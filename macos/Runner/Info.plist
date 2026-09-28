@@ -30,6 +30,10 @@
 	<string>NSApplication</string>
 	<key>CFBundleDisplayName</key>
 	<string>Podavio</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

@@ -9,6 +9,7 @@ import '../data/app_database.dart';
 import '../data/feed_service.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
+import 'playback_handler.dart';
 
 class PlayerUiState {
   const PlayerUiState({
@@ -103,10 +104,22 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (!_started) {
       _started = true;
       _player = AudioPlayer();
-      _ui = PlayerUiState(speed: ref.read(settingsProvider).speed);
+      final settings = ref.read(settingsProvider);
+      _ui = PlayerUiState(speed: settings.speed);
+      final handler = playbackHandler;
+      if (handler != null) {
+        handler.skipBack = Duration(seconds: settings.skipBackSeconds);
+        handler.skipForward = Duration(seconds: settings.skipForwardSeconds);
+        handler.attach(_player);
+      }
       _bind();
       ref.onDispose(_dispose);
       ref.listen(settingsProvider, (previous, next) {
+        final session = playbackHandler;
+        if (session != null) {
+          session.skipBack = Duration(seconds: next.skipBackSeconds);
+          session.skipForward = Duration(seconds: next.skipForwardSeconds);
+        }
         if (next.speed == _ui.speed) return;
         unawaited(_player.setSpeed(next.speed));
         _emit(_ui.copyWith(speed: next.speed));
@@ -125,6 +138,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       await _player.pause();
       await persistPosition();
     } else {
+      playbackHandler?.activate();
       await _prepareSession();
       await _player.play();
     }
@@ -207,6 +221,13 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       ),
     );
     try {
+      playbackHandler?.setEpisode(
+        id: '${episode.id}',
+        title: episode.title,
+        podcast: podcast.title,
+        artUri: artworkUri(episode.imageUrl ?? podcast.imageUrl),
+        duration: duration > Duration.zero ? duration : null,
+      );
       await _prepareSession();
       final uri = _sourceUri(episode);
       await _player.setAudioSource(
@@ -309,6 +330,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   Future<void> _dispose() async {
     _disposed = true;
+    playbackHandler?.detach();
     _sleepTimer?.cancel();
     await _positionSub?.cancel();
     await _durationSub?.cancel();
