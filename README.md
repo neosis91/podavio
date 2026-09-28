@@ -1,6 +1,6 @@
 # Podavio
 
-Podavio est un lecteur de podcasts pour Android, iOS, Windows, macOS et Linux. Il s’inspire d’[AntennaPod](https://antennapod.org/) : on s’abonne à n’importe quel flux RSS, sans compte obligatoire et sans publicité dans l’application.
+Podavio est un lecteur de podcasts pour Android, iOS, Windows, macOS et Linux. On s’abonne à n’importe quel flux RSS, sans compte obligatoire et sans publicité dans l’application.
 
 ## Fonctions
 

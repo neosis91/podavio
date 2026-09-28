@@ -38,7 +38,7 @@ class PreferencesPage extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.file_download_outlined),
             title: const Text('Exporter les abonnements'),
-            subtitle: const Text('Fichier OPML, compatible avec AntennaPod'),
+            subtitle: const Text('Fichier OPML'),
             onTap: () => _exportOpml(context, ref),
           ),
           const Divider(),
@@ -61,7 +61,7 @@ class PreferencesPage extends ConsumerWidget {
                 const SizedBox(height: 16),
                 Text(
                   'Lecteur de podcasts pour Android, iOS, Windows, macOS et Linux. '
-                  'Inspiré par AntennaPod : vos abonnements restent des flux RSS, '
+                  'Vos abonnements restent des flux RSS, '
                   'sans compte obligatoire et sans publicité.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium,

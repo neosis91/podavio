@@ -80,27 +80,11 @@ class EpisodeTile extends ConsumerWidget {
                       style: theme.textTheme.bodyMedium?.copyWith(color: muted),
                     ),
                   ],
-                  if (progress != null ||
-                      episode.downloadPath != null ||
-                      episode.favorite ||
-                      episode.queueIndex != null)
+                  if (episode.favorite || episode.queueIndex != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Row(
                         children: [
-                          if (progress != null)
-                            DownloadProgressRing(
-                              progress: progress,
-                              onCancel: () => ref
-                                  .read(downloadProgressProvider.notifier)
-                                  .cancel(episode.id),
-                            )
-                          else if (episode.downloadPath != null)
-                            Icon(
-                              Icons.download_done,
-                              size: 16,
-                              color: theme.colorScheme.primary,
-                            ),
                           if (episode.favorite)
                             Icon(
                               Icons.favorite,
@@ -119,17 +103,36 @@ class EpisodeTile extends ConsumerWidget {
                 ],
               ),
             ),
-            IconButton(
-              tooltip: playing ? 'Ouvrir le lecteur' : 'Lire',
-              onPressed: () async {
-                if (playing) {
-                  context.push(AppRoutes.player);
-                  return;
-                }
-                await ref.read(playerProvider.notifier).playEntry(entry);
-              },
-              icon: Icon(playing ? Icons.graphic_eq : Icons.play_arrow),
-            ),
+            if (progress != null)
+              DownloadProgressRing(
+                progress: progress,
+                onCancel: () => ref
+                    .read(downloadProgressProvider.notifier)
+                    .cancel(episode.id),
+              )
+            else if (episode.downloadPath != null)
+              IconButton(
+                tooltip: playing ? 'Ouvrir le lecteur' : 'Lire',
+                onPressed: () async {
+                  if (playing) {
+                    context.push(AppRoutes.player);
+                    return;
+                  }
+                  await ref.read(playerProvider.notifier).playEntry(entry);
+                },
+                icon: Icon(playing ? Icons.graphic_eq : Icons.play_arrow),
+              )
+            else
+              IconButton(
+                tooltip: 'Télécharger',
+                onPressed: () => runEpisodeAction(
+                  context,
+                  ref,
+                  entry,
+                  EpisodeMenuAction.download,
+                ),
+                icon: const Icon(Icons.download_outlined),
+              ),
             PopupMenuButton<EpisodeMenuAction>(
               tooltip: 'Actions',
               onSelected: (action) =>

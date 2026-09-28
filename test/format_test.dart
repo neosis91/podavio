@@ -17,10 +17,20 @@ void main() {
   });
 
   test('plainText strips markup', () {
+    expect(plainText('<p>Bonjour&nbsp;<b>monde</b></p>'), 'Bonjour monde');
+  });
+
+  test('plainText keeps line breaks', () {
     expect(
-      plainText('<p>Bonjour&nbsp;<b>monde</b></p>'),
-      'Bonjour monde',
+      plainText('<p>Premier paragraphe.</p><p>Deuxième<br>ligne</p>'),
+      'Premier paragraphe.\n\nDeuxième\nligne',
     );
+    expect(
+      plainText('<p>Phrase\ncoupée dans le flux.</p>'),
+      'Phrase coupée dans le flux.',
+    );
+    expect(plainText('Une ligne\n\nUne autre'), 'Une ligne\n\nUne autre');
+    expect(plainText('<ul><li>Un</li><li>Deux</li></ul>'), '• Un\n• Deux');
   });
 
   test('audioExtension prefers the mime type', () {
