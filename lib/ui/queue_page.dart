@@ -1,0 +1,32 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../data/providers.dart';
+import 'widgets/empty_state.dart';
+import 'widgets/episode_list.dart';
+
+class QueuePage extends ConsumerWidget {
+  const QueuePage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('File d’attente')),
+      body: EpisodeListBody(
+        query: const EpisodeQuery(queuedOnly: true, paginated: false),
+        reorder: (entries, oldIndex, newIndex) {
+          final next = [...entries];
+          final moved = next.removeAt(oldIndex);
+          next.insert(newIndex, moved);
+          ref
+              .read(databaseProvider)
+              .setQueueOrder(next.map((entry) => entry.episode.id).toList());
+        },
+        empty: const EmptyState(
+          title: 'La file est vide',
+          message: 'Ajoutez des épisodes pour les écouter les uns à la suite des autres. Maintenez un épisode pour changer l’ordre.',
+        ),
+      ),
+    );
+  }
+}

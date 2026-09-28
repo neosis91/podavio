@@ -1,0 +1,112 @@
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:podavio/data/app_database.dart';
+import 'package:podavio/data/models.dart';
+
+void main() {
+  test('refreshing a feed keeps listening progress', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    const draft = FeedDraft(
+      feedUrl: 'https://example.com/feed.xml',
+      title: 'Essai',
+      author: 'Auteur',
+      description: 'Description',
+      episodes: [
+        EpisodeDraft(
+          guid: 'ep-1',
+          title: 'Premier',
+          description: 'Notes',
+          audioUrl: 'https://example.com/1.mp3',
+          durationSeconds: 120,
+          publishedAt: null,
+        ),
+      ],
+    );
+
+    final podcastId = await database.saveFeed(draft);
+    final created = await database.watchEpisodes(podcastId: podcastId).first;
+    final episodeId = created.single.episode.id;
+    await database.setFavorite(episodeId, favorite: true);
+    await database.addToQueue(episodeId);
+    await database.setPosition(episodeId, 15000);
+
+    await database.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai mis à jour',
+        author: 'Auteur',
+        description: 'Nouvelle description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'ep-1',
+            title: 'Premier épisode',
+            description: 'Notes revues',
+            audioUrl: 'https://example.com/1.mp3',
+            durationSeconds: 130,
+          ),
+        ],
+      ),
+    );
+
+    final updated = await database.watchEpisodes(podcastId: podcastId).first;
+    final episode = updated.single.episode;
+    expect(updated.single.podcast.title, 'Essai mis à jour');
+    expect(episode.title, 'Premier épisode');
+    expect(episode.durationSeconds, 130);
+    expect(episode.favorite, isTrue);
+    expect(episode.queueIndex, 0);
+    expect(episode.positionMs, 15000);
+    expect(episode.played, isFalse);
+  });
+
+  test('episode windows load a page without show notes', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final podcastId = await database.saveFeed(
+      FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'ep-1',
+            title: 'Un',
+            description: 'Notes secrètes',
+            audioUrl: 'https://example.com/1.mp3',
+            publishedAt: DateTime.utc(2024, 1, 1),
+          ),
+          const EpisodeDraft(
+            guid: 'ep-2',
+            title: 'Deux',
+            description: 'Autre',
+            audioUrl: 'https://example.com/2.mp3',
+            publishedAt: null,
+          ),
+          EpisodeDraft(
+            guid: 'ep-3',
+            title: 'Trois',
+            description: 'Suite',
+            audioUrl: 'https://example.com/3.mp3',
+            publishedAt: DateTime.utc(2024, 3, 1),
+          ),
+        ],
+      ),
+    );
+
+    final page = await database
+        .watchEpisodeWindow(podcastId: podcastId, limit: 2)
+        .first;
+    expect(page.map((entry) => entry.episode.title), ['Trois', 'Un']);
+    expect(page.first.episode.description, isEmpty);
+
+    final found = await database
+        .watchEpisodeWindow(podcastId: podcastId, search: 'notes')
+        .first;
+    expect(found.single.episode.title, 'Un');
+    expect(found.single.episode.description, isEmpty);
+  });
+}
