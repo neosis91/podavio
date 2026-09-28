@@ -15,8 +15,8 @@ class PodavioApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
       title: 'Podavio',
-      theme: buildLightTheme(),
-      darkTheme: buildDarkTheme(),
+      theme: buildLightTheme(settings.accent),
+      darkTheme: buildDarkTheme(settings.accent),
       themeMode: settings.themeMode,
       routerConfig: router,
       locale: const Locale('fr'),

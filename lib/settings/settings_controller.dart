@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/theme.dart';
 import '../data/providers.dart';
 
 class AppSettings {
   const AppSettings({
     required this.themeMode,
+    required this.accent,
     required this.speed,
     required this.skipBackSeconds,
     required this.skipForwardSeconds,
@@ -14,6 +16,7 @@ class AppSettings {
   });
 
   final ThemeMode themeMode;
+  final AppAccent accent;
   final double speed;
   final int skipBackSeconds;
   final int skipForwardSeconds;
@@ -22,6 +25,7 @@ class AppSettings {
 
   AppSettings copyWith({
     ThemeMode? themeMode,
+    AppAccent? accent,
     double? speed,
     int? skipBackSeconds,
     int? skipForwardSeconds,
@@ -30,6 +34,7 @@ class AppSettings {
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
+      accent: accent ?? this.accent,
       speed: speed ?? this.speed,
       skipBackSeconds: skipBackSeconds ?? this.skipBackSeconds,
       skipForwardSeconds: skipForwardSeconds ?? this.skipForwardSeconds,
@@ -50,6 +55,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final themeName = preferences.getString('theme') ?? ThemeMode.system.name;
     return AppSettings(
       themeMode: ThemeMode.values.asNameMap()[themeName] ?? ThemeMode.system,
+      accent: AppAccent.byId(preferences.getString('accent')),
       speed: preferences.getDouble('speed') ?? 1,
       skipBackSeconds: preferences.getInt('skipBack') ?? 10,
       skipForwardSeconds: preferences.getInt('skipForward') ?? 30,
@@ -66,6 +72,11 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setThemeMode(ThemeMode mode) async {
     state = state.copyWith(themeMode: mode);
     await ref.read(sharedPreferencesProvider).setString('theme', mode.name);
+  }
+
+  Future<void> setAccent(AppAccent accent) async {
+    state = state.copyWith(accent: accent);
+    await ref.read(sharedPreferencesProvider).setString('accent', accent.id);
   }
 
   Future<void> setSpeed(double speed) async {

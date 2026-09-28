@@ -36,7 +36,6 @@ class Episodes extends Table {
   TextColumn get downloadPath => text().nullable()();
   IntColumn get queueIndex => integer().nullable()();
   DateTimeColumn get lastPlayedAt => dateTime().nullable()();
-  DateTimeColumn get downloadedAt => dateTime().nullable()();
 
   @override
   List<Set<Column<Object>>> get uniqueKeys => [

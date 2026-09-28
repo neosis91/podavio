@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/theme.dart';
 import '../settings/settings_controller.dart';
 
 class AppearancePage extends ConsumerWidget {
@@ -27,6 +28,23 @@ class AppearancePage extends ConsumerWidget {
               selected: {settings.themeMode},
               onSelectionChanged: (selection) =>
                   notifier.setThemeMode(selection.first),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const ListTile(title: Text('Couleur')),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final accent in AppAccent.values)
+                  _AccentChoice(
+                    accent: accent,
+                    selected: settings.accent == accent,
+                    onTap: () => notifier.setAccent(accent),
+                  ),
+              ],
             ),
           ),
         ],
@@ -83,6 +101,59 @@ class PlaybackPage extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AccentChoice extends StatelessWidget {
+  const _AccentChoice({
+    required this.accent,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AppAccent accent;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final check = accent.seed.computeLuminance() < 0.45
+        ? Colors.white
+        : Colors.black;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: accent.seed,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected
+                      ? Theme.of(context).colorScheme.onSurface
+                      : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+              child: selected ? Icon(Icons.check, color: check) : null,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              accent.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+          ],
+        ),
       ),
     );
   }
