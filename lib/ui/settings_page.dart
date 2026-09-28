@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/waveform.dart';
 import '../settings/settings_controller.dart';
+import 'widgets/brand.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -72,10 +72,8 @@ class SettingsPage extends ConsumerWidget {
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                const WaveformMark(size: 88),
-                const SizedBox(height: 12),
-                Text('Podavio', style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 8),
+                const PodavioLogo(),
+                const SizedBox(height: 16),
                 Text(
                   'Lecteur de podcasts pour Android, iOS, Windows, macOS et Linux. '
                   'Inspiré par AntennaPod : vos abonnements restent des flux RSS, '

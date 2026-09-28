@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/waveform.dart';
+import 'brand.dart';
 
 class EmptyState extends StatelessWidget {
   const EmptyState({
@@ -25,7 +25,7 @@ class EmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const WaveformMark(size: 96),
+              const PodavioIcon(),
               const SizedBox(height: 20),
               Text(
                 title,
