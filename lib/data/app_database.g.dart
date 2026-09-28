@@ -106,6 +106,21 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _preferredMeta = const VerificationMeta(
+    'preferred',
+  );
+  @override
+  late final GeneratedColumn<bool> preferred = GeneratedColumn<bool>(
+    'preferred',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("preferred" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -117,6 +132,7 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     link,
     subscribedAt,
     refreshedAt,
+    preferred,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -196,6 +212,12 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         ),
       );
     }
+    if (data.containsKey('preferred')) {
+      context.handle(
+        _preferredMeta,
+        preferred.isAcceptableOrUnknown(data['preferred']!, _preferredMeta),
+      );
+    }
     return context;
   }
 
@@ -241,6 +263,10 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}refreshed_at'],
       ),
+      preferred: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}preferred'],
+      )!,
     );
   }
 
@@ -260,6 +286,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
   final String? link;
   final DateTime subscribedAt;
   final DateTime? refreshedAt;
+  final bool preferred;
   const Podcast({
     required this.id,
     required this.feedUrl,
@@ -270,6 +297,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     this.link,
     required this.subscribedAt,
     this.refreshedAt,
+    required this.preferred,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -289,6 +317,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     if (!nullToAbsent || refreshedAt != null) {
       map['refreshed_at'] = Variable<DateTime>(refreshedAt);
     }
+    map['preferred'] = Variable<bool>(preferred);
     return map;
   }
 
@@ -307,6 +336,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       refreshedAt: refreshedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(refreshedAt),
+      preferred: Value(preferred),
     );
   }
 
@@ -325,6 +355,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       link: serializer.fromJson<String?>(json['link']),
       subscribedAt: serializer.fromJson<DateTime>(json['subscribedAt']),
       refreshedAt: serializer.fromJson<DateTime?>(json['refreshedAt']),
+      preferred: serializer.fromJson<bool>(json['preferred']),
     );
   }
   @override
@@ -340,6 +371,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       'link': serializer.toJson<String?>(link),
       'subscribedAt': serializer.toJson<DateTime>(subscribedAt),
       'refreshedAt': serializer.toJson<DateTime?>(refreshedAt),
+      'preferred': serializer.toJson<bool>(preferred),
     };
   }
 
@@ -353,6 +385,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     Value<String?> link = const Value.absent(),
     DateTime? subscribedAt,
     Value<DateTime?> refreshedAt = const Value.absent(),
+    bool? preferred,
   }) => Podcast(
     id: id ?? this.id,
     feedUrl: feedUrl ?? this.feedUrl,
@@ -363,6 +396,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     link: link.present ? link.value : this.link,
     subscribedAt: subscribedAt ?? this.subscribedAt,
     refreshedAt: refreshedAt.present ? refreshedAt.value : this.refreshedAt,
+    preferred: preferred ?? this.preferred,
   );
   Podcast copyWithCompanion(PodcastsCompanion data) {
     return Podcast(
@@ -381,6 +415,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       refreshedAt: data.refreshedAt.present
           ? data.refreshedAt.value
           : this.refreshedAt,
+      preferred: data.preferred.present ? data.preferred.value : this.preferred,
     );
   }
 
@@ -395,7 +430,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           ..write('imageUrl: $imageUrl, ')
           ..write('link: $link, ')
           ..write('subscribedAt: $subscribedAt, ')
-          ..write('refreshedAt: $refreshedAt')
+          ..write('refreshedAt: $refreshedAt, ')
+          ..write('preferred: $preferred')
           ..write(')'))
         .toString();
   }
@@ -411,6 +447,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     link,
     subscribedAt,
     refreshedAt,
+    preferred,
   );
   @override
   bool operator ==(Object other) =>
@@ -424,7 +461,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           other.imageUrl == this.imageUrl &&
           other.link == this.link &&
           other.subscribedAt == this.subscribedAt &&
-          other.refreshedAt == this.refreshedAt);
+          other.refreshedAt == this.refreshedAt &&
+          other.preferred == this.preferred);
 }
 
 class PodcastsCompanion extends UpdateCompanion<Podcast> {
@@ -437,6 +475,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
   final Value<String?> link;
   final Value<DateTime> subscribedAt;
   final Value<DateTime?> refreshedAt;
+  final Value<bool> preferred;
   const PodcastsCompanion({
     this.id = const Value.absent(),
     this.feedUrl = const Value.absent(),
@@ -447,6 +486,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.link = const Value.absent(),
     this.subscribedAt = const Value.absent(),
     this.refreshedAt = const Value.absent(),
+    this.preferred = const Value.absent(),
   });
   PodcastsCompanion.insert({
     this.id = const Value.absent(),
@@ -458,6 +498,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.link = const Value.absent(),
     required DateTime subscribedAt,
     this.refreshedAt = const Value.absent(),
+    this.preferred = const Value.absent(),
   }) : feedUrl = Value(feedUrl),
        title = Value(title),
        subscribedAt = Value(subscribedAt);
@@ -471,6 +512,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Expression<String>? link,
     Expression<DateTime>? subscribedAt,
     Expression<DateTime>? refreshedAt,
+    Expression<bool>? preferred,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -482,6 +524,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       if (link != null) 'link': link,
       if (subscribedAt != null) 'subscribed_at': subscribedAt,
       if (refreshedAt != null) 'refreshed_at': refreshedAt,
+      if (preferred != null) 'preferred': preferred,
     });
   }
 
@@ -495,6 +538,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Value<String?>? link,
     Value<DateTime>? subscribedAt,
     Value<DateTime?>? refreshedAt,
+    Value<bool>? preferred,
   }) {
     return PodcastsCompanion(
       id: id ?? this.id,
@@ -506,6 +550,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       link: link ?? this.link,
       subscribedAt: subscribedAt ?? this.subscribedAt,
       refreshedAt: refreshedAt ?? this.refreshedAt,
+      preferred: preferred ?? this.preferred,
     );
   }
 
@@ -539,6 +584,9 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     if (refreshedAt.present) {
       map['refreshed_at'] = Variable<DateTime>(refreshedAt.value);
     }
+    if (preferred.present) {
+      map['preferred'] = Variable<bool>(preferred.value);
+    }
     return map;
   }
 
@@ -553,7 +601,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
           ..write('imageUrl: $imageUrl, ')
           ..write('link: $link, ')
           ..write('subscribedAt: $subscribedAt, ')
-          ..write('refreshedAt: $refreshedAt')
+          ..write('refreshedAt: $refreshedAt, ')
+          ..write('preferred: $preferred')
           ..write(')'))
         .toString();
   }
@@ -749,6 +798,17 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _downloadedAtMeta = const VerificationMeta(
+    'downloadedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> downloadedAt = GeneratedColumn<DateTime>(
+    'downloaded_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -767,6 +827,7 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
     downloadPath,
     queueIndex,
     lastPlayedAt,
+    downloadedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -896,6 +957,15 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
         ),
       );
     }
+    if (data.containsKey('downloaded_at')) {
+      context.handle(
+        _downloadedAtMeta,
+        downloadedAt.isAcceptableOrUnknown(
+          data['downloaded_at']!,
+          _downloadedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -973,6 +1043,10 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_played_at'],
       ),
+      downloadedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}downloaded_at'],
+      ),
     );
   }
 
@@ -999,6 +1073,7 @@ class Episode extends DataClass implements Insertable<Episode> {
   final String? downloadPath;
   final int? queueIndex;
   final DateTime? lastPlayedAt;
+  final DateTime? downloadedAt;
   const Episode({
     required this.id,
     required this.podcastId,
@@ -1016,6 +1091,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     this.downloadPath,
     this.queueIndex,
     this.lastPlayedAt,
+    this.downloadedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1049,6 +1125,9 @@ class Episode extends DataClass implements Insertable<Episode> {
     }
     if (!nullToAbsent || lastPlayedAt != null) {
       map['last_played_at'] = Variable<DateTime>(lastPlayedAt);
+    }
+    if (!nullToAbsent || downloadedAt != null) {
+      map['downloaded_at'] = Variable<DateTime>(downloadedAt);
     }
     return map;
   }
@@ -1085,6 +1164,9 @@ class Episode extends DataClass implements Insertable<Episode> {
       lastPlayedAt: lastPlayedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastPlayedAt),
+      downloadedAt: downloadedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(downloadedAt),
     );
   }
 
@@ -1110,6 +1192,7 @@ class Episode extends DataClass implements Insertable<Episode> {
       downloadPath: serializer.fromJson<String?>(json['downloadPath']),
       queueIndex: serializer.fromJson<int?>(json['queueIndex']),
       lastPlayedAt: serializer.fromJson<DateTime?>(json['lastPlayedAt']),
+      downloadedAt: serializer.fromJson<DateTime?>(json['downloadedAt']),
     );
   }
   @override
@@ -1132,6 +1215,7 @@ class Episode extends DataClass implements Insertable<Episode> {
       'downloadPath': serializer.toJson<String?>(downloadPath),
       'queueIndex': serializer.toJson<int?>(queueIndex),
       'lastPlayedAt': serializer.toJson<DateTime?>(lastPlayedAt),
+      'downloadedAt': serializer.toJson<DateTime?>(downloadedAt),
     };
   }
 
@@ -1152,6 +1236,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     Value<String?> downloadPath = const Value.absent(),
     Value<int?> queueIndex = const Value.absent(),
     Value<DateTime?> lastPlayedAt = const Value.absent(),
+    Value<DateTime?> downloadedAt = const Value.absent(),
   }) => Episode(
     id: id ?? this.id,
     podcastId: podcastId ?? this.podcastId,
@@ -1171,6 +1256,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     downloadPath: downloadPath.present ? downloadPath.value : this.downloadPath,
     queueIndex: queueIndex.present ? queueIndex.value : this.queueIndex,
     lastPlayedAt: lastPlayedAt.present ? lastPlayedAt.value : this.lastPlayedAt,
+    downloadedAt: downloadedAt.present ? downloadedAt.value : this.downloadedAt,
   );
   Episode copyWithCompanion(EpisodesCompanion data) {
     return Episode(
@@ -1204,6 +1290,9 @@ class Episode extends DataClass implements Insertable<Episode> {
       lastPlayedAt: data.lastPlayedAt.present
           ? data.lastPlayedAt.value
           : this.lastPlayedAt,
+      downloadedAt: data.downloadedAt.present
+          ? data.downloadedAt.value
+          : this.downloadedAt,
     );
   }
 
@@ -1225,7 +1314,8 @@ class Episode extends DataClass implements Insertable<Episode> {
           ..write('favorite: $favorite, ')
           ..write('downloadPath: $downloadPath, ')
           ..write('queueIndex: $queueIndex, ')
-          ..write('lastPlayedAt: $lastPlayedAt')
+          ..write('lastPlayedAt: $lastPlayedAt, ')
+          ..write('downloadedAt: $downloadedAt')
           ..write(')'))
         .toString();
   }
@@ -1248,6 +1338,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     downloadPath,
     queueIndex,
     lastPlayedAt,
+    downloadedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -1268,7 +1359,8 @@ class Episode extends DataClass implements Insertable<Episode> {
           other.favorite == this.favorite &&
           other.downloadPath == this.downloadPath &&
           other.queueIndex == this.queueIndex &&
-          other.lastPlayedAt == this.lastPlayedAt);
+          other.lastPlayedAt == this.lastPlayedAt &&
+          other.downloadedAt == this.downloadedAt);
 }
 
 class EpisodesCompanion extends UpdateCompanion<Episode> {
@@ -1288,6 +1380,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
   final Value<String?> downloadPath;
   final Value<int?> queueIndex;
   final Value<DateTime?> lastPlayedAt;
+  final Value<DateTime?> downloadedAt;
   const EpisodesCompanion({
     this.id = const Value.absent(),
     this.podcastId = const Value.absent(),
@@ -1305,6 +1398,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     this.downloadPath = const Value.absent(),
     this.queueIndex = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
+    this.downloadedAt = const Value.absent(),
   });
   EpisodesCompanion.insert({
     this.id = const Value.absent(),
@@ -1323,6 +1417,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     this.downloadPath = const Value.absent(),
     this.queueIndex = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
+    this.downloadedAt = const Value.absent(),
   }) : podcastId = Value(podcastId),
        guid = Value(guid),
        title = Value(title),
@@ -1344,6 +1439,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     Expression<String>? downloadPath,
     Expression<int>? queueIndex,
     Expression<DateTime>? lastPlayedAt,
+    Expression<DateTime>? downloadedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1362,6 +1458,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
       if (downloadPath != null) 'download_path': downloadPath,
       if (queueIndex != null) 'queue_index': queueIndex,
       if (lastPlayedAt != null) 'last_played_at': lastPlayedAt,
+      if (downloadedAt != null) 'downloaded_at': downloadedAt,
     });
   }
 
@@ -1382,6 +1479,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     Value<String?>? downloadPath,
     Value<int?>? queueIndex,
     Value<DateTime?>? lastPlayedAt,
+    Value<DateTime?>? downloadedAt,
   }) {
     return EpisodesCompanion(
       id: id ?? this.id,
@@ -1400,6 +1498,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
       downloadPath: downloadPath ?? this.downloadPath,
       queueIndex: queueIndex ?? this.queueIndex,
       lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
+      downloadedAt: downloadedAt ?? this.downloadedAt,
     );
   }
 
@@ -1454,6 +1553,9 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     if (lastPlayedAt.present) {
       map['last_played_at'] = Variable<DateTime>(lastPlayedAt.value);
     }
+    if (downloadedAt.present) {
+      map['downloaded_at'] = Variable<DateTime>(downloadedAt.value);
+    }
     return map;
   }
 
@@ -1475,7 +1577,8 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
           ..write('favorite: $favorite, ')
           ..write('downloadPath: $downloadPath, ')
           ..write('queueIndex: $queueIndex, ')
-          ..write('lastPlayedAt: $lastPlayedAt')
+          ..write('lastPlayedAt: $lastPlayedAt, ')
+          ..write('downloadedAt: $downloadedAt')
           ..write(')'))
         .toString();
   }
@@ -1513,6 +1616,7 @@ typedef $$PodcastsTableCreateCompanionBuilder = PodcastsCompanion Function({
   Value<String?> link,
   required DateTime subscribedAt,
   Value<DateTime?> refreshedAt,
+  Value<bool> preferred,
 });
 typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<int> id,
@@ -1524,6 +1628,7 @@ typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<String?> link,
   Value<DateTime> subscribedAt,
   Value<DateTime?> refreshedAt,
+  Value<bool> preferred,
 });
 
 final class $$PodcastsTableReferences
@@ -1601,6 +1706,11 @@ class $$PodcastsTableFilterComposer
 
   ColumnFilters<DateTime> get refreshedAt => $composableBuilder(
     column: $table.refreshedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get preferred => $composableBuilder(
+    column: $table.preferred,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1683,6 +1793,11 @@ class $$PodcastsTableOrderingComposer
     column: $table.refreshedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get preferred => $composableBuilder(
+    column: $table.preferred,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PodcastsTableAnnotationComposer
@@ -1726,6 +1841,9 @@ class $$PodcastsTableAnnotationComposer
     column: $table.refreshedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get preferred =>
+      $composableBuilder(column: $table.preferred, builder: (column) => column);
 
   Expression<T> episodesRefs<T extends Object>(
     Expression<T> Function($$EpisodesTableAnnotationComposer a) f,
@@ -1790,6 +1908,7 @@ class $$PodcastsTableTableManager
                 Value<String?> link = const Value.absent(),
                 Value<DateTime> subscribedAt = const Value.absent(),
                 Value<DateTime?> refreshedAt = const Value.absent(),
+                Value<bool> preferred = const Value.absent(),
               }) => PodcastsCompanion(
                 id: id,
                 feedUrl: feedUrl,
@@ -1800,6 +1919,7 @@ class $$PodcastsTableTableManager
                 link: link,
                 subscribedAt: subscribedAt,
                 refreshedAt: refreshedAt,
+                preferred: preferred,
               ),
           createCompanionCallback:
               ({
@@ -1812,6 +1932,7 @@ class $$PodcastsTableTableManager
                 Value<String?> link = const Value.absent(),
                 required DateTime subscribedAt,
                 Value<DateTime?> refreshedAt = const Value.absent(),
+                Value<bool> preferred = const Value.absent(),
               }) => PodcastsCompanion.insert(
                 id: id,
                 feedUrl: feedUrl,
@@ -1822,6 +1943,7 @@ class $$PodcastsTableTableManager
                 link: link,
                 subscribedAt: subscribedAt,
                 refreshedAt: refreshedAt,
+                preferred: preferred,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -1888,6 +2010,7 @@ typedef $$EpisodesTableCreateCompanionBuilder = EpisodesCompanion Function({
   Value<String?> downloadPath,
   Value<int?> queueIndex,
   Value<DateTime?> lastPlayedAt,
+  Value<DateTime?> downloadedAt,
 });
 typedef $$EpisodesTableUpdateCompanionBuilder = EpisodesCompanion Function({
   Value<int> id,
@@ -1906,6 +2029,7 @@ typedef $$EpisodesTableUpdateCompanionBuilder = EpisodesCompanion Function({
   Value<String?> downloadPath,
   Value<int?> queueIndex,
   Value<DateTime?> lastPlayedAt,
+  Value<DateTime?> downloadedAt,
 });
 
 final class $$EpisodesTableReferences
@@ -2011,6 +2135,11 @@ class $$EpisodesTableFilterComposer
 
   ColumnFilters<DateTime> get lastPlayedAt => $composableBuilder(
     column: $table.lastPlayedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get downloadedAt => $composableBuilder(
+    column: $table.downloadedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2122,6 +2251,11 @@ class $$EpisodesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get downloadedAt => $composableBuilder(
+    column: $table.downloadedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$PodcastsTableOrderingComposer get podcastId {
     final $$PodcastsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -2214,6 +2348,11 @@ class $$EpisodesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<DateTime> get downloadedAt => $composableBuilder(
+    column: $table.downloadedAt,
+    builder: (column) => column,
+  );
+
   $$PodcastsTableAnnotationComposer get podcastId {
     final $$PodcastsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -2282,6 +2421,7 @@ class $$EpisodesTableTableManager
                 Value<String?> downloadPath = const Value.absent(),
                 Value<int?> queueIndex = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
+                Value<DateTime?> downloadedAt = const Value.absent(),
               }) => EpisodesCompanion(
                 id: id,
                 podcastId: podcastId,
@@ -2299,6 +2439,7 @@ class $$EpisodesTableTableManager
                 downloadPath: downloadPath,
                 queueIndex: queueIndex,
                 lastPlayedAt: lastPlayedAt,
+                downloadedAt: downloadedAt,
               ),
           createCompanionCallback:
               ({
@@ -2318,6 +2459,7 @@ class $$EpisodesTableTableManager
                 Value<String?> downloadPath = const Value.absent(),
                 Value<int?> queueIndex = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
+                Value<DateTime?> downloadedAt = const Value.absent(),
               }) => EpisodesCompanion.insert(
                 id: id,
                 podcastId: podcastId,
@@ -2335,6 +2477,7 @@ class $$EpisodesTableTableManager
                 downloadPath: downloadPath,
                 queueIndex: queueIndex,
                 lastPlayedAt: lastPlayedAt,
+                downloadedAt: downloadedAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(

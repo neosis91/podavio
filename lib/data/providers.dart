@@ -163,3 +163,37 @@ class EpisodeQuery {
     paginated,
   );
 }
+
+final inProgressProvider = StreamProvider<List<EpisodeEntry>>((ref) {
+  return ref.watch(databaseProvider).watchInProgress();
+});
+
+final freshEpisodesProvider = StreamProvider<List<EpisodeEntry>>((ref) {
+  return ref.watch(databaseProvider).watchFreshEpisodes();
+});
+
+final recentDownloadsProvider = StreamProvider<List<EpisodeEntry>>((ref) {
+  return ref.watch(databaseProvider).watchRecentDownloads();
+});
+
+final preferredPodcastsProvider = StreamProvider<List<Podcast>>((ref) {
+  return ref.watch(databaseProvider).watchPodcastsByPreference();
+});
+
+final randomEpisodesProvider =
+    AsyncNotifierProvider<RandomEpisodesNotifier, List<EpisodeEntry>>(
+      RandomEpisodesNotifier.new,
+    );
+
+class RandomEpisodesNotifier extends AsyncNotifier<List<EpisodeEntry>> {
+  @override
+  Future<List<EpisodeEntry>> build() {
+    return ref.read(databaseProvider).randomEpisodes();
+  }
+
+  Future<void> reshuffle() async {
+    state = await AsyncValue.guard(
+      () => ref.read(databaseProvider).randomEpisodes(),
+    );
+  }
+}

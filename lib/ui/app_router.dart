@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../player/player_controller.dart';
 import 'discover_page.dart';
 import 'episodes_page.dart';
+import 'home_page.dart';
 import 'library_pages.dart';
 import 'more_page.dart';
 import 'player_page.dart';
@@ -17,11 +18,15 @@ import 'shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    initialLocation: AppRoutes.episodes,
+    initialLocation: AppRoutes.home,
     routes: [
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
         routes: [
+          GoRoute(
+            path: AppRoutes.home,
+            builder: (context, state) => const HomePage(),
+          ),
           GoRoute(
             path: AppRoutes.episodes,
             builder: (context, state) => const EpisodesPage(),
@@ -49,8 +54,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const DiscoverPage(),
           ),
           GoRoute(
-            path: AppRoutes.more,
-            builder: (context, state) => const MorePage(),
+            path: AppRoutes.preferences,
+            builder: (context, state) => const PreferencesPage(),
           ),
           GoRoute(
             path: AppRoutes.favorites,
@@ -65,8 +70,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const DownloadsPage(),
           ),
           GoRoute(
-            path: AppRoutes.settings,
-            builder: (context, state) => const SettingsPage(),
+            path: AppRoutes.appearance,
+            builder: (context, state) => const AppearancePage(),
+          ),
+          GoRoute(
+            path: AppRoutes.playback,
+            builder: (context, state) => const PlaybackPage(),
           ),
         ],
       ),

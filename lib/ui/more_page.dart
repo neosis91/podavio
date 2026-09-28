@@ -10,33 +10,18 @@ import '../data/opml.dart';
 import '../data/providers.dart';
 import 'episodes_page.dart';
 import 'router.dart';
+import 'widgets/brand.dart';
 import 'widgets/messages.dart';
 
-class MorePage extends ConsumerWidget {
-  const MorePage({super.key});
+class PreferencesPage extends ConsumerWidget {
+  const PreferencesPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Plus')),
+      appBar: AppBar(title: const Text('Préférences')),
       body: ListView(
         children: [
-          ListTile(
-            leading: const Icon(Icons.favorite_outline),
-            title: const Text('Favoris'),
-            onTap: () => context.push(AppRoutes.favorites),
-          ),
-          ListTile(
-            leading: const Icon(Icons.history),
-            title: const Text('Historique'),
-            onTap: () => context.push(AppRoutes.history),
-          ),
-          ListTile(
-            leading: const Icon(Icons.download_outlined),
-            title: const Text('Téléchargements'),
-            onTap: () => context.push(AppRoutes.downloads),
-          ),
-          const Divider(),
           ListTile(
             leading: const Icon(Icons.refresh),
             title: const Text('Actualiser tous les abonnements'),
@@ -45,7 +30,9 @@ class MorePage extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.file_upload_outlined),
             title: const Text('Importer un fichier OPML'),
-            subtitle: const Text('Abonnements exportés depuis une autre application'),
+            subtitle: const Text(
+              'Abonnements exportés depuis une autre application',
+            ),
             onTap: () => _importOpml(context, ref),
           ),
           ListTile(
@@ -56,9 +43,31 @@ class MorePage extends ConsumerWidget {
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.settings_outlined),
-            title: const Text('Paramètres'),
-            onTap: () => context.push(AppRoutes.settings),
+            leading: const Icon(Icons.palette_outlined),
+            title: const Text('Interface utilisateur'),
+            onTap: () => context.push(AppRoutes.appearance),
+          ),
+          ListTile(
+            leading: const Icon(Icons.speed),
+            title: const Text('Lecture'),
+            onTap: () => context.push(AppRoutes.playback),
+          ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                const PodavioLogo(),
+                const SizedBox(height: 16),
+                Text(
+                  'Lecteur de podcasts pour Android, iOS, Windows, macOS et Linux. '
+                  'Inspiré par AntennaPod : vos abonnements restent des flux RSS, '
+                  'sans compte obligatoire et sans publicité.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -94,18 +103,24 @@ class MorePage extends ConsumerWidget {
     try {
       bytes = await file.readAsBytes();
     } catch (_) {
-      if (context.mounted) showMessage(context, 'Impossible de lire ce fichier');
+      if (context.mounted) {
+        showMessage(context, 'Impossible de lire ce fichier');
+      }
       return;
     }
     List<String> urls;
     try {
       urls = parseOpml(utf8.decode(bytes));
     } catch (_) {
-      if (context.mounted) showMessage(context, 'Ce fichier OPML est illisible');
+      if (context.mounted) {
+        showMessage(context, 'Ce fichier OPML est illisible');
+      }
       return;
     }
     if (urls.isEmpty) {
-      if (context.mounted) showMessage(context, 'Aucun flux trouvé dans ce fichier');
+      if (context.mounted) {
+        showMessage(context, 'Aucun flux trouvé dans ce fichier');
+      }
       return;
     }
     if (!context.mounted) return;

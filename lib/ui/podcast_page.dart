@@ -68,10 +68,28 @@ class PodcastPage extends ConsumerWidget {
                           icon: const Icon(Icons.refresh),
                         ),
                         PopupMenuButton<String>(
-                          onSelected: (value) =>
-                              _unsubscribe(context, ref, item),
-                          itemBuilder: (context) => const [
+                          onSelected: (value) {
+                            if (value == 'preferred') {
+                              ref
+                                  .read(databaseProvider)
+                                  .setPodcastPreferred(
+                                    item.id,
+                                    preferred: !item.preferred,
+                                  );
+                              return;
+                            }
+                            _unsubscribe(context, ref, item);
+                          },
+                          itemBuilder: (context) => [
                             PopupMenuItem(
+                              value: 'preferred',
+                              child: Text(
+                                item.preferred
+                                    ? 'Retirer des préférés'
+                                    : 'Marquer comme préféré',
+                              ),
+                            ),
+                            const PopupMenuItem(
                               value: 'unsubscribe',
                               child: Text('Se désabonner'),
                             ),

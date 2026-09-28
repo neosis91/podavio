@@ -32,9 +32,7 @@ class DiscoverNotifier extends AsyncNotifier<List<remote.Item>> {
         : await service.search(query);
     if (!result.successful) {
       throw Exception(
-        result.lastError.isEmpty
-            ? 'La recherche a échoué.'
-            : result.lastError,
+        result.lastError.isEmpty ? 'La recherche a échoué.' : result.lastError,
       );
     }
     return result.items;
@@ -131,19 +129,34 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage> {
                   separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final item = items[index];
-                    final feedUrl = item.feedUrl;
-                    final title = item.trackName ?? item.collectionName ?? 'Podcast';
-                    final already = feedUrl != null && subscribed.contains(feedUrl);
-                    final busy = feedUrl != null && _subscribing.contains(feedUrl);
+                    final feedUrl = item.feedUrl?.trim();
+                    final appleId = item.collectionId ?? item.trackId;
+                    final subscribeKey = (feedUrl != null && feedUrl.isNotEmpty)
+                        ? feedUrl
+                        : (appleId == null ? null : 'apple:$appleId');
+                    final title =
+                        item.trackName ?? item.collectionName ?? 'Podcast';
+                    final already =
+                        feedUrl != null &&
+                        feedUrl.isNotEmpty &&
+                        subscribed.contains(feedUrl);
+                    final busy =
+                        subscribeKey != null &&
+                        _subscribing.contains(subscribeKey);
                     return ListTile(
                       leading: PodcastCover(
                         url: item.bestArtworkUrl,
                         radius: 8,
                       ),
-                      title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      title: Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       subtitle: Text(
                         [
-                          if ((item.artistName ?? '').isNotEmpty) item.artistName!,
+                          if ((item.artistName ?? '').isNotEmpty)
+                            item.artistName!,
                           if ((item.primaryGenreName ?? '').isNotEmpty)
                             item.primaryGenreName!,
                         ].join(' · '),
@@ -157,10 +170,14 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : IconButton(
-                              tooltip: already ? 'Déjà abonné' : 'S’abonner',
-                              onPressed: feedUrl == null
+                              tooltip: already
+                                  ? 'Déjà abonné'
+                                  : subscribeKey == null
+                                  ? 'Pas de flux RSS public'
+                                  : 'S’abonner',
+                              onPressed: subscribeKey == null
                                   ? null
-                                  : () => _subscribe(feedUrl),
+                                  : () => _subscribe(item, subscribeKey),
                               icon: Icon(
                                 already ? Icons.check_circle : Icons.add_circle,
                               ),
@@ -176,9 +193,21 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage> {
     );
   }
 
-  Future<void> _subscribe(String feedUrl) async {
-    setState(() => _subscribing.add(feedUrl));
-    await subscribeToFeed(context, ref, feedUrl);
-    if (mounted) setState(() => _subscribing.remove(feedUrl));
+  Future<void> _subscribe(remote.Item item, String key) async {
+    setState(() => _subscribing.add(key));
+    try {
+      final direct = item.feedUrl?.trim() ?? '';
+      final url = direct.isNotEmpty
+          ? direct
+          : await ref
+                .read(feedServiceProvider)
+                .feedUrlForAppleShow(item.collectionId ?? item.trackId!);
+      if (!mounted) return;
+      await subscribeToFeed(context, ref, url);
+    } catch (error) {
+      if (mounted) showMessage(context, errorText(error));
+    } finally {
+      if (mounted) setState(() => _subscribing.remove(key));
+    }
   }
 }

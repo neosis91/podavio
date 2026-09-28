@@ -109,4 +109,67 @@ void main() {
     expect(found.single.episode.title, 'Un');
     expect(found.single.episode.description, isEmpty);
   });
+
+  test('home rows split progress, new episodes and preferred shows', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final alpha = await database.saveFeed(
+      FeedDraft(
+        feedUrl: 'https://example.com/alpha.xml',
+        title: 'Alpha',
+        author: '',
+        description: '',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a1',
+            title: 'Déjà commencé',
+            description: '',
+            audioUrl: 'https://example.com/a1.mp3',
+            publishedAt: DateTime.utc(2024, 2, 1),
+          ),
+          EpisodeDraft(
+            guid: 'a2',
+            title: 'Tout neuf',
+            description: '',
+            audioUrl: 'https://example.com/a2.mp3',
+            publishedAt: DateTime.utc(2024, 3, 1),
+          ),
+        ],
+      ),
+    );
+    await database.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/zeta.xml',
+        title: 'Zèbre',
+        author: '',
+        description: '',
+        episodes: [],
+      ),
+    );
+
+    final shows = await database.listPodcasts();
+    final zebra = shows.singleWhere((podcast) => podcast.title == 'Zèbre');
+    await database.setPodcastPreferred(zebra.id, preferred: true);
+    final ordered = await database.watchPodcastsByPreference().first;
+    expect(ordered.map((podcast) => podcast.title), ['Zèbre', 'Alpha']);
+
+    final episodes = await database.watchEpisodes(podcastId: alpha).first;
+    final started = episodes.singleWhere(
+      (entry) => entry.episode.title == 'Déjà commencé',
+    );
+    await database.setPosition(started.episode.id, 4000);
+    await database.setDownloadPath(started.episode.id, '/tmp/episode.mp3');
+
+    final progress = await database.watchInProgress().first;
+    expect(progress.single.episode.title, 'Déjà commencé');
+    final fresh = await database.watchFreshEpisodes().first;
+    expect(fresh.map((entry) => entry.episode.title), ['Tout neuf']);
+    final downloads = await database.watchRecentDownloads().first;
+    expect(downloads.single.episode.downloadedAt, isNotNull);
+
+    await database.setPlayed(started.episode.id, played: true);
+    final random = await database.randomEpisodes(limit: 10);
+    expect(random.map((entry) => entry.episode.title), ['Tout neuf']);
+  });
 }

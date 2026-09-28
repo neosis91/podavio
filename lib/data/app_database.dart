@@ -15,6 +15,7 @@ class Podcasts extends Table {
   TextColumn get link => text().nullable()();
   DateTimeColumn get subscribedAt => dateTime()();
   DateTimeColumn get refreshedAt => dateTime().nullable()();
+  BoolColumn get preferred => boolean().withDefault(const Constant(false))();
 }
 
 class Episodes extends Table {
@@ -35,6 +36,7 @@ class Episodes extends Table {
   TextColumn get downloadPath => text().nullable()();
   IntColumn get queueIndex => integer().nullable()();
   DateTimeColumn get lastPlayedAt => dateTime().nullable()();
+  DateTimeColumn get downloadedAt => dateTime().nullable()();
 
   @override
   List<Set<Column<Object>>> get uniqueKeys => [
@@ -58,10 +60,16 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (migrator, from, to) async {
+      if (from < 2) {
+        await migrator.addColumn(podcasts, podcasts.preferred);
+        await migrator.addColumn(episodes, episodes.downloadedAt);
+      }
+    },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
     },
@@ -71,6 +79,41 @@ class AppDatabase extends _$AppDatabase {
     return (select(
       podcasts,
     )..orderBy([(table) => OrderingTerm.asc(table.title)])).watch();
+  }
+
+  /// Preferred subscriptions first, then the others by title.
+  Stream<List<Podcast>> watchPodcastsByPreference() {
+    return (select(podcasts)..orderBy([
+          (table) => OrderingTerm.desc(table.preferred),
+          (table) => OrderingTerm.asc(table.title),
+        ]))
+        .watch();
+  }
+
+  Future<void> setPodcastPreferred(int id, {required bool preferred}) {
+    return (update(podcasts)..where((table) => table.id.equals(id))).write(
+      PodcastsCompanion(preferred: Value(preferred)),
+    );
+  }
+
+  Stream<List<EpisodeEntry>> watchInProgress({int limit = 15}) {
+    return _episodeWindow(inProgressOnly: true, limit: limit).watch();
+  }
+
+  Stream<List<EpisodeEntry>> watchFreshEpisodes({int limit = 16}) {
+    return _episodeWindow(freshOnly: true, limit: limit).watch();
+  }
+
+  Stream<List<EpisodeEntry>> watchRecentDownloads({int limit = 12}) {
+    return _episodeWindow(recentDownloads: true, limit: limit).watch();
+  }
+
+  Future<List<EpisodeEntry>> randomEpisodes({int limit = 12}) {
+    return _episodeWindow(
+      unplayedOnly: true,
+      randomOrder: true,
+      limit: limit,
+    ).get();
   }
 
   Future<List<Podcast>> listPodcasts() {
@@ -187,6 +230,33 @@ class AppDatabase extends _$AppDatabase {
     String search = '',
     int? limit,
   }) {
+    return _episodeWindow(
+      unreadOnly: unreadOnly,
+      favoritesOnly: favoritesOnly,
+      downloadsOnly: downloadsOnly,
+      queuedOnly: queuedOnly,
+      historyOnly: historyOnly,
+      podcastId: podcastId,
+      search: search,
+      limit: limit,
+    ).watch();
+  }
+
+  Selectable<EpisodeEntry> _episodeWindow({
+    bool unreadOnly = false,
+    bool favoritesOnly = false,
+    bool downloadsOnly = false,
+    bool queuedOnly = false,
+    bool historyOnly = false,
+    bool inProgressOnly = false,
+    bool freshOnly = false,
+    bool recentDownloads = false,
+    bool unplayedOnly = false,
+    bool randomOrder = false,
+    int? podcastId,
+    String search = '',
+    int? limit,
+  }) {
     final query = selectOnly(episodes)
       ..addColumns([
         episodes.id,
@@ -204,6 +274,7 @@ class AppDatabase extends _$AppDatabase {
         episodes.downloadPath,
         episodes.queueIndex,
         episodes.lastPlayedAt,
+        episodes.downloadedAt,
         podcasts.id,
         podcasts.feedUrl,
         podcasts.title,
@@ -212,6 +283,7 @@ class AppDatabase extends _$AppDatabase {
         podcasts.link,
         podcasts.subscribedAt,
         podcasts.refreshedAt,
+        podcasts.preferred,
       ])
       ..join([innerJoin(podcasts, podcasts.id.equalsExp(episodes.podcastId))]);
     if (unreadOnly) query.where(episodes.played.equals(false));
@@ -219,6 +291,19 @@ class AppDatabase extends _$AppDatabase {
     if (downloadsOnly) query.where(episodes.downloadPath.isNotNull());
     if (queuedOnly) query.where(episodes.queueIndex.isNotNull());
     if (historyOnly) query.where(episodes.lastPlayedAt.isNotNull());
+    if (inProgressOnly) {
+      query.where(
+        episodes.played.equals(false) &
+            episodes.positionMs.isBiggerThanValue(0),
+      );
+    }
+    if (freshOnly) {
+      query.where(
+        episodes.played.equals(false) & episodes.positionMs.equals(0),
+      );
+    }
+    if (recentDownloads) query.where(episodes.downloadPath.isNotNull());
+    if (unplayedOnly) query.where(episodes.played.equals(false));
     if (podcastId != null) query.where(episodes.podcastId.equals(podcastId));
     final needle = search.trim().toLowerCase();
     if (needle.isNotEmpty) {
@@ -228,7 +313,16 @@ class AppDatabase extends _$AppDatabase {
             episodes.description.lower().contains(needle),
       );
     }
-    if (queuedOnly) {
+    if (randomOrder) {
+      query.orderBy([OrderingTerm.random()]);
+    } else if (inProgressOnly) {
+      query.orderBy([OrderingTerm.desc(episodes.lastPlayedAt)]);
+    } else if (recentDownloads) {
+      query.orderBy([
+        OrderingTerm.desc(episodes.downloadedAt),
+        OrderingTerm.desc(episodes.publishedAt),
+      ]);
+    } else if (queuedOnly) {
       query.orderBy([OrderingTerm.asc(episodes.queueIndex)]);
     } else if (historyOnly) {
       query.orderBy([OrderingTerm.desc(episodes.lastPlayedAt)]);
@@ -236,41 +330,40 @@ class AppDatabase extends _$AppDatabase {
       query.orderBy([OrderingTerm.desc(episodes.publishedAt)]);
     }
     if (limit != null) query.limit(limit);
-    return query.watch().map(
-      (rows) => [
-        for (final row in rows)
-          EpisodeEntry(
-            episode: Episode(
-              id: row.read(episodes.id)!,
-              podcastId: row.read(episodes.podcastId)!,
-              guid: row.read(episodes.guid)!,
-              title: row.read(episodes.title)!,
-              description: '',
-              audioUrl: row.read(episodes.audioUrl)!,
-              mimeType: row.read(episodes.mimeType),
-              durationSeconds: row.read(episodes.durationSeconds),
-              publishedAt: row.read(episodes.publishedAt),
-              imageUrl: row.read(episodes.imageUrl),
-              positionMs: row.read(episodes.positionMs)!,
-              played: row.read(episodes.played)!,
-              favorite: row.read(episodes.favorite)!,
-              downloadPath: row.read(episodes.downloadPath),
-              queueIndex: row.read(episodes.queueIndex),
-              lastPlayedAt: row.read(episodes.lastPlayedAt),
-            ),
-            podcast: Podcast(
-              id: row.read(podcasts.id)!,
-              feedUrl: row.read(podcasts.feedUrl)!,
-              title: row.read(podcasts.title)!,
-              author: row.read(podcasts.author)!,
-              description: '',
-              imageUrl: row.read(podcasts.imageUrl),
-              link: row.read(podcasts.link),
-              subscribedAt: row.read(podcasts.subscribedAt)!,
-              refreshedAt: row.read(podcasts.refreshedAt),
-            ),
-          ),
-      ],
+    return query.map(
+      (row) => EpisodeEntry(
+        episode: Episode(
+          id: row.read(episodes.id)!,
+          podcastId: row.read(episodes.podcastId)!,
+          guid: row.read(episodes.guid)!,
+          title: row.read(episodes.title)!,
+          description: '',
+          audioUrl: row.read(episodes.audioUrl)!,
+          mimeType: row.read(episodes.mimeType),
+          durationSeconds: row.read(episodes.durationSeconds),
+          publishedAt: row.read(episodes.publishedAt),
+          imageUrl: row.read(episodes.imageUrl),
+          positionMs: row.read(episodes.positionMs)!,
+          played: row.read(episodes.played)!,
+          favorite: row.read(episodes.favorite)!,
+          downloadPath: row.read(episodes.downloadPath),
+          queueIndex: row.read(episodes.queueIndex),
+          lastPlayedAt: row.read(episodes.lastPlayedAt),
+          downloadedAt: row.read(episodes.downloadedAt),
+        ),
+        podcast: Podcast(
+          id: row.read(podcasts.id)!,
+          feedUrl: row.read(podcasts.feedUrl)!,
+          title: row.read(podcasts.title)!,
+          author: row.read(podcasts.author)!,
+          description: '',
+          imageUrl: row.read(podcasts.imageUrl),
+          link: row.read(podcasts.link),
+          subscribedAt: row.read(podcasts.subscribedAt)!,
+          refreshedAt: row.read(podcasts.refreshedAt),
+          preferred: row.read(podcasts.preferred)!,
+        ),
+      ),
     );
   }
 
@@ -412,7 +505,10 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> setDownloadPath(int id, String? path) {
     return (update(episodes)..where((table) => table.id.equals(id))).write(
-      EpisodesCompanion(downloadPath: Value(path)),
+      EpisodesCompanion(
+        downloadPath: Value(path),
+        downloadedAt: Value(path == null ? null : DateTime.now()),
+      ),
     );
   }
 

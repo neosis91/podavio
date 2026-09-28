@@ -2,6 +2,7 @@ import 'package:http/http.dart' as http;
 import 'package:podcast_search/podcast_search.dart' as remote;
 
 import 'app_database.dart';
+import 'apple_feed.dart';
 import 'models.dart';
 import 'spotify_feed.dart';
 
@@ -41,6 +42,28 @@ class FeedService {
 
   Future<remote.SearchResult> charts() {
     return _search.charts(country: remote.Country.france, limit: 24);
+  }
+
+  /// Resolves the public RSS address when iTunes search omitted it.
+  Future<String> feedUrlForAppleShow(int id) async {
+    final response = await http
+        .get(
+          Uri.parse('https://podcasts.apple.com/podcast/id$id'),
+          headers: const {
+            'User-Agent': 'Mozilla/5.0 (compatible; Podavio/0.1)',
+          },
+        )
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      throw Exception('La page Apple Podcasts n’a pas répondu.');
+    }
+    final feed = appleFeedUrlFromPage(response.body);
+    if (feed == null) {
+      throw Exception(
+        'Ce podcast n’a pas de flux RSS public. Podavio ne peut pas s’y abonner.',
+      );
+    }
+    return feed;
   }
 
   Future<int> _refreshUrl(String url) async {
