@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme.dart';
+import '../core/wallpaper_colors.dart';
 import '../settings/settings_controller.dart';
 
 class AppearancePage extends ConsumerWidget {
@@ -11,6 +13,7 @@ class AppearancePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
+    final wallpaperOption = defaultTargetPlatform != TargetPlatform.iOS;
     return Scaffold(
       appBar: AppBar(title: const Text('Interface utilisateur')),
       body: ListView(
@@ -30,27 +33,57 @@ class AppearancePage extends ConsumerWidget {
                   notifier.setThemeMode(selection.first),
             ),
           ),
-          const SizedBox(height: 8),
-          const ListTile(title: Text('Couleur')),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                for (final accent in AppAccent.values)
-                  _AccentChoice(
-                    accent: accent,
-                    selected: settings.accent == accent,
-                    onTap: () => notifier.setAccent(accent),
-                  ),
-              ],
-            ),
+          SwitchListTile(
+            title: const Text('Noir pur'),
+            subtitle: const Text('Fond noir en mode sombre'),
+            value: settings.pureBlack,
+            onChanged: notifier.setPureBlack,
           ),
+          if (wallpaperOption)
+            SwitchListTile(
+              title: const Text('Fond d’écran'),
+              subtitle: Text(_wallpaperSubtitle(ref)),
+              value: settings.wallpaperColors,
+              onChanged: notifier.setWallpaperColors,
+            ),
+          if (!wallpaperOption || !settings.wallpaperColors) ...[
+            const SizedBox(height: 8),
+            const ListTile(title: Text('Couleur')),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (final accent in AppAccent.values)
+                    _AccentChoice(
+                      accent: accent,
+                      selected: settings.accent == accent,
+                      onTap: () => notifier.setAccent(accent),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+String _wallpaperSubtitle(WidgetRef ref) {
+  final palette = ref.watch(wallpaperPaletteProvider);
+  final enabled = ref.watch(
+    settingsProvider.select((settings) => settings.wallpaperColors),
+  );
+  if (!enabled) {
+    return 'Adapter les couleurs à celles du fond d’écran';
+  }
+  if (palette.isLoading) return 'Lecture du fond d’écran…';
+  if (palette.hasError || palette.asData?.value == null) {
+    return 'Le fond d’écran n’a pas pu être lu';
+  }
+  return 'Les couleurs suivent le fond d’écran';
 }
 
 class PlaybackPage extends ConsumerWidget {

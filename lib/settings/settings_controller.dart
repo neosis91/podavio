@@ -8,6 +8,8 @@ class AppSettings {
   const AppSettings({
     required this.themeMode,
     required this.accent,
+    required this.pureBlack,
+    required this.wallpaperColors,
     required this.speed,
     required this.skipBackSeconds,
     required this.skipForwardSeconds,
@@ -17,6 +19,8 @@ class AppSettings {
 
   final ThemeMode themeMode;
   final AppAccent accent;
+  final bool pureBlack;
+  final bool wallpaperColors;
   final double speed;
   final int skipBackSeconds;
   final int skipForwardSeconds;
@@ -26,6 +30,8 @@ class AppSettings {
   AppSettings copyWith({
     ThemeMode? themeMode,
     AppAccent? accent,
+    bool? pureBlack,
+    bool? wallpaperColors,
     double? speed,
     int? skipBackSeconds,
     int? skipForwardSeconds,
@@ -35,6 +41,8 @@ class AppSettings {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
       accent: accent ?? this.accent,
+      pureBlack: pureBlack ?? this.pureBlack,
+      wallpaperColors: wallpaperColors ?? this.wallpaperColors,
       speed: speed ?? this.speed,
       skipBackSeconds: skipBackSeconds ?? this.skipBackSeconds,
       skipForwardSeconds: skipForwardSeconds ?? this.skipForwardSeconds,
@@ -56,6 +64,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
     return AppSettings(
       themeMode: ThemeMode.values.asNameMap()[themeName] ?? ThemeMode.system,
       accent: AppAccent.byId(preferences.getString('accent')),
+      pureBlack: preferences.getBool('pureBlack') ?? false,
+      wallpaperColors: preferences.getBool('wallpaperColors') ?? false,
       speed: preferences.getDouble('speed') ?? 1,
       skipBackSeconds: preferences.getInt('skipBack') ?? 10,
       skipForwardSeconds: preferences.getInt('skipForward') ?? 30,
@@ -77,6 +87,18 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAccent(AppAccent accent) async {
     state = state.copyWith(accent: accent);
     await ref.read(sharedPreferencesProvider).setString('accent', accent.id);
+  }
+
+  Future<void> setPureBlack(bool enabled) async {
+    state = state.copyWith(pureBlack: enabled);
+    await ref.read(sharedPreferencesProvider).setBool('pureBlack', enabled);
+  }
+
+  Future<void> setWallpaperColors(bool enabled) async {
+    state = state.copyWith(wallpaperColors: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('wallpaperColors', enabled);
   }
 
   Future<void> setSpeed(double speed) async {

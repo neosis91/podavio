@@ -41,15 +41,39 @@ ThemeData buildLightTheme(AppAccent accent) {
   );
 }
 
-ThemeData buildDarkTheme(AppAccent accent) {
-  return _theme(
-    ColorScheme.fromSeed(seedColor: accent.seed, brightness: Brightness.dark),
+ThemeData buildDarkTheme(AppAccent accent, {bool pureBlack = false}) {
+  final scheme = ColorScheme.fromSeed(
+    seedColor: accent.seed,
+    brightness: Brightness.dark,
+  );
+  return themeFromScheme(scheme, pureBlack: pureBlack);
+}
+
+ThemeData themeFromScheme(ColorScheme scheme, {bool pureBlack = false}) {
+  final resolved = pureBlack && scheme.brightness == Brightness.dark
+      ? _pureBlack(scheme)
+      : scheme;
+  return _theme(resolved);
+}
+
+ColorScheme _pureBlack(ColorScheme scheme) {
+  return scheme.copyWith(
+    surface: Colors.black,
+    surfaceDim: Colors.black,
+    surfaceBright: const Color(0xFF1A1A1A),
+    surfaceContainerLowest: Colors.black,
+    surfaceContainerLow: Colors.black,
+    surfaceContainer: Colors.black,
+    surfaceContainerHigh: const Color(0xFF141414),
+    surfaceContainerHighest: const Color(0xFF1C1C1C),
   );
 }
 
 ThemeData _theme(ColorScheme scheme) {
   return ThemeData(
     colorScheme: scheme,
+    scaffoldBackgroundColor: scheme.surface,
+    canvasColor: scheme.surface,
     useMaterial3: true,
     appBarTheme: AppBarTheme(
       centerTitle: false,
