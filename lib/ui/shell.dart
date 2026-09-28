@@ -21,7 +21,7 @@ class AppShell extends ConsumerWidget {
     final destinations = [
       _Destination(AppRoutes.episodes, 'Épisodes', Icons.podcasts_outlined, Icons.podcasts, unread),
       _Destination(AppRoutes.queue, 'File', Icons.queue_music_outlined, Icons.queue_music, queued),
-      const _Destination(AppRoutes.podcasts, 'Podcasts', Icons.grid_view_outlined, Icons.grid_view, 0),
+      const _Destination(AppRoutes.podcasts, 'Abonnements', Icons.grid_view_outlined, Icons.grid_view, 0),
       const _Destination(AppRoutes.discover, 'Explorer', Icons.explore_outlined, Icons.explore, 0),
       const _Destination(AppRoutes.more, 'Plus', Icons.menu_outlined, Icons.menu, 0),
     ];

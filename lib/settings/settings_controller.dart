@@ -9,24 +9,32 @@ class AppSettings {
     required this.speed,
     required this.skipBackSeconds,
     required this.skipForwardSeconds,
+    required this.podcastColumns,
+    required this.podcastList,
   });
 
   final ThemeMode themeMode;
   final double speed;
   final int skipBackSeconds;
   final int skipForwardSeconds;
+  final int podcastColumns;
+  final bool podcastList;
 
   AppSettings copyWith({
     ThemeMode? themeMode,
     double? speed,
     int? skipBackSeconds,
     int? skipForwardSeconds,
+    int? podcastColumns,
+    bool? podcastList,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
       speed: speed ?? this.speed,
       skipBackSeconds: skipBackSeconds ?? this.skipBackSeconds,
       skipForwardSeconds: skipForwardSeconds ?? this.skipForwardSeconds,
+      podcastColumns: podcastColumns ?? this.podcastColumns,
+      podcastList: podcastList ?? this.podcastList,
     );
   }
 }
@@ -45,7 +53,14 @@ class SettingsNotifier extends Notifier<AppSettings> {
       speed: preferences.getDouble('speed') ?? 1,
       skipBackSeconds: preferences.getInt('skipBack') ?? 10,
       skipForwardSeconds: preferences.getInt('skipForward') ?? 30,
+      podcastColumns: _columns(preferences.getInt('podcastColumns')),
+      podcastList: preferences.getBool('podcastList') ?? false,
     );
+  }
+
+  static int _columns(int? stored) {
+    if (stored == null || stored < 1 || stored > 6) return 3;
+    return stored;
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
@@ -66,5 +81,18 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setSkipForward(int seconds) async {
     state = state.copyWith(skipForwardSeconds: seconds);
     await ref.read(sharedPreferencesProvider).setInt('skipForward', seconds);
+  }
+
+  Future<void> setPodcastLayout({required bool list, int? columns}) async {
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (list) {
+      state = state.copyWith(podcastList: true);
+      await preferences.setBool('podcastList', true);
+      return;
+    }
+    final stored = (columns ?? state.podcastColumns).clamp(1, 6);
+    state = state.copyWith(podcastList: false, podcastColumns: stored);
+    await preferences.setBool('podcastList', false);
+    await preferences.setInt('podcastColumns', stored);
   }
 }
