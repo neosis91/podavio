@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/theme.dart';
 import '../core/wallpaper_colors.dart';
 import '../settings/settings_controller.dart';
+import 'nav_catalog.dart';
 
 class AppearancePage extends ConsumerWidget {
   const AppearancePage({super.key});
@@ -65,9 +66,125 @@ class AppearancePage extends ConsumerWidget {
               ),
             ),
           ],
+          const _SectionTitle('Préférences du volet'),
+          ListTile(
+            leading: const Icon(Icons.reorder),
+            title: const Text('Ordre des pages'),
+            subtitle: const Text('L’ordre utilisé par le menu'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showPanelOrder(context),
+          ),
         ],
       ),
     );
+  }
+}
+
+void _showPanelOrder(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    useRootNavigator: true,
+    builder: (context) => const _PanelOrderDialog(),
+  );
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.titleSmall
+            ?.copyWith(color: Theme.of(context).colorScheme.primary),
+      ),
+    );
+  }
+}
+
+class _PanelOrderDialog extends ConsumerStatefulWidget {
+  const _PanelOrderDialog();
+
+  @override
+  ConsumerState<_PanelOrderDialog> createState() => _PanelOrderDialogState();
+}
+
+class _PanelOrderDialogState extends ConsumerState<_PanelOrderDialog> {
+  late final List<String> _order;
+
+  @override
+  void initState() {
+    super.initState();
+    _order = List<String>.of(ref.read(settingsProvider).navOrder);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final height = MediaQuery.sizeOf(context).height;
+    final dialogHeight = height - 48 > 640 ? 640.0 : height - 48;
+    return Dialog(
+      child: SizedBox(
+        width: 420,
+        height: dialogHeight,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+              child: Text(
+                'Ordre des pages',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+              child: Text(
+                'Les pages s’affichent dans cet ordre. Celles qui ne tiennent pas restent dans Plus.',
+              ),
+            ),
+            Expanded(
+              child: ReorderableListView.builder(
+                buildDefaultDragHandles: true,
+                itemCount: _order.length,
+                onReorderItem: _reorder,
+                itemBuilder: (context, index) {
+                  final page = navPageByPath(_order[index])!;
+                  return ListTile(
+                    key: ValueKey(page.path),
+                    contentPadding: const EdgeInsets.only(left: 24, right: 48),
+                    leading: Icon(page.icon),
+                    title: Text(page.label),
+                  );
+                },
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                child: TextButton(
+                  onPressed: () =>
+                      Navigator.of(context, rootNavigator: true).pop(),
+                  child: const Text('Fermer'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _reorder(int oldIndex, int newIndex) {
+    setState(() {
+      final path = _order.removeAt(oldIndex);
+      _order.insert(newIndex, path);
+    });
+    ref.read(settingsProvider.notifier).setNavOrder(_order);
   }
 }
 

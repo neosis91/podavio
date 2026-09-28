@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../data/app_database.dart';
 import '../data/providers.dart';
-import '../player/player_controller.dart';
 import 'router.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
@@ -152,14 +151,14 @@ class _InlineSection extends StatelessWidget {
   }
 }
 
-class _EpisodeCard extends ConsumerWidget {
+class _EpisodeCard extends StatelessWidget {
   const _EpisodeCard({required this.entry, this.showProgress = false});
 
   final EpisodeEntry entry;
   final bool showProgress;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final episode = entry.episode;
     final duration = episode.durationSeconds == null
@@ -169,20 +168,11 @@ class _EpisodeCard extends ConsumerWidget {
     final fraction = duration == null || duration == Duration.zero
         ? null
         : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
-    final playing = ref.watch(
-      playerProvider.select((state) => state.episodeId == episode.id),
-    );
     return SizedBox(
       width: _cardWidth,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () async {
-          if (playing) {
-            context.push(AppRoutes.player);
-            return;
-          }
-          await ref.read(playerProvider.notifier).playEntry(entry);
-        },
+        onTap: () => context.push(AppRoutes.episode(episode.id)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

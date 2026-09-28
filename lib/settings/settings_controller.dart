@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme.dart';
 import '../data/providers.dart';
+import '../ui/nav_catalog.dart';
 
 class AppSettings {
   const AppSettings({
@@ -15,6 +16,7 @@ class AppSettings {
     required this.skipForwardSeconds,
     required this.podcastColumns,
     required this.podcastList,
+    required this.navOrder,
   });
 
   final ThemeMode themeMode;
@@ -26,6 +28,7 @@ class AppSettings {
   final int skipForwardSeconds;
   final int podcastColumns;
   final bool podcastList;
+  final List<String> navOrder;
 
   AppSettings copyWith({
     ThemeMode? themeMode,
@@ -37,6 +40,7 @@ class AppSettings {
     int? skipForwardSeconds,
     int? podcastColumns,
     bool? podcastList,
+    List<String>? navOrder,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -48,6 +52,7 @@ class AppSettings {
       skipForwardSeconds: skipForwardSeconds ?? this.skipForwardSeconds,
       podcastColumns: podcastColumns ?? this.podcastColumns,
       podcastList: podcastList ?? this.podcastList,
+      navOrder: navOrder ?? this.navOrder,
     );
   }
 }
@@ -71,6 +76,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       skipForwardSeconds: preferences.getInt('skipForward') ?? 30,
       podcastColumns: _columns(preferences.getInt('podcastColumns')),
       podcastList: preferences.getBool('podcastList') ?? false,
+      navOrder: normalizeNavOrder(preferences.getStringList('navOrder')),
     );
   }
 
@@ -127,5 +133,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
     state = state.copyWith(podcastList: false, podcastColumns: stored);
     await preferences.setBool('podcastList', false);
     await preferences.setInt('podcastColumns', stored);
+  }
+
+  Future<void> setNavOrder(List<String> order) async {
+    final normalized = normalizeNavOrder(order);
+    state = state.copyWith(navOrder: normalized);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setStringList('navOrder', normalized);
   }
 }

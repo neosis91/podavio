@@ -13,4 +13,6 @@ class AppRoutes {
   static const player = '/player';
 
   static String podcast(int id) => '/podcasts/$id';
+
+  static String episode(int id) => '/episode/$id';
 }

@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/format.dart';
 import '../../data/app_database.dart';
 import '../../data/download_controller.dart';
+import '../../data/download_service.dart';
 import '../../data/providers.dart';
 import '../../player/player_controller.dart';
 import '../router.dart';
@@ -41,137 +42,193 @@ class EpisodeTile extends ConsumerWidget {
     ].where((part) => part.isNotEmpty).join(' · ');
 
     final muted = theme.colorScheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: PodcastCover(url: entry.imageUrl),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  episode.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: episode.played
-                        ? FontWeight.w500
-                        : FontWeight.w700,
-                    color: episode.played ? muted : theme.colorScheme.onSurface,
-                  ),
-                ),
-                if (details.isNotEmpty) ...[
-                  const SizedBox(height: 2),
+    return InkWell(
+      onTap: () => context.push(AppRoutes.episode(episode.id)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: PodcastCover(url: entry.imageUrl),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    details,
+                    episode.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: episode.played
+                          ? FontWeight.w500
+                          : FontWeight.w700,
+                      color: episode.played
+                          ? muted
+                          : theme.colorScheme.onSurface,
+                    ),
                   ),
+                  if (details.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      details,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+                    ),
+                  ],
+                  if (progress != null ||
+                      episode.downloadPath != null ||
+                      episode.favorite ||
+                      episode.queueIndex != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        children: [
+                          if (progress != null)
+                            DownloadProgressRing(
+                              progress: progress,
+                              onCancel: () => ref
+                                  .read(downloadProgressProvider.notifier)
+                                  .cancel(episode.id),
+                            )
+                          else if (episode.downloadPath != null)
+                            Icon(
+                              Icons.download_done,
+                              size: 16,
+                              color: theme.colorScheme.primary,
+                            ),
+                          if (episode.favorite)
+                            Icon(
+                              Icons.favorite,
+                              size: 16,
+                              color: theme.colorScheme.primary,
+                            ),
+                          if (episode.queueIndex != null)
+                            Icon(
+                              Icons.queue_music,
+                              size: 16,
+                              color: theme.colorScheme.primary,
+                            ),
+                        ],
+                      ),
+                    ),
                 ],
-                if (episode.downloadPath != null ||
-                    episode.favorite ||
-                    episode.queueIndex != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      children: [
-                        if (episode.downloadPath != null)
-                          Icon(
-                            Icons.download_done,
-                            size: 16,
-                            color: theme.colorScheme.primary,
-                          ),
-                        if (episode.favorite)
-                          Icon(
-                            Icons.favorite,
-                            size: 16,
-                            color: theme.colorScheme.primary,
-                          ),
-                        if (episode.queueIndex != null)
-                          Icon(
-                            Icons.queue_music,
-                            size: 16,
-                            color: theme.colorScheme.primary,
-                          ),
-                      ],
-                    ),
+              ),
+            ),
+            IconButton(
+              tooltip: playing ? 'Ouvrir le lecteur' : 'Lire',
+              onPressed: () async {
+                if (playing) {
+                  context.push(AppRoutes.player);
+                  return;
+                }
+                await ref.read(playerProvider.notifier).playEntry(entry);
+              },
+              icon: Icon(playing ? Icons.graphic_eq : Icons.play_arrow),
+            ),
+            PopupMenuButton<EpisodeMenuAction>(
+              tooltip: 'Actions',
+              onSelected: (action) =>
+                  runEpisodeAction(context, ref, entry, action),
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: EpisodeMenuAction.queue,
+                  child: Text(
+                    episode.queueIndex == null
+                        ? 'Ajouter à la file'
+                        : 'Retirer de la file',
                   ),
-                if (progress != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6, right: 12),
-                    child: LinearProgressIndicator(
-                      value: progress == 0 ? null : progress,
-                    ),
+                ),
+                PopupMenuItem(
+                  value: EpisodeMenuAction.played,
+                  child: Text(
+                    episode.played
+                        ? 'Marquer comme non lu'
+                        : 'Marquer comme lu',
                   ),
+                ),
+                PopupMenuItem(
+                  value: EpisodeMenuAction.favorite,
+                  child: Text(
+                    episode.favorite
+                        ? 'Retirer des favoris'
+                        : 'Ajouter aux favoris',
+                  ),
+                ),
+                PopupMenuItem(
+                  value: EpisodeMenuAction.download,
+                  child: Text(
+                    episode.downloadPath == null
+                        ? 'Télécharger'
+                        : 'Supprimer le téléchargement',
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: EpisodeMenuAction.share,
+                  child: Text('Partager'),
+                ),
               ],
             ),
-          ),
-          IconButton(
-            tooltip: playing ? 'Ouvrir le lecteur' : 'Lire',
-            onPressed: () async {
-              if (playing) {
-                context.push(AppRoutes.player);
-                return;
-              }
-              await ref.read(playerProvider.notifier).playEntry(entry);
-            },
-            icon: Icon(playing ? Icons.graphic_eq : Icons.play_arrow),
-          ),
-          PopupMenuButton<EpisodeMenuAction>(
-            tooltip: 'Actions',
-            onSelected: (action) =>
-                runEpisodeAction(context, ref, entry, action),
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: EpisodeMenuAction.queue,
-                child: Text(
-                  episode.queueIndex == null
-                      ? 'Ajouter à la file'
-                      : 'Retirer de la file',
-                ),
-              ),
-              PopupMenuItem(
-                value: EpisodeMenuAction.played,
-                child: Text(
-                  episode.played ? 'Marquer comme non lu' : 'Marquer comme lu',
-                ),
-              ),
-              PopupMenuItem(
-                value: EpisodeMenuAction.favorite,
-                child: Text(
-                  episode.favorite
-                      ? 'Retirer des favoris'
-                      : 'Ajouter aux favoris',
-                ),
-              ),
-              PopupMenuItem(
-                value: EpisodeMenuAction.download,
-                child: Text(
-                  episode.downloadPath == null
-                      ? 'Télécharger'
-                      : 'Supprimer le téléchargement',
-                ),
-              ),
-              const PopupMenuItem(
-                value: EpisodeMenuAction.share,
-                child: Text('Partager'),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
 enum EpisodeMenuAction { queue, played, favorite, download, share }
+
+class DownloadProgressRing extends StatelessWidget {
+  const DownloadProgressRing({
+    super.key,
+    required this.progress,
+    this.onCancel,
+    this.showClose = false,
+    this.size = 28,
+  });
+
+  final double progress;
+  final VoidCallback? onCancel;
+  final bool showClose;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ring = SizedBox.square(
+      dimension: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CircularProgressIndicator(
+            strokeWidth: 2,
+            value: progress == 0 ? null : progress,
+          ),
+          if (showClose || onCancel != null)
+            Icon(Icons.close, size: size * 0.42),
+        ],
+      ),
+    );
+    final cancel = onCancel;
+    if (cancel == null) return ring;
+    return IconButton(
+      tooltip: 'Annuler le téléchargement',
+      onPressed: cancel,
+      padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+      constraints: BoxConstraints.tightFor(width: size, height: size),
+      style: IconButton.styleFrom(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.square(size),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      icon: ring,
+    );
+  }
+}
 
 Future<void> shareEpisode(EpisodeEntry entry) {
   final notes = plainText(entry.episode.description);
@@ -219,6 +276,8 @@ Future<void> runEpisodeAction(
         final full = await database.getEpisode(episode.id);
         await shareEpisode(full ?? entry);
     }
+  } on DownloadCancelled {
+    return;
   } catch (error) {
     if (context.mounted) showMessage(context, errorText(error));
   }

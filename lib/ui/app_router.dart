@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../player/player_controller.dart';
 import 'discover_page.dart';
+import 'episode_page.dart';
 import 'episodes_page.dart';
 import 'home_page.dart';
 import 'library_pages.dart';
@@ -76,6 +77,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.playback,
             builder: (context, state) => const PlaybackPage(),
+          ),
+          GoRoute(
+            path: '/episode/:id',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['id'] ?? '');
+              if (id == null) return const HomePage();
+              return EpisodePage(episodeId: id);
+            },
           ),
         ],
       ),
