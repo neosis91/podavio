@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/format.dart';
 import '../../player/player_controller.dart';
 import '../router.dart';
+import 'brand.dart';
 import 'cover.dart';
 
 class MiniPlayer extends ConsumerWidget {
@@ -86,10 +87,7 @@ class MiniPlayer extends ConsumerWidget {
                   IconButton(
                     tooltip: player.playing ? 'Pause' : 'Lecture',
                     onPressed: () => ref.read(playerProvider.notifier).toggle(),
-                    icon: Icon(
-                      player.playing ? Icons.pause_circle : Icons.play_circle,
-                      size: 36,
-                    ),
+                    icon: PlayPauseIcon(playing: player.playing, size: 28),
                   ),
                 ],
               ),

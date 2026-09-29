@@ -51,14 +51,23 @@ class EpisodeTile extends ConsumerWidget {
     return InkWell(
       onTap: () => context.push(AppRoutes.episode(episode.id)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+        padding: EdgeInsets.fromLTRB(reorderIndex != null ? 4 : 16, 8, 4, 8),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: PodcastCover(url: entry.imageUrl),
-            ),
+            if (reorderIndex != null)
+              Tooltip(
+                message: 'Déplacer',
+                child: ReorderableDragStartListener(
+                  index: reorderIndex!,
+                  child: const SizedBox(
+                    width: 40,
+                    height: 48,
+                    child: Center(child: Icon(Icons.drag_handle)),
+                  ),
+                ),
+              ),
+            PodcastCover(url: entry.imageUrl),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -110,11 +119,30 @@ class EpisodeTile extends ConsumerWidget {
               ),
             ),
             if (progress != null)
-              DownloadProgressRing(
-                progress: progress,
-                onCancel: () => ref
-                    .read(downloadProgressProvider.notifier)
-                    .cancel(episode.id),
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 40,
+                      child: Text(
+                        progress <= 0 ? '…' : '${(progress * 100).round()} %',
+                        textAlign: TextAlign.right,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                    DownloadProgressRing(
+                      progress: progress,
+                      onCancel: () => ref
+                          .read(downloadProgressProvider.notifier)
+                          .cancel(episode.id),
+                    ),
+                  ],
+                ),
               )
             else if (episode.downloadPath != null)
               IconButton(
@@ -182,18 +210,6 @@ class EpisodeTile extends ConsumerWidget {
                 ),
               ],
             ),
-            if (reorderIndex != null)
-              Tooltip(
-                message: 'Déplacer',
-                child: ReorderableDragStartListener(
-                  index: reorderIndex!,
-                  child: const SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Icon(Icons.drag_handle),
-                  ),
-                ),
-              ),
           ],
         ),
       ),

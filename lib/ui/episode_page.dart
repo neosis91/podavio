@@ -8,6 +8,7 @@ import '../data/download_controller.dart';
 import '../data/providers.dart';
 import '../player/player_controller.dart';
 import 'router.dart';
+import 'widgets/brand.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/episode_tile.dart';
@@ -88,11 +89,7 @@ class _EpisodeDetail extends ConsumerWidget {
         : downloaded
         ? 'Lecture'
         : 'Streaming';
-    final playIcon = playing
-        ? Icons.pause
-        : downloaded || position > Duration.zero
-        ? Icons.play_arrow
-        : Icons.podcasts;
+    final usePlayPause = playing || downloaded || position > Duration.zero;
 
     return Scaffold(
       appBar: AppBar(
@@ -135,7 +132,9 @@ class _EpisodeDetail extends ConsumerWidget {
                   Expanded(
                     child: FilledButton.icon(
                       onPressed: () => _togglePlayback(ref, current),
-                      icon: Icon(playIcon),
+                      icon: usePlayPause
+                          ? PlayPauseIcon(playing: playing, size: 20)
+                          : const Icon(Icons.podcasts),
                       label: Text(playLabel),
                     ),
                   ),

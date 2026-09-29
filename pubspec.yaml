@@ -97,6 +97,9 @@ flutter:
     - assets/brand/icon.png
     - assets/brand/fast_rewind.svg
     - assets/brand/fast_forward.svg
+    - assets/brand/keyboard_arrow_down.svg
+    - assets/brand/play_arrow.svg
+    - assets/brand/pause.svg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

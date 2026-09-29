@@ -20,7 +20,13 @@ class PlayerPage extends ConsumerWidget {
     );
     if (episodeId == null) {
       return Scaffold(
-        appBar: AppBar(),
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: 'Réduire',
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const SkipIcon.collapse(),
+          ),
+        ),
         body: const EmptyState(
           title: 'Aucune lecture',
           message: 'Lancez un épisode pour ouvrir le lecteur.',
@@ -30,6 +36,11 @@ class PlayerPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Réduire',
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const SkipIcon.collapse(),
+        ),
         title: const Text('Lecture'),
         actions: [
           const _SleepAction(),
@@ -144,7 +155,7 @@ class _PlayerTransport extends ConsumerWidget {
               tooltip: player.playing ? 'Pause' : 'Lecture',
               iconSize: 56,
               onPressed: () => ref.read(playerProvider.notifier).toggle(),
-              icon: Icon(player.playing ? Icons.pause : Icons.play_arrow),
+              icon: PlayPauseIcon(playing: player.playing, size: 36),
             ),
             const SizedBox(width: 12),
             IconButton(
