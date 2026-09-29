@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../core/build_info.dart';
 import '../data/opml.dart';
 import '../data/providers.dart';
 import 'episodes_page.dart';
@@ -22,6 +23,9 @@ class AboutPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final muted = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return Scaffold(
       appBar: AppBar(title: const Text('À propos')),
       body: ListView(
@@ -40,14 +44,29 @@ class AboutPage extends StatelessWidget {
           FutureBuilder<PackageInfo>(
             future: _packageInfo,
             builder: (context, snapshot) {
-              final version = snapshot.data?.version;
-              if (version == null) return const SizedBox.shrink();
-              return Text(
-                'Version $version',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+              final packaged = snapshot.data?.version;
+              final version = (BuildInfo.version.isNotEmpty)
+                  ? BuildInfo.version
+                  : packaged;
+              if (version == null || version.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return Column(
+                children: [
+                  Text(
+                    'Version $version',
+                    textAlign: TextAlign.center,
+                    style: muted,
+                  ),
+                  if (BuildInfo.hasGitlabId) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'GitLab #${BuildInfo.gitlabPipelineId}',
+                      textAlign: TextAlign.center,
+                      style: muted,
+                    ),
+                  ],
+                ],
               );
             },
           ),
