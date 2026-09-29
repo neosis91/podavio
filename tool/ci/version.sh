@@ -1,17 +1,17 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Calcule la version CalVer Podavio : année.mois.numéro
 # - En CI GitLab : numéro = CI_PIPELINE_IID (incrémenté à chaque pipeline)
 # - En local : numéro = 0 (sauf si PODAVIO_BUILD_NUMBER est fixé)
 # Identifiant unique GitLab : CI_PIPELINE_ID
-set -euo pipefail
+set -eu
 
 YEAR="$(date -u +%Y)"
 # Mois sans zéro initial : 2026.9.42 et non 2026.09.42
-MONTH="$(date -u +%-m 2>/dev/null || date -u +%m | sed 's/^0//')"
+MONTH="$(date -u +%m | sed 's/^0//')"
 
-if [[ -n "${CI_PIPELINE_IID:-}" ]]; then
+if [ -n "${CI_PIPELINE_IID:-}" ]; then
   NUMBER="${CI_PIPELINE_IID}"
-elif [[ -n "${PODAVIO_BUILD_NUMBER:-}" ]]; then
+elif [ -n "${PODAVIO_BUILD_NUMBER:-}" ]; then
   NUMBER="${PODAVIO_BUILD_NUMBER}"
 else
   NUMBER="0"
@@ -23,7 +23,7 @@ PODAVIO_GITLAB_ID="${CI_PIPELINE_ID:-}"
 
 export PODAVIO_VERSION PODAVIO_BUILD PODAVIO_GITLAB_ID
 
-if [[ "${1:-}" == "--dotenv" ]]; then
+if [ "${1:-}" = "--dotenv" ]; then
   {
     echo "PODAVIO_VERSION=${PODAVIO_VERSION}"
     echo "PODAVIO_BUILD=${PODAVIO_BUILD}"
