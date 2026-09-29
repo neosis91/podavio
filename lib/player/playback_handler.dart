@@ -1,28 +1,64 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_media_session/flutter_media_session.dart';
 import 'package:just_audio/just_audio.dart';
 
-/// Session média partagée avec la notification, l’écran de verrouillage et MPRIS.
+/// Session système (notification média, écran de verrouillage, centre de contrôle).
 PlaybackHandler? playbackHandler;
 
-class PlaybackHandler extends BaseAudioHandler {
+class PlaybackHandler {
+  PlaybackHandler(this._session);
+
+  final FlutterMediaSession _session;
   AudioPlayer? _player;
-  var skipBack = const Duration(seconds: 10);
-  var skipForward = const Duration(seconds: 30);
+  var _skipBack = const Duration(seconds: 10);
+  var _skipForward = const Duration(seconds: 30);
   var _active = false;
+  var _unsupported = false;
+  MediaMetadata? _metadata;
+  Future<void>? _starting;
+  DateTime _lastPush = DateTime.fromMillisecondsSinceEpoch(0);
   final List<StreamSubscription<dynamic>> _subscriptions = [];
+
+  Duration get skipBack => _skipBack;
+
+  set skipBack(Duration value) {
+    _skipBack = value;
+    unawaited(_publishIntervals());
+  }
+
+  Duration get skipForward => _skipForward;
+
+  set skipForward(Duration value) {
+    _skipForward = value;
+    unawaited(_publishIntervals());
+  }
+
+  Future<void> prepare() async {
+    if (!kIsWeb && Platform.isWindows) {
+      try {
+        await _session.setWindowsAppUserModelId(
+          'fr.podavio.podavio',
+          displayName: 'Podavio',
+        );
+      } catch (error, stack) {
+        debugPrint('Identifiant Windows indisponible: $error\n$stack');
+      }
+    }
+    await _publishIntervals();
+  }
 
   void attach(AudioPlayer player) {
     if (identical(_player, player)) return;
     detach();
     _player = player;
     _subscriptions.addAll([
-      player.playbackEventStream.listen((_) => _broadcast()),
-      player.playingStream.listen((_) => _broadcast()),
-      player.speedStream.listen((_) => _broadcast()),
+      player.playerStateStream.listen((_) => _push(force: true)),
+      player.positionStream.listen((_) => _push()),
+      player.speedStream.listen((_) => _push(force: true)),
       player.durationStream.listen(_rememberDuration),
     ]);
   }
@@ -37,70 +73,70 @@ class PlaybackHandler extends BaseAudioHandler {
 
   void activate() {
     _active = true;
-    _broadcast();
+    unawaited(_ensureStarted().then((_) => _push(force: true)));
   }
 
   void setEpisode({
-    required String id,
     required String title,
     required String podcast,
     Uri? artUri,
     Duration? duration,
   }) {
     _active = true;
-    final item = MediaItem(
-      id: id,
+    _metadata = MediaMetadata(
       title: title,
-      album: podcast,
       artist: podcast,
-      artUri: artUri,
+      album: podcast,
+      artworkUri: artUri?.toString(),
       duration: duration != null && duration > Duration.zero ? duration : null,
     );
-    mediaItem.add(item);
-    queue.add([item]);
-    _broadcast();
+    unawaited(
+      _ensureStarted().then((_) async {
+        await _pushMetadata();
+        _push(force: true);
+      }),
+    );
   }
 
-  @override
-  Future<void> play() async {
-    _active = true;
-    await _player?.play();
+  Future<void> _ensureStarted() {
+    if (_unsupported) return Future<void>.value();
+    return _starting ??= _start();
   }
 
-  @override
-  Future<void> pause() => _player?.pause() ?? Future<void>.value();
+  Future<void> _start() async {
+    try {
+      await _session.activate();
+      _session.setActionHandler(
+        onPlay: () => unawaited(_player?.play()),
+        onPause: () => unawaited(_player?.pause()),
+        onStop: () => unawaited(_stop()),
+        onSeekTo: (position) => unawaited(_player?.seek(position)),
+        onSkipToNext: () => unawaited(_skip(_skipForward)),
+        onSkipToPrevious: () => unawaited(_skip(-_skipBack)),
+        onFastForward: () => unawaited(_skip(_skipForward)),
+        onRewind: () => unawaited(_skip(-_skipBack)),
+      );
+      await FlutterMediaSessionPlatform.instance.updateAvailableActions(
+        _actions,
+      );
+      await _publishIntervals();
+      await _pushMetadata();
+    } catch (error, stack) {
+      if (error is MissingPluginException) _unsupported = true;
+      _starting = null;
+      debugPrint('Contrôles média indisponibles: $error\n$stack');
+    }
+  }
 
-  @override
-  Future<void> seek(Duration position) =>
-      _player?.seek(position) ?? Future<void>.value();
-
-  @override
-  Future<void> stop() async {
+  Future<void> _stop() async {
     _active = false;
+    _starting = null;
     await _player?.pause();
-    await super.stop();
-  }
-
-  @override
-  Future<void> rewind() => _skip(-skipBack);
-
-  @override
-  Future<void> fastForward() => _skip(skipForward);
-
-  @override
-  Future<void> skipToPrevious() => rewind();
-
-  @override
-  Future<void> skipToNext() => fastForward();
-
-  @override
-  Future<void> seekBackward(bool begin) async {
-    if (begin) await rewind();
-  }
-
-  @override
-  Future<void> seekForward(bool begin) async {
-    if (begin) await fastForward();
+    try {
+      await _session.deactivate();
+    } catch (error, stack) {
+      debugPrint('Arrêt des contrôles média impossible: $error\n$stack');
+    }
   }
 
   Future<void> _skip(Duration offset) async {
@@ -116,88 +152,90 @@ class PlaybackHandler extends BaseAudioHandler {
   }
 
   void _rememberDuration(Duration? duration) {
-    final current = mediaItem.value;
+    final current = _metadata;
     if (current == null || duration == null || duration <= Duration.zero) {
       return;
     }
     if (current.duration == duration) return;
-    mediaItem.add(current.copyWith(duration: duration));
+    _metadata = MediaMetadata(
+      title: current.title,
+      artist: current.artist,
+      album: current.album,
+      artworkUri: current.artworkUri,
+      duration: duration,
+    );
+    unawaited(_pushMetadata());
   }
 
-  void _broadcast() {
+  Future<void> _publishIntervals() async {
+    try {
+      await _session.setSkipIntervals(
+        backwardSeconds: _skipBack.inSeconds,
+        forwardSeconds: _skipForward.inSeconds,
+      );
+    } catch (error, stack) {
+      debugPrint('Intervalles de saut indisponibles: $error\n$stack');
+    }
+  }
+
+  Future<void> _pushMetadata() async {
+    final metadata = _metadata;
+    if (metadata == null || _unsupported || _starting == null) return;
+    try {
+      await FlutterMediaSessionPlatform.instance.updateMetadata(metadata);
+    } catch (error, stack) {
+      debugPrint('Métadonnées média indisponibles: $error\n$stack');
+    }
+  }
+
+  void _push({bool force = false}) {
     final player = _player;
-    if (!_active || player == null) return;
-    final playing = player.playing;
-    playbackState.add(
-      playbackState.value.copyWith(
-        controls: _controls(playing),
-        systemActions: const {
-          MediaAction.seek,
-          MediaAction.seekForward,
-          MediaAction.seekBackward,
-        },
-        androidCompactActionIndices: const [0, 1, 2],
-        processingState: switch (player.processingState) {
-          ProcessingState.idle => AudioProcessingState.loading,
-          ProcessingState.loading => AudioProcessingState.loading,
-          ProcessingState.buffering => AudioProcessingState.buffering,
-          ProcessingState.ready => AudioProcessingState.ready,
-          ProcessingState.completed => AudioProcessingState.completed,
-        },
-        playing: playing,
-        updatePosition: player.position,
-        bufferedPosition: player.bufferedPosition,
-        speed: player.speed,
-        queueIndex: 0,
-      ),
+    if (!_active || player == null || _unsupported || _starting == null) {
+      return;
+    }
+    final now = DateTime.now();
+    if (!force && now.difference(_lastPush) < const Duration(seconds: 1)) {
+      return;
+    }
+    _lastPush = now;
+    final state = PlaybackState(
+      status: _status(player),
+      position: player.position,
+      speed: player.speed,
+      bufferedPosition: player.bufferedPosition,
+    );
+    unawaited(
+      FlutterMediaSessionPlatform.instance
+          .updatePlaybackState(state)
+          .catchError((Object error, StackTrace stack) {
+            debugPrint('État de lecture indisponible: $error\n$stack');
+          }),
     );
   }
+
+  Set<MediaAction> get _actions {
+    final apple = !kIsWeb && (Platform.isIOS || Platform.isMacOS);
+    return {
+      MediaAction.play,
+      MediaAction.pause,
+      MediaAction.seekTo,
+      MediaAction.stop,
+      if (apple) ...[MediaAction.rewind, MediaAction.fastForward],
+      if (!apple) ...[MediaAction.skipToPrevious, MediaAction.skipToNext],
+    };
+  }
 }
 
-List<MediaControl> _controls(bool playing) {
-  final ios = !kIsWeb && Platform.isIOS;
-  return [
-    ios ? _rewind : _previous,
-    if (playing) _pause else _play,
-    ios ? _fastForward : _next,
-  ];
+PlaybackStatus _status(AudioPlayer player) {
+  return switch (player.processingState) {
+    ProcessingState.idle ||
+    ProcessingState.loading ||
+    ProcessingState.buffering => PlaybackStatus.buffering,
+    ProcessingState.ready =>
+      player.playing ? PlaybackStatus.playing : PlaybackStatus.paused,
+    ProcessingState.completed => PlaybackStatus.ended,
+  };
 }
-
-const _play = MediaControl(
-  androidIcon: 'drawable/audio_service_play_arrow',
-  label: 'Lecture',
-  action: MediaAction.play,
-);
-
-const _pause = MediaControl(
-  androidIcon: 'drawable/audio_service_pause',
-  label: 'Pause',
-  action: MediaAction.pause,
-);
-
-const _rewind = MediaControl(
-  androidIcon: 'drawable/audio_service_fast_rewind',
-  label: 'Reculer',
-  action: MediaAction.rewind,
-);
-
-const _fastForward = MediaControl(
-  androidIcon: 'drawable/audio_service_fast_forward',
-  label: 'Avancer',
-  action: MediaAction.fastForward,
-);
-
-const _previous = MediaControl(
-  androidIcon: 'drawable/audio_service_skip_previous',
-  label: 'Reculer',
-  action: MediaAction.skipToPrevious,
-);
-
-const _next = MediaControl(
-  androidIcon: 'drawable/audio_service_skip_next',
-  label: 'Avancer',
-  action: MediaAction.skipToNext,
-);
 
 Uri? artworkUri(String? url) {
   if (url == null || url.isEmpty) return null;

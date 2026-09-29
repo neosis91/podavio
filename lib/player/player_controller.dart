@@ -222,7 +222,6 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     );
     try {
       playbackHandler?.setEpisode(
-        id: '${episode.id}',
         title: episode.title,
         podcast: podcast.title,
         artUri: artworkUri(episode.imageUrl ?? podcast.imageUrl),
