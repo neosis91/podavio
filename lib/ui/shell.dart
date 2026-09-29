@@ -196,7 +196,9 @@ double _slotWidth(String label, TextStyle style) =>
 double _railWidth(List<_Destination> items) {
   var text = 0.0;
   for (final item in items) {
-    text = math.max(text, _textWidth(item.label, _railLabelStyle));
+    var width = _textWidth(item.label, _railLabelStyle);
+    if (item.count > 0) width += 32;
+    text = math.max(text, width);
   }
   return math.min(248, math.max(196, 88 + text));
 }
@@ -333,12 +335,12 @@ class _NavButton extends StatelessWidget {
     final foreground = selected
         ? scheme.onSecondaryContainer
         : scheme.onSurfaceVariant;
+    final iconData = selected ? destination.selectedIcon : destination.icon;
     final icon = IconTheme(
       data: IconThemeData(color: foreground, size: 24),
-      child: _BadgedIcon(
-        icon: selected ? destination.selectedIcon : destination.icon,
-        count: destination.count,
-      ),
+      child: rail
+          ? Icon(iconData)
+          : _BadgedIcon(icon: iconData, count: destination.count),
     );
     final label = Text(
       destination.label,
@@ -348,6 +350,19 @@ class _NavButton extends StatelessWidget {
       style: (rail ? _railLabelStyle : _barLabelStyle).copyWith(
         color: foreground,
       ),
+    );
+    final railLabel = Row(
+      children: [
+        Flexible(child: label),
+        if (destination.count > 0) ...[
+          const SizedBox(width: 8),
+          Badge(
+            label: Text(
+              destination.count > 99 ? '99+' : '${destination.count}',
+            ),
+          ),
+        ],
+      ],
     );
     final child = rail
         ? Padding(
@@ -363,7 +378,7 @@ class _NavButton extends StatelessWidget {
                   children: [
                     icon,
                     const SizedBox(width: 12),
-                    Expanded(child: label),
+                    Expanded(child: railLabel),
                   ],
                 ),
               ),

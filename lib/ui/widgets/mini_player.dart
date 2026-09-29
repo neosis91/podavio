@@ -20,55 +20,81 @@ class MiniPlayer extends ConsumerWidget {
         ? 0.0
         : (player.position.inMilliseconds / total).clamp(0.0, 1.0);
 
+    void openPlayer() => context.push(AppRoutes.player);
+
     return RepaintBoundary(
       child: Material(
         color: scheme.surfaceContainer,
-        child: InkWell(
-          onTap: () => context.push(AppRoutes.player),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              LinearProgressIndicator(value: progress, minHeight: 2),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-                child: Row(
-                  children: [
-                    PodcastCover(url: player.imageUrl, size: 48, radius: 6),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            player.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LinearProgressIndicator(value: progress, minHeight: 2),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Tooltip(
+                      message: 'Ouvrir la lecture',
+                      child: InkWell(
+                        onTap: openPlayer,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                          child: Row(
+                            children: [
+                              PodcastCover(
+                                url: player.imageUrl,
+                                size: 48,
+                                radius: 6,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      player.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    Text(
+                                      player.error ??
+                                          '${player.podcastTitle} · ${formatClock(player.position)}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.keyboard_arrow_up,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ],
                           ),
-                          Text(
-                            player.error ??
-                                '${player.podcastTitle} · ${formatClock(player.position)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: scheme.onSurfaceVariant),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                    IconButton(
-                      tooltip: player.playing ? 'Pause' : 'Lecture',
-                      onPressed: () =>
-                          ref.read(playerProvider.notifier).toggle(),
-                      icon: Icon(
-                        player.playing ? Icons.pause_circle : Icons.play_circle,
-                        size: 36,
-                      ),
+                  ),
+                  IconButton(
+                    tooltip: player.playing ? 'Pause' : 'Lecture',
+                    onPressed: () => ref.read(playerProvider.notifier).toggle(),
+                    icon: Icon(
+                      player.playing ? Icons.pause_circle : Icons.play_circle,
+                      size: 36,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

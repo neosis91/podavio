@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../player/player_controller.dart';
+import '../settings/settings_controller.dart';
 import 'discover_page.dart';
 import 'episode_page.dart';
 import 'episodes_page.dart';
@@ -17,9 +18,13 @@ import 'router.dart';
 import 'settings_page.dart';
 import 'shell.dart';
 
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>((ref) {
+  final start = ref.read(settingsProvider).navOrder.first;
   return GoRouter(
-    initialLocation: AppRoutes.home,
+    navigatorKey: rootNavigatorKey,
+    initialLocation: start,
     routes: [
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
@@ -90,7 +95,26 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.player,
-        builder: (context, state) => const PlayerPage(),
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (context, state) => CustomTransitionPage<void>(
+          key: state.pageKey,
+          fullscreenDialog: true,
+          child: const PlayerPage(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInCubic,
+            );
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 1),
+                end: Offset.zero,
+              ).animate(curved),
+              child: child,
+            );
+          },
+        ),
       ),
     ],
   );
