@@ -49,7 +49,7 @@ Future<void> _startBackgroundPlayback() async {
         androidNotificationIcon: 'drawable/ic_notification',
         androidNotificationOngoing: true,
         androidStopForegroundOnPause: true,
-        notificationColor: podavioBlue,
+        notificationColor: podavioGreen,
         fastForwardInterval: Duration(seconds: skipForward),
         rewindInterval: Duration(seconds: skipBack),
       ),

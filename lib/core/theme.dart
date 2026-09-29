@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 const podavioBlue = Color(0xFF002395);
 const podavioRed = Color(0xFFED2939);
+const podavioGreen = Color(0xFF2E895D);
 
 enum AppAccent {
+  podavio('podavio', 'Podavio', podavioGreen),
   blue('blue', 'Bleu', podavioBlue),
   green('green', 'Vert', Color(0xFF2E7D32)),
   purple('purple', 'Violet', Color(0xFF6A1B9A)),
@@ -31,7 +33,7 @@ enum AppAccent {
     for (final accent in values) {
       if (accent.id == id) return accent;
     }
-    return blue;
+    return podavio;
   }
 }
 

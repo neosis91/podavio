@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 /// Session média partagée avec la notification, l’écran de verrouillage et MPRIS.
@@ -46,18 +48,16 @@ class PlaybackHandler extends BaseAudioHandler {
     Duration? duration,
   }) {
     _active = true;
-    mediaItem.add(
-      MediaItem(
-        id: id,
-        title: title,
-        album: podcast,
-        artist: podcast,
-        artUri: artUri,
-        duration: duration != null && duration > Duration.zero
-            ? duration
-            : null,
-      ),
+    final item = MediaItem(
+      id: id,
+      title: title,
+      album: podcast,
+      artist: podcast,
+      artUri: artUri,
+      duration: duration != null && duration > Duration.zero ? duration : null,
     );
+    mediaItem.add(item);
+    queue.add([item]);
     _broadcast();
   }
 
@@ -86,6 +86,12 @@ class PlaybackHandler extends BaseAudioHandler {
 
   @override
   Future<void> fastForward() => _skip(skipForward);
+
+  @override
+  Future<void> skipToPrevious() => rewind();
+
+  @override
+  Future<void> skipToNext() => fastForward();
 
   @override
   Future<void> seekBackward(bool begin) async {
@@ -124,7 +130,7 @@ class PlaybackHandler extends BaseAudioHandler {
     final playing = player.playing;
     playbackState.add(
       playbackState.value.copyWith(
-        controls: [_rewind, if (playing) _pause else _play, _fastForward],
+        controls: _controls(playing),
         systemActions: const {
           MediaAction.seek,
           MediaAction.seekForward,
@@ -132,7 +138,7 @@ class PlaybackHandler extends BaseAudioHandler {
         },
         androidCompactActionIndices: const [0, 1, 2],
         processingState: switch (player.processingState) {
-          ProcessingState.idle => AudioProcessingState.idle,
+          ProcessingState.idle => AudioProcessingState.loading,
           ProcessingState.loading => AudioProcessingState.loading,
           ProcessingState.buffering => AudioProcessingState.buffering,
           ProcessingState.ready => AudioProcessingState.ready,
@@ -142,9 +148,19 @@ class PlaybackHandler extends BaseAudioHandler {
         updatePosition: player.position,
         bufferedPosition: player.bufferedPosition,
         speed: player.speed,
+        queueIndex: 0,
       ),
     );
   }
+}
+
+List<MediaControl> _controls(bool playing) {
+  final ios = !kIsWeb && Platform.isIOS;
+  return [
+    ios ? _rewind : _previous,
+    if (playing) _pause else _play,
+    ios ? _fastForward : _next,
+  ];
 }
 
 const _play = MediaControl(
@@ -169,6 +185,18 @@ const _fastForward = MediaControl(
   androidIcon: 'drawable/audio_service_fast_forward',
   label: 'Avancer',
   action: MediaAction.fastForward,
+);
+
+const _previous = MediaControl(
+  androidIcon: 'drawable/audio_service_skip_previous',
+  label: 'Reculer',
+  action: MediaAction.skipToPrevious,
+);
+
+const _next = MediaControl(
+  androidIcon: 'drawable/audio_service_skip_next',
+  label: 'Avancer',
+  action: MediaAction.skipToNext,
 );
 
 Uri? artworkUri(String? url) {

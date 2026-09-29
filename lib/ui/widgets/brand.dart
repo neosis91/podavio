@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 class PodavioLogo extends StatelessWidget {
   const PodavioLogo({super.key, this.width = 240});
@@ -8,10 +7,10 @@ class PodavioLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SvgPicture.asset(
-      'assets/brand/logo.svg',
+    return Image.asset(
+      'assets/brand/logo.png',
       width: width,
-      semanticsLabel: 'Podavio',
+      semanticLabel: 'Podavio',
     );
   }
 }
@@ -23,11 +22,11 @@ class PodavioIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SvgPicture.asset(
-      'assets/brand/icon.svg',
+    return Image.asset(
+      'assets/brand/icon.png',
       width: size,
       height: size,
-      semanticsLabel: 'Podavio',
+      semanticLabel: 'Podavio',
     );
   }
 }

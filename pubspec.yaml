@@ -58,7 +58,6 @@ dependencies:
   just_audio_media_kit: ^2.1.0
   media_kit_libs_linux: ^1.2.1
   media_kit_libs_windows_audio: ^1.0.9
-  flutter_svg: ^2.3.0
   dynamic_color: ^2.1.0
 
 dev_dependencies:
@@ -91,8 +90,8 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/brand/logo.svg
-    - assets/brand/icon.svg
+    - assets/brand/logo.png
+    - assets/brand/icon.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
