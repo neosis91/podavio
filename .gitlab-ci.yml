@@ -73,10 +73,14 @@ build:android:
       flutter build apk --release "${FLAGS[@]}"
       flutter build apk --release --split-per-abi "${FLAGS[@]}"
       mkdir -p dist/android
-      for apk in build/app/outputs/flutter-apk/*.apk; do
-        name="$(basename "${apk}" .apk)"
-        cp "${apk}" "dist/android/${name}-${PODAVIO_VERSION}.apk"
-      done
+      cp build/app/outputs/flutter-apk/app-release.apk \
+        "dist/android/podavio-${PODAVIO_VERSION}-android-universal.apk"
+      cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+        "dist/android/podavio-${PODAVIO_VERSION}-android-armeabi-v7a.apk"
+      cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+        "dist/android/podavio-${PODAVIO_VERSION}-android-arm64-v8a.apk"
+      cp build/app/outputs/flutter-apk/app-x86_64-release.apk \
+        "dist/android/podavio-${PODAVIO_VERSION}-android-x86_64.apk"
       ls -lh dist/android
   artifacts:
     name: "podavio-android-${PODAVIO_VERSION}"
@@ -147,16 +151,13 @@ release:
       when: manual
     - if: $CI_PIPELINE_SOURCE == "web"
       when: manual
+  before_script:
+    - apk add --no-cache curl
   script:
-    - echo "Publication de Podavio ${PODAVIO_VERSION} (GitLab ${PODAVIO_GITLAB_ID})"
-  release:
-    tag_name: "$PODAVIO_VERSION"
-    name: "Podavio $PODAVIO_VERSION"
-    description: |
-      Compilation CalVer **$PODAVIO_VERSION**
-
-      - Identifiant GitLab : `$PODAVIO_GITLAB_ID`
-      - Commit : $CI_COMMIT_SHORT_SHA
-
-      Artefacts disponibles sur les jobs `build:android` et `build:linux` de ce pipeline.
-    ref: "$CI_COMMIT_SHA"
+    - chmod +x tool/ci/publish_release.sh
+    - tool/ci/publish_release.sh
+  artifacts:
+    name: "podavio-release-${PODAVIO_VERSION}"
+    paths:
+      - dist/release/
+    expire_in: 90 days
