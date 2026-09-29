@@ -14,10 +14,16 @@ import 'cover.dart';
 import 'messages.dart';
 
 class EpisodeTile extends ConsumerWidget {
-  const EpisodeTile({super.key, required this.entry, this.showPodcast = true});
+  const EpisodeTile({
+    super.key,
+    required this.entry,
+    this.showPodcast = true,
+    this.reorderIndex,
+  });
 
   final EpisodeEntry entry;
   final bool showPodcast;
+  final int? reorderIndex;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -176,6 +182,18 @@ class EpisodeTile extends ConsumerWidget {
                 ),
               ],
             ),
+            if (reorderIndex != null)
+              Tooltip(
+                message: 'Déplacer',
+                child: ReorderableDragStartListener(
+                  index: reorderIndex!,
+                  child: const SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Icon(Icons.drag_handle),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -272,7 +290,9 @@ Future<void> runEpisodeAction(
           await ref.read(downloadProgressProvider.notifier).download(episode);
           if (context.mounted) showMessage(context, 'Épisode téléchargé');
         } else {
-          await ref.read(downloadServiceProvider).deleteDownload(episode);
+          await ref
+              .read(downloadProgressProvider.notifier)
+              .deleteDownload(episode);
           if (context.mounted) showMessage(context, 'Téléchargement supprimé');
         }
       case EpisodeMenuAction.share:

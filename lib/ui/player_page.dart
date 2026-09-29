@@ -5,6 +5,7 @@ import '../core/format.dart';
 import '../data/providers.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
+import 'widgets/brand.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/episode_tile.dart';
@@ -30,21 +31,29 @@ class PlayerPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lecture'),
-        actions: [_PlayerActions(episodeId: episodeId)],
+        actions: [
+          const _SleepAction(),
+          _PlayerActions(episodeId: episodeId),
+        ],
       ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-            children: [
-              const _PlayerHeading(),
-              const _PlayerTransport(),
-              _PlayerNotes(episodeId: episodeId),
-            ],
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+        children: [
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const _PlayerHeading(),
+                  const _PlayerTransport(),
+                  _PlayerNotes(episodeId: episodeId),
+                ],
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -117,52 +126,61 @@ class _PlayerTransport extends ConsumerWidget {
             Text(formatClock(player.duration)),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             IconButton(
               tooltip: 'Reculer de ${settings.skipBackSeconds} s',
+              iconSize: 36,
               onPressed: () => ref
                   .read(playerProvider.notifier)
                   .skipBy(-settings.skipBackSeconds),
-              icon: const Icon(Icons.replay),
+              icon: const SkipIcon.back(size: 36),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             IconButton.filled(
               tooltip: player.playing ? 'Pause' : 'Lecture',
-              iconSize: 42,
+              iconSize: 56,
               onPressed: () => ref.read(playerProvider.notifier).toggle(),
               icon: Icon(player.playing ? Icons.pause : Icons.play_arrow),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             IconButton(
               tooltip: 'Avancer de ${settings.skipForwardSeconds} s',
+              iconSize: 36,
               onPressed: () => ref
                   .read(playerProvider.notifier)
                   .skipBy(settings.skipForwardSeconds),
-              icon: const Icon(Icons.forward),
+              icon: const SkipIcon.forward(size: 36),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ActionChip(
-              avatar: const Icon(Icons.speed, size: 18),
-              label: Text('${player.speed}×'),
-              onPressed: () => _chooseSpeed(context, ref, player.speed),
-            ),
-            const SizedBox(width: 8),
-            ActionChip(
-              avatar: const Icon(Icons.bedtime_outlined, size: 18),
-              label: Text(_sleepLabel(player)),
-              onPressed: () => _chooseSleep(context, ref),
-            ),
-          ],
+        const SizedBox(height: 12),
+        Center(
+          child: ActionChip(
+            avatar: const Icon(Icons.speed, size: 18),
+            label: Text('${player.speed}×'),
+            onPressed: () => _chooseSpeed(context, ref, player.speed),
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _SleepAction extends ConsumerWidget {
+  const _SleepAction();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final player = ref.watch(playerProvider);
+    final active = player.sleepAtEnd || player.sleepRemaining != null;
+    return IconButton(
+      tooltip: _sleepLabel(player),
+      onPressed: () => _chooseSleep(context, ref),
+      icon: Icon(active ? Icons.bedtime : Icons.bedtime_outlined),
     );
   }
 }

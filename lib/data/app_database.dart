@@ -502,6 +502,18 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  Future<List<Episode>> downloadedEpisodes() {
+    return (select(
+      episodes,
+    )..where((table) => table.downloadPath.isNotNull())).get();
+  }
+
+  Future<void> updateDownloadPath(int id, String path) {
+    return (update(episodes)..where((table) => table.id.equals(id))).write(
+      EpisodesCompanion(downloadPath: Value(path)),
+    );
+  }
+
   Future<void> setDownloadPath(int id, String? path) {
     return (update(episodes)..where((table) => table.id.equals(id))).write(
       EpisodesCompanion(

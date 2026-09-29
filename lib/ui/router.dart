@@ -10,6 +10,8 @@ class AppRoutes {
   static const downloads = '/downloads';
   static const appearance = '/appearance';
   static const playback = '/playback';
+  static const downloadSettings = '/download-settings';
+  static const about = '/about';
   static const player = '/player';
 
   static String podcast(int id) => '/podcasts/$id';

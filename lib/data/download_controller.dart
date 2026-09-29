@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../settings/settings_controller.dart';
 import 'app_database.dart';
 import 'download_service.dart';
 import 'providers.dart';
@@ -26,11 +27,15 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
           .read(downloadServiceProvider)
           .download(
             episode,
+            directory: ref.read(settingsProvider).downloadDirectory,
             onProgress: (progress) {
               if (!state.containsKey(episode.id)) return;
               state = {...state, episode.id: progress.clamp(0, 1)};
             },
           );
+      if (ref.read(settingsProvider).enqueueDownloads) {
+        await ref.read(databaseProvider).addToQueue(episode.id);
+      }
     } on DownloadCancelled {
       _clear(episode.id);
       rethrow;
@@ -39,6 +44,13 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
       rethrow;
     }
     _clear(episode.id);
+  }
+
+  Future<void> deleteDownload(Episode episode) async {
+    await ref.read(downloadServiceProvider).deleteDownload(episode);
+    if (ref.read(settingsProvider).dequeueDeletedDownloads) {
+      await ref.read(databaseProvider).removeFromQueue(episode.id);
+    }
   }
 
   void _clear(int episodeId) {

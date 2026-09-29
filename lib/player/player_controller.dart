@@ -232,9 +232,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       await _player.setAudioSource(
         AudioSource.uri(
           uri,
-          headers: uri.isScheme('file')
-              ? null
-              : const {'User-Agent': podavioUserAgent},
+          headers: uri.scheme == 'http' || uri.scheme == 'https'
+              ? const {'User-Agent': podavioUserAgent}
+              : null,
         ),
       );
       await _player.setSpeed(_ui.speed);
@@ -252,7 +252,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   Uri _sourceUri(Episode episode) {
     final path = episode.downloadPath;
-    if (path != null && File(path).existsSync()) return Uri.file(path);
+    if (path == null) return Uri.parse(episode.audioUrl);
+    if (path.startsWith('content://')) return Uri.parse(path);
+    if (File(path).existsSync()) return Uri.file(path);
     return Uri.parse(episode.audioUrl);
   }
 

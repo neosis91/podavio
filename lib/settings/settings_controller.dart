@@ -17,6 +17,9 @@ class AppSettings {
     required this.podcastColumns,
     required this.podcastList,
     required this.navOrder,
+    required this.enqueueDownloads,
+    required this.dequeueDeletedDownloads,
+    required this.downloadDirectory,
   });
 
   final ThemeMode themeMode;
@@ -29,6 +32,9 @@ class AppSettings {
   final int podcastColumns;
   final bool podcastList;
   final List<String> navOrder;
+  final bool enqueueDownloads;
+  final bool dequeueDeletedDownloads;
+  final String? downloadDirectory;
 
   AppSettings copyWith({
     ThemeMode? themeMode,
@@ -41,6 +47,10 @@ class AppSettings {
     int? podcastColumns,
     bool? podcastList,
     List<String>? navOrder,
+    bool? enqueueDownloads,
+    bool? dequeueDeletedDownloads,
+    String? downloadDirectory,
+    bool clearDownloadDirectory = false,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -53,6 +63,12 @@ class AppSettings {
       podcastColumns: podcastColumns ?? this.podcastColumns,
       podcastList: podcastList ?? this.podcastList,
       navOrder: navOrder ?? this.navOrder,
+      enqueueDownloads: enqueueDownloads ?? this.enqueueDownloads,
+      dequeueDeletedDownloads:
+          dequeueDeletedDownloads ?? this.dequeueDeletedDownloads,
+      downloadDirectory: clearDownloadDirectory
+          ? null
+          : (downloadDirectory ?? this.downloadDirectory),
     );
   }
 }
@@ -77,6 +93,10 @@ class SettingsNotifier extends Notifier<AppSettings> {
       podcastColumns: _columns(preferences.getInt('podcastColumns')),
       podcastList: preferences.getBool('podcastList') ?? false,
       navOrder: normalizeNavOrder(preferences.getStringList('navOrder')),
+      enqueueDownloads: preferences.getBool('enqueueDownloads') ?? true,
+      dequeueDeletedDownloads:
+          preferences.getBool('dequeueDeletedDownloads') ?? true,
+      downloadDirectory: preferences.getString('downloadDirectory'),
     );
   }
 
@@ -120,6 +140,31 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setSkipForward(int seconds) async {
     state = state.copyWith(skipForwardSeconds: seconds);
     await ref.read(sharedPreferencesProvider).setInt('skipForward', seconds);
+  }
+
+  Future<void> setDownloadDirectory(String? directory) async {
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (directory == null || directory.isEmpty) {
+      state = state.copyWith(clearDownloadDirectory: true);
+      await preferences.remove('downloadDirectory');
+      return;
+    }
+    state = state.copyWith(downloadDirectory: directory);
+    await preferences.setString('downloadDirectory', directory);
+  }
+
+  Future<void> setDequeueDeletedDownloads(bool enabled) async {
+    state = state.copyWith(dequeueDeletedDownloads: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('dequeueDeletedDownloads', enabled);
+  }
+
+  Future<void> setEnqueueDownloads(bool enabled) async {
+    state = state.copyWith(enqueueDownloads: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('enqueueDownloads', enabled);
   }
 
   Future<void> setPodcastLayout({required bool list, int? columns}) async {

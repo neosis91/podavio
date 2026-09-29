@@ -208,7 +208,9 @@ bool _belongs(String path, String route) {
   if (route == AppRoutes.preferences) {
     return path == AppRoutes.preferences ||
         path == AppRoutes.appearance ||
-        path == AppRoutes.playback;
+        path == AppRoutes.playback ||
+        path == AppRoutes.downloadSettings ||
+        path == AppRoutes.about;
   }
   return path == route || path.startsWith('$route/');
 }

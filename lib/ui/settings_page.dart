@@ -1,11 +1,19 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:saf_util/saf_util.dart';
 
 import '../core/theme.dart';
 import '../core/wallpaper_colors.dart';
+import '../data/download_controller.dart';
+import '../data/download_service.dart';
+import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import 'nav_catalog.dart';
+import 'widgets/messages.dart';
 
 class AppearancePage extends ConsumerWidget {
   const AppearancePage({super.key});
@@ -124,11 +132,13 @@ class _PanelOrderDialogState extends ConsumerState<_PanelOrderDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final height = MediaQuery.sizeOf(context).height;
-    final dialogHeight = height - 48 > 640 ? 640.0 : height - 48;
+    final size = MediaQuery.sizeOf(context);
+    final availableWidth = size.width - 80;
+    final dialogWidth = availableWidth < 420 ? availableWidth : 420.0;
+    final dialogHeight = size.height - 96 > 640 ? 640.0 : size.height - 96;
     return Dialog(
       child: SizedBox(
-        width: 420,
+        width: dialogWidth,
         height: dialogHeight,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -148,16 +158,23 @@ class _PanelOrderDialogState extends ConsumerState<_PanelOrderDialog> {
             ),
             Expanded(
               child: ReorderableListView.builder(
-                buildDefaultDragHandles: true,
+                buildDefaultDragHandles: false,
                 itemCount: _order.length,
                 onReorderItem: _reorder,
                 itemBuilder: (context, index) {
                   final page = navPageByPath(_order[index])!;
                   return ListTile(
                     key: ValueKey(page.path),
-                    contentPadding: const EdgeInsets.only(left: 24, right: 48),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                     leading: Icon(page.icon),
                     title: Text(page.label),
+                    trailing: ReorderableDragStartListener(
+                      index: index,
+                      child: const Tooltip(
+                        message: 'Déplacer',
+                        child: Icon(Icons.drag_handle),
+                      ),
+                    ),
                   );
                 },
               ),
@@ -201,6 +218,152 @@ String _wallpaperSubtitle(WidgetRef ref) {
     return 'Le fond d’écran n’a pas pu être lu';
   }
   return 'Les couleurs suivent le fond d’écran';
+}
+
+class DownloadSettingsPage extends ConsumerWidget {
+  const DownloadSettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final directory = settings.downloadDirectory;
+    final fallback = ref.watch(defaultDownloadDirectoryProvider).value;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Gestion des téléchargements')),
+      body: ListView(
+        children: [
+          const _SectionTitle('Dossiers'),
+          ListTile(
+            title: const Text('Dossier des téléchargements'),
+            subtitle: Text(
+              directory == null
+                  ? (fallback ?? '…')
+                  : downloadDirectoryLabel(directory),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _chooseDownloadDirectory(context, ref),
+          ),
+          if (directory != null)
+            ListTile(
+              title: const Text('Utiliser le dossier de l’application'),
+              onTap: () => _relocateDownloads(context, ref, null),
+            ),
+          const _SectionTitle('Automatisation'),
+          SwitchListTile(
+            title: const Text('Retirer de la file'),
+            subtitle: const Text(
+              'Enlève l’épisode de la file quand son téléchargement est supprimé',
+            ),
+            value: settings.dequeueDeletedDownloads,
+            onChanged: ref
+                .read(settingsProvider.notifier)
+                .setDequeueDeletedDownloads,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _chooseDownloadDirectory(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  if (ref.read(downloadProgressProvider).isNotEmpty) {
+    showMessage(context, 'Attendez la fin des téléchargements en cours.');
+    return;
+  }
+  final current = ref.read(settingsProvider).downloadDirectory;
+  final String? picked;
+  try {
+    if (Platform.isAndroid) {
+      final folder = await SafUtil().pickDirectory(
+        initialUri: current != null && isContentUri(current) ? current : null,
+        writePermission: true,
+        persistablePermission: true,
+      );
+      picked = folder?.uri;
+    } else {
+      final initial =
+          current ??
+          await ref
+              .read(downloadServiceProvider)
+              .resolveDownloadDirectory(null);
+      picked = await FilePicker.getDirectoryPath(
+        dialogTitle: 'Dossier des téléchargements',
+        initialDirectory: initial,
+      );
+    }
+  } catch (error) {
+    if (context.mounted) showMessage(context, errorText(error));
+    return;
+  }
+  if (picked == null || !context.mounted) return;
+  await _relocateDownloads(context, ref, picked);
+}
+
+Future<void> _relocateDownloads(
+  BuildContext context,
+  WidgetRef ref,
+  String? destination,
+) async {
+  if (ref.read(downloadProgressProvider).isNotEmpty) {
+    showMessage(context, 'Attendez la fin des téléchargements en cours.');
+    return;
+  }
+  final service = ref.read(downloadServiceProvider);
+  final current = ref.read(settingsProvider).downloadDirectory;
+  final source = await service.resolveDownloadDirectory(current);
+  final target = await service.resolveDownloadDirectory(destination);
+  if (!context.mounted) return;
+  if (sameDownloadLocation(source, target)) {
+    showMessage(context, 'Ce dossier est déjà utilisé.');
+    return;
+  }
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    useRootNavigator: true,
+    builder: (context) => const PopScope(
+      canPop: false,
+      child: AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 24),
+            Expanded(child: Text('Déplacement des fichiers…')),
+          ],
+        ),
+      ),
+    ),
+  );
+  try {
+    final result = await service.relocateDownloads(
+      from: current,
+      to: destination,
+    );
+    await ref.read(settingsProvider.notifier).setDownloadDirectory(destination);
+    if (context.mounted) showMessage(context, _relocationMessage(result));
+  } catch (error) {
+    if (context.mounted) showMessage(context, errorText(error));
+  } finally {
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+}
+
+String _relocationMessage(DownloadRelocation result) {
+  if (result.failed > 0) {
+    return result.moved == 0
+        ? 'Le dossier est modifié, mais les fichiers n’ont pas pu être déplacés'
+        : 'Le dossier est modifié. ${result.moved} déplacés, ${result.failed} en échec';
+  }
+  return result.moved == 0
+      ? 'Dossier des téléchargements modifié'
+      : 'Fichiers déplacés';
 }
 
 class PlaybackPage extends ConsumerWidget {
@@ -249,6 +412,14 @@ class PlaybackPage extends ConsumerWidget {
                 if (value != null) notifier.setSkipForward(value);
               },
             ),
+          ),
+          SwitchListTile(
+            title: const Text('Ajouter à la file'),
+            subtitle: const Text(
+              'Place l’épisode dans la file dès la fin du téléchargement',
+            ),
+            value: settings.enqueueDownloads,
+            onChanged: notifier.setEnqueueDownloads,
           ),
         ],
       ),

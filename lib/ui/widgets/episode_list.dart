@@ -111,6 +111,7 @@ class _EpisodeWindowList extends StatelessWidget {
           )
         : ReorderableListView.builder(
             physics: physics,
+            buildDefaultDragHandles: false,
             itemCount: entries.length,
             onReorderItem: (oldIndex, newIndex) =>
                 reorder!(entries, oldIndex, newIndex),
@@ -118,6 +119,7 @@ class _EpisodeWindowList extends StatelessWidget {
               key: ValueKey(entries[index].episode.id),
               entry: entries[index],
               showPodcast: showPodcast,
+              reorderIndex: index,
             ),
           );
     final scrollable = onRefresh == null

@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../data/opml.dart';
 import '../data/providers.dart';
@@ -12,6 +13,49 @@ import 'episodes_page.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/messages.dart';
+
+final _packageInfo = PackageInfo.fromPlatform();
+
+class AboutPage extends StatelessWidget {
+  const AboutPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('À propos')),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          const Center(child: PodavioLogo()),
+          const SizedBox(height: 16),
+          Text(
+            'Lecteur de podcasts pour Android, iOS, Windows, macOS et Linux. '
+            'Vos abonnements restent des flux RSS, '
+            'sans compte obligatoire et sans publicité.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          FutureBuilder<PackageInfo>(
+            future: _packageInfo,
+            builder: (context, snapshot) {
+              final version = snapshot.data?.version;
+              if (version == null) return const SizedBox.shrink();
+              return Text(
+                'Version $version',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class PreferencesPage extends ConsumerWidget {
   const PreferencesPage({super.key});
@@ -52,22 +96,15 @@ class PreferencesPage extends ConsumerWidget {
             title: const Text('Lecture'),
             onTap: () => context.push(AppRoutes.playback),
           ),
-          const Divider(),
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              children: [
-                const PodavioLogo(),
-                const SizedBox(height: 16),
-                Text(
-                  'Lecteur de podcasts pour Android, iOS, Windows, macOS et Linux. '
-                  'Vos abonnements restent des flux RSS, '
-                  'sans compte obligatoire et sans publicité.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
+          ListTile(
+            leading: const Icon(Icons.download_outlined),
+            title: const Text('Gestion des téléchargements'),
+            onTap: () => context.push(AppRoutes.downloadSettings),
+          ),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('À propos'),
+            onTap: () => context.push(AppRoutes.about),
           ),
         ],
       ),

@@ -24,7 +24,7 @@ class QueuePage extends ConsumerWidget {
         },
         empty: const EmptyState(
           title: 'La file est vide',
-          message: 'Ajoutez des épisodes pour les écouter les uns à la suite des autres. Maintenez un épisode pour changer l’ordre.',
+          message: 'Ajoutez des épisodes pour les écouter les uns à la suite des autres.',
         ),
       ),
     );

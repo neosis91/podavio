@@ -84,6 +84,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const PlaybackPage(),
           ),
           GoRoute(
+            path: AppRoutes.downloadSettings,
+            builder: (context, state) => const DownloadSettingsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.about,
+            builder: (context, state) => const AboutPage(),
+          ),
+          GoRoute(
             path: '/episode/:id',
             builder: (context, state) {
               final id = int.tryParse(state.pathParameters['id'] ?? '');

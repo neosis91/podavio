@@ -25,6 +25,10 @@ final downloadServiceProvider = Provider<DownloadService>((ref) {
   return DownloadService(ref.watch(databaseProvider));
 });
 
+final defaultDownloadDirectoryProvider = FutureProvider<String>((ref) {
+  return ref.watch(downloadServiceProvider).resolveDownloadDirectory(null);
+});
+
 final episodeProvider = StreamProvider.family<EpisodeEntry?, int>((ref, id) {
   return ref.watch(databaseProvider).watchEpisode(id);
 });
