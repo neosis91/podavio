@@ -145,6 +145,5 @@ Les archives « Source code » affichées par GitLab sont automatiques et ne fon
 release-cli create \
   --name "Podavio ${VERSION}" \
   --tag-name "${VERSION}" \
-  --ref "${CI_COMMIT_SHA}" \
   --description "${DESCRIPTION}" \
   "$@"

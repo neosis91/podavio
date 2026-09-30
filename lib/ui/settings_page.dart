@@ -261,9 +261,96 @@ class DownloadSettingsPage extends ConsumerWidget {
                 .read(settingsProvider.notifier)
                 .setDequeueDeletedDownloads,
           ),
+          const _SectionTitle('Actions'),
+          ListTile(
+            title: const Text('Supprimer tous les téléchargements'),
+            subtitle: const Text(
+              'Efface les fichiers locaux de tous les épisodes téléchargés',
+            ),
+            onTap: () => _confirmDeleteAllDownloads(context, ref),
+          ),
         ],
       ),
     );
+  }
+}
+
+Future<void> _confirmDeleteAllDownloads(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  if (ref.read(downloadProgressProvider).isNotEmpty) {
+    showMessage(context, 'Attendez la fin des téléchargements en cours.');
+    return;
+  }
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Supprimer tous les téléchargements ?'),
+      content: const Text(
+        'Tous les fichiers téléchargés seront effacés. Cette action est irréversible.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Supprimer'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+  await _deleteAllDownloads(context, ref);
+}
+
+Future<void> _deleteAllDownloads(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  if (ref.read(downloadProgressProvider).isNotEmpty) {
+    showMessage(context, 'Attendez la fin des téléchargements en cours.');
+    return;
+  }
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    useRootNavigator: true,
+    builder: (context) => const PopScope(
+      canPop: false,
+      child: AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 24),
+            Expanded(child: Text('Suppression des téléchargements…')),
+          ],
+        ),
+      ),
+    ),
+  );
+  try {
+    final count = await ref
+        .read(downloadProgressProvider.notifier)
+        .deleteAllDownloads();
+    if (context.mounted) {
+      showMessage(
+        context,
+        count == 0
+            ? 'Aucun téléchargement à supprimer'
+            : count == 1
+            ? '1 téléchargement supprimé'
+            : '$count téléchargements supprimés',
+      );
+    }
+  } catch (error) {
+    if (context.mounted) showMessage(context, errorText(error));
+  } finally {
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
   }
 }
 
