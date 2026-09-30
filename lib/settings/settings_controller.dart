@@ -101,7 +101,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   static int _columns(int? stored) {
-    if (stored == null || stored < 1 || stored > 6) return 3;
+    if (stored == null || stored < 1 || stored > 8) return 3;
     return stored;
   }
 
@@ -174,7 +174,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       await preferences.setBool('podcastList', true);
       return;
     }
-    final stored = (columns ?? state.podcastColumns).clamp(1, 6);
+    final stored = (columns ?? state.podcastColumns).clamp(1, 8);
     state = state.copyWith(podcastList: false, podcastColumns: stored);
     await preferences.setBool('podcastList', false);
     await preferences.setInt('podcastColumns', stored);

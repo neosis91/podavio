@@ -6,6 +6,7 @@ import '../data/app_database.dart';
 import '../data/feed_refresh_controller.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
+import '../core/platform.dart';
 import 'episodes_page.dart';
 import 'router.dart';
 import 'widgets/cover.dart';
@@ -22,109 +23,107 @@ class PodcastsPage extends ConsumerWidget {
     final refreshing = ref.watch(
       feedRefreshProvider.select((s) => s.isRunning),
     );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxColumns = _maxColumns(constraints.maxWidth);
-        final columns = settings.podcastList
-            ? 1
-            : _columnsForWidth(constraints.maxWidth, settings.podcastColumns);
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Abonnements'),
-            actions: [
-              IconButton(
-                tooltip: refreshing
-                    ? 'Actualisation en cours'
-                    : 'Actualiser les abonnements',
-                onPressed: refreshing
-                    ? null
-                    : () => refreshSubscriptions(context, ref),
-                icon: const Icon(Icons.refresh),
-              ),
-              PopupMenuButton<int>(
-                tooltip: 'Affichage',
-                icon: Icon(
-                  settings.podcastList ? Icons.view_list : Icons.grid_view,
+    final maxColumns = maxPodcastColumnsFor(
+      MediaQuery.sizeOf(context).width,
+    );
+    final columns = settings.podcastList
+        ? 1
+        : settings.podcastColumns.clamp(1, maxColumns);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Abonnements'),
+        actions: [
+          IconButton(
+            tooltip: refreshing
+                ? 'Actualisation en cours'
+                : 'Actualiser les abonnements',
+            onPressed: refreshing
+                ? null
+                : () => refreshSubscriptions(context, ref),
+            icon: const Icon(Icons.refresh),
+          ),
+          PopupMenuButton<int>(
+            tooltip: 'Affichage',
+            icon: Icon(
+              settings.podcastList ? Icons.view_list : Icons.grid_view,
+            ),
+            onSelected: (value) => ref
+                .read(settingsProvider.notifier)
+                .setPodcastLayout(
+                  list: value == 0,
+                  columns: value == 0 ? null : value,
                 ),
-                onSelected: (value) => ref
-                    .read(settingsProvider.notifier)
-                    .setPodcastLayout(
-                      list: value == 0,
-                      columns: value == 0 ? null : value,
-                    ),
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 0,
-                    child: Row(
-                      children: [
-                        const Expanded(child: Text('Liste')),
-                        if (settings.podcastList)
-                          const Icon(Icons.check, size: 18),
-                      ],
-                    ),
-                  ),
-                  for (var count = 1; count <= maxColumns; count++)
-                    PopupMenuItem(
-                      value: count,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '$count ${count == 1 ? 'colonne' : 'colonnes'}',
-                            ),
-                          ),
-                          if (!settings.podcastList && count == columns)
-                            const Icon(Icons.check, size: 18),
-                        ],
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 0,
+                child: Row(
+                  children: [
+                    const Expanded(child: Text('Liste')),
+                    if (settings.podcastList) const Icon(Icons.check, size: 18),
+                  ],
+                ),
+              ),
+              for (var count = 1; count <= maxColumns; count++)
+                PopupMenuItem(
+                  value: count,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '$count ${count == 1 ? 'colonne' : 'colonnes'}',
+                        ),
                       ),
-                    ),
-                ],
-              ),
-              IconButton(
-                tooltip: 'Ajouter un flux RSS',
-                onPressed: () => _addFeed(context, ref),
-                icon: const Icon(Icons.add),
-              ),
+                      if (!settings.podcastList && count == columns)
+                        const Icon(Icons.check, size: 18),
+                    ],
+                  ),
+                ),
             ],
           ),
-          body: podcasts.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => EmptyState(
-              title: 'Abonnements indisponibles',
-              message: error.toString(),
-            ),
-            data: (items) {
-              if (items.isEmpty) {
-                return EmptyState(
-                  title: 'Aucun abonnement',
-                  message: 'Ajoutez un flux RSS ou cherchez un podcast dans Explorer.',
-                  action: FilledButton.icon(
-                    onPressed: () => context.go(AppRoutes.discover),
-                    icon: const Icon(Icons.explore),
-                    label: const Text('Explorer'),
-                  ),
-                );
-              }
-              final child = settings.podcastList
-                  ? ListView.separated(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: items.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final podcast = items[index];
-                        return _PodcastListTile(podcast: podcast);
-                      },
-                    )
-                  : _PodcastGrid(items: items, columns: columns);
-              if (refreshing) return child;
-              return RefreshIndicator(
-                onRefresh: () => refreshSubscriptions(context, ref),
-                child: child,
-              );
-            },
+          IconButton(
+            tooltip: 'Ajouter un flux RSS',
+            onPressed: () => _addFeed(context, ref),
+            icon: const Icon(Icons.add),
           ),
-        );
-      },
+        ],
+      ),
+      body: podcasts.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => EmptyState(
+          title: 'Abonnements indisponibles',
+          message: error.toString(),
+        ),
+        data: (items) {
+          if (items.isEmpty) {
+            return EmptyState(
+              title: 'Aucun abonnement',
+              message:
+                  'Ajoutez un flux RSS ou cherchez un podcast dans Explorer.',
+              action: FilledButton.icon(
+                onPressed: () => context.go(AppRoutes.discover),
+                icon: const Icon(Icons.explore),
+                label: const Text('Explorer'),
+              ),
+            );
+          }
+          final child = settings.podcastList
+              ? ListView.separated(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: items.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final podcast = items[index];
+                    return _PodcastListTile(podcast: podcast);
+                  },
+                )
+              : _PodcastGrid(items: items, columns: columns);
+          if (refreshing || !supportsPullToRefresh) return child;
+          return RefreshIndicator(
+            onRefresh: () => refreshSubscriptions(context, ref),
+            child: child,
+          );
+        },
+      ),
     );
   }
 
@@ -213,24 +212,12 @@ Future<void> subscribeToFeed(
 
 const _gridPadding = 16.0;
 const _gridSpacing = 16.0;
-const _minTile = 148.0;
+const _phoneMaxColumns = 5;
+const _tabletMaxColumns = 8;
+const _tabletBreakpoint = 600.0;
 
-int _maxColumns(double width) {
-  final inner = width - _gridPadding * 2;
-  if (inner <= _minTile) return 1;
-  var fit = 1;
-  for (var count = 2; count <= 6; count++) {
-    final tile = (inner - _gridSpacing * (count - 1)) / count;
-    if (tile < _minTile) break;
-    fit = count;
-  }
-  return fit;
-}
-
-int _columnsForWidth(double width, int preferred) {
-  final maxFit = _maxColumns(width);
-  final wanted = preferred.clamp(1, 6);
-  return wanted > maxFit ? maxFit : wanted;
+int maxPodcastColumnsFor(double width) {
+  return width >= _tabletBreakpoint ? _tabletMaxColumns : _phoneMaxColumns;
 }
 
 class _PodcastGrid extends ConsumerWidget {
@@ -286,6 +273,7 @@ class _PodcastGrid extends ConsumerWidget {
                     aspectRatio: 1,
                     child: _CoverWithUnread(
                       url: podcast.imageUrl,
+                      localPath: podcast.imagePath,
                       radius: 16,
                       unread: unread,
                     ),
@@ -343,6 +331,7 @@ class _PodcastListTile extends ConsumerWidget {
                 height: 72,
                 child: _CoverWithUnread(
                   url: podcast.imageUrl,
+                  localPath: podcast.imagePath,
                   size: 72,
                   radius: 12,
                   unread: unread,
@@ -385,12 +374,14 @@ class _PodcastListTile extends ConsumerWidget {
 class _CoverWithUnread extends StatelessWidget {
   const _CoverWithUnread({
     required this.url,
+    this.localPath,
     required this.radius,
     required this.unread,
     this.size,
   });
 
   final String? url;
+  final String? localPath;
   final double radius;
   final int unread;
   final double? size;
@@ -401,7 +392,12 @@ class _CoverWithUnread extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        PodcastCover(url: url, size: size, radius: radius),
+        PodcastCover(
+          url: url,
+          localPath: localPath,
+          size: size,
+          radius: radius,
+        ),
         if (unread > 0)
           Positioned(
             top: 6,

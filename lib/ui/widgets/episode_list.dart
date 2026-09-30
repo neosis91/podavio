@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/platform.dart';
 import '../../data/app_database.dart';
 import '../../data/providers.dart';
 import 'empty_state.dart';
@@ -52,7 +53,7 @@ class _EpisodeListBodyState extends ConsumerState<EpisodeListBody> {
       window: window,
       empty: widget.empty,
       showPodcast: widget.showPodcast,
-      onRefresh: widget.onRefresh,
+      onRefresh: supportsPullToRefresh ? widget.onRefresh : null,
       reorder: widget.reorder,
       onLoadMore: () =>
           ref.read(episodesProvider(widget.query).notifier).loadMore(),

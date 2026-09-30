@@ -75,6 +75,17 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _imagePathMeta = const VerificationMeta(
+    'imagePath',
+  );
+  @override
+  late final GeneratedColumn<String> imagePath = GeneratedColumn<String>(
+    'image_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _linkMeta = const VerificationMeta('link');
   @override
   late final GeneratedColumn<String> link = GeneratedColumn<String>(
@@ -129,6 +140,7 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     author,
     description,
     imageUrl,
+    imagePath,
     link,
     subscribedAt,
     refreshedAt,
@@ -184,6 +196,12 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
       context.handle(
         _imageUrlMeta,
         imageUrl.isAcceptableOrUnknown(data['image_url']!, _imageUrlMeta),
+      );
+    }
+    if (data.containsKey('image_path')) {
+      context.handle(
+        _imagePathMeta,
+        imagePath.isAcceptableOrUnknown(data['image_path']!, _imagePathMeta),
       );
     }
     if (data.containsKey('link')) {
@@ -251,6 +269,10 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         DriftSqlType.string,
         data['${effectivePrefix}image_url'],
       ),
+      imagePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_path'],
+      ),
       link: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}link'],
@@ -283,6 +305,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
   final String author;
   final String description;
   final String? imageUrl;
+  final String? imagePath;
   final String? link;
   final DateTime subscribedAt;
   final DateTime? refreshedAt;
@@ -294,6 +317,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     required this.author,
     required this.description,
     this.imageUrl,
+    this.imagePath,
     this.link,
     required this.subscribedAt,
     this.refreshedAt,
@@ -309,6 +333,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     map['description'] = Variable<String>(description);
     if (!nullToAbsent || imageUrl != null) {
       map['image_url'] = Variable<String>(imageUrl);
+    }
+    if (!nullToAbsent || imagePath != null) {
+      map['image_path'] = Variable<String>(imagePath);
     }
     if (!nullToAbsent || link != null) {
       map['link'] = Variable<String>(link);
@@ -331,6 +358,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       imageUrl: imageUrl == null && nullToAbsent
           ? const Value.absent()
           : Value(imageUrl),
+      imagePath: imagePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imagePath),
       link: link == null && nullToAbsent ? const Value.absent() : Value(link),
       subscribedAt: Value(subscribedAt),
       refreshedAt: refreshedAt == null && nullToAbsent
@@ -352,6 +382,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       author: serializer.fromJson<String>(json['author']),
       description: serializer.fromJson<String>(json['description']),
       imageUrl: serializer.fromJson<String?>(json['imageUrl']),
+      imagePath: serializer.fromJson<String?>(json['imagePath']),
       link: serializer.fromJson<String?>(json['link']),
       subscribedAt: serializer.fromJson<DateTime>(json['subscribedAt']),
       refreshedAt: serializer.fromJson<DateTime?>(json['refreshedAt']),
@@ -368,6 +399,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       'author': serializer.toJson<String>(author),
       'description': serializer.toJson<String>(description),
       'imageUrl': serializer.toJson<String?>(imageUrl),
+      'imagePath': serializer.toJson<String?>(imagePath),
       'link': serializer.toJson<String?>(link),
       'subscribedAt': serializer.toJson<DateTime>(subscribedAt),
       'refreshedAt': serializer.toJson<DateTime?>(refreshedAt),
@@ -382,6 +414,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     String? author,
     String? description,
     Value<String?> imageUrl = const Value.absent(),
+    Value<String?> imagePath = const Value.absent(),
     Value<String?> link = const Value.absent(),
     DateTime? subscribedAt,
     Value<DateTime?> refreshedAt = const Value.absent(),
@@ -393,6 +426,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     author: author ?? this.author,
     description: description ?? this.description,
     imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
+    imagePath: imagePath.present ? imagePath.value : this.imagePath,
     link: link.present ? link.value : this.link,
     subscribedAt: subscribedAt ?? this.subscribedAt,
     refreshedAt: refreshedAt.present ? refreshedAt.value : this.refreshedAt,
@@ -408,6 +442,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           ? data.description.value
           : this.description,
       imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
+      imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
       link: data.link.present ? data.link.value : this.link,
       subscribedAt: data.subscribedAt.present
           ? data.subscribedAt.value
@@ -428,6 +463,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           ..write('author: $author, ')
           ..write('description: $description, ')
           ..write('imageUrl: $imageUrl, ')
+          ..write('imagePath: $imagePath, ')
           ..write('link: $link, ')
           ..write('subscribedAt: $subscribedAt, ')
           ..write('refreshedAt: $refreshedAt, ')
@@ -444,6 +480,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     author,
     description,
     imageUrl,
+    imagePath,
     link,
     subscribedAt,
     refreshedAt,
@@ -459,6 +496,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           other.author == this.author &&
           other.description == this.description &&
           other.imageUrl == this.imageUrl &&
+          other.imagePath == this.imagePath &&
           other.link == this.link &&
           other.subscribedAt == this.subscribedAt &&
           other.refreshedAt == this.refreshedAt &&
@@ -472,6 +510,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
   final Value<String> author;
   final Value<String> description;
   final Value<String?> imageUrl;
+  final Value<String?> imagePath;
   final Value<String?> link;
   final Value<DateTime> subscribedAt;
   final Value<DateTime?> refreshedAt;
@@ -483,6 +522,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.author = const Value.absent(),
     this.description = const Value.absent(),
     this.imageUrl = const Value.absent(),
+    this.imagePath = const Value.absent(),
     this.link = const Value.absent(),
     this.subscribedAt = const Value.absent(),
     this.refreshedAt = const Value.absent(),
@@ -495,6 +535,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.author = const Value.absent(),
     this.description = const Value.absent(),
     this.imageUrl = const Value.absent(),
+    this.imagePath = const Value.absent(),
     this.link = const Value.absent(),
     required DateTime subscribedAt,
     this.refreshedAt = const Value.absent(),
@@ -509,6 +550,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Expression<String>? author,
     Expression<String>? description,
     Expression<String>? imageUrl,
+    Expression<String>? imagePath,
     Expression<String>? link,
     Expression<DateTime>? subscribedAt,
     Expression<DateTime>? refreshedAt,
@@ -521,6 +563,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       if (author != null) 'author': author,
       if (description != null) 'description': description,
       if (imageUrl != null) 'image_url': imageUrl,
+      if (imagePath != null) 'image_path': imagePath,
       if (link != null) 'link': link,
       if (subscribedAt != null) 'subscribed_at': subscribedAt,
       if (refreshedAt != null) 'refreshed_at': refreshedAt,
@@ -535,6 +578,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Value<String>? author,
     Value<String>? description,
     Value<String?>? imageUrl,
+    Value<String?>? imagePath,
     Value<String?>? link,
     Value<DateTime>? subscribedAt,
     Value<DateTime?>? refreshedAt,
@@ -547,6 +591,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       author: author ?? this.author,
       description: description ?? this.description,
       imageUrl: imageUrl ?? this.imageUrl,
+      imagePath: imagePath ?? this.imagePath,
       link: link ?? this.link,
       subscribedAt: subscribedAt ?? this.subscribedAt,
       refreshedAt: refreshedAt ?? this.refreshedAt,
@@ -575,6 +620,9 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     if (imageUrl.present) {
       map['image_url'] = Variable<String>(imageUrl.value);
     }
+    if (imagePath.present) {
+      map['image_path'] = Variable<String>(imagePath.value);
+    }
     if (link.present) {
       map['link'] = Variable<String>(link.value);
     }
@@ -599,6 +647,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
           ..write('author: $author, ')
           ..write('description: $description, ')
           ..write('imageUrl: $imageUrl, ')
+          ..write('imagePath: $imagePath, ')
           ..write('link: $link, ')
           ..write('subscribedAt: $subscribedAt, ')
           ..write('refreshedAt: $refreshedAt, ')
@@ -725,6 +774,17 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _imagePathMeta = const VerificationMeta(
+    'imagePath',
+  );
+  @override
+  late final GeneratedColumn<String> imagePath = GeneratedColumn<String>(
+    'image_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _positionMsMeta = const VerificationMeta(
     'positionMs',
   );
@@ -821,6 +881,7 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
     durationSeconds,
     publishedAt,
     imageUrl,
+    imagePath,
     positionMs,
     played,
     favorite,
@@ -913,6 +974,12 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
       context.handle(
         _imageUrlMeta,
         imageUrl.isAcceptableOrUnknown(data['image_url']!, _imageUrlMeta),
+      );
+    }
+    if (data.containsKey('image_path')) {
+      context.handle(
+        _imagePathMeta,
+        imagePath.isAcceptableOrUnknown(data['image_path']!, _imagePathMeta),
       );
     }
     if (data.containsKey('position_ms')) {
@@ -1019,6 +1086,10 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
         DriftSqlType.string,
         data['${effectivePrefix}image_url'],
       ),
+      imagePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_path'],
+      ),
       positionMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}position_ms'],
@@ -1067,6 +1138,7 @@ class Episode extends DataClass implements Insertable<Episode> {
   final int? durationSeconds;
   final DateTime? publishedAt;
   final String? imageUrl;
+  final String? imagePath;
   final int positionMs;
   final bool played;
   final bool favorite;
@@ -1085,6 +1157,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     this.durationSeconds,
     this.publishedAt,
     this.imageUrl,
+    this.imagePath,
     required this.positionMs,
     required this.played,
     required this.favorite,
@@ -1113,6 +1186,9 @@ class Episode extends DataClass implements Insertable<Episode> {
     }
     if (!nullToAbsent || imageUrl != null) {
       map['image_url'] = Variable<String>(imageUrl);
+    }
+    if (!nullToAbsent || imagePath != null) {
+      map['image_path'] = Variable<String>(imagePath);
     }
     map['position_ms'] = Variable<int>(positionMs);
     map['played'] = Variable<bool>(played);
@@ -1152,6 +1228,9 @@ class Episode extends DataClass implements Insertable<Episode> {
       imageUrl: imageUrl == null && nullToAbsent
           ? const Value.absent()
           : Value(imageUrl),
+      imagePath: imagePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imagePath),
       positionMs: Value(positionMs),
       played: Value(played),
       favorite: Value(favorite),
@@ -1186,6 +1265,7 @@ class Episode extends DataClass implements Insertable<Episode> {
       durationSeconds: serializer.fromJson<int?>(json['durationSeconds']),
       publishedAt: serializer.fromJson<DateTime?>(json['publishedAt']),
       imageUrl: serializer.fromJson<String?>(json['imageUrl']),
+      imagePath: serializer.fromJson<String?>(json['imagePath']),
       positionMs: serializer.fromJson<int>(json['positionMs']),
       played: serializer.fromJson<bool>(json['played']),
       favorite: serializer.fromJson<bool>(json['favorite']),
@@ -1209,6 +1289,7 @@ class Episode extends DataClass implements Insertable<Episode> {
       'durationSeconds': serializer.toJson<int?>(durationSeconds),
       'publishedAt': serializer.toJson<DateTime?>(publishedAt),
       'imageUrl': serializer.toJson<String?>(imageUrl),
+      'imagePath': serializer.toJson<String?>(imagePath),
       'positionMs': serializer.toJson<int>(positionMs),
       'played': serializer.toJson<bool>(played),
       'favorite': serializer.toJson<bool>(favorite),
@@ -1230,6 +1311,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     Value<int?> durationSeconds = const Value.absent(),
     Value<DateTime?> publishedAt = const Value.absent(),
     Value<String?> imageUrl = const Value.absent(),
+    Value<String?> imagePath = const Value.absent(),
     int? positionMs,
     bool? played,
     bool? favorite,
@@ -1250,6 +1332,7 @@ class Episode extends DataClass implements Insertable<Episode> {
         : this.durationSeconds,
     publishedAt: publishedAt.present ? publishedAt.value : this.publishedAt,
     imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
+    imagePath: imagePath.present ? imagePath.value : this.imagePath,
     positionMs: positionMs ?? this.positionMs,
     played: played ?? this.played,
     favorite: favorite ?? this.favorite,
@@ -1276,6 +1359,7 @@ class Episode extends DataClass implements Insertable<Episode> {
           ? data.publishedAt.value
           : this.publishedAt,
       imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
+      imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
       positionMs: data.positionMs.present
           ? data.positionMs.value
           : this.positionMs,
@@ -1309,6 +1393,7 @@ class Episode extends DataClass implements Insertable<Episode> {
           ..write('durationSeconds: $durationSeconds, ')
           ..write('publishedAt: $publishedAt, ')
           ..write('imageUrl: $imageUrl, ')
+          ..write('imagePath: $imagePath, ')
           ..write('positionMs: $positionMs, ')
           ..write('played: $played, ')
           ..write('favorite: $favorite, ')
@@ -1332,6 +1417,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     durationSeconds,
     publishedAt,
     imageUrl,
+    imagePath,
     positionMs,
     played,
     favorite,
@@ -1354,6 +1440,7 @@ class Episode extends DataClass implements Insertable<Episode> {
           other.durationSeconds == this.durationSeconds &&
           other.publishedAt == this.publishedAt &&
           other.imageUrl == this.imageUrl &&
+          other.imagePath == this.imagePath &&
           other.positionMs == this.positionMs &&
           other.played == this.played &&
           other.favorite == this.favorite &&
@@ -1374,6 +1461,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
   final Value<int?> durationSeconds;
   final Value<DateTime?> publishedAt;
   final Value<String?> imageUrl;
+  final Value<String?> imagePath;
   final Value<int> positionMs;
   final Value<bool> played;
   final Value<bool> favorite;
@@ -1392,6 +1480,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     this.durationSeconds = const Value.absent(),
     this.publishedAt = const Value.absent(),
     this.imageUrl = const Value.absent(),
+    this.imagePath = const Value.absent(),
     this.positionMs = const Value.absent(),
     this.played = const Value.absent(),
     this.favorite = const Value.absent(),
@@ -1411,6 +1500,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     this.durationSeconds = const Value.absent(),
     this.publishedAt = const Value.absent(),
     this.imageUrl = const Value.absent(),
+    this.imagePath = const Value.absent(),
     this.positionMs = const Value.absent(),
     this.played = const Value.absent(),
     this.favorite = const Value.absent(),
@@ -1433,6 +1523,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     Expression<int>? durationSeconds,
     Expression<DateTime>? publishedAt,
     Expression<String>? imageUrl,
+    Expression<String>? imagePath,
     Expression<int>? positionMs,
     Expression<bool>? played,
     Expression<bool>? favorite,
@@ -1452,6 +1543,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
       if (durationSeconds != null) 'duration_seconds': durationSeconds,
       if (publishedAt != null) 'published_at': publishedAt,
       if (imageUrl != null) 'image_url': imageUrl,
+      if (imagePath != null) 'image_path': imagePath,
       if (positionMs != null) 'position_ms': positionMs,
       if (played != null) 'played': played,
       if (favorite != null) 'favorite': favorite,
@@ -1473,6 +1565,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     Value<int?>? durationSeconds,
     Value<DateTime?>? publishedAt,
     Value<String?>? imageUrl,
+    Value<String?>? imagePath,
     Value<int>? positionMs,
     Value<bool>? played,
     Value<bool>? favorite,
@@ -1492,6 +1585,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
       durationSeconds: durationSeconds ?? this.durationSeconds,
       publishedAt: publishedAt ?? this.publishedAt,
       imageUrl: imageUrl ?? this.imageUrl,
+      imagePath: imagePath ?? this.imagePath,
       positionMs: positionMs ?? this.positionMs,
       played: played ?? this.played,
       favorite: favorite ?? this.favorite,
@@ -1535,6 +1629,9 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     if (imageUrl.present) {
       map['image_url'] = Variable<String>(imageUrl.value);
     }
+    if (imagePath.present) {
+      map['image_path'] = Variable<String>(imagePath.value);
+    }
     if (positionMs.present) {
       map['position_ms'] = Variable<int>(positionMs.value);
     }
@@ -1572,6 +1669,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
           ..write('durationSeconds: $durationSeconds, ')
           ..write('publishedAt: $publishedAt, ')
           ..write('imageUrl: $imageUrl, ')
+          ..write('imagePath: $imagePath, ')
           ..write('positionMs: $positionMs, ')
           ..write('played: $played, ')
           ..write('favorite: $favorite, ')
@@ -1613,6 +1711,7 @@ typedef $$PodcastsTableCreateCompanionBuilder = PodcastsCompanion Function({
   Value<String> author,
   Value<String> description,
   Value<String?> imageUrl,
+  Value<String?> imagePath,
   Value<String?> link,
   required DateTime subscribedAt,
   Value<DateTime?> refreshedAt,
@@ -1625,6 +1724,7 @@ typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<String> author,
   Value<String> description,
   Value<String?> imageUrl,
+  Value<String?> imagePath,
   Value<String?> link,
   Value<DateTime> subscribedAt,
   Value<DateTime?> refreshedAt,
@@ -1691,6 +1791,11 @@ class $$PodcastsTableFilterComposer
 
   ColumnFilters<String> get imageUrl => $composableBuilder(
     column: $table.imageUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imagePath => $composableBuilder(
+    column: $table.imagePath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1779,6 +1884,11 @@ class $$PodcastsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get imagePath => $composableBuilder(
+    column: $table.imagePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get link => $composableBuilder(
     column: $table.link,
     builder: (column) => ColumnOrderings(column),
@@ -1828,6 +1938,9 @@ class $$PodcastsTableAnnotationComposer
 
   GeneratedColumn<String> get imageUrl =>
       $composableBuilder(column: $table.imageUrl, builder: (column) => column);
+
+  GeneratedColumn<String> get imagePath =>
+      $composableBuilder(column: $table.imagePath, builder: (column) => column);
 
   GeneratedColumn<String> get link =>
       $composableBuilder(column: $table.link, builder: (column) => column);
@@ -1905,6 +2018,7 @@ class $$PodcastsTableTableManager
                 Value<String> author = const Value.absent(),
                 Value<String> description = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
+                Value<String?> imagePath = const Value.absent(),
                 Value<String?> link = const Value.absent(),
                 Value<DateTime> subscribedAt = const Value.absent(),
                 Value<DateTime?> refreshedAt = const Value.absent(),
@@ -1916,6 +2030,7 @@ class $$PodcastsTableTableManager
                 author: author,
                 description: description,
                 imageUrl: imageUrl,
+                imagePath: imagePath,
                 link: link,
                 subscribedAt: subscribedAt,
                 refreshedAt: refreshedAt,
@@ -1929,6 +2044,7 @@ class $$PodcastsTableTableManager
                 Value<String> author = const Value.absent(),
                 Value<String> description = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
+                Value<String?> imagePath = const Value.absent(),
                 Value<String?> link = const Value.absent(),
                 required DateTime subscribedAt,
                 Value<DateTime?> refreshedAt = const Value.absent(),
@@ -1940,6 +2056,7 @@ class $$PodcastsTableTableManager
                 author: author,
                 description: description,
                 imageUrl: imageUrl,
+                imagePath: imagePath,
                 link: link,
                 subscribedAt: subscribedAt,
                 refreshedAt: refreshedAt,
@@ -2004,6 +2121,7 @@ typedef $$EpisodesTableCreateCompanionBuilder = EpisodesCompanion Function({
   Value<int?> durationSeconds,
   Value<DateTime?> publishedAt,
   Value<String?> imageUrl,
+  Value<String?> imagePath,
   Value<int> positionMs,
   Value<bool> played,
   Value<bool> favorite,
@@ -2023,6 +2141,7 @@ typedef $$EpisodesTableUpdateCompanionBuilder = EpisodesCompanion Function({
   Value<int?> durationSeconds,
   Value<DateTime?> publishedAt,
   Value<String?> imageUrl,
+  Value<String?> imagePath,
   Value<int> positionMs,
   Value<bool> played,
   Value<bool> favorite,
@@ -2105,6 +2224,11 @@ class $$EpisodesTableFilterComposer
 
   ColumnFilters<String> get imageUrl => $composableBuilder(
     column: $table.imageUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imagePath => $composableBuilder(
+    column: $table.imagePath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2221,6 +2345,11 @@ class $$EpisodesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get imagePath => $composableBuilder(
+    column: $table.imagePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get positionMs => $composableBuilder(
     column: $table.positionMs,
     builder: (column) => ColumnOrderings(column),
@@ -2322,6 +2451,9 @@ class $$EpisodesTableAnnotationComposer
   GeneratedColumn<String> get imageUrl =>
       $composableBuilder(column: $table.imageUrl, builder: (column) => column);
 
+  GeneratedColumn<String> get imagePath =>
+      $composableBuilder(column: $table.imagePath, builder: (column) => column);
+
   GeneratedColumn<int> get positionMs => $composableBuilder(
     column: $table.positionMs,
     builder: (column) => column,
@@ -2415,6 +2547,7 @@ class $$EpisodesTableTableManager
                 Value<int?> durationSeconds = const Value.absent(),
                 Value<DateTime?> publishedAt = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
+                Value<String?> imagePath = const Value.absent(),
                 Value<int> positionMs = const Value.absent(),
                 Value<bool> played = const Value.absent(),
                 Value<bool> favorite = const Value.absent(),
@@ -2433,6 +2566,7 @@ class $$EpisodesTableTableManager
                 durationSeconds: durationSeconds,
                 publishedAt: publishedAt,
                 imageUrl: imageUrl,
+                imagePath: imagePath,
                 positionMs: positionMs,
                 played: played,
                 favorite: favorite,
@@ -2453,6 +2587,7 @@ class $$EpisodesTableTableManager
                 Value<int?> durationSeconds = const Value.absent(),
                 Value<DateTime?> publishedAt = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
+                Value<String?> imagePath = const Value.absent(),
                 Value<int> positionMs = const Value.absent(),
                 Value<bool> played = const Value.absent(),
                 Value<bool> favorite = const Value.absent(),
@@ -2471,6 +2606,7 @@ class $$EpisodesTableTableManager
                 durationSeconds: durationSeconds,
                 publishedAt: publishedAt,
                 imageUrl: imageUrl,
+                imagePath: imagePath,
                 positionMs: positionMs,
                 played: played,
                 favorite: favorite,

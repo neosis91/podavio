@@ -176,7 +176,12 @@ class _EpisodeCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            PodcastCover(url: entry.imageUrl, size: _cardWidth, radius: 12),
+            PodcastCover(
+              url: entry.imageUrl,
+              localPath: entry.imagePath,
+              size: _cardWidth,
+              radius: 12,
+            ),
             if (showProgress && fraction != null) ...[
               const SizedBox(height: 6),
               ClipRRect(
@@ -234,6 +239,7 @@ class _PodcastCard extends StatelessWidget {
                 children: [
                   PodcastCover(
                     url: podcast.imageUrl,
+                    localPath: podcast.imagePath,
                     size: _podcastWidth,
                     radius: 12,
                   ),

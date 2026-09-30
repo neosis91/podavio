@@ -12,6 +12,7 @@ class Podcasts extends Table {
   TextColumn get author => text().withDefault(const Constant(''))();
   TextColumn get description => text().withDefault(const Constant(''))();
   TextColumn get imageUrl => text().nullable()();
+  TextColumn get imagePath => text().nullable()();
   TextColumn get link => text().nullable()();
   DateTimeColumn get subscribedAt => dateTime()();
   DateTimeColumn get refreshedAt => dateTime().nullable()();
@@ -30,12 +31,14 @@ class Episodes extends Table {
   IntColumn get durationSeconds => integer().nullable()();
   DateTimeColumn get publishedAt => dateTime().nullable()();
   TextColumn get imageUrl => text().nullable()();
+  TextColumn get imagePath => text().nullable()();
   IntColumn get positionMs => integer().withDefault(const Constant(0))();
   BoolColumn get played => boolean().withDefault(const Constant(false))();
   BoolColumn get favorite => boolean().withDefault(const Constant(false))();
   TextColumn get downloadPath => text().nullable()();
   IntColumn get queueIndex => integer().nullable()();
   DateTimeColumn get lastPlayedAt => dateTime().nullable()();
+  DateTimeColumn get downloadedAt => dateTime().nullable()();
 
   @override
   List<Set<Column<Object>>> get uniqueKeys => [
@@ -49,7 +52,23 @@ class EpisodeEntry {
   final Episode episode;
   final Podcast podcast;
 
-  String? get imageUrl => episode.imageUrl ?? podcast.imageUrl;
+  /// URL distante de la jaquette (épisode, sinon podcast).
+  String? get imageUrl {
+    final episodeImage = episode.imageUrl?.trim();
+    if (episodeImage != null && episodeImage.isNotEmpty) return episodeImage;
+    final podcastImage = podcast.imageUrl?.trim();
+    if (podcastImage == null || podcastImage.isEmpty) return null;
+    return podcastImage;
+  }
+
+  /// Fichier local de la jaquette, s’il a déjà été téléchargé.
+  String? get imagePath {
+    final episodeImage = episode.imageUrl?.trim();
+    if (episodeImage != null && episodeImage.isNotEmpty) {
+      return episode.imagePath;
+    }
+    return podcast.imagePath;
+  }
 }
 
 @DriftDatabase(tables: [Podcasts, Episodes])
@@ -59,7 +78,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -67,6 +86,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 2) {
         await migrator.addColumn(podcasts, podcasts.preferred);
         await migrator.addColumn(episodes, episodes.downloadedAt);
+      }
+      if (from < 3) {
+        await migrator.addColumn(podcasts, podcasts.imagePath);
+        await migrator.addColumn(episodes, episodes.imagePath);
       }
     },
     beforeOpen: (details) async {
@@ -287,6 +310,7 @@ class AppDatabase extends _$AppDatabase {
         episodes.durationSeconds,
         episodes.publishedAt,
         episodes.imageUrl,
+        episodes.imagePath,
         episodes.positionMs,
         episodes.played,
         episodes.favorite,
@@ -299,6 +323,7 @@ class AppDatabase extends _$AppDatabase {
         podcasts.title,
         podcasts.author,
         podcasts.imageUrl,
+        podcasts.imagePath,
         podcasts.link,
         podcasts.subscribedAt,
         podcasts.refreshedAt,
@@ -362,6 +387,7 @@ class AppDatabase extends _$AppDatabase {
           durationSeconds: row.read(episodes.durationSeconds),
           publishedAt: row.read(episodes.publishedAt),
           imageUrl: row.read(episodes.imageUrl),
+          imagePath: row.read(episodes.imagePath),
           positionMs: row.read(episodes.positionMs)!,
           played: row.read(episodes.played)!,
           favorite: row.read(episodes.favorite)!,
@@ -377,6 +403,7 @@ class AppDatabase extends _$AppDatabase {
           author: row.read(podcasts.author)!,
           description: '',
           imageUrl: row.read(podcasts.imageUrl),
+          imagePath: row.read(podcasts.imagePath),
           link: row.read(podcasts.link),
           subscribedAt: row.read(podcasts.subscribedAt)!,
           refreshedAt: row.read(podcasts.refreshedAt),
@@ -405,6 +432,7 @@ class AppDatabase extends _$AppDatabase {
         );
       } else {
         podcastId = existing.id;
+        final imageChanged = (existing.imageUrl ?? '') != (draft.imageUrl ?? '');
         await (update(
           podcasts,
         )..where((table) => table.id.equals(podcastId))).write(
@@ -413,6 +441,7 @@ class AppDatabase extends _$AppDatabase {
             author: Value(draft.author),
             description: Value(draft.description),
             imageUrl: Value(draft.imageUrl),
+            imagePath: imageChanged ? const Value(null) : const Value.absent(),
             link: Value(draft.link),
             refreshedAt: Value(DateTime.now()),
           ),
@@ -421,15 +450,19 @@ class AppDatabase extends _$AppDatabase {
 
       final known =
           await (selectOnly(episodes)
-                ..addColumns([episodes.id, episodes.guid])
+                ..addColumns([episodes.id, episodes.guid, episodes.imageUrl])
                 ..where(episodes.podcastId.equals(podcastId)))
               .get();
       final idsByGuid = {
         for (final row in known)
           row.read(episodes.guid)!: row.read(episodes.id)!,
       };
+      final imageUrlById = {
+        for (final row in known)
+          row.read(episodes.id)!: row.read(episodes.imageUrl),
+      };
       final fresh = <EpisodesCompanion>[];
-      final changed = <({int id, EpisodeDraft episode})>[];
+      final changed = <({int id, EpisodeDraft episode, bool imageChanged})>[];
       final seen = <String>{};
       for (final episode in draft.episodes) {
         if (!seen.add(episode.guid)) continue;
@@ -449,7 +482,12 @@ class AppDatabase extends _$AppDatabase {
             ),
           );
         } else {
-          changed.add((id: existingId, episode: episode));
+          final previous = imageUrlById[existingId];
+          changed.add((
+            id: existingId,
+            episode: episode,
+            imageChanged: (previous ?? '') != (episode.imageUrl ?? ''),
+          ));
         }
       }
 
@@ -467,6 +505,9 @@ class AppDatabase extends _$AppDatabase {
                 durationSeconds: Value(item.episode.durationSeconds),
                 publishedAt: Value(item.episode.publishedAt),
                 imageUrl: Value(item.episode.imageUrl),
+                imagePath: item.imageChanged
+                    ? const Value(null)
+                    : const Value.absent(),
               ),
               where: (table) => table.id.equals(item.id),
             );
@@ -478,16 +519,56 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<List<String>> deletePodcast(int id) async {
+    final podcast = await (select(
+      podcasts,
+    )..where((table) => table.id.equals(id))).getSingleOrNull();
     final stored = await (select(
       episodes,
     )..where((table) => table.podcastId.equals(id))).get();
-    final paths = stored
-        .map((episode) => episode.downloadPath)
-        .whereType<String>()
-        .toList();
+    final paths = <String>[
+      if (podcast?.imagePath != null) podcast!.imagePath!,
+      for (final episode in stored) ...[
+        if (episode.downloadPath != null) episode.downloadPath!,
+        if (episode.imagePath != null) episode.imagePath!,
+      ],
+    ];
     await (delete(episodes)..where((table) => table.podcastId.equals(id))).go();
     await (delete(podcasts)..where((table) => table.id.equals(id))).go();
     return paths;
+  }
+
+  Future<void> setPodcastImagePath(int id, String? path) {
+    return (update(podcasts)..where((table) => table.id.equals(id))).write(
+      PodcastsCompanion(imagePath: Value(path)),
+    );
+  }
+
+  Future<void> setPodcastImagePaths(
+    List<({int id, String path})> updates,
+  ) {
+    if (updates.isEmpty) return Future.value();
+    return batch((statement) {
+      for (final item in updates) {
+        statement.update(
+          podcasts,
+          PodcastsCompanion(imagePath: Value(item.path)),
+          where: (table) => table.id.equals(item.id),
+        );
+      }
+    });
+  }
+
+  Future<void> setEpisodeImagePath(int id, String? path) {
+    return (update(episodes)..where((table) => table.id.equals(id))).write(
+      EpisodesCompanion(imagePath: Value(path)),
+    );
+  }
+
+  Future<List<Podcast>> podcastsMissingCovers() {
+    return (select(
+      podcasts,
+    )..where((table) => table.imageUrl.isNotNull() & table.imagePath.isNull()))
+        .get();
   }
 
   Future<void> setPosition(int id, int positionMs) {
@@ -526,6 +607,232 @@ class AppDatabase extends _$AppDatabase {
     return (select(
       episodes,
     )..where((table) => table.downloadPath.isNotNull())).get();
+  }
+
+  Future<List<Episode>> episodesForPodcast(int podcastId) {
+    return (select(episodes)
+          ..where((table) => table.podcastId.equals(podcastId))
+          ..orderBy([(table) => OrderingTerm.asc(table.publishedAt)]))
+        .get();
+  }
+
+  Future<PodcastStats> podcastStats(int podcastId) async {
+    final items = await episodesForPodcast(podcastId);
+    var unread = 0;
+    var started = 0;
+    var completed = 0;
+    var inProgress = 0;
+    var favorites = 0;
+    var downloads = 0;
+    var listenedSeconds = 0;
+    var totalDuration = 0;
+    var durationSamples = 0;
+    final published = <DateTime>[];
+
+    for (final episode in items) {
+      if (!episode.played) unread++;
+      if (episode.played) completed++;
+      if (!episode.played && episode.positionMs > 0) inProgress++;
+      if (episode.played ||
+          episode.positionMs > 0 ||
+          episode.lastPlayedAt != null) {
+        started++;
+      }
+      if (episode.favorite) favorites++;
+      if (episode.downloadPath != null) downloads++;
+
+      final duration = episode.durationSeconds;
+      if (duration != null && duration > 0) {
+        totalDuration += duration;
+        durationSamples++;
+      }
+
+      if (episode.played) {
+        listenedSeconds += duration ?? (episode.positionMs ~/ 1000);
+      } else if (episode.positionMs > 0) {
+        listenedSeconds += episode.positionMs ~/ 1000;
+      }
+
+      final publishedAt = episode.publishedAt;
+      if (publishedAt != null) published.add(publishedAt.toUtc());
+    }
+
+    published.sort();
+    Duration? interval;
+    if (published.length >= 3) {
+      final gaps = <int>[];
+      final start = published.length > 12 ? published.length - 12 : 1;
+      for (var i = start; i < published.length; i++) {
+        final days = published[i].difference(published[i - 1]).inHours;
+        if (days > 0) gaps.add(days);
+      }
+      if (gaps.isNotEmpty) {
+        gaps.sort();
+        interval = Duration(hours: gaps[gaps.length ~/ 2]);
+      }
+    } else if (published.length == 2) {
+      final hours = published[1].difference(published[0]).inHours;
+      if (hours > 0) interval = Duration(hours: hours);
+    }
+
+    final lastPublished = published.isEmpty ? null : published.last;
+    final nextEpisode = lastPublished == null || interval == null
+        ? null
+        : lastPublished.add(interval);
+
+    return PodcastStats(
+      episodeCount: items.length,
+      unreadCount: unread,
+      startedCount: started,
+      completedCount: completed,
+      inProgressCount: inProgress,
+      favoriteCount: favorites,
+      downloadCount: downloads,
+      downloadBytes: 0,
+      listenedSeconds: listenedSeconds,
+      totalDurationSeconds: totalDuration,
+      averageDurationSeconds: durationSamples == 0
+          ? null
+          : (totalDuration / durationSamples).round(),
+      releaseInterval: interval,
+      lastPublishedAt: lastPublished?.toLocal(),
+      nextEpisodeAt: nextEpisode?.toLocal(),
+    );
+  }
+
+  Future<LibraryStats> libraryStats() async {
+    final podcastList = await listPodcasts();
+    final allEpisodes = await select(episodes).get();
+    final byPodcast = <int, List<Episode>>{};
+    for (final episode in allEpisodes) {
+      (byPodcast[episode.podcastId] ??= []).add(episode);
+    }
+
+    final subscriptions = <SubscriptionStat>[];
+    final years = <int, _YearBucket>{};
+    final downloads = <DownloadStat>[];
+    var totalListened = 0;
+    var totalDownloadCount = 0;
+
+    for (final podcast in podcastList) {
+      final items = byPodcast[podcast.id] ?? const <Episode>[];
+      var completed = 0;
+      var started = 0;
+      var listened = 0;
+      var downloadCount = 0;
+
+      for (final episode in items) {
+        final listenedSeconds = _episodeListenedSeconds(episode);
+        final startedEpisode =
+            episode.played ||
+            episode.positionMs > 0 ||
+            episode.lastPlayedAt != null;
+        if (episode.played) completed++;
+        if (startedEpisode) started++;
+        listened += listenedSeconds;
+        if (episode.downloadPath != null) downloadCount++;
+
+        final playedAt = episode.lastPlayedAt;
+        if (startedEpisode && playedAt != null) {
+          final local = playedAt.toLocal();
+          final bucket = years.putIfAbsent(local.year, _YearBucket.new);
+          bucket.listenedSeconds += listenedSeconds;
+          bucket.startedCount++;
+          if (episode.played) bucket.completedCount++;
+          final monthBucket = bucket.months.putIfAbsent(
+            local.month,
+            _MonthBucket.new,
+          );
+          monthBucket.listenedSeconds += listenedSeconds;
+          monthBucket.startedCount++;
+          if (episode.played) monthBucket.completedCount++;
+        }
+      }
+
+      totalListened += listened;
+      totalDownloadCount += downloadCount;
+
+      subscriptions.add(
+        SubscriptionStat(
+          podcastId: podcast.id,
+          title: podcast.title,
+          author: podcast.author,
+          imageUrl: podcast.imageUrl,
+          episodeCount: items.length,
+          completedCount: completed,
+          startedCount: started,
+          listenedSeconds: listened,
+          downloadCount: downloadCount,
+        ),
+      );
+
+      if (downloadCount > 0) {
+        downloads.add(
+          DownloadStat(
+            podcastId: podcast.id,
+            title: podcast.title,
+            author: podcast.author,
+            imageUrl: podcast.imageUrl,
+            downloadCount: downloadCount,
+            downloadBytes: 0,
+          ),
+        );
+      }
+    }
+
+    subscriptions.sort((a, b) {
+      final byListen = b.listenedSeconds.compareTo(a.listenedSeconds);
+      if (byListen != 0) return byListen;
+      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    });
+    downloads.sort(
+      (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+    );
+
+    final yearStats =
+        years.entries
+            .map((entry) {
+              final months = [
+                for (var month = 1; month <= 12; month++)
+                  MonthStat(
+                    year: entry.key,
+                    month: month,
+                    listenedSeconds:
+                        entry.value.months[month]?.listenedSeconds ?? 0,
+                    startedCount: entry.value.months[month]?.startedCount ?? 0,
+                    completedCount:
+                        entry.value.months[month]?.completedCount ?? 0,
+                  ),
+              ];
+              return YearStat(
+                year: entry.key,
+                listenedSeconds: entry.value.listenedSeconds,
+                startedCount: entry.value.startedCount,
+                completedCount: entry.value.completedCount,
+                months: months,
+              );
+            })
+            .toList()
+          ..sort((a, b) => b.year.compareTo(a.year));
+
+    return LibraryStats(
+      subscriptions: subscriptions,
+      years: yearStats,
+      downloads: downloads,
+      totalListenedSeconds: totalListened,
+      totalDownloadBytes: 0,
+      totalDownloadCount: totalDownloadCount,
+      podcastCount: podcastList.length,
+      episodeCount: allEpisodes.length,
+    );
+  }
+
+  int _episodeListenedSeconds(Episode episode) {
+    if (episode.played) {
+      return episode.durationSeconds ?? (episode.positionMs ~/ 1000);
+    }
+    if (episode.positionMs > 0) return episode.positionMs ~/ 1000;
+    return 0;
   }
 
   Future<void> updateDownloadPath(int id, String path) {
@@ -574,3 +881,17 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 }
+
+class _YearBucket {
+  var listenedSeconds = 0;
+  var startedCount = 0;
+  var completedCount = 0;
+  final months = <int, _MonthBucket>{};
+}
+
+class _MonthBucket {
+  var listenedSeconds = 0;
+  var startedCount = 0;
+  var completedCount = 0;
+}
+

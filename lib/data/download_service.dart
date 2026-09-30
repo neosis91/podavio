@@ -300,4 +300,40 @@ class DownloadService {
     if (mime != null && mime.isNotEmpty) return mime;
     return 'audio/mpeg';
   }
+
+  Future<int> downloadBytesForPodcast(int podcastId) async {
+    final items = await _database.episodesForPodcast(podcastId);
+    var total = 0;
+    for (final episode in items) {
+      final path = episode.downloadPath;
+      if (path == null) continue;
+      total += await _storedLength(path);
+    }
+    return total;
+  }
+
+  Future<Map<int, int>> downloadBytesByPodcast() async {
+    final items = await _database.downloadedEpisodes();
+    final totals = <int, int>{};
+    for (final episode in items) {
+      final path = episode.downloadPath;
+      if (path == null) continue;
+      final length = await _storedLength(path);
+      totals[episode.podcastId] = (totals[episode.podcastId] ?? 0) + length;
+    }
+    return totals;
+  }
+
+  Future<int> _storedLength(String path) async {
+    try {
+      if (isContentUri(path)) {
+        final document = await _documents.documentFileFromUri(path, false);
+        final length = document?.length ?? -1;
+        return length > 0 ? length : 0;
+      }
+      final file = File(path);
+      if (await file.exists()) return await file.length();
+    } catch (_) {}
+    return 0;
+  }
 }

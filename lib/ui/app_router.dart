@@ -20,6 +20,7 @@ import 'queue_page.dart';
 import 'router.dart';
 import 'settings_page.dart';
 import 'shell.dart';
+import 'stats_page.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -101,6 +102,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.backupRestore,
             builder: (context, state) => const BackupRestorePage(),
+          ),
+          GoRoute(
+            path: AppRoutes.stats,
+            builder: (context, state) => const StatsPage(),
           ),
           GoRoute(
             path: AppRoutes.opmlImport,

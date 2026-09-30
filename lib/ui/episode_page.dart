@@ -103,7 +103,12 @@ class _EpisodeDetail extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
             children: [
               Center(
-                child: PodcastCover(url: entry.imageUrl, size: 200, radius: 16),
+                child: PodcastCover(
+                  url: entry.imageUrl,
+                  localPath: entry.imagePath,
+                  size: 200,
+                  radius: 16,
+                ),
               ),
               const SizedBox(height: 20),
               Text(episode.title, style: theme.textTheme.headlineSmall),
