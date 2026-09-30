@@ -188,12 +188,21 @@ class BackupRestorePage extends ConsumerWidget {
   }
 
   Future<void> _importOpml(BuildContext context, WidgetRef ref) async {
+    // Sur Android, FileType.custom + extension « opml » est filtré via MimeTypeMap
+    // (inconnu → seul text/xml reste). Les .opml s’affichent alors sans pouvoir
+    // être sélectionnés. On laisse choisir n’importe quel fichier, puis on valide.
     final file = await FilePicker.pickFile(
       dialogTitle: 'Importer un OPML',
-      type: FileType.custom,
-      allowedExtensions: const ['opml', 'xml'],
+      type: FileType.any,
     );
     if (file == null) return;
+    final name = (file.name).toLowerCase();
+    if (!name.endsWith('.opml') && !name.endsWith('.xml')) {
+      if (context.mounted) {
+        showMessage(context, 'Choisissez un fichier .opml ou .xml');
+      }
+      return;
+    }
     final Uint8List bytes;
     try {
       bytes = await file.readAsBytes();

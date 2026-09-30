@@ -53,6 +53,14 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
     }
   }
 
+  Future<int> deleteAllDownloads() async {
+    final episodes = await ref.read(databaseProvider).downloadedEpisodes();
+    for (final episode in episodes) {
+      await deleteDownload(episode);
+    }
+    return episodes.length;
+  }
+
   void _clear(int episodeId) {
     if (!state.containsKey(episodeId)) return;
     final next = Map<int, double>.of(state)..remove(episodeId);
