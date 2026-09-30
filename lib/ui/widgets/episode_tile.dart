@@ -120,21 +120,18 @@ class EpisodeTile extends ConsumerWidget {
             ),
             if (progress != null)
               Padding(
-                padding: const EdgeInsets.only(right: 4),
+                padding: const EdgeInsets.only(right: 8),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(
-                      width: 40,
-                      child: Text(
-                        progress <= 0 ? '…' : '${(progress * 100).round()} %',
-                        textAlign: TextAlign.right,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                    Text(
+                      '${(progress.clamp(0, 1) * 100).round()} %',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
+                    const SizedBox(width: 6),
                     DownloadProgressRing(
                       progress: progress,
                       onCancel: () => ref
@@ -167,49 +164,50 @@ class EpisodeTile extends ConsumerWidget {
                 ),
                 icon: const Icon(Icons.download_outlined),
               ),
-            PopupMenuButton<EpisodeMenuAction>(
-              tooltip: 'Actions',
-              onSelected: (action) =>
-                  runEpisodeAction(context, ref, entry, action),
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: EpisodeMenuAction.queue,
-                  child: Text(
-                    episode.queueIndex == null
-                        ? 'Ajouter à la file'
-                        : 'Retirer de la file',
+            if (progress == null)
+              PopupMenuButton<EpisodeMenuAction>(
+                tooltip: 'Actions',
+                onSelected: (action) =>
+                    runEpisodeAction(context, ref, entry, action),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: EpisodeMenuAction.queue,
+                    child: Text(
+                      episode.queueIndex == null
+                          ? 'Ajouter à la file'
+                          : 'Retirer de la file',
+                    ),
                   ),
-                ),
-                PopupMenuItem(
-                  value: EpisodeMenuAction.played,
-                  child: Text(
-                    episode.played
-                        ? 'Marquer comme non lu'
-                        : 'Marquer comme lu',
+                  PopupMenuItem(
+                    value: EpisodeMenuAction.played,
+                    child: Text(
+                      episode.played
+                          ? 'Marquer comme non lu'
+                          : 'Marquer comme lu',
+                    ),
                   ),
-                ),
-                PopupMenuItem(
-                  value: EpisodeMenuAction.favorite,
-                  child: Text(
-                    episode.favorite
-                        ? 'Retirer des favoris'
-                        : 'Ajouter aux favoris',
+                  PopupMenuItem(
+                    value: EpisodeMenuAction.favorite,
+                    child: Text(
+                      episode.favorite
+                          ? 'Retirer des favoris'
+                          : 'Ajouter aux favoris',
+                    ),
                   ),
-                ),
-                PopupMenuItem(
-                  value: EpisodeMenuAction.download,
-                  child: Text(
-                    episode.downloadPath == null
-                        ? 'Télécharger'
-                        : 'Supprimer le téléchargement',
+                  PopupMenuItem(
+                    value: EpisodeMenuAction.download,
+                    child: Text(
+                      episode.downloadPath == null
+                          ? 'Télécharger'
+                          : 'Supprimer le téléchargement',
+                    ),
                   ),
-                ),
-                const PopupMenuItem(
-                  value: EpisodeMenuAction.share,
-                  child: Text('Partager'),
-                ),
-              ],
-            ),
+                  const PopupMenuItem(
+                    value: EpisodeMenuAction.share,
+                    child: Text('Partager'),
+                  ),
+                ],
+              ),
           ],
         ),
       ),

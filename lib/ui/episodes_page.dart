@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/providers.dart';
+import '../data/feed_refresh_controller.dart';
 import 'router.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/episode_list.dart';
@@ -30,13 +31,20 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final refreshing = ref.watch(
+      feedRefreshProvider.select((s) => s.isRunning),
+    );
     return Scaffold(
       appBar: AppBar(
         title: const Text('Épisodes'),
         actions: [
           IconButton(
-            tooltip: 'Actualiser les abonnements',
-            onPressed: () => refreshSubscriptions(context, ref),
+            tooltip: refreshing
+                ? 'Actualisation en cours'
+                : 'Actualiser les abonnements',
+            onPressed: refreshing
+                ? null
+                : () => refreshSubscriptions(context, ref),
             icon: const Icon(Icons.refresh),
           ),
           PopupMenuButton<String>(
@@ -95,7 +103,9 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
           Expanded(
             child: EpisodeListBody(
               query: EpisodeQuery(unreadOnly: _unreadOnly, search: _search),
-              onRefresh: () => refreshSubscriptions(context, ref),
+              onRefresh: refreshing
+                  ? null
+                  : () => refreshSubscriptions(context, ref),
               empty: EmptyState(
                 title: _search.isEmpty
                     ? 'Aucun épisode à écouter'
@@ -119,18 +129,12 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
 }
 
 Future<void> refreshSubscriptions(BuildContext context, WidgetRef ref) async {
-  final report = await ref.read(feedServiceProvider).refreshAll();
-  if (!context.mounted) return;
-  if (report.total == 0) {
+  if (ref.read(feedRefreshProvider).isRunning) {
+    showMessage(context, 'Actualisation déjà en cours');
+    return;
+  }
+  final started = await ref.read(feedRefreshProvider.notifier).start();
+  if (!started && context.mounted) {
     showMessage(context, 'Aucun abonnement à actualiser');
-    return;
   }
-  if (report.failed == 0) {
-    showMessage(context, 'Abonnements actualisés');
-    return;
-  }
-  showMessage(
-    context,
-    '${report.total - report.failed} flux actualisés, ${report.failed} en échec',
-  );
 }

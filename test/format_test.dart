@@ -39,6 +39,25 @@ void main() {
     expect(audioExtension(null, 'https://cdn.example/a'), '.mp3');
   });
 
+  test('downloadFileName uses podcast and episode titles', () {
+    expect(
+      downloadFileName(
+        podcastTitle: 'Nota Bene',
+        episodeTitle: 'Les pyramides',
+        extension: '.mp3',
+      ),
+      '[Nota Bene] Les pyramides.mp3',
+    );
+    expect(
+      downloadFileName(
+        podcastTitle: 'A/B:C',
+        episodeTitle: 'Épisode "1"',
+        extension: '.m4a',
+      ),
+      '[A B C] Épisode 1.m4a',
+    );
+  });
+
   test('formatDate uses relative labels', () {
     final now = DateTime.now();
     expect(formatDate(now), "Aujourd'hui");

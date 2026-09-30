@@ -12,6 +12,9 @@ class AppRoutes {
   static const playback = '/playback';
   static const downloadSettings = '/download-settings';
   static const about = '/about';
+  static const licenses = '/licenses';
+  static const backupRestore = '/backup-restore';
+  static const opmlImport = '/preferences/opml-import';
   static const player = '/player';
 
   static String podcast(int id) => '/podcasts/$id';

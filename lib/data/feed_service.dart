@@ -21,19 +21,80 @@ class FeedService {
     return SubscribeResult(podcastId: id, created: existing == null);
   }
 
-  Future<int> refresh(String feedUrl) => _refreshUrl(feedUrl);
+  /// Abonne plusieurs flux en parallèle (réseau), avec une limite de concurrence.
+  Future<RefreshReport> subscribeMany(
+    List<String> urls, {
+    int concurrency = 4,
+    void Function(int done, int total, List<SubscribeFailure> failures)?
+    onProgress,
+  }) async {
+    if (urls.isEmpty) return const RefreshReport(total: 0);
+    final total = urls.length;
+    final workers = concurrency.clamp(1, total);
+    var next = 0;
+    var done = 0;
+    final failures = <SubscribeFailure>[];
 
-  Future<RefreshReport> refreshAll() async {
-    final podcasts = await _database.listPodcasts();
-    var failed = 0;
-    for (final podcast in podcasts) {
-      try {
-        await _refreshUrl(podcast.feedUrl);
-      } catch (_) {
-        failed++;
+    Future<void> worker() async {
+      while (true) {
+        final index = next;
+        if (index >= total) return;
+        next = index + 1;
+        final url = urls[index];
+        try {
+          await subscribe(url);
+        } catch (error) {
+          failures.add(
+            SubscribeFailure(feedUrl: url, message: describeFeedError(error)),
+          );
+        }
+        done++;
+        onProgress?.call(done, total, List.unmodifiable(failures));
       }
     }
-    return RefreshReport(total: podcasts.length, failed: failed);
+
+    await Future.wait(List.generate(workers, (_) => worker()));
+    return RefreshReport(total: total, failures: List.unmodifiable(failures));
+  }
+
+  Future<int> refresh(String feedUrl) => _refreshUrl(feedUrl);
+
+  Future<RefreshReport> refreshAll({
+    int concurrency = 4,
+    void Function(int done, int total, List<SubscribeFailure> failures)?
+    onProgress,
+  }) async {
+    final podcasts = await _database.listPodcasts();
+    if (podcasts.isEmpty) return const RefreshReport(total: 0);
+    final total = podcasts.length;
+    final workers = concurrency.clamp(1, total);
+    var next = 0;
+    var done = 0;
+    final failures = <SubscribeFailure>[];
+
+    Future<void> worker() async {
+      while (true) {
+        final index = next;
+        if (index >= total) return;
+        next = index + 1;
+        final podcast = podcasts[index];
+        try {
+          await _refreshUrl(podcast.feedUrl);
+        } catch (error) {
+          failures.add(
+            SubscribeFailure(
+              feedUrl: podcast.feedUrl,
+              message: describeFeedError(error),
+            ),
+          );
+        }
+        done++;
+        onProgress?.call(done, total, List.unmodifiable(failures));
+      }
+    }
+
+    await Future.wait(List.generate(workers, (_) => worker()));
+    return RefreshReport(total: total, failures: List.unmodifiable(failures));
   }
 
   Future<remote.SearchResult> search(String query) {
@@ -211,4 +272,46 @@ class FeedService {
     }
     return uri.toString();
   }
+}
+
+String describeFeedError(Object error) {
+  if (error is remote.PodcastTimeoutException) {
+    return 'Délai dépassé';
+  }
+  if (error is remote.PodcastCertificateException) {
+    return 'Certificat HTTPS invalide';
+  }
+  if (error is remote.PodcastGoneException) {
+    return 'Flux supprimé (${error.statusCode})';
+  }
+
+  final status = switch (error) {
+    remote.PodcastFailedException(:final statusCode) => statusCode,
+    remote.PodcastUnknownException(:final statusCode) => statusCode,
+    remote.PodcastCancelledException(:final statusCode) => statusCode,
+    _ => null,
+  };
+  if (status != null) {
+    return switch (status) {
+      404 => 'Flux introuvable (404)',
+      410 => 'Flux supprimé (410)',
+      401 => 'Accès non autorisé (401)',
+      403 => 'Accès refusé (403)',
+      408 || 504 => 'Délai dépassé ($status)',
+      500 || 502 || 503 => 'Serveur indisponible ($status)',
+      _ when status > 0 => 'Erreur HTTP $status',
+      _ => 'Impossible de charger le flux',
+    };
+  }
+
+  final text = error.toString();
+  if (text.startsWith('Exception: ')) return text.substring(11);
+  if (text.startsWith('FormatException: ')) return text.substring(17);
+  if (text.startsWith('TimeoutException')) {
+    return 'Délai dépassé';
+  }
+  if (text.contains('SocketException') || text.contains('Failed host lookup')) {
+    return 'Pas de connexion réseau';
+  }
+  return text;
 }

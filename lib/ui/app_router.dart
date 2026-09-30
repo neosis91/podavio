@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/opml.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
 import 'discover_page.dart';
@@ -9,7 +10,9 @@ import 'episode_page.dart';
 import 'episodes_page.dart';
 import 'home_page.dart';
 import 'library_pages.dart';
+import 'licenses_page.dart';
 import 'more_page.dart';
+import 'opml_import_page.dart';
 import 'player_page.dart';
 import 'podcast_page.dart';
 import 'podcasts_page.dart';
@@ -90,6 +93,24 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.about,
             builder: (context, state) => const AboutPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.licenses,
+            builder: (context, state) => const LicensesPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.backupRestore,
+            builder: (context, state) => const BackupRestorePage(),
+          ),
+          GoRoute(
+            path: AppRoutes.opmlImport,
+            builder: (context, state) {
+              final entries = state.extra;
+              if (entries is! List<OpmlEntry>) {
+                return const BackupRestorePage();
+              }
+              return OpmlImportPage(entries: entries);
+            },
           ),
           GoRoute(
             path: '/episode/:id',

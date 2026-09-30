@@ -47,9 +47,18 @@ class SubscribeResult {
   final bool created;
 }
 
+class SubscribeFailure {
+  const SubscribeFailure({required this.feedUrl, required this.message});
+
+  final String feedUrl;
+  final String message;
+}
+
 class RefreshReport {
-  const RefreshReport({required this.total, required this.failed});
+  const RefreshReport({required this.total, this.failures = const []});
 
   final int total;
-  final int failed;
+  final List<SubscribeFailure> failures;
+
+  int get failed => failures.length;
 }

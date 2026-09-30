@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/app_database.dart';
+import '../data/feed_refresh_controller.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
+import 'episodes_page.dart';
 import 'router.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
@@ -17,6 +19,9 @@ class PodcastsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final podcasts = ref.watch(podcastsProvider);
     final settings = ref.watch(settingsProvider);
+    final refreshing = ref.watch(
+      feedRefreshProvider.select((s) => s.isRunning),
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxColumns = _maxColumns(constraints.maxWidth);
@@ -27,6 +32,15 @@ class PodcastsPage extends ConsumerWidget {
           appBar: AppBar(
             title: const Text('Abonnements'),
             actions: [
+              IconButton(
+                tooltip: refreshing
+                    ? 'Actualisation en cours'
+                    : 'Actualiser les abonnements',
+                onPressed: refreshing
+                    ? null
+                    : () => refreshSubscriptions(context, ref),
+                icon: const Icon(Icons.refresh),
+              ),
               PopupMenuButton<int>(
                 tooltip: 'Affichage',
                 icon: Icon(
@@ -91,18 +105,22 @@ class PodcastsPage extends ConsumerWidget {
                   ),
                 );
               }
-              if (settings.podcastList) {
-                return ListView.separated(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: items.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final podcast = items[index];
-                    return _PodcastListTile(podcast: podcast);
-                  },
-                );
-              }
-              return _PodcastGrid(items: items, columns: columns);
+              final child = settings.podcastList
+                  ? ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: items.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final podcast = items[index];
+                        return _PodcastListTile(podcast: podcast);
+                      },
+                    )
+                  : _PodcastGrid(items: items, columns: columns);
+              if (refreshing) return child;
+              return RefreshIndicator(
+                onRefresh: () => refreshSubscriptions(context, ref),
+                child: child,
+              );
             },
           ),
         );
@@ -215,14 +233,16 @@ int _columnsForWidth(double width, int preferred) {
   return wanted > maxFit ? maxFit : wanted;
 }
 
-class _PodcastGrid extends StatelessWidget {
+class _PodcastGrid extends ConsumerWidget {
   const _PodcastGrid({required this.items, required this.columns});
 
   final List<Podcast> items;
   final int columns;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadByPodcast =
+        ref.watch(unreadCountsByPodcastProvider).value ?? const {};
     final theme = Theme.of(context);
     final titleStyle = theme.textTheme.titleSmall?.copyWith(
       fontWeight: FontWeight.w700,
@@ -255,6 +275,7 @@ class _PodcastGrid extends StatelessWidget {
           itemCount: items.length,
           itemBuilder: (context, index) {
             final podcast = items[index];
+            final unread = unreadByPodcast[podcast.id] ?? 0;
             return InkWell(
               borderRadius: BorderRadius.circular(16),
               onTap: () => context.push(AppRoutes.podcast(podcast.id)),
@@ -263,10 +284,10 @@ class _PodcastGrid extends StatelessWidget {
                 children: [
                   AspectRatio(
                     aspectRatio: 1,
-                    child: PodcastCover(
+                    child: _CoverWithUnread(
                       url: podcast.imageUrl,
-                      size: null,
                       radius: 16,
+                      unread: unread,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -299,13 +320,15 @@ class _PodcastGrid extends StatelessWidget {
   }
 }
 
-class _PodcastListTile extends StatelessWidget {
+class _PodcastListTile extends ConsumerWidget {
   const _PodcastListTile({required this.podcast});
 
   final Podcast podcast;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unread =
+        ref.watch(unreadCountsByPodcastProvider).value?[podcast.id] ?? 0;
     final theme = Theme.of(context);
     return InkWell(
       onTap: () => context.push(AppRoutes.podcast(podcast.id)),
@@ -315,7 +338,16 @@ class _PodcastListTile extends StatelessWidget {
           height: 72,
           child: Row(
             children: [
-              PodcastCover(url: podcast.imageUrl, size: 72, radius: 12),
+              SizedBox(
+                width: 72,
+                height: 72,
+                child: _CoverWithUnread(
+                  url: podcast.imageUrl,
+                  size: 72,
+                  radius: 12,
+                  unread: unread,
+                ),
+              ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -346,6 +378,52 @@ class _PodcastListTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CoverWithUnread extends StatelessWidget {
+  const _CoverWithUnread({
+    required this.url,
+    required this.radius,
+    required this.unread,
+    this.size,
+  });
+
+  final String? url;
+  final double radius;
+  final int unread;
+  final double? size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PodcastCover(url: url, size: size, radius: radius),
+        if (unread > 0)
+          Positioned(
+            top: 6,
+            right: 6,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.primary,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  '$unread',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: scheme.onPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

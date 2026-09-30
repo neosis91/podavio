@@ -20,6 +20,27 @@ void main() {
     ]);
   });
 
+  test('parseOpmlEntries keeps title and optional image', () {
+    const xml = '''
+<opml version="2.0">
+  <body>
+    <outline text="Show A" title="Show A" xmlUrl="https://a.example/feed" imageUrl="https://a.example/cover.jpg"/>
+    <outline text="Nested">
+      <outline text="Show B" XMLURL="https://b.example/feed/" icon="https://b.example/icon.png"/>
+    </outline>
+  </body>
+</opml>
+''';
+    final entries = parseOpmlEntries(xml);
+    expect(entries, hasLength(2));
+    expect(entries[0].title, 'Show A');
+    expect(entries[0].imageUrl, 'https://a.example/cover.jpg');
+    expect(entries[1].title, 'Show B');
+    expect(entries[1].feedUrl, 'https://b.example/feed/');
+    expect(entries[1].imageUrl, 'https://b.example/icon.png');
+    expect(normalizeFeedUrl(entries[1].feedUrl), 'https://b.example/feed');
+  });
+
   test('buildOpml roundtrips subscriptions', () {
     final podcast = Podcast(
       id: 1,
@@ -27,8 +48,13 @@ void main() {
       title: 'A & B',
       author: '',
       description: '',
+      imageUrl: 'https://a.example/cover.jpg',
       subscribedAt: DateTime.utc(2026, 1, 1),
+      preferred: false,
     );
-    expect(parseOpml(buildOpml([podcast])), ['https://a.example/feed']);
+    final entries = parseOpmlEntries(buildOpml([podcast]));
+    expect(entries, hasLength(1));
+    expect(entries.single.feedUrl, 'https://a.example/feed');
+    expect(entries.single.imageUrl, 'https://a.example/cover.jpg');
   });
 }

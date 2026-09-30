@@ -69,6 +69,7 @@ build:android:
         --build-number="${PODAVIO_BUILD}"
         --dart-define=PODAVIO_VERSION="${PODAVIO_VERSION}"
         --dart-define=GITLAB_PIPELINE_ID="${PODAVIO_GITLAB_ID}"
+        --dart-define=GITLAB_COMMIT_SHA="${CI_COMMIT_SHORT_SHA}"
       )
       flutter build apk --release "${FLAGS[@]}"
       flutter build apk --release --split-per-abi "${FLAGS[@]}"
@@ -115,6 +116,7 @@ build:linux:
         --build-number="${PODAVIO_BUILD}"
         --dart-define=PODAVIO_VERSION="${PODAVIO_VERSION}"
         --dart-define=GITLAB_PIPELINE_ID="${PODAVIO_GITLAB_ID}"
+        --dart-define=GITLAB_COMMIT_SHA="${CI_COMMIT_SHORT_SHA}"
       )
       flutter build linux --release "${FLAGS[@]}"
       mkdir -p dist/linux
@@ -146,10 +148,9 @@ release:
       artifacts: true
     - job: build:linux
       artifacts: true
+  # Uniquement sur main (branche par défaut), jamais sur dev / MR / tags.
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
-    - if: $CI_PIPELINE_SOURCE == "web"
       when: manual
   before_script:
     - apk add --no-cache curl
