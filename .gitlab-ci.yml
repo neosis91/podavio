@@ -45,13 +45,15 @@ cache:
     - .pub-cache/
 
 # Après merge sur main : crée le prochain tag CalVer (incrémente N).
+# Création via git push (API Tags souvent inaccessible au job token).
+# Optionnel : PODAVIO_TAG_TOKEN (PAT write_repository) si le push échoue.
 create_tag:
   stage: tag
   image: alpine:3.21
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   before_script:
-    - apk add --no-cache curl jq
+    - apk add --no-cache curl jq git
   script:
     - chmod +x tool/ci/create_tag.sh
     - tool/ci/create_tag.sh
