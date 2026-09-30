@@ -72,8 +72,12 @@ class DownloadService {
     void Function(double progress)? onProgress,
   }) async {
     final location = await resolveDownloadDirectory(directory);
-    final name =
-        '${episode.id}${audioExtension(episode.mimeType, episode.audioUrl)}';
+    final podcast = await _database.getPodcast(episode.podcastId);
+    final name = downloadFileName(
+      podcastTitle: podcast?.title ?? '',
+      episodeTitle: episode.title,
+      extension: audioExtension(episode.mimeType, episode.audioUrl),
+    );
     final client = http.Client();
     _clients[episode.id] = client;
     File? file;

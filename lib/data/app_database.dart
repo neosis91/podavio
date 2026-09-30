@@ -127,6 +127,12 @@ class AppDatabase extends _$AppDatabase {
     )..where((table) => table.id.equals(id))).watchSingleOrNull();
   }
 
+  Future<Podcast?> getPodcast(int id) {
+    return (select(
+      podcasts,
+    )..where((table) => table.id.equals(id))).getSingleOrNull();
+  }
+
   Future<Podcast?> findByFeedUrl(String feedUrl) {
     return (select(
       podcasts,
@@ -139,6 +145,20 @@ class AppDatabase extends _$AppDatabase {
       ..addColumns([count])
       ..where(episodes.played.equals(false));
     return query.watch().map((rows) => rows.single.read(count) ?? 0);
+  }
+
+  Stream<Map<int, int>> watchUnreadCountsByPodcast() {
+    final count = episodes.id.count();
+    final query = selectOnly(episodes)
+      ..addColumns([episodes.podcastId, count])
+      ..where(episodes.played.equals(false))
+      ..groupBy([episodes.podcastId]);
+    return query.watch().map(
+      (rows) => {
+        for (final row in rows)
+          row.read(episodes.podcastId)!: row.read(count) ?? 0,
+      },
+    );
   }
 
   Stream<int> watchQueueCount() {

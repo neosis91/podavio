@@ -8,7 +8,9 @@ import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import 'nav_catalog.dart';
 import 'router.dart';
+import 'widgets/feed_refresh_banner.dart';
 import 'widgets/mini_player.dart';
+import 'widgets/opml_import_banner.dart';
 
 final _plusButtonKey = GlobalKey();
 
@@ -70,6 +72,8 @@ class AppShell extends ConsumerWidget {
     final content = Column(
       children: [
         Expanded(child: child),
+        const OpmlImportBanner(),
+        const FeedRefreshBanner(),
         const MiniPlayer(),
       ],
     );
@@ -210,7 +214,10 @@ bool _belongs(String path, String route) {
         path == AppRoutes.appearance ||
         path == AppRoutes.playback ||
         path == AppRoutes.downloadSettings ||
-        path == AppRoutes.about;
+        path == AppRoutes.about ||
+        path == AppRoutes.licenses ||
+        path == AppRoutes.backupRestore ||
+        path == AppRoutes.opmlImport;
   }
   return path == route || path.startsWith('$route/');
 }

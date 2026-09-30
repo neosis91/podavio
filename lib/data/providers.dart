@@ -45,6 +45,10 @@ final unreadCountProvider = StreamProvider<int>((ref) {
   return ref.watch(databaseProvider).watchUnreadCount();
 });
 
+final unreadCountsByPodcastProvider = StreamProvider<Map<int, int>>((ref) {
+  return ref.watch(databaseProvider).watchUnreadCountsByPodcast();
+});
+
 final queueCountProvider = StreamProvider<int>((ref) {
   return ref.watch(databaseProvider).watchQueueCount();
 });

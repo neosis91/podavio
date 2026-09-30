@@ -42,10 +42,10 @@ dependencies:
   drift_flutter: ^0.3.1
   sqlite3_flutter_libs: ^0.6.0+eol
   just_audio: ^0.10.6
-  flutter_media_session: ^3.0.7
+  flutter_media_session: ^3.0.8
   audio_session: ^0.2.4
   podcast_search: ^0.7.15
-  cached_network_image: ^4.0.2
+  cached_network_image: ^4.0.4
   path_provider: ^2.1.6
   path: ^1.9.1
   intl: ^0.20.3
@@ -60,7 +60,7 @@ dependencies:
   dynamic_color: ^2.1.0
   package_info_plus: ^10.2.1
   saf_stream: ^4.0.1
-  saf_util: ^3.1.0
+  saf_util: ^3.1.1
   flutter_svg: ^2.3.0
 
 dev_dependencies:

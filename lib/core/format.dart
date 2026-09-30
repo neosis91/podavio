@@ -37,6 +37,35 @@ String audioExtension(String? mimeType, String url) {
   return '.mp3';
 }
 
+/// Nom de fichier pour un épisode téléchargé : `[podcast] titre.ext`
+String downloadFileName({
+  required String podcastTitle,
+  required String episodeTitle,
+  required String extension,
+}) {
+  final podcast = sanitizeFileName(podcastTitle).trim();
+  final episode = sanitizeFileName(episodeTitle).trim();
+  final label = podcast.isEmpty
+      ? (episode.isEmpty ? 'episode' : episode)
+      : episode.isEmpty
+      ? '[$podcast]'
+      : '[$podcast] $episode';
+  final maxBase = 180;
+  final base = label.length <= maxBase
+      ? label
+      : label.substring(0, maxBase).trimRight();
+  return '$base$extension';
+}
+
+String sanitizeFileName(String value) {
+  return value
+      .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim()
+      .replaceAll(RegExp(r'^\.+'), '')
+      .trim();
+}
+
 String plainText(String html) {
   const lineBreak = '\u0000';
   const paragraphBreak = '\u0001';

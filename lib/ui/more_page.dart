@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/build_info.dart';
+import '../data/feed_refresh_controller.dart';
 import '../data/opml.dart';
 import '../data/providers.dart';
 import 'episodes_page.dart';
@@ -29,46 +30,52 @@ class AboutPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('À propos')),
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
         children: [
           const Center(child: PodavioLogo()),
-          const SizedBox(height: 16),
-          Text(
-            'Lecteur de podcasts pour Android, iOS, Windows, macOS et Linux. '
-            'Vos abonnements restent des flux RSS, '
-            'sans compte obligatoire et sans publicité.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium,
-          ),
           const SizedBox(height: 16),
           FutureBuilder<PackageInfo>(
             future: _packageInfo,
             builder: (context, snapshot) {
               final packaged = snapshot.data?.version;
-              final version = (BuildInfo.version.isNotEmpty)
+              final version = BuildInfo.version.isNotEmpty
                   ? BuildInfo.version
                   : packaged;
               if (version == null || version.isEmpty) {
                 return const SizedBox.shrink();
               }
-              return Column(
-                children: [
-                  Text(
-                    'Version $version',
-                    textAlign: TextAlign.center,
-                    style: muted,
-                  ),
-                  if (BuildInfo.hasGitlabId) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'GitLab #${BuildInfo.gitlabPipelineId}',
-                      textAlign: TextAlign.center,
-                      style: muted,
-                    ),
-                  ],
-                ],
+              final commit = BuildInfo.hasCommit ? BuildInfo.commit : null;
+              final label = commit == null ? version : '$version ($commit)';
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Version'),
+                subtitle: Text(label),
               );
             },
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Lecteur de podcasts pour Android, iOS, Windows, macOS et Linux.',
+              style: muted,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Vos abonnements restent des flux RSS, '
+              'sans compte obligatoire et sans publicité.',
+              style: muted,
+            ),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Licences'),
+            subtitle: const Text(
+              'Logiciels et bibliothèques utilisés par Podavio',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.licenses),
           ),
         ],
       ),
@@ -81,28 +88,25 @@ class PreferencesPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final refreshing = ref.watch(
+      feedRefreshProvider.select((s) => s.isRunning),
+    );
     return Scaffold(
       appBar: AppBar(title: const Text('Préférences')),
       body: ListView(
         children: [
           ListTile(
-            leading: const Icon(Icons.refresh),
-            title: const Text('Actualiser tous les abonnements'),
-            onTap: () => refreshSubscriptions(context, ref),
-          ),
-          ListTile(
-            leading: const Icon(Icons.file_upload_outlined),
-            title: const Text('Importer un fichier OPML'),
-            subtitle: const Text(
-              'Abonnements exportés depuis une autre application',
+            leading: Icon(
+              Icons.refresh,
+              color: refreshing ? Theme.of(context).disabledColor : null,
             ),
-            onTap: () => _importOpml(context, ref),
-          ),
-          ListTile(
-            leading: const Icon(Icons.file_download_outlined),
-            title: const Text('Exporter les abonnements'),
-            subtitle: const Text('Fichier OPML'),
-            onTap: () => _exportOpml(context, ref),
+            title: Text(
+              refreshing
+                  ? 'Actualisation en cours…'
+                  : 'Actualiser tous les abonnements',
+            ),
+            enabled: !refreshing,
+            onTap: refreshing ? null : () => refreshSubscriptions(context, ref),
           ),
           const Divider(),
           ListTile(
@@ -121,9 +125,44 @@ class PreferencesPage extends ConsumerWidget {
             onTap: () => context.push(AppRoutes.downloadSettings),
           ),
           ListTile(
+            leading: const Icon(Icons.archive_outlined),
+            title: const Text('Sauvegarde et restauration'),
+            onTap: () => context.push(AppRoutes.backupRestore),
+          ),
+          ListTile(
             leading: const Icon(Icons.info_outline),
             title: const Text('À propos'),
             onTap: () => context.push(AppRoutes.about),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class BackupRestorePage extends ConsumerWidget {
+  const BackupRestorePage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sauvegarde et restauration')),
+      body: ListView(
+        children: [
+          const _SectionTitle('OPML'),
+          ListTile(
+            leading: const Icon(Icons.file_upload_outlined),
+            title: const Text('Importer un fichier OPML'),
+            subtitle: const Text(
+              'Abonnements exportés depuis une autre application',
+            ),
+            onTap: () => _importOpml(context, ref),
+          ),
+          ListTile(
+            leading: const Icon(Icons.file_download_outlined),
+            title: const Text('Exporter les abonnements'),
+            subtitle: const Text('Fichier OPML'),
+            onTap: () => _exportOpml(context, ref),
           ),
         ],
       ),
@@ -152,7 +191,7 @@ class PreferencesPage extends ConsumerWidget {
     final file = await FilePicker.pickFile(
       dialogTitle: 'Importer un OPML',
       type: FileType.custom,
-      allowedExtensions: ['opml', 'xml'],
+      allowedExtensions: const ['opml', 'xml'],
     );
     if (file == null) return;
     final Uint8List bytes;
@@ -164,54 +203,49 @@ class PreferencesPage extends ConsumerWidget {
       }
       return;
     }
-    List<String> urls;
+    List<OpmlEntry> entries;
     try {
-      urls = parseOpml(utf8.decode(bytes));
+      final text = _decodeOpml(bytes);
+      entries = parseOpmlEntries(text);
     } catch (_) {
       if (context.mounted) {
         showMessage(context, 'Ce fichier OPML est illisible');
       }
       return;
     }
-    if (urls.isEmpty) {
+    if (entries.isEmpty) {
       if (context.mounted) {
         showMessage(context, 'Aucun flux trouvé dans ce fichier');
       }
       return;
     }
     if (!context.mounted) return;
-    var done = 0;
-    var failed = 0;
-    final progress = ValueNotifier(0);
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Importation'),
-        content: ValueListenableBuilder<int>(
-          valueListenable: progress,
-          builder: (context, value, _) => Text('$value / ${urls.length} flux'),
-        ),
-      ),
-    );
-    final service = ref.read(feedServiceProvider);
-    for (final url in urls) {
-      try {
-        await service.subscribe(url);
-      } catch (_) {
-        failed++;
-      }
-      done++;
-      progress.value = done;
+    await context.push(AppRoutes.opmlImport, extra: entries);
+  }
+
+  String _decodeOpml(Uint8List bytes) {
+    try {
+      return utf8.decode(bytes);
+    } on FormatException {
+      return latin1.decode(bytes);
     }
-    progress.dispose();
-    if (!context.mounted) return;
-    Navigator.pop(context);
-    showMessage(
-      context,
-      failed == 0
-          ? '$done abonnements importés'
-          : '${done - failed} importés, $failed en échec',
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.titleSmall
+            ?.copyWith(color: Theme.of(context).colorScheme.primary),
+      ),
     );
   }
 }
