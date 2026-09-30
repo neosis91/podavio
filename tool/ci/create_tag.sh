@@ -1,22 +1,38 @@
 #!/bin/sh
 # Crée le prochain tag CalVer (YYYY.M.N) sur le commit courant.
 # À lancer uniquement sur la branche par défaut après un merge.
-# Nécessite que le job token puisse créer des tags
-# (Paramètres → CI/CD → Job token permissions → repository).
+#
+# Lecture des tags : API GitLab (JOB-TOKEN en lecture).
+# Création : git push (le job token n’a souvent pas accès à
+# POST /repository/tags, même avec « write repository »).
 set -eu
 
 YEAR="$(date -u +%Y)"
 MONTH="$(date -u +%m | sed 's/^0//')"
 PREFIX="${YEAR}.${MONTH}."
 
-api() {
-  curl --fail --silent --show-error \
-    --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
-    "$@"
+AUTH_HEADER="JOB-TOKEN: ${CI_JOB_TOKEN}"
+if [ -n "${PODAVIO_TAG_TOKEN:-}" ]; then
+  AUTH_HEADER="PRIVATE-TOKEN: ${PODAVIO_TAG_TOKEN}"
+fi
+
+api_get() {
+  raw="$(curl --silent --show-error \
+    --header "${AUTH_HEADER}" \
+    --write-out "\n%{http_code}" \
+    "$1")"
+  code="$(printf '%s' "${raw}" | tail -n1)"
+  body="$(printf '%s' "${raw}" | sed '$d')"
+  if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ]; then
+    echo "API GET échoué (${code}) : $1" >&2
+    printf '%s\n' "${body}" >&2
+    exit 1
+  fi
+  printf '%s' "${body}"
 }
 
 # Ne pas retagger un commit déjà versionné.
-refs="$(api "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/commits/${CI_COMMIT_SHA}/refs?type=tag")"
+refs="$(api_get "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/commits/${CI_COMMIT_SHA}/refs?type=tag")"
 existing="$(printf '%s' "${refs}" | jq -r '
   [.[] | select(.name | test("^[0-9]{4}\\.[0-9]+\\.[0-9]+$")) | .name] | first // empty
 ')"
@@ -29,7 +45,7 @@ fi
 max=0
 page=1
 while :; do
-  response="$(api "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/tags?per_page=100&page=${page}")"
+  response="$(api_get "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/tags?per_page=100&page=${page}")"
   count="$(printf '%s' "${response}" | jq 'length')"
   if [ "${count}" -eq 0 ]; then
     break
@@ -55,11 +71,19 @@ done
 next=$((max + 1))
 TAG="${PREFIX}${next}"
 
-echo "Création du tag ${TAG} sur ${CI_COMMIT_SHA}…"
-api --request POST \
-  --data-urlencode "tag_name=${TAG}" \
-  --data-urlencode "ref=${CI_COMMIT_SHA}" \
-  --data-urlencode "message=Release ${TAG}" \
-  "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/tags" >/dev/null
+echo "Création du tag ${TAG} sur ${CI_COMMIT_SHA} (git push)…"
+
+git config user.email "${GITLAB_USER_EMAIL:-ci@podavio.local}"
+git config user.name "${GITLAB_USER_NAME:-Podavio CI}"
+git tag -a "${TAG}" -m "Release ${TAG}" "${CI_COMMIT_SHA}"
+
+if [ -n "${PODAVIO_TAG_TOKEN:-}" ]; then
+  # oauth2 + PAT fonctionne pour push HTTP
+  push_url="https://oauth2:${PODAVIO_TAG_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+  git push "${push_url}" "refs/tags/${TAG}"
+else
+  # origin est déjà authentifié via CI_REPOSITORY_URL (job token)
+  git push origin "refs/tags/${TAG}"
+fi
 
 echo "Tag créé : ${TAG}"
