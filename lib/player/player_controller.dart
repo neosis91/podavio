@@ -17,6 +17,7 @@ class PlayerUiState {
     this.title = '',
     this.podcastTitle = '',
     this.imageUrl,
+    this.imagePath,
     this.playing = false,
     this.position = Duration.zero,
     this.duration = Duration.zero,
@@ -30,6 +31,7 @@ class PlayerUiState {
   final String title;
   final String podcastTitle;
   final String? imageUrl;
+  final String? imagePath;
   final bool playing;
   final Duration position;
   final Duration duration;
@@ -54,6 +56,7 @@ class PlayerUiState {
     String? title,
     String? podcastTitle,
     String? imageUrl,
+    String? imagePath,
     bool clearImage = false,
     bool? playing,
     Duration? position,
@@ -70,6 +73,7 @@ class PlayerUiState {
       title: title ?? this.title,
       podcastTitle: podcastTitle ?? this.podcastTitle,
       imageUrl: clearImage ? null : imageUrl ?? this.imageUrl,
+      imagePath: clearImage ? null : imagePath ?? this.imagePath,
       playing: playing ?? this.playing,
       position: position ?? this.position,
       duration: duration ?? this.duration,
@@ -207,13 +211,18 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         start >= duration - const Duration(seconds: 5)) {
       start = Duration.zero;
     }
+    final remoteImage = episode.imageUrl ?? podcast.imageUrl;
+    final localImage = (episode.imageUrl != null && episode.imageUrl!.trim().isNotEmpty)
+        ? episode.imagePath
+        : podcast.imagePath;
     _emit(
       _ui.copyWith(
         episodeId: episode.id,
         title: episode.title,
         podcastTitle: podcast.title,
-        imageUrl: episode.imageUrl ?? podcast.imageUrl,
-        clearImage: episode.imageUrl == null && podcast.imageUrl == null,
+        imageUrl: remoteImage,
+        imagePath: localImage,
+        clearImage: remoteImage == null && localImage == null,
         position: start,
         duration: duration,
         playing: false,
@@ -224,7 +233,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       playbackHandler?.setEpisode(
         title: episode.title,
         podcast: podcast.title,
-        artUri: artworkUri(episode.imageUrl ?? podcast.imageUrl),
+        artUri: artworkUri(localImage ?? remoteImage),
         duration: duration > Duration.zero ? duration : null,
       );
       await _prepareSession();

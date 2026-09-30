@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_database.dart';
+import 'cover_service.dart';
 import 'download_service.dart';
 import 'feed_service.dart';
+import 'models.dart';
 
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw StateError('SharedPreferences n’est pas initialisé.');
@@ -25,6 +27,10 @@ final downloadServiceProvider = Provider<DownloadService>((ref) {
   return DownloadService(ref.watch(databaseProvider));
 });
 
+final coverServiceProvider = Provider<CoverService>((ref) {
+  return CoverService(ref.watch(databaseProvider));
+});
+
 final defaultDownloadDirectoryProvider = FutureProvider<String>((ref) {
   return ref.watch(downloadServiceProvider).resolveDownloadDirectory(null);
 });
@@ -35,6 +41,15 @@ final episodeProvider = StreamProvider.family<EpisodeEntry?, int>((ref, id) {
 
 final podcastsProvider = StreamProvider<List<Podcast>>((ref) {
   return ref.watch(databaseProvider).watchPodcasts();
+});
+
+/// Télécharge automatiquement les jaquettes de podcasts manquantes.
+final coverPrefetchProvider = Provider<void>((ref) {
+  final service = ref.watch(coverServiceProvider);
+  ref.listen<AsyncValue<List<Podcast>>>(podcastsProvider, (_, next) {
+    next.whenData((_) => service.schedulePodcastSync());
+  });
+  Future.microtask(service.schedulePodcastSync);
 });
 
 final podcastProvider = StreamProvider.family<Podcast?, int>((ref, id) {
@@ -192,6 +207,73 @@ final randomEpisodesProvider =
     AsyncNotifierProvider<RandomEpisodesNotifier, List<EpisodeEntry>>(
       RandomEpisodesNotifier.new,
     );
+
+final podcastStatsProvider = FutureProvider.family<PodcastStats, int>((
+  ref,
+  podcastId,
+) async {
+  // Recalcule quand les épisodes du podcast changent.
+  ref.watch(
+    episodesProvider(EpisodeQuery(podcastId: podcastId, paginated: false)),
+  );
+  final stats = await ref.read(databaseProvider).podcastStats(podcastId);
+  final bytes = await ref
+      .read(downloadServiceProvider)
+      .downloadBytesForPodcast(podcastId);
+  return PodcastStats(
+    episodeCount: stats.episodeCount,
+    unreadCount: stats.unreadCount,
+    startedCount: stats.startedCount,
+    completedCount: stats.completedCount,
+    inProgressCount: stats.inProgressCount,
+    favoriteCount: stats.favoriteCount,
+    downloadCount: stats.downloadCount,
+    downloadBytes: bytes,
+    listenedSeconds: stats.listenedSeconds,
+    totalDurationSeconds: stats.totalDurationSeconds,
+    averageDurationSeconds: stats.averageDurationSeconds,
+    releaseInterval: stats.releaseInterval,
+    lastPublishedAt: stats.lastPublishedAt,
+    nextEpisodeAt: stats.nextEpisodeAt,
+  );
+});
+
+final libraryStatsProvider = FutureProvider<LibraryStats>((ref) async {
+  ref.watch(podcastsProvider);
+  final stats = await ref.read(databaseProvider).libraryStats();
+  final bytesByPodcast = await ref
+      .read(downloadServiceProvider)
+      .downloadBytesByPodcast();
+  final downloads = [
+    for (final item in stats.downloads)
+      DownloadStat(
+        podcastId: item.podcastId,
+        title: item.title,
+        author: item.author,
+        imageUrl: item.imageUrl,
+        downloadCount: item.downloadCount,
+        downloadBytes: bytesByPodcast[item.podcastId] ?? 0,
+      ),
+  ]..sort((a, b) {
+    final byBytes = b.downloadBytes.compareTo(a.downloadBytes);
+    if (byBytes != 0) return byBytes;
+    return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+  });
+  final totalBytes = downloads.fold<int>(
+    0,
+    (sum, item) => sum + item.downloadBytes,
+  );
+  return LibraryStats(
+    subscriptions: stats.subscriptions,
+    years: stats.years,
+    downloads: downloads,
+    totalListenedSeconds: stats.totalListenedSeconds,
+    totalDownloadBytes: totalBytes,
+    totalDownloadCount: stats.totalDownloadCount,
+    podcastCount: stats.podcastCount,
+    episodeCount: stats.episodeCount,
+  );
+});
 
 class RandomEpisodesNotifier extends AsyncNotifier<List<EpisodeEntry>> {
   @override

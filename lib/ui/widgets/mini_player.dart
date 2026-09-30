@@ -46,6 +46,7 @@ class MiniPlayer extends ConsumerWidget {
                             children: [
                               PodcastCover(
                                 url: player.imageUrl,
+                                localPath: player.imagePath,
                                 size: 48,
                                 radius: 6,
                               ),

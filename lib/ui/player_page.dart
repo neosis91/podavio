@@ -82,12 +82,22 @@ class _PlayerHeading extends ConsumerWidget {
     final imageUrl = ref.watch(
       playerProvider.select((state) => state.imageUrl),
     );
+    final imagePath = ref.watch(
+      playerProvider.select((state) => state.imagePath),
+    );
     final error = ref.watch(playerProvider.select((state) => state.error));
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Center(child: PodcastCover(url: imageUrl, size: 280, radius: 24)),
+        Center(
+          child: PodcastCover(
+            url: imageUrl,
+            localPath: imagePath,
+            size: 280,
+            radius: 24,
+          ),
+        ),
         const SizedBox(height: 24),
         Text(title, style: theme.textTheme.headlineSmall),
         const SizedBox(height: 4),

@@ -67,7 +67,7 @@ class EpisodeTile extends ConsumerWidget {
                   ),
                 ),
               ),
-            PodcastCover(url: entry.imageUrl),
+            PodcastCover(url: entry.imageUrl, localPath: entry.imagePath),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

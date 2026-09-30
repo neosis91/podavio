@@ -21,6 +21,7 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(coverPrefetchProvider);
     final path = GoRouterState.of(context).uri.path;
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final padding = MediaQuery.paddingOf(context);
@@ -366,6 +367,8 @@ class _NavButton extends StatelessWidget {
         if (destination.count > 0) ...[
           const SizedBox(width: 8),
           Badge(
+            backgroundColor: scheme.primary,
+            textColor: scheme.onPrimary,
             label: Text(
               destination.count > 99 ? '99+' : '${destination.count}',
             ),
@@ -476,8 +479,11 @@ class _BadgedIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Badge(
       isLabelVisible: count > 0,
+      backgroundColor: scheme.primary,
+      textColor: scheme.onPrimary,
       label: Text(count > 99 ? '99+' : '$count'),
       child: Icon(icon),
     );

@@ -51,6 +51,12 @@ const navPages = <NavPage>[
     Icons.download,
   ),
   NavPage(
+    AppRoutes.stats,
+    'Statistiques',
+    Icons.insights_outlined,
+    Icons.insights,
+  ),
+  NavPage(
     AppRoutes.preferences,
     'Préférences',
     Icons.tune_outlined,

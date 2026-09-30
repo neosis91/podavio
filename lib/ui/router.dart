@@ -14,6 +14,7 @@ class AppRoutes {
   static const about = '/about';
   static const licenses = '/licenses';
   static const backupRestore = '/backup-restore';
+  static const stats = '/stats';
   static const opmlImport = '/preferences/opml-import';
   static const player = '/player';
 

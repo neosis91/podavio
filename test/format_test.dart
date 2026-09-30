@@ -63,4 +63,39 @@ void main() {
     expect(formatDate(now), "Aujourd'hui");
     expect(formatDate(now.subtract(const Duration(days: 1))), 'Hier');
   });
+
+  test('formatListeningTime formats hours and minutes', () {
+    expect(formatListeningTime(0), '0 min');
+    expect(formatListeningTime(90), '1 min');
+    expect(formatListeningTime(3600), '1 h');
+    expect(formatListeningTime(3660), '1 h 1 min');
+  });
+
+  test('formatBytes formats storage sizes', () {
+    expect(formatBytes(0), '0 Mo');
+    expect(formatBytes(512), '0.5 Ko');
+    expect(formatBytes(5 * 1024 * 1024), '5.0 Mo');
+    expect(formatBytes(1536 * 1024 * 1024), '1.50 Go');
+  });
+
+  test('formatReleaseCadence estimates publication rhythm', () {
+    expect(formatReleaseCadence(null), 'Indéterminé');
+    expect(formatReleaseCadence(const Duration(hours: 20)), 'Quotidien');
+    expect(formatReleaseCadence(const Duration(days: 7)), 'Hebdomadaire');
+    expect(formatReleaseCadence(const Duration(days: 30)), 'Mensuel');
+  });
+
+  test('formatRelativeFuture describes upcoming dates', () {
+    final now = DateTime.now();
+    expect(formatRelativeFuture(null), 'Indéterminée');
+    expect(formatRelativeFuture(now), "Aujourd'hui");
+    expect(
+      formatRelativeFuture(now.add(const Duration(days: 1))),
+      'Demain',
+    );
+    expect(
+      formatRelativeFuture(now.add(const Duration(days: 5))),
+      'Dans 5 jours',
+    );
+  });
 }

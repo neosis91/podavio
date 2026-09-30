@@ -22,6 +22,60 @@ String formatDate(DateTime? date) {
   return DateFormat.yMMMd('fr').format(local);
 }
 
+String formatListeningTime(int seconds) {
+  if (seconds <= 0) return '0 min';
+  final hours = seconds ~/ 3600;
+  final minutes = (seconds % 3600) ~/ 60;
+  if (hours == 0) return '$minutes min';
+  if (minutes == 0) return '$hours h';
+  return '$hours h $minutes min';
+}
+
+String formatBytes(int bytes) {
+  if (bytes <= 0) return '0 Mo';
+  const kilo = 1024.0;
+  if (bytes < kilo * kilo) {
+    return '${(bytes / kilo).toStringAsFixed(bytes < 10 * kilo ? 1 : 0)} Ko';
+  }
+  if (bytes < kilo * kilo * kilo) {
+    final mega = bytes / (kilo * kilo);
+    return '${mega.toStringAsFixed(mega < 10 ? 1 : 0)} Mo';
+  }
+  final giga = bytes / (kilo * kilo * kilo);
+  return '${giga.toStringAsFixed(giga < 10 ? 2 : 1)} Go';
+}
+
+String formatReleaseCadence(Duration? interval) {
+  if (interval == null) return 'Indéterminé';
+  final days = interval.inHours / 24;
+  if (days < 1.2) return 'Quotidien';
+  if (days < 2.5) return 'Tous les 2 jours';
+  if (days < 5) return 'Tous les ${days.round()} jours';
+  if (days < 9) return 'Hebdomadaire';
+  if (days < 18) return 'Toutes les 2 semaines';
+  if (days < 40) return 'Mensuel';
+  if (days < 80) return 'Tous les 2 mois';
+  return 'Tous les ${days.round()} jours';
+}
+
+String formatMonthShort(int month) {
+  return DateFormat.MMM('fr').format(DateTime(2000, month));
+}
+
+String formatRelativeFuture(DateTime? date) {
+  if (date == null) return 'Indéterminée';
+  final local = date.toLocal();
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(local.year, local.month, local.day);
+  final diff = day.difference(today).inDays;
+  if (diff < 0) return 'En retard (prévu ${formatDate(local)})';
+  if (diff == 0) return "Aujourd'hui";
+  if (diff == 1) return 'Demain';
+  if (diff < 14) return 'Dans $diff jours';
+  return formatDate(local);
+}
+
 String audioExtension(String? mimeType, String url) {
   final mime = mimeType?.toLowerCase() ?? '';
   if (mime.contains('mpeg') || mime.contains('mp3')) return '.mp3';

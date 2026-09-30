@@ -62,6 +62,8 @@ dependencies:
   saf_stream: ^4.0.1
   saf_util: ^3.1.1
   flutter_svg: ^2.3.0
+  fl_chart: ^1.2.0
+  flutter_cache_manager: ^3.4.5
 
 dev_dependencies:
   flutter_test:

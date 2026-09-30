@@ -37,6 +37,12 @@ class PlaybackHandler {
     unawaited(_publishIntervals());
   }
 
+  /// Intervalles de saut système : Android / iOS seulement.
+  bool get _supportsSkipIntervals {
+    if (kIsWeb) return false;
+    return Platform.isAndroid || Platform.isIOS;
+  }
+
   Future<void> prepare() async {
     if (!kIsWeb && Platform.isWindows) {
       try {
@@ -168,6 +174,7 @@ class PlaybackHandler {
   }
 
   Future<void> _publishIntervals() async {
+    if (!_supportsSkipIntervals) return;
     try {
       await _session.setSkipIntervals(
         backwardSeconds: _skipBack.inSeconds,
@@ -239,9 +246,17 @@ PlaybackStatus _status(AudioPlayer player) {
 
 Uri? artworkUri(String? url) {
   if (url == null || url.isEmpty) return null;
+  if (url.startsWith('/') ||
+      (url.length > 2 && url[1] == ':') ||
+      url.startsWith(r'\\')) {
+    return Uri.file(url);
+  }
   final uri = Uri.tryParse(url);
   if (uri == null) return null;
-  if (uri.isScheme('http') || uri.isScheme('https') || uri.isScheme('file')) {
+  if (uri.isScheme('http') ||
+      uri.isScheme('https') ||
+      uri.isScheme('file') ||
+      uri.isScheme('content')) {
     return uri;
   }
   return null;
