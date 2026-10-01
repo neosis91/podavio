@@ -144,6 +144,7 @@ build:linux:
         --dart-define=GITLAB_PIPELINE_ID="${PODAVIO_GITLAB_ID}"
         --dart-define=GITLAB_COMMIT_SHA="${CI_COMMIT_SHORT_SHA}"
       )
+      # Même CalVer que BuildInfo / .desktop (CMake lit $PODAVIO_VERSION).
       flutter build linux --release "${FLAGS[@]}"
       mkdir -p dist/linux
       bundle="dist/linux/podavio-${PODAVIO_VERSION}-linux-x64"

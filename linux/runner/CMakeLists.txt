@@ -19,8 +19,31 @@ apply_standard_settings(${BINARY_NAME})
 # Add preprocessor definitions for the application ID.
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
+# CalVer (même source que --dart-define=PODAVIO_VERSION / BuildInfo.version).
+if(DEFINED ENV{PODAVIO_VERSION} AND NOT "$ENV{PODAVIO_VERSION}" STREQUAL "")
+  set(PODAVIO_VERSION "$ENV{PODAVIO_VERSION}")
+else()
+  set(PODAVIO_VERSION "")
+endif()
+# Version= du .desktop : CalVer du tag, ou 1.0 en build local.
+if(PODAVIO_VERSION STREQUAL "")
+  set(PODAVIO_DESKTOP_VERSION "1.0")
+else()
+  set(PODAVIO_DESKTOP_VERSION "${PODAVIO_VERSION}")
+endif()
+target_compile_definitions(${BINARY_NAME} PRIVATE
+  "PODAVIO_VERSION=\"${PODAVIO_VERSION}\""
+  "PODAVIO_DESKTOP_VERSION=\"${PODAVIO_DESKTOP_VERSION}\"")
+
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
+
+# .desktop du bundle : Version = CalVer du tag (sinon 1.0).
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/resources/fr.podavio.podavio.desktop.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/fr.podavio.podavio.desktop"
+  @ONLY
+)
