@@ -98,9 +98,22 @@ class AppDatabase extends _$AppDatabase {
   );
 
   Stream<List<Podcast>> watchPodcasts() {
-    return (select(
-      podcasts,
-    )..orderBy([(table) => OrderingTerm.asc(table.title)])).watch();
+    // Plus récent dernier épisode en tête ; sans épisode → en bas.
+    final latestEpisode = episodes.publishedAt.max();
+    final latestOrEpoch = coalesce([
+      latestEpisode,
+      Constant(DateTime.fromMillisecondsSinceEpoch(0, isUtc: true)),
+    ]);
+    final query = select(podcasts).join([
+      leftOuterJoin(episodes, episodes.podcastId.equalsExp(podcasts.id)),
+    ])
+      ..addColumns([latestEpisode])
+      ..groupBy([podcasts.id])
+      ..orderBy([
+        OrderingTerm(expression: latestOrEpoch, mode: OrderingMode.desc),
+        OrderingTerm.asc(podcasts.title),
+      ]);
+    return query.map((row) => row.readTable(podcasts)).watch();
   }
 
   /// Preferred subscriptions first, then the others by title.

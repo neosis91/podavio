@@ -104,6 +104,15 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/podavio.png"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 
+# Icône thème hicolor + .desktop (nom = application-id) pour Wayland.
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/podavio.png"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/256x256/apps"
+  RENAME "fr.podavio.podavio.png"
+  COMPONENT Runtime)
+install(FILES "${CMAKE_BINARY_DIR}/runner/fr.podavio.podavio.desktop"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/applications"
+  COMPONENT Runtime)
+
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 

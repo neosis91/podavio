@@ -7,6 +7,13 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+#ifndef PODAVIO_VERSION
+#define PODAVIO_VERSION ""
+#endif
+#ifndef PODAVIO_DESKTOP_VERSION
+#define PODAVIO_DESKTOP_VERSION "1.0"
+#endif
+
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
@@ -14,6 +21,9 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+static gchar* resolve_podavio_icon_path();
+static gchar* resolve_exe_path();
+static void install_wayland_desktop_entry();
 static void set_podavio_icon(GtkWindow* window);
 
 // Called when first Flutter frame received.
@@ -86,7 +96,7 @@ static gboolean my_application_local_command_line(GApplication* application,
                                                   gchar*** arguments,
                                                   int* exit_status) {
   MyApplication* self = MY_APPLICATION(application);
-  // Strip out the first argument as it is the binary name.
+  // Strip out the first argument as the binary name.
   self->dart_entrypoint_arguments = g_strdupv(*arguments + 1);
 
   g_autoptr(GError) error = nullptr;
@@ -104,35 +114,147 @@ static gboolean my_application_local_command_line(GApplication* application,
 
 // Implements GApplication::startup.
 static void my_application_startup(GApplication* application) {
-  // MyApplication* self = MY_APPLICATION(object);
-
-  // Perform any actions required at application startup.
+  g_set_application_name("Podavio");
+  g_autofree gchar* icon_path = resolve_podavio_icon_path();
+  if (icon_path != nullptr) {
+    g_autoptr(GError) error = nullptr;
+    if (!gtk_window_set_default_icon_from_file(icon_path, &error)) {
+      g_warning("Icône Podavio par défaut : %s", error->message);
+    }
+  }
 
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }
 
 // Implements GApplication::shutdown.
 static void my_application_shutdown(GApplication* application) {
-  // MyApplication* self = MY_APPLICATION(object);
-
-  // Perform any actions required at application shutdown.
-
   G_APPLICATION_CLASS(my_application_parent_class)->shutdown(application);
 }
 
-static void set_podavio_icon(GtkWindow* window) {
-  g_autofree gchar* exe_path = g_file_read_link("/proc/self/exe", nullptr);
-  if (exe_path == nullptr) return;
+static gchar* resolve_exe_path() {
+  return g_file_read_link("/proc/self/exe", nullptr);
+}
+
+static gchar* resolve_podavio_icon_path() {
+  g_autofree gchar* exe_path = resolve_exe_path();
+  if (exe_path == nullptr) return nullptr;
   g_autofree gchar* exe_dir = g_path_get_dirname(exe_path);
-  g_autofree gchar* icon_path =
-      g_build_filename(exe_dir, "data", "podavio.png", nullptr);
+
+  const gchar* candidates[] = {
+      "data/podavio.png",
+      "data/flutter_assets/assets/brand/icon.png",
+      nullptr,
+  };
+  for (int i = 0; candidates[i] != nullptr; i++) {
+    g_autofree gchar* path =
+        g_build_filename(exe_dir, candidates[i], nullptr);
+    if (g_file_test(path, G_FILE_TEST_IS_REGULAR)) {
+      return g_steal_pointer(&path);
+    }
+  }
+  return nullptr;
+}
+
+// Wayland ignore gtk_window_set_icon* : l’icône vient du .desktop dont le
+// nom = application-id (ici fr.podavio.podavio.desktop).
+static void install_wayland_desktop_entry() {
+  g_autofree gchar* exe_path = resolve_exe_path();
+  g_autofree gchar* icon_src = resolve_podavio_icon_path();
+  if (exe_path == nullptr || icon_src == nullptr) return;
+
+  const gchar* home = g_get_home_dir();
+  if (home == nullptr) return;
+
+  const int sizes[] = {256, 128, 64, 48, 32, 24, 16};
   g_autoptr(GError) error = nullptr;
-  g_autoptr(GdkPixbuf) pixbuf = gdk_pixbuf_new_from_file(icon_path, &error);
-  if (pixbuf == nullptr) {
-    g_warning("Icône Podavio introuvable : %s", error->message);
+  g_autoptr(GdkPixbuf) source = gdk_pixbuf_new_from_file(icon_src, &error);
+  if (source == nullptr) {
+    g_warning("Icône Podavio illisible pour le thème : %s", error->message);
     return;
   }
-  gtk_window_set_icon(window, pixbuf);
+
+  for (guint i = 0; i < G_N_ELEMENTS(sizes); i++) {
+    g_autofree gchar* size_dir = g_strdup_printf("%dx%d", sizes[i], sizes[i]);
+    g_autofree gchar* icon_dir = g_build_filename(
+        home, ".local", "share", "icons", "hicolor", size_dir, "apps", nullptr);
+    if (g_mkdir_with_parents(icon_dir, 0755) != 0) continue;
+
+    g_autofree gchar* icon_dst = g_build_filename(
+        icon_dir, APPLICATION_ID ".png", nullptr);
+    g_autoptr(GdkPixbuf) scaled = gdk_pixbuf_scale_simple(
+        source, sizes[i], sizes[i], GDK_INTERP_BILINEAR);
+    if (scaled == nullptr) continue;
+    g_autoptr(GError) save_error = nullptr;
+    if (!gdk_pixbuf_save(scaled, icon_dst, "png", &save_error, nullptr)) {
+      g_warning("Impossible d’écrire %s : %s", icon_dst, save_error->message);
+    }
+  }
+
+  g_autofree gchar* apps_dir =
+      g_build_filename(home, ".local", "share", "applications", nullptr);
+  if (g_mkdir_with_parents(apps_dir, 0755) != 0) return;
+
+  g_autofree gchar* desktop_path = g_build_filename(
+      apps_dir, APPLICATION_ID ".desktop", nullptr);
+  // Même CalVer que BuildInfo.version (injecté à la compile depuis le tag CI).
+  g_autofree gchar* desktop = g_strdup_printf(
+      "[Desktop Entry]\n"
+      "Version=%s\n"
+      "Type=Application\n"
+      "Name=Podavio\n"
+      "Comment=Lecteur de podcasts\n"
+      "Exec=\"%s\"\n"
+      "Icon=%s\n"
+      "Terminal=false\n"
+      "Categories=AudioVideo;Audio;Player;\n"
+      "StartupWMClass=%s\n"
+      "Keywords=podcast;audio;rss;\n",
+      PODAVIO_DESKTOP_VERSION, exe_path, APPLICATION_ID, APPLICATION_ID);
+
+  if (!g_file_set_contents(desktop_path, desktop, -1, &error)) {
+    g_warning("Impossible d’écrire %s : %s", desktop_path, error->message);
+    return;
+  }
+
+  // Rafraîchir les caches si les outils sont présents (best-effort).
+  g_autofree gchar* update_desktop = g_strdup_printf(
+      "update-desktop-database \"%s\" >/dev/null 2>&1", apps_dir);
+  g_autofree gchar* icon_root =
+      g_build_filename(home, ".local", "share", "icons", "hicolor", nullptr);
+  g_autofree gchar* update_icons = g_strdup_printf(
+      "gtk-update-icon-cache -f -t \"%s\" >/dev/null 2>&1", icon_root);
+  g_spawn_command_line_async(update_desktop, nullptr);
+  g_spawn_command_line_async(update_icons, nullptr);
+}
+
+static void set_podavio_icon(GtkWindow* window) {
+  g_autofree gchar* icon_path = resolve_podavio_icon_path();
+  if (icon_path == nullptr) {
+    g_warning("Icône Podavio introuvable à côté du binaire");
+    return;
+  }
+
+  g_autoptr(GError) error = nullptr;
+  g_autoptr(GdkPixbuf) source = gdk_pixbuf_new_from_file(icon_path, &error);
+  if (source == nullptr) {
+    g_warning("Icône Podavio illisible : %s", error->message);
+    return;
+  }
+
+  const int sizes[] = {256, 128, 64, 48, 32, 24, 16};
+  GList* icons = nullptr;
+  for (guint i = 0; i < G_N_ELEMENTS(sizes); i++) {
+    GdkPixbuf* scaled = gdk_pixbuf_scale_simple(
+        source, sizes[i], sizes[i], GDK_INTERP_BILINEAR);
+    if (scaled != nullptr) {
+      icons = g_list_append(icons, scaled);
+    }
+  }
+  if (icons == nullptr) return;
+
+  gtk_window_set_default_icon_list(icons);
+  gtk_window_set_icon_list(window, icons);
+  g_list_free_full(icons, g_object_unref);
 }
 
 // Implements GObject::dispose.
@@ -154,6 +276,9 @@ static void my_application_class_init(MyApplicationClass* klass) {
 static void my_application_init(MyApplication* self) {}
 
 MyApplication* my_application_new() {
+  // Avant l’enregistrement Wayland : le compositeur lie app_id → .desktop.
+  install_wayland_desktop_entry();
+
   // Set the program name to the application ID, which helps various systems
   // like GTK and desktop environments map this running application to its
   // corresponding .desktop file. This ensures better integration by allowing

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=@PODAVIO_DESKTOP_VERSION@
+Type=Application
+Name=Podavio
+Comment=Lecteur de podcasts
+Exec=podavio
+Icon=fr.podavio.podavio
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+StartupWMClass=fr.podavio.podavio
+Keywords=podcast;audio;rss;

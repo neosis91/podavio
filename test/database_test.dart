@@ -110,6 +110,62 @@ void main() {
     expect(found.single.episode.description, isEmpty);
   });
 
+  test('subscriptions are ordered by latest episode date', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    await database.saveFeed(
+      FeedDraft(
+        feedUrl: 'https://example.com/old.xml',
+        title: 'Ancien',
+        author: '',
+        description: '',
+        episodes: [
+          EpisodeDraft(
+            guid: 'old-1',
+            title: 'Vieux',
+            description: '',
+            audioUrl: 'https://example.com/old.mp3',
+            publishedAt: DateTime.utc(2024, 1, 1),
+          ),
+        ],
+      ),
+    );
+    await database.saveFeed(
+      FeedDraft(
+        feedUrl: 'https://example.com/new.xml',
+        title: 'Récent',
+        author: '',
+        description: '',
+        episodes: [
+          EpisodeDraft(
+            guid: 'new-1',
+            title: 'Frais',
+            description: '',
+            audioUrl: 'https://example.com/new.mp3',
+            publishedAt: DateTime.utc(2024, 6, 1),
+          ),
+        ],
+      ),
+    );
+    await database.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/empty.xml',
+        title: 'Vide',
+        author: '',
+        description: '',
+        episodes: [],
+      ),
+    );
+
+    final ordered = await database.watchPodcasts().first;
+    expect(ordered.map((podcast) => podcast.title), [
+      'Récent',
+      'Ancien',
+      'Vide',
+    ]);
+  });
+
   test('home rows split progress, new episodes and preferred shows', () async {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
