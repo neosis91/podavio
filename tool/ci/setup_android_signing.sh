@@ -12,7 +12,17 @@
 # Écrit android/key.properties et (si besoin) android/ci-upload-keystore.jks
 set -eu
 
-ROOT="$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)"
+# Sourcé depuis la CI (`. tool/ci/setup_android_signing.sh`) : $0 est le shell, pas
+# le script — utiliser BASH_SOURCE, sinon la racine du job / le CWD.
+if [ -n "${BASH_SOURCE:-}" ]; then
+  ROOT="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+elif [ -n "${CI_PROJECT_DIR:-}" ]; then
+  ROOT="${CI_PROJECT_DIR}"
+elif [ -d android ] && [ -f pubspec.yaml ]; then
+  ROOT="$(pwd)"
+else
+  ROOT="$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)"
+fi
 ANDROID_DIR="${ROOT}/android"
 PROPS="${ANDROID_DIR}/key.properties"
 DECODED_KEYSTORE="${ANDROID_DIR}/ci-upload-keystore.jks"
