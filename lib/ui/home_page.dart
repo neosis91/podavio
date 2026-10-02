@@ -48,6 +48,7 @@ class HomePage extends ConsumerWidget {
                     height: _episodeRowHeight,
                     itemCount: inProgress.length,
                     itemBuilder: (context, index) => _EpisodeCard(
+                      key: ValueKey(inProgress[index].episode.id),
                       entry: inProgress[index],
                       showProgress: true,
                     ),
@@ -57,8 +58,10 @@ class HomePage extends ConsumerWidget {
                     title: 'Les nouveautés',
                     height: _episodeRowHeight,
                     itemCount: fresh.length,
-                    itemBuilder: (context, index) =>
-                        _EpisodeCard(entry: fresh[index]),
+                    itemBuilder: (context, index) => _EpisodeCard(
+                      key: ValueKey(fresh[index].episode.id),
+                      entry: fresh[index],
+                    ),
                   ),
                 if (random.isNotEmpty)
                   _InlineSection(
@@ -71,24 +74,30 @@ class HomePage extends ConsumerWidget {
                           ref.read(randomEpisodesProvider.notifier).reshuffle(),
                       icon: const Icon(Icons.shuffle),
                     ),
-                    itemBuilder: (context, index) =>
-                        _EpisodeCard(entry: random[index]),
+                    itemBuilder: (context, index) => _EpisodeCard(
+                      key: ValueKey(random[index].episode.id),
+                      entry: random[index],
+                    ),
                   ),
                 if (subscriptions.isNotEmpty)
                   _InlineSection(
                     title: 'Abonnements préférés',
                     height: _podcastRowHeight,
                     itemCount: subscriptions.length,
-                    itemBuilder: (context, index) =>
-                        _PodcastCard(podcast: subscriptions[index]),
+                    itemBuilder: (context, index) => _PodcastCard(
+                      key: ValueKey(subscriptions[index].id),
+                      podcast: subscriptions[index],
+                    ),
                   ),
                 if (downloads.isNotEmpty)
                   _InlineSection(
                     title: 'Derniers téléchargements',
                     height: _episodeRowHeight,
                     itemCount: downloads.length,
-                    itemBuilder: (context, index) =>
-                        _EpisodeCard(entry: downloads[index]),
+                    itemBuilder: (context, index) => _EpisodeCard(
+                      key: ValueKey(downloads[index].episode.id),
+                      entry: downloads[index],
+                    ),
                   ),
               ],
             ),
@@ -152,7 +161,11 @@ class _InlineSection extends StatelessWidget {
 }
 
 class _EpisodeCard extends StatelessWidget {
-  const _EpisodeCard({required this.entry, this.showProgress = false});
+  const _EpisodeCard({
+    super.key,
+    required this.entry,
+    this.showProgress = false,
+  });
 
   final EpisodeEntry entry;
   final bool showProgress;
@@ -217,7 +230,7 @@ class _EpisodeCard extends StatelessWidget {
 }
 
 class _PodcastCard extends StatelessWidget {
-  const _PodcastCard({required this.podcast});
+  const _PodcastCard({super.key, required this.podcast});
 
   final Podcast podcast;
 

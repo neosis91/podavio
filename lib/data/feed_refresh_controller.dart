@@ -1,10 +1,32 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../settings/settings_controller.dart';
 import 'app_database.dart';
 import 'models.dart';
 import 'providers.dart';
 
 enum FeedRefreshPhase { idle, running, completed }
+
+enum FeedRefreshStartResult { started, alreadyRunning, empty, throttled }
+
+class FeedRefreshStart {
+  const FeedRefreshStart._(this.result, {this.retryAfter});
+
+  const FeedRefreshStart.started() : this._(FeedRefreshStartResult.started);
+
+  const FeedRefreshStart.alreadyRunning()
+    : this._(FeedRefreshStartResult.alreadyRunning);
+
+  const FeedRefreshStart.empty() : this._(FeedRefreshStartResult.empty);
+
+  const FeedRefreshStart.throttled(Duration retryAfter)
+    : this._(FeedRefreshStartResult.throttled, retryAfter: retryAfter);
+
+  final FeedRefreshStartResult result;
+  final Duration? retryAfter;
+
+  bool get started => result == FeedRefreshStartResult.started;
+}
 
 class FeedRefreshFailure {
   const FeedRefreshFailure({
@@ -47,24 +69,53 @@ final feedRefreshProvider =
     );
 
 class FeedRefreshNotifier extends Notifier<FeedRefreshState> {
+  static const _lastRefreshKey = 'lastFeedRefreshAtMs';
+
+  DateTime _lastProgressUi = DateTime.fromMillisecondsSinceEpoch(0);
+
   @override
   FeedRefreshState build() => const FeedRefreshState();
 
-  /// Lance l'actualisation en arrière-plan.
-  /// Retourne false si déjà en cours ou s'il n'y a aucun abonnement.
-  Future<bool> start() async {
-    if (state.isRunning) return false;
+  /// Lance l'actualisation en arrière-plan (respecte l’intervalle des réglages).
+  Future<FeedRefreshStart> start({bool force = false}) async {
+    if (state.isRunning) return const FeedRefreshStart.alreadyRunning();
+
+    if (!force) {
+      final throttled = _throttleRemaining();
+      if (throttled != null) {
+        return FeedRefreshStart.throttled(throttled);
+      }
+    }
+
     final podcasts = (await ref.read(databaseProvider).listPodcasts())
         .where((podcast) => podcast.keepUpdated)
         .toList();
-    if (podcasts.isEmpty) return false;
-    if (state.isRunning) return false;
+    if (podcasts.isEmpty) return const FeedRefreshStart.empty();
+    if (state.isRunning) return const FeedRefreshStart.alreadyRunning();
+
+    await ref
+        .read(sharedPreferencesProvider)
+        .setInt(_lastRefreshKey, DateTime.now().millisecondsSinceEpoch);
+
     state = FeedRefreshState(
       phase: FeedRefreshPhase.running,
       total: podcasts.length,
     );
     _run(podcasts);
-    return true;
+    return const FeedRefreshStart.started();
+  }
+
+  Duration? _throttleRemaining() {
+    final minutes = ref.read(settingsProvider).refreshIntervalMinutes;
+    if (minutes <= 0) return null;
+    final lastMs = ref.read(sharedPreferencesProvider).getInt(_lastRefreshKey);
+    if (lastMs == null) return null;
+    final elapsed = DateTime.now().difference(
+      DateTime.fromMillisecondsSinceEpoch(lastMs),
+    );
+    final minInterval = Duration(minutes: minutes);
+    if (elapsed >= minInterval) return null;
+    return minInterval - elapsed;
   }
 
   void dismiss() {
@@ -81,6 +132,14 @@ class FeedRefreshNotifier extends Notifier<FeedRefreshState> {
         .refreshAll(
           onProgress: (done, total, failures) {
             if (!state.isRunning) return;
+            final now = DateTime.now();
+            final isLast = done >= total;
+            if (!isLast &&
+                now.difference(_lastProgressUi) <
+                    const Duration(milliseconds: 200)) {
+              return;
+            }
+            _lastProgressUi = now;
             state = FeedRefreshState(
               phase: FeedRefreshPhase.running,
               done: done,
@@ -110,4 +169,21 @@ class FeedRefreshNotifier extends Notifier<FeedRefreshState> {
         ),
     ];
   }
+}
+
+String formatRefreshRetryAfter(Duration remaining) {
+  final totalSeconds = remaining.inSeconds.clamp(1, 24 * 60 * 60);
+  if (totalSeconds < 60) {
+    return '$totalSeconds s';
+  }
+  final minutes = (totalSeconds / 60).ceil();
+  if (minutes < 60) {
+    return minutes == 1 ? '1 min' : '$minutes min';
+  }
+  final hours = minutes ~/ 60;
+  final rest = minutes % 60;
+  if (rest == 0) {
+    return hours == 1 ? '1 h' : '$hours h';
+  }
+  return '$hours h $rest min';
 }

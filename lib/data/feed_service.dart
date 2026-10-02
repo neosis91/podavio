@@ -27,6 +27,9 @@ class FeedService {
   final remote.Search _search = remote.Search();
   final PodcastIndexSearch _podcastIndex = PodcastIndexSearch();
   final FyydSearch _fyyd = FyydSearch();
+  final _chapterInflight = <int, Future<void>>{};
+  final _chapterFailedAt = <int, DateTime>{};
+  static const _chapterRetryBackoff = Duration(minutes: 5);
 
   Future<SubscribeResult> subscribe(String rawUrl) async {
     final url = await _resolveFeedUrl(rawUrl);
@@ -405,10 +408,25 @@ class FeedService {
   }
 
   /// Charge et mémorise les chapitres Podcast Index d’un épisode (lazy).
-  Future<void> ensureChapters(int episodeId) async {
+  Future<void> ensureChapters(int episodeId) {
+    final inflight = _chapterInflight[episodeId];
+    if (inflight != null) return inflight;
+    final future = _ensureChapters(episodeId).whenComplete(() {
+      _chapterInflight.remove(episodeId);
+    });
+    _chapterInflight[episodeId] = future;
+    return future;
+  }
+
+  Future<void> _ensureChapters(int episodeId) async {
     final episode = await _database.episodeById(episodeId);
     if (episode == null) return;
     if (episode.chaptersFetched) return;
+    final failedAt = _chapterFailedAt[episodeId];
+    if (failedAt != null &&
+        DateTime.now().difference(failedAt) < _chapterRetryBackoff) {
+      return;
+    }
     final url = episode.chaptersUrl?.trim() ?? '';
     if (url.isEmpty) {
       await _database.markChaptersFetched(episodeId);
@@ -437,9 +455,10 @@ class FeedService {
           ),
       ];
       await _database.replaceChapters(episodeId, rows);
+      _chapterFailedAt.remove(episodeId);
     } catch (_) {
-      // Réessai possible plus tard (UA / réseau).
-      await _database.markChaptersFetched(episodeId);
+      // Pas de markFetched : réessai après backoff.
+      _chapterFailedAt[episodeId] = DateTime.now();
     }
   }
 
