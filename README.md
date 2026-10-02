@@ -7,7 +7,7 @@ Podavio est un lecteur de podcasts pour Android, iOS, Windows, macOS et Linux. O
 - Recherche et tendances via l’annuaire iTunes, centré sur la France
 - Ajout d’un podcast par adresse RSS
 - Import et export OPML des abonnements
-- Épisodes non lus, file d’attente réordonnable, favoris et historique
+- Épisodes non lus, playlist réordonnable, favoris et historique
 - Lecteur avec position mémorisée, vitesse, sauts et minuteur de sommeil
 - Téléchargement des épisodes pour les écouter hors ligne
 - Thème clair, sombre ou système
@@ -42,6 +42,16 @@ flutter run -d windows
 
 ```bash
 flutter test
+```
+
+## Signature Android (release / CI)
+
+Les APK de release doivent être signés avec un keystore stable (sinon les mises à
+jour in-place échouent). Création du keystore, variables GitLab et job
+`build:android` : voir [docs/android-signing.md](docs/android-signing.md).
+
+```bash
+tool/ci/create_android_keystore.sh
 ```
 
 ## Suite prévue

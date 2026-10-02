@@ -4,6 +4,32 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+import java.io.FileInputStream
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
+fun signingValue(envName: String, propName: String): String? {
+    val fromEnv = System.getenv(envName)?.takeIf { it.isNotBlank() }
+    if (fromEnv != null) return fromEnv
+    return keystoreProperties.getProperty(propName)?.takeIf { it.isNotBlank() }
+}
+
+val releaseStoreFile = signingValue("ANDROID_KEYSTORE_PATH", "storeFile")?.let { path ->
+    val asFile = file(path)
+    if (asFile.isAbsolute) asFile else rootProject.file(path)
+}
+val hasReleaseSigning =
+    releaseStoreFile != null &&
+        releaseStoreFile.exists() &&
+        !signingValue("ANDROID_KEY_ALIAS", "keyAlias").isNullOrBlank() &&
+        !signingValue("ANDROID_KEYSTORE_PASSWORD", "storePassword").isNullOrBlank() &&
+        !signingValue("ANDROID_KEY_PASSWORD", "keyPassword").isNullOrBlank()
+
 android {
     namespace = "fr.podavio.podavio"
     compileSdk = flutter.compileSdkVersion
@@ -29,11 +55,25 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = signingValue("ANDROID_KEYSTORE_PASSWORD", "storePassword")
+                keyAlias = signingValue("ANDROID_KEY_ALIAS", "keyAlias")
+                keyPassword = signingValue("ANDROID_KEY_PASSWORD", "keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                // Local / sans secrets : debug (pas pour une release publique).
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

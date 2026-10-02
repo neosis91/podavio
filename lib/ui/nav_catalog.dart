@@ -1,66 +1,92 @@
 import 'package:flutter/material.dart';
 
 import 'router.dart';
+import 'widgets/brand.dart';
+
+typedef NavIconBuilder = Widget Function({required Color color, double size});
+
+NavIconBuilder _material(IconData data) {
+  return ({required Color color, double size = 24}) =>
+      Icon(data, color: color, size: size);
+}
 
 class NavPage {
-  const NavPage(this.path, this.label, this.icon, this.selectedIcon);
+  const NavPage(this.path, this.label, this.icon, [this.selectedIcon]);
 
   final String path;
   final String label;
-  final IconData icon;
-  final IconData selectedIcon;
+  final NavIconBuilder icon;
+  final NavIconBuilder? selectedIcon;
+
+  Widget buildIcon({
+    required Color color,
+    double size = 24,
+    bool selected = false,
+  }) {
+    final builder = selected ? (selectedIcon ?? icon) : icon;
+    return builder(color: color, size: size);
+  }
 }
 
-const navPages = <NavPage>[
-  NavPage(AppRoutes.home, 'Accueil', Icons.home_outlined, Icons.home),
+final navPages = <NavPage>[
+  NavPage(
+    AppRoutes.home,
+    'Accueil',
+    _material(Icons.home_outlined),
+    _material(Icons.home),
+  ),
   NavPage(
     AppRoutes.episodes,
     'Épisodes',
-    Icons.podcasts_outlined,
-    Icons.podcasts,
+    _material(Icons.podcasts_outlined),
+    _material(Icons.podcasts),
   ),
   NavPage(
     AppRoutes.queue,
-    'File',
-    Icons.queue_music_outlined,
-    Icons.queue_music,
+    'Playlist',
+    ({required Color color, double size = 24}) => IconTheme(
+      data: IconThemeData(color: color, size: size),
+      child: PlaylistPlayIcon(size: size),
+    ),
   ),
   NavPage(
     AppRoutes.podcasts,
     'Abonnements',
-    Icons.grid_view_outlined,
-    Icons.grid_view,
+    ({required Color color, double size = 24}) => IconTheme(
+      data: IconThemeData(color: color, size: size),
+      child: SubscriptionsIcon(size: size),
+    ),
   ),
   NavPage(
     AppRoutes.discover,
     'Explorer',
-    Icons.explore_outlined,
-    Icons.explore,
+    _material(Icons.explore_outlined),
+    _material(Icons.explore),
   ),
-  NavPage(AppRoutes.history, 'Historique', Icons.history, Icons.history),
+  NavPage(AppRoutes.history, 'Historique', _material(Icons.history)),
   NavPage(
     AppRoutes.favorites,
     'Favoris',
-    Icons.favorite_outline,
-    Icons.favorite,
+    _material(Icons.favorite_outline),
+    _material(Icons.favorite),
   ),
   NavPage(
     AppRoutes.downloads,
     'Téléchargements',
-    Icons.download_outlined,
-    Icons.download,
+    _material(Icons.download_outlined),
+    _material(Icons.download),
   ),
   NavPage(
     AppRoutes.stats,
     'Statistiques',
-    Icons.insights_outlined,
-    Icons.insights,
+    _material(Icons.insights_outlined),
+    _material(Icons.insights),
   ),
   NavPage(
     AppRoutes.preferences,
     'Préférences',
-    Icons.tune_outlined,
-    Icons.tune,
+    _material(Icons.tune_outlined),
+    _material(Icons.tune),
   ),
 ];
 

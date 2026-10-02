@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/providers.dart';
+import '../player/player_controller.dart';
+import '../player/player_sheet_controller.dart';
 import '../settings/settings_controller.dart';
 import 'nav_catalog.dart';
 import 'router.dart';
+import 'widgets/expandable_player.dart';
 import 'widgets/feed_refresh_banner.dart';
-import 'widgets/mini_player.dart';
 import 'widgets/opml_import_banner.dart';
 
 final _plusButtonKey = GlobalKey();
@@ -25,20 +27,17 @@ class AppShell extends ConsumerWidget {
     final path = GoRouterState.of(context).uri.path;
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final padding = MediaQuery.paddingOf(context);
-    final unread = ref.watch(unreadCountProvider).value ?? 0;
-    final queued = ref.watch(queueCountProvider).value ?? 0;
     final order = ref.watch(
       settingsProvider.select((settings) => settings.navOrder),
     );
     final pages = [
-      for (final path in order) _pageDestination(path, unread, queued),
+      for (final path in order) _pageDestination(path),
     ];
-    const plus = _Destination(
+    final plus = _Destination(
       '',
       'Plus',
-      Icons.menu_outlined,
-      Icons.menu,
-      0,
+      _navMaterial(Icons.menu_outlined),
+      _navMaterial(Icons.menu),
       menu: true,
     );
     final size = MediaQuery.sizeOf(context);
@@ -63,19 +62,25 @@ class AppShell extends ConsumerWidget {
 
     void select(int selected) {
       final destination = destinations[selected];
+      ref.read(playerSheetProvider.notifier).collapse();
       if (destination.menu) {
-        _openPlusMenu(context, layout.overflow);
+        _openPlusMenu(context, layout.overflow, ref);
         return;
       }
       context.go(destination.path);
     }
+
+    final hasEpisode = ref.watch(
+      playerProvider.select((state) => state.hasEpisode),
+    );
+    final miniReserve = hasEpisode ? miniPlayerHeight : 0.0;
 
     final content = Column(
       children: [
         Expanded(child: child),
         const OpmlImportBanner(),
         const FeedRefreshBanner(),
-        const MiniPlayer(),
+        SizedBox(height: miniReserve),
       ],
     );
 
@@ -86,21 +91,39 @@ class AppShell extends ConsumerWidget {
       rail: useRail,
     );
 
-    if (useRail) {
-      return Scaffold(
-        body: SafeArea(
-          child: Row(
-            children: [
-              navigation,
-              const VerticalDivider(width: 1),
-              Expanded(child: content),
-            ],
-          ),
-        ),
-      );
-    }
+    final bottomInset = useRail
+        ? padding.bottom
+        : 1.0 + _barHeight + padding.bottom;
+    final leftInset = useRail
+        ? padding.left + _railWidth(destinations) + 1.0
+        : 0.0;
+    final topInset = useRail ? padding.top : 0.0;
 
-    return Scaffold(body: content, bottomNavigationBar: navigation);
+    final shell = useRail
+        ? Scaffold(
+            body: SafeArea(
+              child: Row(
+                children: [
+                  navigation,
+                  const VerticalDivider(width: 1),
+                  Expanded(child: content),
+                ],
+              ),
+            ),
+          )
+        : Scaffold(body: content, bottomNavigationBar: navigation);
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        shell,
+        ExpandablePlayer(
+          bottomInset: bottomInset,
+          leftInset: leftInset,
+          topInset: topInset,
+        ),
+      ],
+    );
   }
 
   int _indexFor(
@@ -140,20 +163,19 @@ class _NavLayout {
   final List<_Destination> overflow;
 }
 
-_Destination _pageDestination(String path, int unread, int queued) {
+_Destination _pageDestination(String path) {
   final page = navPageByPath(path)!;
-  final count = switch (path) {
-    AppRoutes.episodes => unread,
-    AppRoutes.queue => queued,
-    _ => 0,
-  };
   return _Destination(
     page.path,
     page.label,
     page.icon,
-    page.selectedIcon,
-    count,
+    page.selectedIcon ?? page.icon,
   );
+}
+
+NavIconBuilder _navMaterial(IconData data) {
+  return ({required Color color, double size = 24}) =>
+      Icon(data, color: color, size: size);
 }
 
 _NavLayout _layoutNav({
@@ -201,9 +223,7 @@ double _slotWidth(String label, TextStyle style) =>
 double _railWidth(List<_Destination> items) {
   var text = 0.0;
   for (final item in items) {
-    var width = _textWidth(item.label, _railLabelStyle);
-    if (item.count > 0) width += 32;
-    text = math.max(text, width);
+    text = math.max(text, _textWidth(item.label, _railLabelStyle));
   }
   return math.min(248, math.max(196, 88 + text));
 }
@@ -226,6 +246,7 @@ bool _belongs(String path, String route) {
 Future<void> _openPlusMenu(
   BuildContext context,
   List<_Destination> overflow,
+  WidgetRef ref,
 ) async {
   final path = GoRouterState.of(context).uri.path;
   final choice = await showMenu<String>(
@@ -243,7 +264,10 @@ Future<void> _openPlusMenu(
         ),
     ],
   );
-  if (choice != null && context.mounted) context.go(choice);
+  if (choice != null && context.mounted) {
+    ref.read(playerSheetProvider.notifier).collapse();
+    context.go(choice);
+  }
 }
 
 RelativeRect _plusMenuAnchor(BuildContext context) {
@@ -345,12 +369,9 @@ class _NavButton extends StatelessWidget {
     final foreground = selected
         ? scheme.onSecondaryContainer
         : scheme.onSurfaceVariant;
-    final iconData = selected ? destination.selectedIcon : destination.icon;
-    final icon = IconTheme(
-      data: IconThemeData(color: foreground, size: 24),
-      child: rail
-          ? Icon(iconData)
-          : _BadgedIcon(icon: iconData, count: destination.count),
+    final iconWidget = destination.buildIcon(
+      color: foreground,
+      selected: selected,
     );
     final label = Text(
       destination.label,
@@ -360,21 +381,6 @@ class _NavButton extends StatelessWidget {
       style: (rail ? _railLabelStyle : _barLabelStyle).copyWith(
         color: foreground,
       ),
-    );
-    final railLabel = Row(
-      children: [
-        Flexible(child: label),
-        if (destination.count > 0) ...[
-          const SizedBox(width: 8),
-          Badge(
-            backgroundColor: scheme.primary,
-            textColor: scheme.onPrimary,
-            label: Text(
-              destination.count > 99 ? '99+' : '${destination.count}',
-            ),
-          ),
-        ],
-      ],
     );
     final child = rail
         ? Padding(
@@ -388,9 +394,9 @@ class _NavButton extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
                   children: [
-                    icon,
+                    iconWidget,
                     const SizedBox(width: 12),
-                    Expanded(child: railLabel),
+                    Expanded(child: label),
                   ],
                 ),
               ),
@@ -409,7 +415,7 @@ class _NavButton extends StatelessWidget {
                     horizontal: 16,
                     vertical: 4,
                   ),
-                  child: icon,
+                  child: iconWidget,
                 ),
               ),
               const SizedBox(height: 4),
@@ -433,17 +439,19 @@ class _PlusMenuRow extends StatelessWidget {
     required this.selected,
   });
 
-  final IconData icon;
+  final NavIconBuilder icon;
   final String label;
   final bool selected;
 
   @override
   Widget build(BuildContext context) {
+    final color = IconTheme.of(context).color ??
+        Theme.of(context).colorScheme.onSurface;
     return SizedBox(
       width: 220,
       child: Row(
         children: [
-          Icon(icon),
+          icon(color: color),
           const SizedBox(width: 12),
           Expanded(child: Text(label)),
           if (selected) const Icon(Icons.check, size: 18),
@@ -458,34 +466,22 @@ class _Destination {
     this.path,
     this.label,
     this.icon,
-    this.selectedIcon,
-    this.count, {
+    this.selectedIcon, {
     this.menu = false,
   });
 
   final String path;
   final String label;
-  final IconData icon;
-  final IconData selectedIcon;
-  final int count;
+  final NavIconBuilder icon;
+  final NavIconBuilder selectedIcon;
   final bool menu;
-}
 
-class _BadgedIcon extends StatelessWidget {
-  const _BadgedIcon({required this.icon, required this.count});
-
-  final IconData icon;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Badge(
-      isLabelVisible: count > 0,
-      backgroundColor: scheme.primary,
-      textColor: scheme.onPrimary,
-      label: Text(count > 99 ? '99+' : '$count'),
-      child: Icon(icon),
-    );
+  Widget buildIcon({
+    required Color color,
+    double size = 24,
+    bool selected = false,
+  }) {
+    final builder = selected ? selectedIcon : icon;
+    return builder(color: color, size: size);
   }
 }

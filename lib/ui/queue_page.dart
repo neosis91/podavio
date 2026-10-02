@@ -11,7 +11,7 @@ class QueuePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('File d’attente')),
+      appBar: AppBar(title: const Text('Playlist')),
       body: EpisodeListBody(
         query: const EpisodeQuery(queuedOnly: true, paginated: false),
         reorder: (entries, oldIndex, newIndex) {

@@ -7,6 +7,7 @@ import 'core/theme.dart';
 import 'core/wallpaper_colors.dart';
 import 'settings/settings_controller.dart';
 import 'ui/app_router.dart';
+import 'ui/widgets/player_keyboard_shortcuts.dart';
 
 class PodavioApp extends ConsumerWidget {
   const PodavioApp({super.key});
@@ -37,8 +38,9 @@ class PodavioApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      builder: (context, child) =>
-          PlaybackLifecycle(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => PlayerKeyboardShortcuts(
+        child: PlaybackLifecycle(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

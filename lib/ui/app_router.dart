@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../data/opml.dart';
 import '../player/player_controller.dart';
+import '../player/player_sheet_controller.dart';
 import '../settings/settings_controller.dart';
 import 'discover_page.dart';
 import 'episode_page.dart';
@@ -13,7 +17,6 @@ import 'library_pages.dart';
 import 'licenses_page.dart';
 import 'more_page.dart';
 import 'opml_import_page.dart';
-import 'player_page.dart';
 import 'podcast_page.dart';
 import 'podcasts_page.dart';
 import 'queue_page.dart';
@@ -62,6 +65,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.discover,
             builder: (context, state) => const DiscoverPage(),
+            routes: [
+              GoRoute(
+                path: 'more',
+                builder: (context, state) => const DiscoverMorePage(),
+              ),
+            ],
           ),
           GoRoute(
             path: AppRoutes.preferences,
@@ -130,25 +139,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.player,
         parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) => CustomTransitionPage<void>(
-          key: state.pageKey,
-          fullscreenDialog: true,
-          child: const PlayerPage(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final curved = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-              reverseCurve: Curves.easeInCubic,
-            );
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 1),
-                end: Offset.zero,
-              ).animate(curved),
-              child: child,
-            );
-          },
-        ),
+        builder: (context, state) => const _PlayerExpandGate(),
       ),
     ],
   );
@@ -163,17 +154,58 @@ class PlaybackLifecycle extends ConsumerStatefulWidget {
   ConsumerState<PlaybackLifecycle> createState() => _PlaybackLifecycleState();
 }
 
+/// Ouvre le mini player expansible puis quitte la route `/player`.
+class _PlayerExpandGate extends ConsumerStatefulWidget {
+  const _PlayerExpandGate();
+
+  @override
+  ConsumerState<_PlayerExpandGate> createState() => _PlayerExpandGateState();
+}
+
+class _PlayerExpandGateState extends ConsumerState<_PlayerExpandGate> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      openPlayer(ref);
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(ref.read(settingsProvider).navOrder.first);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
 class _PlaybackLifecycleState extends ConsumerState<PlaybackLifecycle>
     with WidgetsBindingObserver {
+  var _wakelockEnabled = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(ref.read(playerProvider.notifier).restoreLastEpisode());
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (_wakelockEnabled) {
+      unawaited(WakelockPlus.disable());
+      _wakelockEnabled = false;
+    }
     super.dispose();
   }
 
@@ -186,6 +218,26 @@ class _PlaybackLifecycleState extends ConsumerState<PlaybackLifecycle>
     }
   }
 
+  void _syncWakelock({required bool keepOn, required bool playing}) {
+    final shouldEnable = keepOn && playing;
+    if (shouldEnable == _wakelockEnabled) return;
+    _wakelockEnabled = shouldEnable;
+    if (shouldEnable) {
+      unawaited(WakelockPlus.enable());
+    } else {
+      unawaited(WakelockPlus.disable());
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    final keepOn = ref.watch(
+      settingsProvider.select((settings) => settings.keepScreenOn),
+    );
+    final playing = ref.watch(
+      playerProvider.select((state) => state.playing),
+    );
+    _syncWakelock(keepOn: keepOn, playing: playing);
+    return widget.child;
+  }
 }

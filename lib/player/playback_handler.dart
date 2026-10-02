@@ -10,7 +10,12 @@ import 'package:just_audio/just_audio.dart';
 PlaybackHandler? playbackHandler;
 
 class PlaybackHandler {
-  PlaybackHandler(this._session);
+  PlaybackHandler(this._session) {
+    // flutter_media_session : Android, iOS, macOS, Windows, Web — pas Linux.
+    if (!kIsWeb && Platform.isLinux) {
+      _unsupported = true;
+    }
+  }
 
   final FlutterMediaSession _session;
   AudioPlayer? _player;
@@ -128,9 +133,13 @@ class PlaybackHandler {
       await _publishIntervals();
       await _pushMetadata();
     } catch (error, stack) {
-      if (error is MissingPluginException) _unsupported = true;
-      _starting = null;
-      debugPrint('Contrôles média indisponibles: $error\n$stack');
+      if (error is MissingPluginException) {
+        _unsupported = true;
+        debugPrint('Contrôles média indisponibles sur cette plateforme.');
+      } else {
+        _starting = null;
+        debugPrint('Contrôles média indisponibles: $error\n$stack');
+      }
     }
   }
 

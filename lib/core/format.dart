@@ -22,6 +22,16 @@ String formatDate(DateTime? date) {
   return DateFormat.yMMMd('fr').format(local);
 }
 
+/// Date de sortie : sans année si c’est l’année en cours.
+String formatReleaseDate(DateTime? date) {
+  if (date == null) return '';
+  final local = date.toLocal();
+  if (local.year == DateTime.now().year) {
+    return DateFormat.MMMd('fr').format(local);
+  }
+  return DateFormat.yMMMd('fr').format(local);
+}
+
 String formatListeningTime(int seconds) {
   if (seconds <= 0) return '0 min';
   final hours = seconds ~/ 3600;

@@ -160,9 +160,9 @@ class _EpisodeDetail extends ConsumerWidget {
                 children: [
                   _DetailAction(
                     icon: episode.queueIndex == null
-                        ? Icons.playlist_add
-                        : Icons.playlist_remove,
-                    label: episode.queueIndex == null ? 'File' : 'Retirer',
+                        ? const PlaylistAddIcon()
+                        : const PlaylistRemoveIcon(),
+                    label: episode.queueIndex == null ? 'Playlist' : 'Retirer',
                     selected: episode.queueIndex != null,
                     onPressed: () => runEpisodeAction(
                       context,
@@ -172,9 +172,11 @@ class _EpisodeDetail extends ConsumerWidget {
                     ),
                   ),
                   _DetailAction(
-                    icon: episode.favorite
-                        ? Icons.favorite
-                        : Icons.favorite_outline,
+                    icon: Icon(
+                      episode.favorite
+                          ? Icons.favorite
+                          : Icons.favorite_outline,
+                    ),
                     label: 'Favori',
                     selected: episode.favorite,
                     onPressed: () => runEpisodeAction(
@@ -185,9 +187,11 @@ class _EpisodeDetail extends ConsumerWidget {
                     ),
                   ),
                   _DetailAction(
-                    icon: episode.played
-                        ? Icons.mark_email_unread_outlined
-                        : Icons.check_circle_outline,
+                    icon: Icon(
+                      episode.played
+                          ? Icons.mark_email_unread_outlined
+                          : Icons.check_circle_outline,
+                    ),
                     label: episode.played ? 'Non lu' : 'Lu',
                     selected: episode.played,
                     onPressed: () => runEpisodeAction(
@@ -198,7 +202,7 @@ class _EpisodeDetail extends ConsumerWidget {
                     ),
                   ),
                   _DetailAction(
-                    icon: Icons.share_outlined,
+                    icon: const Icon(Icons.share_outlined),
                     label: 'Partager',
                     onPressed: () => runEpisodeAction(
                       context,
@@ -270,7 +274,7 @@ class _DetailAction extends StatelessWidget {
     this.selected = false,
   });
 
-  final IconData icon;
+  final Widget icon;
   final String label;
   final VoidCallback onPressed;
   final bool selected;
@@ -288,7 +292,10 @@ class _DetailAction extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: Column(
             children: [
-              Icon(icon, color: color),
+              IconTheme(
+                data: IconThemeData(color: color, size: 24),
+                child: icon,
+              ),
               const SizedBox(height: 4),
               Text(
                 label,

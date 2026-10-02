@@ -156,7 +156,7 @@ class BackupRestorePage extends ConsumerWidget {
             subtitle: const Text(
               'Abonnements exportés depuis une autre application',
             ),
-            onTap: () => _importOpml(context, ref),
+            onTap: () => importOpmlFile(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.file_download_outlined),
@@ -186,58 +186,59 @@ class BackupRestorePage extends ConsumerWidget {
       showMessage(context, 'Abonnements exportés');
     }
   }
+}
 
-  Future<void> _importOpml(BuildContext context, WidgetRef ref) async {
-    // Sur Android, FileType.custom + extension « opml » est filtré via MimeTypeMap
-    // (inconnu → seul text/xml reste). Les .opml s’affichent alors sans pouvoir
-    // être sélectionnés. On laisse choisir n’importe quel fichier, puis on valide.
-    final file = await FilePicker.pickFile(
-      dialogTitle: 'Importer un OPML',
-      type: FileType.any,
-    );
-    if (file == null) return;
-    final name = (file.name).toLowerCase();
-    if (!name.endsWith('.opml') && !name.endsWith('.xml')) {
-      if (context.mounted) {
-        showMessage(context, 'Choisissez un fichier .opml ou .xml');
-      }
-      return;
+/// Sélectionne un fichier OPML et ouvre l’écran d’import.
+Future<void> importOpmlFile(BuildContext context, WidgetRef ref) async {
+  // Sur Android, FileType.custom + extension « opml » est filtré via MimeTypeMap
+  // (inconnu → seul text/xml reste). Les .opml s’affichent alors sans pouvoir
+  // être sélectionnés. On laisse choisir n’importe quel fichier, puis on valide.
+  final file = await FilePicker.pickFile(
+    dialogTitle: 'Importer un OPML',
+    type: FileType.any,
+  );
+  if (file == null) return;
+  final name = (file.name).toLowerCase();
+  if (!name.endsWith('.opml') && !name.endsWith('.xml')) {
+    if (context.mounted) {
+      showMessage(context, 'Choisissez un fichier .opml ou .xml');
     }
-    final Uint8List bytes;
-    try {
-      bytes = await file.readAsBytes();
-    } catch (_) {
-      if (context.mounted) {
-        showMessage(context, 'Impossible de lire ce fichier');
-      }
-      return;
-    }
-    List<OpmlEntry> entries;
-    try {
-      final text = _decodeOpml(bytes);
-      entries = parseOpmlEntries(text);
-    } catch (_) {
-      if (context.mounted) {
-        showMessage(context, 'Ce fichier OPML est illisible');
-      }
-      return;
-    }
-    if (entries.isEmpty) {
-      if (context.mounted) {
-        showMessage(context, 'Aucun flux trouvé dans ce fichier');
-      }
-      return;
-    }
-    if (!context.mounted) return;
-    await context.push(AppRoutes.opmlImport, extra: entries);
+    return;
   }
-
-  String _decodeOpml(Uint8List bytes) {
-    try {
-      return utf8.decode(bytes);
-    } on FormatException {
-      return latin1.decode(bytes);
+  final Uint8List bytes;
+  try {
+    bytes = await file.readAsBytes();
+  } catch (_) {
+    if (context.mounted) {
+      showMessage(context, 'Impossible de lire ce fichier');
     }
+    return;
+  }
+  List<OpmlEntry> entries;
+  try {
+    final text = _decodeOpmlBytes(bytes);
+    entries = parseOpmlEntries(text);
+  } catch (_) {
+    if (context.mounted) {
+      showMessage(context, 'Ce fichier OPML est illisible');
+    }
+    return;
+  }
+  if (entries.isEmpty) {
+    if (context.mounted) {
+      showMessage(context, 'Aucun flux trouvé dans ce fichier');
+    }
+    return;
+  }
+  if (!context.mounted) return;
+  await context.push(AppRoutes.opmlImport, extra: entries);
+}
+
+String _decodeOpmlBytes(Uint8List bytes) {
+  try {
+    return utf8.decode(bytes);
+  } on FormatException {
+    return latin1.decode(bytes);
   }
 }
 
