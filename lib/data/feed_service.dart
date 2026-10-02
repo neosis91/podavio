@@ -1,24 +1,57 @@
+import 'package:drift/drift.dart';
 import 'package:http/http.dart' as http;
 import 'package:podcast_search/podcast_search.dart' as remote;
 
 import 'app_database.dart';
 import 'apple_feed.dart';
+import 'chapters_parser.dart';
+import 'discover_hit.dart';
+import 'fyyd_search.dart';
 import 'models.dart';
+import 'podcast_index_search.dart';
 import 'spotify_feed.dart';
 
 const podavioUserAgent = 'Podavio/0.1 (podcast player)';
+
+enum DiscoverSearchScope {
+  combined,
+  apple,
+  podcastIndex,
+  fyyd,
+}
 
 class FeedService {
   FeedService(this._database);
 
   final AppDatabase _database;
   final remote.Search _search = remote.Search();
+  final PodcastIndexSearch _podcastIndex = PodcastIndexSearch();
+  final FyydSearch _fyyd = FyydSearch();
 
   Future<SubscribeResult> subscribe(String rawUrl) async {
     final url = await _resolveFeedUrl(rawUrl);
     final existing = await _database.findByFeedUrl(url);
-    final id = await _refreshUrl(url);
-    return SubscribeResult(podcastId: id, created: existing == null);
+    final wasSubscribed = existing?.subscribed ?? false;
+    final id = await _refreshUrl(
+      url,
+      subscribed: true,
+      keepUpdated: true,
+    );
+    return SubscribeResult(
+      podcastId: id,
+      created: existing == null || !wasSubscribed,
+    );
+  }
+
+  /// Charge le flux en aperçu (épisodes utilisables) sans l’ajouter à la bibliothèque.
+  Future<int> preview(String rawUrl) async {
+    final url = await _resolveFeedUrl(rawUrl);
+    final existing = await _database.findByFeedUrl(url);
+    if (existing != null) {
+      // Rafraîchir les épisodes sans changer le statut d’abonnement.
+      return _refreshUrl(url);
+    }
+    return _refreshUrl(url, subscribed: false, keepUpdated: false);
   }
 
   /// Abonne plusieurs flux en parallèle (réseau), avec une limite de concurrence.
@@ -64,7 +97,9 @@ class FeedService {
     void Function(int done, int total, List<SubscribeFailure> failures)?
     onProgress,
   }) async {
-    final podcasts = await _database.listPodcasts();
+    final podcasts = (await _database.listPodcasts())
+        .where((podcast) => podcast.keepUpdated)
+        .toList();
     if (podcasts.isEmpty) return const RefreshReport(total: 0);
     final total = podcasts.length;
     final workers = concurrency.clamp(1, total);
@@ -105,6 +140,141 @@ class FeedService {
     return _search.charts(country: remote.Country.france, limit: 24);
   }
 
+  /// Suggestions combinées (Apple charts FR + Podcast Index trending + fyyd).
+  Future<List<DiscoverHit>> discoverCharts({int limit = 24}) async {
+    Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
+      try {
+        return await future;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final results = await Future.wait([
+      safe(_appleChartHits()),
+      safe(_podcastIndex.trending(lang: 'fr', max: limit)),
+      safe(_fyyd.suggestions(count: limit)),
+    ]);
+
+    final merged = _mergeHits(results, const [1.0, 1.0, 0.8]);
+    // Grille visuelle : préférer ceux qui ont une jaquette.
+    final withArt = merged.where((h) => (h.imageUrl ?? '').isNotEmpty).toList();
+    final without = merged.where((h) => (h.imageUrl ?? '').isEmpty).toList();
+    final ordered = [...withArt, ...without];
+    if (ordered.length <= limit) return ordered;
+    return ordered.sublist(0, limit);
+  }
+
+  Future<List<DiscoverHit>> _appleChartHits() async {
+    final result = await _search.charts(
+      country: remote.Country.france,
+      limit: 24,
+    );
+    if (!result.successful) {
+      throw Exception(
+        result.lastError.isEmpty ? 'La recherche a échoué.' : result.lastError,
+      );
+    }
+    return [
+      for (final item in result.items)
+        DiscoverHit(
+          title: item.trackName ?? item.collectionName ?? 'Podcast',
+          author: item.artistName ?? '',
+          imageUrl: item.bestArtworkUrl,
+          feedUrl: item.feedUrl?.trim() ?? '',
+          source: DiscoverSource.apple,
+          appleId: item.collectionId ?? item.trackId,
+        ),
+    ];
+  }
+
+  /// Recherche multi-annuaires (Apple, Podcast Index, fyyd).
+  Future<List<DiscoverHit>> discoverSearch(
+    String query, {
+    DiscoverSearchScope scope = DiscoverSearchScope.combined,
+  }) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return const [];
+
+    switch (scope) {
+      case DiscoverSearchScope.apple:
+        return _searchAppleHits(trimmed);
+      case DiscoverSearchScope.podcastIndex:
+        return _podcastIndex.search(trimmed);
+      case DiscoverSearchScope.fyyd:
+        return _fyyd.search(trimmed);
+      case DiscoverSearchScope.combined:
+        return _searchCombined(trimmed);
+    }
+  }
+
+  Future<List<DiscoverHit>> _searchCombined(String query) async {
+    Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
+      try {
+        return await future;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final results = await Future.wait([
+      safe(_searchAppleHits(query)),
+      safe(_podcastIndex.search(query)),
+      safe(_fyyd.search(query)),
+    ]);
+
+    return _mergeHits(results, const [1.0, 1.0, 0.8]);
+  }
+
+  /// Pondération proche d’AntennaPod CombinedSearcher.
+  List<DiscoverHit> _mergeHits(
+    List<List<DiscoverHit>?> results,
+    List<double> weights,
+  ) {
+    final ranking = <String, double>{};
+    final byKey = <String, DiscoverHit>{};
+
+    for (var provider = 0; provider < results.length; provider++) {
+      final list = results[provider];
+      if (list == null) continue;
+      final weight = weights[provider];
+      for (var i = 0; i < list.length; i++) {
+        final hit = list[i];
+        final key = hit.dedupeKey;
+        byKey.putIfAbsent(key, () => hit);
+        ranking[key] = (ranking[key] ?? 0) + weight / (i + 1);
+      }
+    }
+
+    final sorted = ranking.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return [for (final e in sorted) byKey[e.key]!];
+  }
+
+  Future<List<DiscoverHit>> _searchAppleHits(String query) async {
+    final result = await _search.search(
+      query,
+      country: remote.Country.france,
+      limit: 30,
+    );
+    if (!result.successful) {
+      throw Exception(
+        result.lastError.isEmpty ? 'La recherche a échoué.' : result.lastError,
+      );
+    }
+    return [
+      for (final item in result.items)
+        DiscoverHit(
+          title: item.trackName ?? item.collectionName ?? 'Podcast',
+          author: item.artistName ?? '',
+          imageUrl: item.bestArtworkUrl,
+          feedUrl: item.feedUrl?.trim() ?? '',
+          source: DiscoverSource.apple,
+          appleId: item.collectionId ?? item.trackId,
+        ),
+    ];
+  }
+
   /// Resolves the public RSS address when iTunes search omitted it.
   Future<String> feedUrlForAppleShow(int id) async {
     final response = await http
@@ -127,7 +297,11 @@ class FeedService {
     return feed;
   }
 
-  Future<int> _refreshUrl(String url) async {
+  Future<int> _refreshUrl(
+    String url, {
+    bool? subscribed,
+    bool? keepUpdated,
+  }) async {
     final podcast =
         await remote.Feed.loadFeed(
           url: url,
@@ -139,16 +313,44 @@ class FeedService {
             throw Exception('Le flux met trop de temps à répondre.');
           },
         );
-    return _database.saveFeed(_draftFrom(url, podcast));
+    final pscByKey = await _loadPscChapters(url);
+    return _database.saveFeed(
+      _draftFrom(url, podcast, pscByKey: pscByKey),
+      subscribed: subscribed,
+      keepUpdated: keepUpdated,
+    );
   }
 
-  FeedDraft _draftFrom(String url, remote.Podcast podcast) {
+  Future<Map<String, List<ChapterDraft>>> _loadPscChapters(String url) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: const {'User-Agent': podavioUserAgent},
+          )
+          .timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200 || response.body.isEmpty) {
+        return const {};
+      }
+      return parsePscChaptersByItem(response.body);
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  FeedDraft _draftFrom(
+    String url,
+    remote.Podcast podcast, {
+    Map<String, List<ChapterDraft>> pscByKey = const {},
+  }) {
     final episodes = <EpisodeDraft>[];
     for (final episode in podcast.episodes) {
       final audioUrl = episode.contentUrl?.trim() ?? '';
       if (audioUrl.isEmpty) continue;
       final guid = episode.guid.trim().isEmpty ? audioUrl : episode.guid.trim();
       final notes = _notes(episode);
+      final chapters =
+          pscByKey[guid] ?? pscByKey[audioUrl] ?? const <ChapterDraft>[];
       episodes.add(
         EpisodeDraft(
           guid: guid,
@@ -161,6 +363,8 @@ class FeedService {
           durationSeconds: episode.duration?.inSeconds,
           publishedAt: episode.publicationDate,
           imageUrl: _blankToNull(episode.imageUrl),
+          chaptersUrl: _blankToNull(episode.chapters?.url),
+          chapters: chapters,
         ),
       );
     }
@@ -198,6 +402,45 @@ class FeedService {
     final trimmed = value?.trim() ?? '';
     if (trimmed.isEmpty) return null;
     return trimmed;
+  }
+
+  /// Charge et mémorise les chapitres Podcast Index d’un épisode (lazy).
+  Future<void> ensureChapters(int episodeId) async {
+    final episode = await _database.episodeById(episodeId);
+    if (episode == null) return;
+    if (episode.chaptersFetched) return;
+    final url = episode.chaptersUrl?.trim() ?? '';
+    if (url.isEmpty) {
+      await _database.markChaptersFetched(episodeId);
+      return;
+    }
+    try {
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: const {'User-Agent': podavioUserAgent},
+          )
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        throw Exception('Chapitres HTTP ${response.statusCode}');
+      }
+      final parsed = parseChaptersJson(response.body);
+      final rows = <EpisodeChaptersCompanion>[
+        for (var i = 0; i < parsed.length; i++)
+          EpisodeChaptersCompanion.insert(
+            episodeId: episodeId,
+            startMs: parsed[i].startMs,
+            title: Value(parsed[i].title),
+            link: Value(parsed[i].link),
+            toc: Value(parsed[i].toc),
+            sortIndex: Value(i),
+          ),
+      ];
+      await _database.replaceChapters(episodeId, rows);
+    } catch (_) {
+      // Réessai possible plus tard (UA / réseau).
+      await _database.markChaptersFetched(episodeId);
+    }
   }
 
   Future<String> _resolveFeedUrl(String raw) async {

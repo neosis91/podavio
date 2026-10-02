@@ -1,3 +1,5 @@
+import 'chapters_parser.dart';
+
 class FeedDraft {
   const FeedDraft({
     required this.feedUrl,
@@ -28,6 +30,8 @@ class EpisodeDraft {
     this.durationSeconds,
     this.publishedAt,
     this.imageUrl,
+    this.chaptersUrl,
+    this.chapters = const [],
   });
 
   final String guid;
@@ -38,6 +42,8 @@ class EpisodeDraft {
   final int? durationSeconds;
   final DateTime? publishedAt;
   final String? imageUrl;
+  final String? chaptersUrl;
+  final List<ChapterDraft> chapters;
 }
 
 class SubscribeResult {

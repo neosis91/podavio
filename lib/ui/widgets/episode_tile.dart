@@ -9,7 +9,9 @@ import '../../data/download_controller.dart';
 import '../../data/download_service.dart';
 import '../../data/providers.dart';
 import '../../player/player_controller.dart';
+import '../../player/player_sheet_controller.dart';
 import '../router.dart';
+import 'brand.dart';
 import 'cover.dart';
 import 'messages.dart';
 
@@ -63,7 +65,7 @@ class EpisodeTile extends ConsumerWidget {
                   child: const SizedBox(
                     width: 40,
                     height: 48,
-                    child: Center(child: Icon(Icons.drag_handle)),
+                    child: Center(child: DragIndicatorIcon()),
                   ),
                 ),
               ),
@@ -107,10 +109,12 @@ class EpisodeTile extends ConsumerWidget {
                               color: theme.colorScheme.primary,
                             ),
                           if (episode.queueIndex != null)
-                            Icon(
-                              Icons.queue_music,
-                              size: 16,
-                              color: theme.colorScheme.primary,
+                            IconTheme(
+                              data: IconThemeData(
+                                color: theme.colorScheme.primary,
+                                size: 16,
+                              ),
+                              child: const PlaylistPlayIcon(size: 16),
                             ),
                         ],
                       ),
@@ -146,7 +150,7 @@ class EpisodeTile extends ConsumerWidget {
                 tooltip: playing ? 'Ouvrir le lecteur' : 'Lire',
                 onPressed: () async {
                   if (playing) {
-                    context.push(AppRoutes.player);
+                    openPlayer(ref);
                     return;
                   }
                   await ref.read(playerProvider.notifier).playEntry(entry);
@@ -172,10 +176,19 @@ class EpisodeTile extends ConsumerWidget {
                 itemBuilder: (context) => [
                   PopupMenuItem(
                     value: EpisodeMenuAction.queue,
-                    child: Text(
-                      episode.queueIndex == null
-                          ? 'Ajouter à la file'
-                          : 'Retirer de la file',
+                    child: Row(
+                      children: [
+                        if (episode.queueIndex == null)
+                          const PlaylistAddIcon()
+                        else
+                          const PlaylistRemoveIcon(),
+                        const SizedBox(width: 12),
+                        Text(
+                          episode.queueIndex == null
+                              ? 'Ajouter à la playlist'
+                              : 'Retirer de la playlist',
+                        ),
+                      ],
                     ),
                   ),
                   PopupMenuItem(
@@ -266,17 +279,143 @@ class DownloadProgressRing extends StatelessWidget {
 }
 
 Future<void> shareEpisode(EpisodeEntry entry) {
-  final notes = plainText(entry.episode.description);
-  final excerpt = notes.length > 180 ? '${notes.substring(0, 180)}…' : notes;
+  return shareEpisodeAsMessage(entry, position: null);
+}
+
+Future<void> shareEpisodeAsMessage(
+  EpisodeEntry entry, {
+  Duration? position,
+}) {
   final text = [
     entry.episode.title,
     entry.podcast.title,
-    if (excerpt.isNotEmpty) excerpt,
+    if (position != null && position > Duration.zero)
+      'Position : ${formatClock(position)}',
     entry.episode.audioUrl,
   ].join('\n');
   return SharePlus.instance.share(
     ShareParams(text: text, title: entry.episode.title),
   );
+}
+
+Future<void> shareEpisodeAudioUrl(EpisodeEntry entry) {
+  return SharePlus.instance.share(
+    ShareParams(text: entry.episode.audioUrl, title: entry.episode.title),
+  );
+}
+
+Future<void> showShareEpisodeSheet(
+  BuildContext context,
+  WidgetRef ref,
+  EpisodeEntry entry,
+) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => _ShareEpisodeSheet(entry: entry),
+  );
+}
+
+class _ShareEpisodeSheet extends ConsumerStatefulWidget {
+  const _ShareEpisodeSheet({required this.entry});
+
+  final EpisodeEntry entry;
+
+  @override
+  ConsumerState<_ShareEpisodeSheet> createState() => _ShareEpisodeSheetState();
+}
+
+class _ShareEpisodeSheetState extends ConsumerState<_ShareEpisodeSheet> {
+  var _includePosition = false;
+
+  Duration get _position {
+    final player = ref.read(playerProvider);
+    if (player.episodeId == widget.entry.episode.id) {
+      return player.position;
+    }
+    return Duration(milliseconds: widget.entry.episode.positionMs);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final position = _position;
+    final positionLabel = formatClock(position);
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+              child: Text('Partager', style: theme.textTheme.titleMedium),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Text(
+                'Message',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const ShareIcon(),
+              title: const Text('Titre et lien'),
+              subtitle: const Text('Idéal pour un message'),
+              onTap: () async {
+                final includePosition = _includePosition;
+                final pos = _position;
+                Navigator.pop(context);
+                await shareEpisodeAsMessage(
+                  widget.entry,
+                  position: includePosition ? pos : null,
+                );
+              },
+            ),
+            CheckboxListTile(
+              value: _includePosition,
+              onChanged: position > Duration.zero
+                  ? (value) =>
+                        setState(() => _includePosition = value ?? false)
+                  : null,
+              title: const Text('Inclure la position de lecture'),
+              subtitle: Text(
+                position > Duration.zero ? positionLabel : 'Aucune position',
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            const Divider(height: 24),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+              child: Text(
+                'Fichier',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: const Text('Lien du fichier'),
+              subtitle: Text(
+                widget.entry.episode.audioUrl,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                await shareEpisodeAudioUrl(widget.entry);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> runEpisodeAction(
@@ -311,7 +450,8 @@ Future<void> runEpisodeAction(
         }
       case EpisodeMenuAction.share:
         final full = await database.getEpisode(episode.id);
-        await shareEpisode(full ?? entry);
+        if (!context.mounted) return;
+        await showShareEpisodeSheet(context, ref, full ?? entry);
     }
   } on DownloadCancelled {
     return;

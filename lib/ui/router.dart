@@ -4,6 +4,7 @@ class AppRoutes {
   static const queue = '/queue';
   static const podcasts = '/podcasts';
   static const discover = '/discover';
+  static const discoverMore = '/discover/more';
   static const preferences = '/preferences';
   static const favorites = '/favorites';
   static const history = '/history';

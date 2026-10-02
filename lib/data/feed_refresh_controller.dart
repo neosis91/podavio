@@ -54,7 +54,9 @@ class FeedRefreshNotifier extends Notifier<FeedRefreshState> {
   /// Retourne false si déjà en cours ou s'il n'y a aucun abonnement.
   Future<bool> start() async {
     if (state.isRunning) return false;
-    final podcasts = await ref.read(databaseProvider).listPodcasts();
+    final podcasts = (await ref.read(databaseProvider).listPodcasts())
+        .where((podcast) => podcast.keepUpdated)
+        .toList();
     if (podcasts.isEmpty) return false;
     if (state.isRunning) return false;
     state = FeedRefreshState(

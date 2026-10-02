@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -22,6 +23,8 @@ class PlayerUiState {
     this.position = Duration.zero,
     this.duration = Duration.zero,
     this.speed = 1,
+    this.volume = 1,
+    this.carMode = false,
     this.sleepEndsAt,
     this.sleepAtEnd = false,
     this.error,
@@ -36,6 +39,9 @@ class PlayerUiState {
   final Duration position;
   final Duration duration;
   final double speed;
+  final double volume;
+  /// Session-only ; non persisté (reset au redémarrage).
+  final bool carMode;
   final DateTime? sleepEndsAt;
   final bool sleepAtEnd;
   final String? error;
@@ -62,6 +68,8 @@ class PlayerUiState {
     Duration? position,
     Duration? duration,
     double? speed,
+    double? volume,
+    bool? carMode,
     DateTime? sleepEndsAt,
     bool? sleepAtEnd,
     bool clearSleep = false,
@@ -78,6 +86,8 @@ class PlayerUiState {
       position: position ?? this.position,
       duration: duration ?? this.duration,
       speed: speed ?? this.speed,
+      volume: volume ?? this.volume,
+      carMode: carMode ?? this.carMode,
       sleepEndsAt: clearSleep ? null : sleepEndsAt ?? this.sleepEndsAt,
       sleepAtEnd: sleepAtEnd ?? (clearSleep ? false : this.sleepAtEnd),
       error: clearError ? null : error ?? this.error,
@@ -89,13 +99,27 @@ final playerProvider = NotifierProvider<PlayerNotifier, PlayerUiState>(
   PlayerNotifier.new,
 );
 
+/// True s’il existe un épisode suivant dans la file après l’épisode en cours.
+final hasNextInQueueProvider = StreamProvider<bool>((ref) {
+  final episodeId = ref.watch(
+    playerProvider.select((state) => state.episodeId),
+  );
+  return ref.watch(databaseProvider).watchHasNextInQueue(
+    afterEpisodeId: episodeId,
+  );
+});
+
 class PlayerNotifier extends Notifier<PlayerUiState> {
+  static const _nowPlayingKey = 'nowPlayingEpisodeId';
+
   late AudioPlayer _player;
   PlayerUiState _ui = const PlayerUiState();
   var _started = false;
   var _disposed = false;
   var _advancing = false;
   var _sessionReady = false;
+  /// True une fois que l’utilisateur a vraiment lancé la lecture cette session.
+  var _hasPlayedInSession = false;
   DateTime _lastPersist = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _lastPositionUi = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _sleepTimer;
@@ -109,7 +133,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       _started = true;
       _player = AudioPlayer();
       final settings = ref.read(settingsProvider);
-      _ui = PlayerUiState(speed: settings.speed);
+      _ui = PlayerUiState(speed: settings.speed, volume: settings.volume);
+      unawaited(_player.setVolume(settings.volume));
       final handler = playbackHandler;
       if (handler != null) {
         handler.skipBack = Duration(seconds: settings.skipBackSeconds);
@@ -124,9 +149,14 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
           session.skipBack = Duration(seconds: next.skipBackSeconds);
           session.skipForward = Duration(seconds: next.skipForwardSeconds);
         }
-        if (next.speed == _ui.speed) return;
-        unawaited(_player.setSpeed(next.speed));
-        _emit(_ui.copyWith(speed: next.speed));
+        if (next.speed != _ui.speed) {
+          unawaited(_player.setSpeed(next.speed));
+          _emit(_ui.copyWith(speed: next.speed));
+        }
+        if (next.volume != _ui.volume) {
+          unawaited(_player.setVolume(next.volume));
+          _emit(_ui.copyWith(volume: next.volume));
+        }
       });
     }
     return _ui;
@@ -134,6 +164,44 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   Future<void> playEntry(EpisodeEntry entry) {
     return _play(entry.episode, entry.podcast);
+  }
+
+  /// Recharge le dernier épisode en cours sans démarrer la lecture.
+  Future<void> restoreLastEpisode() async {
+    if (_disposed || !ref.mounted || _ui.hasEpisode) return;
+    try {
+      final entry = await _resolveRestoreEntry();
+      if (_disposed || !ref.mounted || _ui.hasEpisode || entry == null) return;
+      await _play(entry.episode, entry.podcast, autoplay: false);
+    } catch (error, stack) {
+      debugPrint('Reprise lecture impossible: $error\n$stack');
+    }
+  }
+
+  Future<EpisodeEntry?> _resolveRestoreEntry() async {
+    final prefs = ref.read(sharedPreferencesProvider);
+    final db = ref.read(databaseProvider);
+
+    // 1) Pref écrite lors d’une vraie lecture (y compris épisode terminé).
+    final savedId = prefs.getInt(_nowPlayingKey);
+    if (savedId != null) {
+      final saved = await db.getEpisode(savedId);
+      if (!ref.mounted) return null;
+      if (saved != null) return saved;
+      await prefs.remove(_nowPlayingKey);
+    }
+
+    // 2) Repli : dernier lastPlayedAt, terminé ou non.
+    if (!ref.mounted) return null;
+    final latest = await db.lastPlayedEpisode();
+    if (!ref.mounted || latest == null) return latest;
+    await prefs.setInt(_nowPlayingKey, latest.episode.id);
+    return latest;
+  }
+
+  Future<void> _rememberNowPlaying(int episodeId) async {
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setInt(_nowPlayingKey, episodeId);
   }
 
   Future<void> toggle() async {
@@ -144,6 +212,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     } else {
       playbackHandler?.activate();
       await _prepareSession();
+      await _markPlayedInSession();
       await _player.play();
     }
   }
@@ -164,10 +233,43 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     return seek(target);
   }
 
+  /// Passe à l’épisode suivant dans la playlist.
+  Future<void> playNextInQueue() async {
+    if (_advancing || _disposed) return;
+    final currentId = _ui.episodeId;
+    final next = await ref.read(databaseProvider).nextInQueue(
+      afterEpisodeId: currentId,
+    );
+    if (next == null || _disposed) return;
+    _advancing = true;
+    try {
+      await persistPosition();
+      // Ne pas retirer de la file : seulement à la fin complète de l’épisode.
+      await _play(next.episode, next.podcast);
+    } finally {
+      _advancing = false;
+    }
+  }
+
   Future<void> setSpeed(double speed) async {
     await _player.setSpeed(speed);
     _emit(_ui.copyWith(speed: speed));
     await ref.read(settingsProvider.notifier).setSpeed(speed);
+  }
+
+  Future<void> setVolume(double volume) async {
+    final clamped = volume.clamp(0.0, 1.0);
+    await _player.setVolume(clamped);
+    _emit(_ui.copyWith(volume: clamped));
+    await ref.read(settingsProvider.notifier).setVolume(clamped);
+  }
+
+  Future<void> nudgeVolume(double delta) {
+    return setVolume(_ui.volume + delta);
+  }
+
+  void setCarMode(bool enabled) {
+    _emit(_ui.copyWith(carMode: enabled));
   }
 
   void setSleep(Duration? duration, {bool atEnd = false}) {
@@ -193,16 +295,35 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     });
   }
 
-  Future<void> persistPosition() async {
+  Future<void> _markPlayedInSession() async {
+    _hasPlayedInSession = true;
     final id = _ui.episodeId;
-    if (id == null || _disposed) return;
-    _lastPersist = DateTime.now();
-    await ref
-        .read(databaseProvider)
-        .setPosition(id, _ui.position.inMilliseconds);
+    if (id == null || !ref.mounted) return;
+    await _rememberNowPlaying(id);
+    await ref.read(databaseProvider).setPosition(
+      id,
+      _ui.position.inMilliseconds,
+      touchLastPlayed: true,
+    );
   }
 
-  Future<void> _play(Episode episode, Podcast podcast) async {
+  Future<void> persistPosition() async {
+    final id = _ui.episodeId;
+    if (id == null || _disposed || !ref.mounted) return;
+    _lastPersist = DateTime.now();
+    await ref.read(databaseProvider).setPosition(
+      id,
+      _ui.position.inMilliseconds,
+      // Ne pas « voler » lastPlayedAt si on a seulement restauré sans lire.
+      touchLastPlayed: _hasPlayedInSession,
+    );
+  }
+
+  Future<void> _play(
+    Episode episode,
+    Podcast podcast, {
+    bool autoplay = true,
+  }) async {
     final duration = episode.durationSeconds == null
         ? Duration.zero
         : Duration(seconds: episode.durationSeconds!);
@@ -215,6 +336,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     final localImage = (episode.imageUrl != null && episode.imageUrl!.trim().isNotEmpty)
         ? episode.imagePath
         : podcast.imagePath;
+    if (autoplay) {
+      _hasPlayedInSession = true;
+    }
     _emit(
       _ui.copyWith(
         episodeId: episode.id,
@@ -229,6 +353,17 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         clearError: true,
       ),
     );
+    if (!ref.mounted) return;
+    if (autoplay) {
+      // Mémoriser seulement lors d’une vraie lecture (pas d’une reprise).
+      await _rememberNowPlaying(episode.id);
+      await ref.read(databaseProvider).setPosition(
+        episode.id,
+        start.inMilliseconds,
+        touchLastPlayed: true,
+      );
+    }
+    if (!ref.mounted || _disposed) return;
     try {
       playbackHandler?.setEpisode(
         title: episode.title,
@@ -236,7 +371,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         artUri: artworkUri(localImage ?? remoteImage),
         duration: duration > Duration.zero ? duration : null,
       );
+      if (ref.mounted) {
+        unawaited(ref.read(feedServiceProvider).ensureChapters(episode.id));
+      }
       await _prepareSession();
+      if (!ref.mounted || _disposed) return;
       final uri = _sourceUri(episode);
       await _player.setAudioSource(
         AudioSource.uri(
@@ -247,11 +386,12 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         ),
       );
       await _player.setSpeed(_ui.speed);
+      await _player.setVolume(_ui.volume);
       if (start > Duration.zero) await _player.seek(start);
-      await _player.play();
-      await ref
-          .read(databaseProvider)
-          .setPosition(episode.id, start.inMilliseconds);
+      if (!ref.mounted || _disposed) return;
+      if (autoplay) {
+        await _player.play();
+      }
     } catch (_) {
       _emit(
         _ui.copyWith(playing: false, error: 'Impossible de lire cet épisode.'),
@@ -293,7 +433,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       if (now.difference(_lastPersist) < const Duration(seconds: 5)) return;
       _lastPersist = now;
       unawaited(
-        ref.read(databaseProvider).setPosition(id, position.inMilliseconds),
+        ref.read(databaseProvider).setPosition(
+          id,
+          position.inMilliseconds,
+          touchLastPlayed: _hasPlayedInSession,
+        ),
       );
     });
     _durationSub = _player.durationStream.listen((duration) {
@@ -314,7 +458,12 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (id == null) return;
     _advancing = true;
     try {
-      await ref.read(databaseProvider).setPlayed(id, played: true);
+      final db = ref.read(databaseProvider);
+      await db.setPlayed(id, played: true);
+      // Retrait auto de la file uniquement quand l’épisode est terminé.
+      await db.removeFromQueue(id);
+      // Garder l’épisode en « en cours » pour le mini-player au prochain lancement.
+      await _rememberNowPlaying(id);
       final sleepAtEnd = _ui.sleepAtEnd;
       _emit(
         _ui.copyWith(
@@ -324,9 +473,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         ),
       );
       if (sleepAtEnd) return;
-      final next = await ref.read(databaseProvider).nextInQueue();
+      final next = await db.nextInQueue(afterEpisodeId: id);
       if (next == null || _disposed) return;
-      await ref.read(databaseProvider).removeFromQueue(next.episode.id);
       await _play(next.episode, next.podcast);
     } finally {
       _advancing = false;
@@ -335,7 +483,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   void _emit(PlayerUiState next) {
     _ui = next;
-    if (!_disposed) state = next;
+    if (_disposed || !ref.mounted) return;
+    state = next;
   }
 
   Future<void> _dispose() async {

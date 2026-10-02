@@ -117,34 +117,72 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
               onPressed: () => _refresh(context, ref, item.feedUrl),
               icon: const Icon(Icons.refresh),
             ),
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'preferred') {
-                  ref
-                      .read(databaseProvider)
-                      .setPodcastPreferred(
-                        item.id,
-                        preferred: !item.preferred,
-                      );
-                  return;
-                }
-                _unsubscribe(context, ref, item);
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'preferred',
-                  child: Text(
-                    item.preferred
-                        ? 'Retirer des préférés'
-                        : 'Marquer comme préféré',
+            if (item.subscribed)
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  switch (value) {
+                    case 'preferred':
+                      ref
+                          .read(databaseProvider)
+                          .setPodcastPreferred(
+                            item.id,
+                            preferred: !item.preferred,
+                          );
+                    case 'autoDownload':
+                      ref
+                          .read(databaseProvider)
+                          .setPodcastAutoDownload(
+                            item.id,
+                            autoDownload: !item.autoDownload,
+                          );
+                    case 'keepUpdated':
+                      ref
+                          .read(databaseProvider)
+                          .setPodcastKeepUpdated(
+                            item.id,
+                            keepUpdated: !item.keepUpdated,
+                          );
+                    case 'unsubscribe':
+                      _unsubscribe(context, ref, item);
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'preferred',
+                    child: Text(
+                      item.preferred
+                          ? 'Retirer des préférés'
+                          : 'Marquer comme préféré',
+                    ),
                   ),
-                ),
-                const PopupMenuItem(
-                  value: 'unsubscribe',
-                  child: Text('Se désabonner'),
-                ),
-              ],
-            ),
+                  PopupMenuItem(
+                    value: 'autoDownload',
+                    child: Text(
+                      item.autoDownload
+                          ? 'Désactiver les téléchargements automatiques'
+                          : 'Activer les téléchargements automatiques',
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'keepUpdated',
+                    child: Text(
+                      item.keepUpdated
+                          ? 'Ne plus maintenir à jour'
+                          : 'Maintenir à jour',
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'unsubscribe',
+                    child: Text('Se désabonner'),
+                  ),
+                ],
+              )
+            else
+              IconButton(
+                tooltip: 'Retirer l’aperçu',
+                onPressed: () => _unsubscribe(context, ref, item),
+                icon: const Icon(Icons.close),
+              ),
           ],
         ),
         SliverToBoxAdapter(child: _PodcastHeader(podcast: item)),
@@ -248,12 +286,15 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     WidgetRef ref,
     Podcast item,
   ) async {
+    final isPreview = !item.subscribed;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Se désabonner ?'),
+        title: Text(isPreview ? 'Retirer cet aperçu ?' : 'Se désabonner ?'),
         content: Text(
-          '« ${item.title} » et ses épisodes seront retirés de Podavio. Les fichiers téléchargés seront aussi supprimés.',
+          isPreview
+              ? '« ${item.title} » et ses épisodes seront retirés. Les fichiers téléchargés seront aussi supprimés.'
+              : '« ${item.title} » et ses épisodes seront retirés de Podavio. Les fichiers téléchargés seront aussi supprimés.',
         ),
         actions: [
           TextButton(
@@ -262,7 +303,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Se désabonner'),
+            child: Text(isPreview ? 'Retirer' : 'Se désabonner'),
           ),
         ],
       ),
@@ -274,13 +315,13 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
   }
 }
 
-class _PodcastHeader extends StatelessWidget {
+class _PodcastHeader extends ConsumerWidget {
   const _PodcastHeader({required this.podcast});
 
   final Podcast podcast;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: Row(
@@ -312,12 +353,31 @@ class _PodcastHeader extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
+                if (!podcast.subscribed) ...[
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => _subscribe(context, ref),
+                    icon: const Icon(Icons.add),
+                    label: const Text('S’abonner'),
+                  ),
+                ],
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _subscribe(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(feedServiceProvider).subscribe(podcast.feedUrl);
+      if (context.mounted) {
+        showMessage(context, 'Abonnement ajouté');
+      }
+    } catch (error) {
+      if (context.mounted) showMessage(context, errorText(error));
+    }
   }
 }
 

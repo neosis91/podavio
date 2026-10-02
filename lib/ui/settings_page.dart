@@ -13,7 +13,9 @@ import '../data/download_service.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import 'nav_catalog.dart';
+import 'widgets/brand.dart';
 import 'widgets/messages.dart';
+import 'widgets/player_keyboard_shortcuts.dart';
 
 class AppearancePage extends ConsumerWidget {
   const AppearancePage({super.key});
@@ -165,15 +167,26 @@ class _PanelOrderDialogState extends ConsumerState<_PanelOrderDialog> {
                   final page = navPageByPath(_order[index])!;
                   return ListTile(
                     key: ValueKey(page.path),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    leading: Icon(page.icon),
-                    title: Text(page.label),
-                    trailing: ReorderableDragStartListener(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    leading: ReorderableDragStartListener(
                       index: index,
                       child: const Tooltip(
                         message: 'Déplacer',
-                        child: Icon(Icons.drag_handle),
+                        child: SizedBox(
+                          width: 40,
+                          height: 48,
+                          child: Center(child: DragIndicatorIcon()),
+                        ),
                       ),
+                    ),
+                    title: Row(
+                      children: [
+                        page.buildIcon(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(page.label)),
+                      ],
                     ),
                   );
                 },
@@ -252,9 +265,9 @@ class DownloadSettingsPage extends ConsumerWidget {
             ),
           const _SectionTitle('Automatisation'),
           SwitchListTile(
-            title: const Text('Retirer de la file'),
+            title: const Text('Retirer de la playlist'),
             subtitle: const Text(
-              'Enlève l’épisode de la file quand son téléchargement est supprimé',
+              'Enlève l’épisode de la playlist quand son téléchargement est supprimé',
             ),
             value: settings.dequeueDeletedDownloads,
             onChanged: ref
@@ -501,12 +514,38 @@ class PlaybackPage extends ConsumerWidget {
             ),
           ),
           SwitchListTile(
-            title: const Text('Ajouter à la file'),
+            title: const Text('Temps restant'),
             subtitle: const Text(
-              'Place l’épisode dans la file dès la fin du téléchargement',
+              'Affiche le temps restant à droite de la barre de lecture',
+            ),
+            value: settings.showRemainingTime,
+            onChanged: notifier.setShowRemainingTime,
+          ),
+          SwitchListTile(
+            title: const Text('Écran allumé'),
+            subtitle: const Text(
+              'Empêche la mise en veille pendant la lecture',
+            ),
+            value: settings.keepScreenOn,
+            onChanged: notifier.setKeepScreenOn,
+          ),
+          SwitchListTile(
+            title: const Text('Ajouter à la playlist'),
+            subtitle: const Text(
+              'Place l’épisode dans la playlist dès la fin du téléchargement',
             ),
             value: settings.enqueueDownloads,
             onChanged: notifier.setEnqueueDownloads,
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.keyboard_alt_outlined),
+            title: const Text('Aide du lecteur'),
+            subtitle: const Text(
+              'Gestes couverture, Espace, J, L, volume… — aussi via ?',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showPlayerKeyboardHelp(context),
           ),
         ],
       ),

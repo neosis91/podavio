@@ -96,6 +96,9 @@ build:android:
     - |
       set -euo pipefail
       export PATH="${FLUTTER_HOME}/bin:${PATH}"
+      # Signature release : variables GitLab (voir docs/android-signing.md)
+      chmod +x tool/ci/setup_android_signing.sh
+      . tool/ci/setup_android_signing.sh
       FLAGS=(
         --build-name="${PODAVIO_VERSION}"
         --build-number="${PODAVIO_BUILD}"

@@ -101,7 +101,7 @@ void main() {
     expect(find.byType(ReorderableListView), findsOneWidget);
     expect(find.text('Accueil'), findsOneWidget);
     expect(find.text('Épisodes'), findsOneWidget);
-    expect(find.text('File'), findsOneWidget);
+    expect(find.text('Playlist'), findsOneWidget);
 
     await tester.tap(find.text('Fermer'));
     await tester.pumpAndSettle();

@@ -8,6 +8,7 @@ import 'cover_service.dart';
 import 'download_service.dart';
 import 'feed_service.dart';
 import 'models.dart';
+import '../settings/settings_controller.dart';
 
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw StateError('SharedPreferences n’est pas initialisé.');
@@ -39,8 +40,22 @@ final episodeProvider = StreamProvider.family<EpisodeEntry?, int>((ref, id) {
   return ref.watch(databaseProvider).watchEpisode(id);
 });
 
+/// Chapitres d’un épisode (chargement lazy depuis l’URL Podcast Index).
+final chaptersProvider = StreamProvider.family<List<EpisodeChapter>, int>((
+  ref,
+  id,
+) {
+  unawaited(ref.watch(feedServiceProvider).ensureChapters(id));
+  return ref.watch(databaseProvider).watchChapters(id);
+});
+
 final podcastsProvider = StreamProvider<List<Podcast>>((ref) {
-  return ref.watch(databaseProvider).watchPodcasts();
+  final sort = ref.watch(settingsProvider.select((s) => s.podcastSort));
+  final database = ref.watch(databaseProvider);
+  return switch (sort) {
+    PodcastSort.published => database.watchPodcasts(),
+    _ => database.watchPodcastsPlain(),
+  };
 });
 
 /// Télécharge automatiquement les jaquettes de podcasts manquantes.

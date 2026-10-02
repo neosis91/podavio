@@ -45,6 +45,7 @@ dependencies:
   flutter_media_session: ^3.0.8
   audio_session: ^0.2.4
   podcast_search: ^0.7.15
+  crypto: ^3.0.7
   cached_network_image: ^4.0.4
   path_provider: ^2.1.6
   path: ^1.9.1
@@ -64,6 +65,8 @@ dependencies:
   flutter_svg: ^2.3.0
   fl_chart: ^1.2.0
   flutter_cache_manager: ^3.4.5
+  url_launcher: ^6.3.2
+  wakelock_plus: ^1.8.1
 
 dev_dependencies:
   flutter_test:
@@ -99,9 +102,20 @@ flutter:
     - assets/brand/icon.png
     - assets/brand/fast_rewind.svg
     - assets/brand/fast_forward.svg
+    - assets/brand/skip_next.svg
     - assets/brand/keyboard_arrow_down.svg
     - assets/brand/play_arrow.svg
     - assets/brand/pause.svg
+    - assets/brand/drag_indicator.svg
+    - assets/brand/info.svg
+    - assets/brand/timer.svg
+    - assets/brand/share.svg
+    - assets/brand/podcasts.svg
+    - assets/brand/link.svg
+    - assets/brand/playlist_play.svg
+    - assets/brand/playlist_add.svg
+    - assets/brand/playlist_remove.svg
+    - assets/brand/subscriptions.svg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
