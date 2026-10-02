@@ -37,6 +37,8 @@ class _ExpandablePlayerState extends ConsumerState<ExpandablePlayer>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   var _dragging = false;
+  /// Une fois monté (t > 0.05), le plein lecteur reste jusqu’au repli complet.
+  var _fullPlayerMounted = false;
 
   @override
   void initState() {
@@ -44,7 +46,7 @@ class _ExpandablePlayerState extends ConsumerState<ExpandablePlayer>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 360),
-    )..addListener(() => setState(() {}));
+    );
   }
 
   @override
@@ -97,87 +99,104 @@ class _ExpandablePlayerState extends ConsumerState<ExpandablePlayer>
       if (next != true) _animateTo(0);
     });
 
-    if (!hasEpisode) return const SizedBox.shrink();
+    if (!hasEpisode) {
+      _fullPlayerMounted = false;
+      return const SizedBox.shrink();
+    }
 
     final size = MediaQuery.sizeOf(context);
-    final t = _controller.value;
     // Toujours au-dessus du menu bas / à droite du rail ; seule la hauteur s’étend.
     final bottom = widget.bottomInset;
     final maxHeight = (size.height - bottom - widget.topInset).clamp(
       miniPlayerHeight,
       size.height,
     );
-    final height = miniPlayerHeight + (maxHeight - miniPlayerHeight) * t;
     final scheme = Theme.of(context).colorScheme;
+    final extent = maxHeight - miniPlayerHeight;
 
     return Positioned(
       left: widget.leftInset,
       right: 0,
       bottom: bottom,
-      height: height.clamp(miniPlayerHeight, maxHeight),
-      child: BackButtonListener(
-        onBackButtonPressed: () async {
-          if (_controller.value <= 0.05) return false;
-          _animateTo(0);
-          return true;
-        },
-        child: MediaQuery.removePadding(
-          context: context,
-          removeBottom: bottom > 0,
-          removeLeft: widget.leftInset > 0,
-          removeTop: widget.topInset > 0,
-          child: Material(
-            elevation: 6 + 6 * t,
-            color: Color.lerp(scheme.surfaceContainer, scheme.surface, t),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Positioned.fill(
-                  child: IgnorePointer(
-                    ignoring: t < 0.15,
-                    child: Opacity(
-                      opacity: Curves.easeOut.transform(
-                        ((t - 0.12) / 0.88).clamp(0.0, 1.0),
-                      ),
-                      child: PlayerPage(
-                        embedded: true,
-                        onCollapse: () =>
-                            ref.read(playerSheetProvider.notifier).collapse(),
-                        onHeaderDragUpdate: (details) => _onDragUpdate(
-                          details,
-                          maxHeight - miniPlayerHeight,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final t = _controller.value;
+          final height = miniPlayerHeight + extent * t;
+          if (t > 0.05) {
+            _fullPlayerMounted = true;
+          } else if (t == 0) {
+            _fullPlayerMounted = false;
+          }
+          final showFullPlayer = _fullPlayerMounted;
+
+          return SizedBox(
+            height: height.clamp(miniPlayerHeight, maxHeight),
+            child: BackButtonListener(
+              onBackButtonPressed: () async {
+                if (_controller.value <= 0.05) return false;
+                _animateTo(0);
+                return true;
+              },
+              child: MediaQuery.removePadding(
+                context: context,
+                removeBottom: bottom > 0,
+                removeLeft: widget.leftInset > 0,
+                removeTop: widget.topInset > 0,
+                child: Material(
+                  elevation: 6 + 6 * t,
+                  color: Color.lerp(scheme.surfaceContainer, scheme.surface, t),
+                  clipBehavior: Clip.antiAlias,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (showFullPlayer)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            ignoring: t < 0.15,
+                            child: Opacity(
+                              opacity: Curves.easeOut.transform(
+                                ((t - 0.12) / 0.88).clamp(0.0, 1.0),
+                              ),
+                              child: PlayerPage(
+                                embedded: true,
+                                onCollapse: () => ref
+                                    .read(playerSheetProvider.notifier)
+                                    .collapse(),
+                                onHeaderDragUpdate: (details) =>
+                                    _onDragUpdate(details, extent),
+                                onHeaderDragEnd: _onDragEnd,
+                              ),
+                            ),
+                          ),
                         ),
-                        onHeaderDragEnd: _onDragEnd,
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        height: miniPlayerHeight,
+                        child: IgnorePointer(
+                          ignoring: t > 0.2,
+                          child: Opacity(
+                            opacity: (1 - t / 0.35).clamp(0.0, 1.0),
+                            child: _MiniPlayerBar(
+                              onOpen: () => ref
+                                  .read(playerSheetProvider.notifier)
+                                  .expand(),
+                              onVerticalDragUpdate: (details) =>
+                                  _onDragUpdate(details, extent),
+                              onVerticalDragEnd: _onDragEnd,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  height: miniPlayerHeight,
-                  child: IgnorePointer(
-                    ignoring: t > 0.2,
-                    child: Opacity(
-                      opacity: (1 - t / 0.35).clamp(0.0, 1.0),
-                      child: _MiniPlayerBar(
-                        onOpen: () =>
-                            ref.read(playerSheetProvider.notifier).expand(),
-                        onVerticalDragUpdate: (details) => _onDragUpdate(
-                          details,
-                          maxHeight - miniPlayerHeight,
-                        ),
-                        onVerticalDragEnd: _onDragEnd,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -196,12 +215,21 @@ class _MiniPlayerBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final player = ref.watch(playerProvider);
+    final title = ref.watch(playerProvider.select((s) => s.title));
+    final podcastTitle = ref.watch(
+      playerProvider.select((s) => s.podcastTitle),
+    );
+    final imageUrl = ref.watch(playerProvider.select((s) => s.imageUrl));
+    final imagePath = ref.watch(playerProvider.select((s) => s.imagePath));
+    final playing = ref.watch(playerProvider.select((s) => s.playing));
+    final position = ref.watch(playerProvider.select((s) => s.position));
+    final duration = ref.watch(playerProvider.select((s) => s.duration));
+    final error = ref.watch(playerProvider.select((s) => s.error));
     final scheme = Theme.of(context).colorScheme;
-    final total = player.duration.inMilliseconds;
+    final total = duration.inMilliseconds;
     final progress = total == 0
         ? 0.0
-        : (player.position.inMilliseconds / total).clamp(0.0, 1.0);
+        : (position.inMilliseconds / total).clamp(0.0, 1.0);
 
     return GestureDetector(
       onVerticalDragUpdate: onVerticalDragUpdate,
@@ -225,8 +253,8 @@ class _MiniPlayerBar extends ConsumerWidget {
                           AspectRatio(
                             aspectRatio: 1,
                             child: PodcastCover(
-                              url: player.imageUrl,
-                              localPath: player.imagePath,
+                              url: imageUrl,
+                              localPath: imagePath,
                               size: null,
                               radius: 0,
                             ),
@@ -241,7 +269,7 @@ class _MiniPlayerBar extends ConsumerWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    player.title,
+                                    title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
@@ -249,8 +277,8 @@ class _MiniPlayerBar extends ConsumerWidget {
                                     ),
                                   ),
                                   Text(
-                                    player.error ??
-                                        '${player.podcastTitle} · ${formatClock(player.position)}',
+                                    error ??
+                                        '$podcastTitle · ${formatClock(position)}',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
@@ -272,11 +300,11 @@ class _MiniPlayerBar extends ConsumerWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: player.playing
+                  tooltip: playing
                       ? 'Pause (Espace)'
                       : 'Lecture (Espace)',
                   onPressed: () => ref.read(playerProvider.notifier).toggle(),
-                  icon: PlayPauseIcon(playing: player.playing, size: 28),
+                  icon: PlayPauseIcon(playing: playing, size: 28),
                 ),
               ],
             ),

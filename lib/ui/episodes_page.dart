@@ -129,12 +129,25 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
 }
 
 Future<void> refreshSubscriptions(BuildContext context, WidgetRef ref) async {
-  if (ref.read(feedRefreshProvider).isRunning) {
-    showMessage(context, 'Actualisation déjà en cours');
-    return;
-  }
-  final started = await ref.read(feedRefreshProvider.notifier).start();
-  if (!started && context.mounted) {
-    showMessage(context, 'Aucun abonnement à actualiser');
+  final outcome = await ref.read(feedRefreshProvider.notifier).start();
+  if (!context.mounted) return;
+  switch (outcome.result) {
+    case FeedRefreshStartResult.started:
+      break;
+    case FeedRefreshStartResult.alreadyRunning:
+      showMessage(context, 'Actualisation déjà en cours');
+      break;
+    case FeedRefreshStartResult.empty:
+      showMessage(context, 'Aucun abonnement à actualiser');
+      break;
+    case FeedRefreshStartResult.throttled:
+      final wait = formatRefreshRetryAfter(
+        outcome.retryAfter ?? Duration.zero,
+      );
+      showMessage(
+        context,
+        'Actualisation récente — réessayez dans $wait',
+      );
+      break;
   }
 }

@@ -60,7 +60,7 @@ variables:
 
 Les variables *Protected* ne sont injectées que sur **branches et tags protégés**.
 
-Pour Podavio (tags CalVer auto après merge sur `main`) :
+Pour Podavio (tags CalVer manuels, ex. `2026.10.2`) :
 
 1. Protège `main` (déjà probable).
 2. **Settings → Repository → Protected tags** : pattern `20*`
