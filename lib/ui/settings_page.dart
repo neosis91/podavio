@@ -529,6 +529,28 @@ class PlaybackPage extends ConsumerWidget {
             value: settings.keepScreenOn,
             onChanged: notifier.setKeepScreenOn,
           ),
+          ListTile(
+            title: const Text('Intervalle d’actualisation'),
+            subtitle: Text(
+              settings.refreshIntervalMinutes == 0
+                  ? 'Pas de limite entre deux actualisations'
+                  : 'Minimum ${settings.refreshIntervalMinutes} min entre deux actualisations',
+            ),
+            trailing: DropdownButton<int>(
+              value: settings.refreshIntervalMinutes,
+              items: const [
+                DropdownMenuItem(value: 0, child: Text('Aucune')),
+                DropdownMenuItem(value: 1, child: Text('1 min')),
+                DropdownMenuItem(value: 5, child: Text('5 min')),
+                DropdownMenuItem(value: 15, child: Text('15 min')),
+                DropdownMenuItem(value: 30, child: Text('30 min')),
+                DropdownMenuItem(value: 60, child: Text('1 h')),
+              ],
+              onChanged: (value) {
+                if (value != null) notifier.setRefreshIntervalMinutes(value);
+              },
+            ),
+          ),
           SwitchListTile(
             title: const Text('Ajouter à la playlist'),
             subtitle: const Text(

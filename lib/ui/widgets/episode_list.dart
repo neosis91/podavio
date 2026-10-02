@@ -99,7 +99,12 @@ class _EpisodeWindowList extends StatelessWidget {
     final itemCount = entries.length + (window.hasMore ? 1 : 0);
     Widget tile(int index) {
       if (index >= entries.length) return const _LoadMoreTile();
-      return EpisodeTile(entry: entries[index], showPodcast: showPodcast);
+      final entry = entries[index];
+      return EpisodeTile(
+        key: ValueKey(entry.episode.id),
+        entry: entry,
+        showPodcast: showPodcast,
+      );
     }
 
     final list = reorder == null
@@ -128,6 +133,10 @@ class _EpisodeWindowList extends StatelessWidget {
         : RefreshIndicator(onRefresh: onRefresh!, child: list);
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
+        if (notification is! ScrollUpdateNotification &&
+            notification is! ScrollEndNotification) {
+          return false;
+        }
         if (notification.metrics.extentAfter < 800) onLoadMore();
         return false;
       },

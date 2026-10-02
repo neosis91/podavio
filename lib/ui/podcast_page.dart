@@ -62,6 +62,10 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
             child: NotificationListener<ScrollNotification>(
               onNotification: (notification) {
                 if (_showInfo) return false;
+                if (notification is! ScrollUpdateNotification &&
+                    notification is! ScrollEndNotification) {
+                  return false;
+                }
                 if (notification.metrics.extentAfter < 800) {
                   ref.read(episodesProvider(query).notifier).loadMore();
                 }
@@ -258,8 +262,10 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                   child: Center(child: CircularProgressIndicator()),
                 );
               }
+              final entry = window.entries[index];
               return EpisodeTile(
-                entry: window.entries[index],
+                key: ValueKey(entry.episode.id),
+                entry: entry,
                 showPodcast: false,
               );
             },

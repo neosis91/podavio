@@ -141,6 +141,7 @@ class AppSettings {
     required this.enqueueDownloads,
     required this.dequeueDeletedDownloads,
     required this.downloadDirectory,
+    required this.refreshIntervalMinutes,
   });
 
   final ThemeMode themeMode;
@@ -164,6 +165,9 @@ class AppSettings {
   final bool dequeueDeletedDownloads;
   final String? downloadDirectory;
 
+  /// Délai mini entre deux actualisations globales (0 = pas de limite).
+  final int refreshIntervalMinutes;
+
   AppSettings copyWith({
     ThemeMode? themeMode,
     AppAccent? accent,
@@ -186,6 +190,7 @@ class AppSettings {
     bool? dequeueDeletedDownloads,
     String? downloadDirectory,
     bool clearDownloadDirectory = false,
+    int? refreshIntervalMinutes,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -211,6 +216,8 @@ class AppSettings {
       downloadDirectory: clearDownloadDirectory
           ? null
           : (downloadDirectory ?? this.downloadDirectory),
+      refreshIntervalMinutes:
+          refreshIntervalMinutes ?? this.refreshIntervalMinutes,
     );
   }
 }
@@ -250,11 +257,20 @@ class SettingsNotifier extends Notifier<AppSettings> {
       dequeueDeletedDownloads:
           preferences.getBool('dequeueDeletedDownloads') ?? true,
       downloadDirectory: preferences.getString('downloadDirectory'),
+      refreshIntervalMinutes: _refreshIntervalMinutes(
+        preferences.getInt('refreshIntervalMinutes'),
+      ),
     );
   }
 
   static int _columns(int? stored) {
     if (stored == null || stored < 1 || stored > 8) return 3;
+    return stored;
+  }
+
+  static int _refreshIntervalMinutes(int? stored) {
+    if (stored == null) return 5;
+    if (stored < 0) return 5;
     return stored;
   }
 
@@ -341,6 +357,14 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await ref
         .read(sharedPreferencesProvider)
         .setBool('enqueueDownloads', enabled);
+  }
+
+  Future<void> setRefreshIntervalMinutes(int minutes) async {
+    final clamped = minutes < 0 ? 0 : minutes;
+    state = state.copyWith(refreshIntervalMinutes: clamped);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setInt('refreshIntervalMinutes', clamped);
   }
 
   Future<void> setPodcastLayout({required bool list, int? columns}) async {

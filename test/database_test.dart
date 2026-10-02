@@ -228,4 +228,81 @@ void main() {
     final random = await database.randomEpisodes(limit: 10);
     expect(random.map((entry) => entry.episode.title), ['Tout neuf']);
   });
+
+  test('podcastStats and libraryStats use aggregates', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final podcastId = await database.saveFeed(
+      FeedDraft(
+        feedUrl: 'https://example.com/stats.xml',
+        title: 'Stats',
+        author: 'Auteur',
+        description: '',
+        episodes: [
+          EpisodeDraft(
+            guid: 's1',
+            title: 'Ancien',
+            description: '',
+            audioUrl: 'https://example.com/s1.mp3',
+            durationSeconds: 100,
+            publishedAt: DateTime.utc(2024, 1, 1),
+          ),
+          EpisodeDraft(
+            guid: 's2',
+            title: 'En cours',
+            description: '',
+            audioUrl: 'https://example.com/s2.mp3',
+            durationSeconds: 200,
+            publishedAt: DateTime.utc(2024, 1, 8),
+          ),
+          EpisodeDraft(
+            guid: 's3',
+            title: 'Neuf',
+            description: '',
+            audioUrl: 'https://example.com/s3.mp3',
+            durationSeconds: 300,
+            publishedAt: DateTime.utc(2024, 1, 15),
+          ),
+        ],
+      ),
+    );
+
+    final episodes = await database.watchEpisodes(podcastId: podcastId).first;
+    final byTitle = {
+      for (final entry in episodes) entry.episode.title: entry.episode.id,
+    };
+    await database.setPlayed(byTitle['Ancien']!, played: true);
+    await database.setPosition(byTitle['En cours']!, 45000);
+    await database.setFavorite(byTitle['Neuf']!, favorite: true);
+    await database.setDownloadPath(byTitle['Neuf']!, '/tmp/s3.mp3');
+
+    final stats = await database.podcastStats(podcastId);
+    expect(stats.episodeCount, 3);
+    expect(stats.completedCount, 1);
+    expect(stats.inProgressCount, 1);
+    expect(stats.unreadCount, 2);
+    expect(stats.startedCount, 2);
+    expect(stats.favoriteCount, 1);
+    expect(stats.downloadCount, 1);
+    expect(stats.listenedSeconds, 100 + 45);
+    expect(stats.totalDurationSeconds, 600);
+    expect(stats.averageDurationSeconds, 200);
+    expect(stats.releaseInterval, const Duration(hours: 7 * 24));
+    expect(stats.lastPublishedAt?.toUtc(), DateTime.utc(2024, 1, 15));
+
+    final library = await database.libraryStats();
+    expect(library.podcastCount, 1);
+    expect(library.episodeCount, 3);
+    expect(library.totalListenedSeconds, 145);
+    expect(library.totalDownloadCount, 1);
+    expect(library.subscriptions.single.completedCount, 1);
+    expect(library.subscriptions.single.startedCount, 2);
+
+    final signal = await database.watchPodcastStatsSignal(podcastId).first;
+    expect(signal.$1, 3); // count
+    expect(signal.$4, 1); // played
+    expect(signal.$5, 1); // favorite
+    expect(signal.$6, 1); // download
+  });
 }

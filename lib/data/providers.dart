@@ -104,12 +104,14 @@ class EpisodesNotifier extends Notifier<AsyncValue<EpisodeWindow>> {
   static const pageSize = 40;
   var _limit = pageSize;
   var _closed = false;
+  var _loadingMore = false;
   StreamSubscription<List<EpisodeEntry>>? _subscription;
 
   @override
   AsyncValue<EpisodeWindow> build() {
     _limit = pageSize;
     _closed = false;
+    _loadingMore = false;
     ref.onDispose(() {
       _closed = true;
       _subscription?.cancel();
@@ -119,9 +121,10 @@ class EpisodesNotifier extends Notifier<AsyncValue<EpisodeWindow>> {
   }
 
   void loadMore() {
-    if (!query.paginated) return;
+    if (!query.paginated || _loadingMore) return;
     final current = state.asData?.value;
     if (current == null || !current.hasMore) return;
+    _loadingMore = true;
     _limit += pageSize;
     _subscribe();
   }
@@ -143,12 +146,14 @@ class EpisodesNotifier extends Notifier<AsyncValue<EpisodeWindow>> {
         .listen(
           (rows) {
             if (_closed) return;
+            _loadingMore = false;
             state = AsyncData(
               EpisodeWindow(rows, query.paginated && rows.length >= _limit),
             );
           },
           onError: (Object error, StackTrace stackTrace) {
             if (_closed) return;
+            _loadingMore = false;
             state = AsyncError(error, stackTrace);
           },
         );
@@ -223,14 +228,19 @@ final randomEpisodesProvider =
       RandomEpisodesNotifier.new,
     );
 
+final podcastStatsSignalProvider =
+    StreamProvider.family<(int, int, int, int, int, int), int>((
+      ref,
+      podcastId,
+    ) {
+      return ref.watch(databaseProvider).watchPodcastStatsSignal(podcastId);
+    });
+
 final podcastStatsProvider = FutureProvider.family<PodcastStats, int>((
   ref,
   podcastId,
 ) async {
-  // Recalcule quand les épisodes du podcast changent.
-  ref.watch(
-    episodesProvider(EpisodeQuery(podcastId: podcastId, paginated: false)),
-  );
+  ref.watch(podcastStatsSignalProvider(podcastId));
   final stats = await ref.read(databaseProvider).podcastStats(podcastId);
   final bytes = await ref
       .read(downloadServiceProvider)
@@ -253,8 +263,13 @@ final podcastStatsProvider = FutureProvider.family<PodcastStats, int>((
   );
 });
 
+final libraryStatsSignalProvider =
+    StreamProvider<(int, int, int, int, int, int)>((ref) {
+      return ref.watch(databaseProvider).watchLibraryStatsSignal();
+    });
+
 final libraryStatsProvider = FutureProvider<LibraryStats>((ref) async {
-  ref.watch(podcastsProvider);
+  ref.watch(libraryStatsSignalProvider);
   final stats = await ref.read(databaseProvider).libraryStats();
   final bytesByPodcast = await ref
       .read(downloadServiceProvider)

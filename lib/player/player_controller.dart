@@ -209,6 +209,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (_player.playing) {
       await _player.pause();
       await persistPosition();
+      await syncPositionToEpisode();
     } else {
       playbackHandler?.activate();
       await _prepareSession();
@@ -243,8 +244,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (next == null || _disposed) return;
     _advancing = true;
     try {
-      await persistPosition();
       // Ne pas retirer de la file : seulement à la fin complète de l’épisode.
+      // `_play` sync la position de l’épisode précédent.
       await _play(next.episode, next.podcast);
     } finally {
       _advancing = false;
@@ -290,9 +291,15 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         return;
       }
       _sleepTimer?.cancel();
-      unawaited(_player.pause());
-      _emit(_ui.copyWith(clearSleep: true, playing: false));
+      unawaited(_pauseForSleep());
     });
+  }
+
+  Future<void> _pauseForSleep() async {
+    await _player.pause();
+    await persistPosition();
+    await syncPositionToEpisode();
+    _emit(_ui.copyWith(clearSleep: true, playing: false));
   }
 
   Future<void> _markPlayedInSession() async {
@@ -300,22 +307,29 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     final id = _ui.episodeId;
     if (id == null || !ref.mounted) return;
     await _rememberNowPlaying(id);
-    await ref.read(databaseProvider).setPosition(
-      id,
-      _ui.position.inMilliseconds,
-      touchLastPlayed: true,
-    );
+    await persistPosition();
+    await syncPositionToEpisode(touchLastPlayed: true);
   }
 
+  /// Persist légère : table `playback_positions` seule (pas de pulse listes).
   Future<void> persistPosition() async {
     final id = _ui.episodeId;
     if (id == null || _disposed || !ref.mounted) return;
     _lastPersist = DateTime.now();
+    await ref.read(databaseProvider).upsertPlaybackPosition(
+      id,
+      _ui.position.inMilliseconds,
+    );
+  }
+
+  /// Sync métier vers `episodes` (tuiles « en cours », historique, lastPlayedAt).
+  Future<void> syncPositionToEpisode({bool? touchLastPlayed}) async {
+    final id = _ui.episodeId;
+    if (id == null || _disposed || !ref.mounted) return;
     await ref.read(databaseProvider).setPosition(
       id,
       _ui.position.inMilliseconds,
-      // Ne pas « voler » lastPlayedAt si on a seulement restauré sans lire.
-      touchLastPlayed: _hasPlayedInSession,
+      touchLastPlayed: touchLastPlayed ?? _hasPlayedInSession,
     );
   }
 
@@ -324,10 +338,21 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     Podcast podcast, {
     bool autoplay = true,
   }) async {
+    final previousId = _ui.episodeId;
+    if (previousId != null && previousId != episode.id) {
+      await persistPosition();
+      await syncPositionToEpisode();
+    }
+    if (!ref.mounted || _disposed) return;
+
+    final db = ref.read(databaseProvider);
+    final savedMs = await db.playbackPositionMs(episode.id);
+    if (!ref.mounted || _disposed) return;
+
     final duration = episode.durationSeconds == null
         ? Duration.zero
         : Duration(seconds: episode.durationSeconds!);
-    var start = Duration(milliseconds: episode.positionMs);
+    var start = Duration(milliseconds: savedMs ?? episode.positionMs);
     if (duration > Duration.zero &&
         start >= duration - const Duration(seconds: 5)) {
       start = Duration.zero;
@@ -357,7 +382,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (autoplay) {
       // Mémoriser seulement lors d’une vraie lecture (pas d’une reprise).
       await _rememberNowPlaying(episode.id);
-      await ref.read(databaseProvider).setPosition(
+      await db.upsertPlaybackPosition(episode.id, start.inMilliseconds);
+      await db.setPosition(
         episode.id,
         start.inMilliseconds,
         touchLastPlayed: true,
@@ -433,10 +459,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       if (now.difference(_lastPersist) < const Duration(seconds: 5)) return;
       _lastPersist = now;
       unawaited(
-        ref.read(databaseProvider).setPosition(
+        ref.read(databaseProvider).upsertPlaybackPosition(
           id,
           position.inMilliseconds,
-          touchLastPlayed: _hasPlayedInSession,
         ),
       );
     });
@@ -459,6 +484,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     _advancing = true;
     try {
       final db = ref.read(databaseProvider);
+      // Sync finale puis marquage terminé (position épisode → 0).
+      await syncPositionToEpisode();
       await db.setPlayed(id, played: true);
       // Retrait auto de la file uniquement quand l’épisode est terminé.
       await db.removeFromQueue(id);
