@@ -5,8 +5,10 @@ class PlayerPage extends ConsumerWidget {
     super.key,
     this.onCollapse,
     this.embedded = false,
+    this.onHeaderDragStart,
     this.onHeaderDragUpdate,
     this.onHeaderDragEnd,
+    this.onHeaderDragCancel,
   });
 
   /// Si fourni, remplace le pop navigateur (lecteur expansible).
@@ -15,8 +17,10 @@ class PlayerPage extends ConsumerWidget {
   /// Affiché dans le sheet : fond transparent géré par le parent.
   final bool embedded;
 
+  final GestureDragStartCallback? onHeaderDragStart;
   final GestureDragUpdateCallback? onHeaderDragUpdate;
   final GestureDragEndCallback? onHeaderDragEnd;
+  final GestureDragCancelCallback? onHeaderDragCancel;
 
   void _collapse(BuildContext context) {
     if (onCollapse != null) {
@@ -71,8 +75,10 @@ class PlayerPage extends ConsumerWidget {
       appBar: PreferredSize(
         preferredSize: appBar.preferredSize,
         child: PlayerCollapseHeader(
+          onVerticalDragStart: onHeaderDragStart,
           onVerticalDragUpdate: onHeaderDragUpdate,
           onVerticalDragEnd: onHeaderDragEnd,
+          onVerticalDragCancel: onHeaderDragCancel,
           child: appBar,
         ),
       ),
@@ -121,20 +127,26 @@ class PlayerCollapseHeader extends StatelessWidget {
   const PlayerCollapseHeader({
     super.key,
     required this.child,
+    this.onVerticalDragStart,
     this.onVerticalDragUpdate,
     this.onVerticalDragEnd,
+    this.onVerticalDragCancel,
   });
 
   final Widget child;
+  final GestureDragStartCallback? onVerticalDragStart;
   final GestureDragUpdateCallback? onVerticalDragUpdate;
   final GestureDragEndCallback? onVerticalDragEnd;
+  final GestureDragCancelCallback? onVerticalDragCancel;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
+      onVerticalDragStart: onVerticalDragStart,
       onVerticalDragUpdate: onVerticalDragUpdate,
       onVerticalDragEnd: onVerticalDragEnd,
+      onVerticalDragCancel: onVerticalDragCancel,
       child: child,
     );
   }

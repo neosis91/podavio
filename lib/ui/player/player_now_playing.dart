@@ -91,11 +91,15 @@ class _PlayerNowPlaying extends ConsumerWidget {
                   height: side,
                   child: _CoverPlayGestures(
                     playing: playing,
-                    child: PodcastCover(
-                      url: imageUrl,
-                      localPath: imagePath,
-                      size: side,
-                      radius: 24,
+                    child: SizedBox(
+                      width: side,
+                      height: side,
+                      child: PodcastCover(
+                        url: imageUrl,
+                        localPath: imagePath,
+                        size: side,
+                        radius: 24,
+                      ),
                     ),
                   ),
                 );
