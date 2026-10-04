@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/cover_cache.dart';
 
+/// Jaquettes toujours affichées dans un cadre carré, jamais étirées
+/// (`BoxFit.cover` : recadrage éventuel, ratio d’origine conservé).
 class PodcastCover extends StatelessWidget {
   const PodcastCover({
     super.key,
@@ -16,6 +18,9 @@ class PodcastCover extends StatelessWidget {
 
   final String? url;
   final String? localPath;
+
+  /// Côté du carré. Si `null`, le widget prend le plus grand carré
+  /// possible dans les contraintes du parent (`AspectRatio` 1:1).
   final double? size;
   final double radius;
 
@@ -40,6 +45,9 @@ class PodcastCover extends StatelessWidget {
       image = Image.file(
         File(local),
         fit: BoxFit.cover,
+        alignment: Alignment.center,
+        width: double.infinity,
+        height: double.infinity,
         cacheWidth: memPixels,
         cacheHeight: memPixels,
         filterQuality: FilterQuality.low,
@@ -51,6 +59,9 @@ class PodcastCover extends StatelessWidget {
             cacheManager: CoverCache.manager,
             cacheKey: imageUrl,
             fit: BoxFit.cover,
+            alignment: Alignment.center,
+            width: double.infinity,
+            height: double.infinity,
             memCacheWidth: memPixels,
             memCacheHeight: memPixels,
             filterQuality: FilterQuality.low,
@@ -67,6 +78,9 @@ class PodcastCover extends StatelessWidget {
         cacheManager: CoverCache.manager,
         cacheKey: imageUrl,
         fit: BoxFit.cover,
+        alignment: Alignment.center,
+        width: double.infinity,
+        height: double.infinity,
         memCacheWidth: memPixels,
         memCacheHeight: memPixels,
         filterQuality: FilterQuality.low,
@@ -79,12 +93,14 @@ class PodcastCover extends StatelessWidget {
       image = placeholder;
     }
 
-    final side = size;
-    final clipped = ClipRRect(
+    final square = ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      child: side == null ? SizedBox.expand(child: image) : image,
+      child: image,
     );
-    if (side == null) return clipped;
-    return SizedBox(width: side, height: side, child: clipped);
+
+    if (size != null) {
+      return SizedBox(width: size, height: size, child: square);
+    }
+    return AspectRatio(aspectRatio: 1, child: square);
   }
 }
