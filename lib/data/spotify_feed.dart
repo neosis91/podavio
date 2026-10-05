@@ -1,3 +1,5 @@
+import '../core/search.dart';
+
 class SpotifyShowLink {
   const SpotifyShowLink(this.pageUrl);
 
@@ -90,12 +92,7 @@ String? matchingFeedUrl({
 }
 
 String foldName(String value) {
-  final buffer = StringBuffer();
-  for (final rune in value.toLowerCase().runes) {
-    final char = String.fromCharCode(rune);
-    buffer.write(_folds[char] ?? char);
-  }
-  return buffer.toString().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+  return foldForSearch(value).replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
 }
 
 String? _meta(String html, String property) {
@@ -129,36 +126,3 @@ String _decode(String value) {
       .replaceAll('&lt;', '<')
       .replaceAll('&gt;', '>');
 }
-
-const _folds = {
-  'à': 'a',
-  'á': 'a',
-  'â': 'a',
-  'ä': 'a',
-  'ã': 'a',
-  'å': 'a',
-  'æ': 'ae',
-  'ç': 'c',
-  'è': 'e',
-  'é': 'e',
-  'ê': 'e',
-  'ë': 'e',
-  'ì': 'i',
-  'í': 'i',
-  'î': 'i',
-  'ï': 'i',
-  'ñ': 'n',
-  'ò': 'o',
-  'ó': 'o',
-  'ô': 'o',
-  'ö': 'o',
-  'õ': 'o',
-  'ø': 'o',
-  'œ': 'oe',
-  'ù': 'u',
-  'ú': 'u',
-  'û': 'u',
-  'ü': 'u',
-  'ý': 'y',
-  'ÿ': 'y',
-};

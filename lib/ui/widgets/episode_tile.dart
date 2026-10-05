@@ -10,6 +10,7 @@ import '../../data/download_service.dart';
 import '../../data/providers.dart';
 import '../../player/player_controller.dart';
 import '../../player/player_sheet_controller.dart';
+import '../../settings/settings_controller.dart';
 import '../router.dart';
 import 'brand.dart';
 import 'cover.dart';
@@ -50,6 +51,9 @@ class EpisodeTile extends ConsumerWidget {
     ].where((part) => part.isNotEmpty).join(' · ');
 
     final muted = theme.colorScheme.onSurfaceVariant;
+    final preferPodcastCover = ref.watch(
+      settingsProvider.select((s) => s.preferPodcastCover),
+    );
     return InkWell(
       onTap: () => context.push(AppRoutes.episode(episode.id)),
       child: Padding(
@@ -69,7 +73,10 @@ class EpisodeTile extends ConsumerWidget {
                   ),
                 ),
               ),
-            PodcastCover(url: entry.imageUrl, localPath: entry.imagePath),
+            PodcastCover(
+              url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+              localPath: entry.imagePath(preferPodcastCover: preferPodcastCover),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

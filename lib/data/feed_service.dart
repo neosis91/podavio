@@ -407,6 +407,17 @@ class FeedService {
     return trimmed;
   }
 
+  /// Fetch chapitres encore en cours pour cet épisode.
+  bool isChaptersInflight(int episodeId) =>
+      _chapterInflight.containsKey(episodeId);
+
+  /// Dernier fetch a échoué et le backoff empêche un nouvel essai.
+  bool chaptersRecentlyFailed(int episodeId) {
+    final failedAt = _chapterFailedAt[episodeId];
+    if (failedAt == null) return false;
+    return DateTime.now().difference(failedAt) < _chapterRetryBackoff;
+  }
+
   /// Charge et mémorise les chapitres Podcast Index d’un épisode (lazy).
   Future<void> ensureChapters(int episodeId) {
     final inflight = _chapterInflight[episodeId];

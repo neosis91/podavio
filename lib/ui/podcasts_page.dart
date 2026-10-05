@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/platform.dart';
+import '../core/search.dart';
 import '../data/app_database.dart';
 import '../data/feed_refresh_controller.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
-import '../core/platform.dart';
 import 'episodes_page.dart';
 import 'router.dart';
 import 'widgets/cover.dart';
@@ -249,13 +250,11 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                   );
                 }
 
-                final needle = _query.trim().toLowerCase();
+                final needle = _query.trim();
                 final searched = needle.isEmpty
                     ? items
                     : items
-                          .where(
-                            (p) => p.title.toLowerCase().contains(needle),
-                          )
+                          .where((p) => searchMatch(p.title, needle))
                           .toList();
 
                 final filtered = _filterPodcasts(

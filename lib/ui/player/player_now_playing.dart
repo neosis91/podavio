@@ -82,23 +82,31 @@ class _PlayerNowPlaying extends ConsumerWidget {
                     .toDouble();
                 final sideCap =
                     compact ? math.min(200.0, maxByWidth) : maxByWidth;
-                final side = constraints.biggest.shortestSide
+                // Ne pas utiliser shortestSide seul : dans un Expanded haut,
+                // un SizedBox(height: side) est forcé à minHeight = maxHeight
+                // et la cover s’étire en rectangle.
+                final side = math
+                    .min(constraints.maxHeight, sideCap)
                     .clamp(0.0, sideCap)
                     .toDouble();
                 if (side < 48) return const SizedBox.shrink();
-                return SizedBox(
-                  width: constraints.maxWidth,
-                  height: side,
-                  child: _CoverPlayGestures(
-                    playing: playing,
-                    child: SizedBox(
-                      width: side,
-                      height: side,
-                      child: PodcastCover(
-                        url: imageUrl,
-                        localPath: imagePath,
-                        size: side,
-                        radius: 24,
+                // Center assouplit les contraintes du Expanded (sinon la
+                // hauteur min = zone entière et casse le carré).
+                return Center(
+                  child: SizedBox(
+                    width: constraints.maxWidth,
+                    height: side,
+                    child: _CoverPlayGestures(
+                      playing: playing,
+                      child: SizedBox(
+                        width: side,
+                        height: side,
+                        child: PodcastCover(
+                          url: imageUrl,
+                          localPath: imagePath,
+                          size: side,
+                          radius: 24,
+                        ),
                       ),
                     ),
                   ),
@@ -326,7 +334,7 @@ class _CoverPlayGesturesState extends ConsumerState<_CoverPlayGestures> {
   @override
   Widget build(BuildContext context) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         _sideHitTarget(onRight: false, onDoubleTap: _skipBack),
         Tooltip(

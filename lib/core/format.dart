@@ -11,6 +11,13 @@ String formatClock(Duration duration) {
   return '$mm:$ss';
 }
 
+/// Durée média convertie en temps réel à la vitesse [speed] (ex. 2× → moitié).
+Duration durationAtSpeed(Duration media, double speed) {
+  if (media <= Duration.zero) return Duration.zero;
+  if (speed <= 0 || (speed - 1).abs() < 0.001) return media;
+  return Duration(microseconds: (media.inMicroseconds / speed).round());
+}
+
 String formatDate(DateTime? date) {
   if (date == null) return '';
   final local = date.toLocal();
@@ -154,6 +161,104 @@ String plainText(String html) {
       .replaceAll(RegExp(r'[ \t]*\n[ \t]*'), '\n')
       .replaceAll(RegExp(r'\n{3,}'), '\n\n')
       .trim();
+}
+
+/// Segment de notes d’épisode : texte brut ou lien http(s).
+class ShowNotesSpan {
+  const ShowNotesSpan(this.text, {this.url});
+
+  final String text;
+  final String? url;
+
+  bool get isLink => url != null && url!.isNotEmpty;
+}
+
+/// Conserve les liens `<a href>` et les URLs nues, le reste comme [plainText].
+List<ShowNotesSpan> showNotesSpans(String html) {
+  if (html.trim().isEmpty) return const [];
+
+  // Marqueurs hors plage utilisée par [plainText] (\u0000 / \u0001).
+  const start = '\uE000';
+  const sep = '\uE001';
+  const end = '\uE002';
+  final hrefs = <String>[];
+  final withAnchors = html.replaceAllMapped(
+    RegExp(
+      r'''<a\s[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>(.*?)</a>''',
+      caseSensitive: false,
+      dotAll: true,
+    ),
+    (match) {
+      final href = match.group(1) ?? match.group(2) ?? match.group(3) ?? '';
+      final label = match.group(4) ?? '';
+      final index = hrefs.length;
+      hrefs.add(href);
+      return '$start$index$sep$label$end';
+    },
+  );
+
+  final plain = plainText(withAnchors);
+  if (plain.isEmpty) return const [];
+
+  final spans = <ShowNotesSpan>[];
+  final marker = RegExp('$start(\\d+)$sep(.*?)$end', dotAll: true);
+  var cursor = 0;
+  for (final match in marker.allMatches(plain)) {
+    if (match.start > cursor) {
+      spans.addAll(_spansWithBareUrls(plain.substring(cursor, match.start)));
+    }
+    final index = int.tryParse(match.group(1) ?? '');
+    final label = match.group(2) ?? '';
+    final href = (index != null && index >= 0 && index < hrefs.length)
+        ? hrefs[index]
+        : '';
+    final uri = _httpUrl(href);
+    if (uri == null) {
+      final text = label.isNotEmpty ? label : href.trim();
+      if (text.isNotEmpty) spans.add(ShowNotesSpan(text));
+    } else {
+      final text = label.isNotEmpty ? label : uri.toString();
+      spans.add(ShowNotesSpan(text, url: uri.toString()));
+    }
+    cursor = match.end;
+  }
+  if (cursor < plain.length) {
+    spans.addAll(_spansWithBareUrls(plain.substring(cursor)));
+  }
+  return spans;
+}
+
+Iterable<ShowNotesSpan> _spansWithBareUrls(String text) sync* {
+  if (text.isEmpty) return;
+  final pattern = RegExp(r'https?://[^\s]+', caseSensitive: false);
+  var cursor = 0;
+  for (final match in pattern.allMatches(text)) {
+    var end = match.end;
+    while (end > match.start &&
+        '.,;:!?)]}>»"\''.contains(text[end - 1])) {
+      end--;
+    }
+    final raw = text.substring(match.start, end);
+    final uri = _httpUrl(raw);
+    if (uri == null) continue;
+    if (match.start > cursor) {
+      yield ShowNotesSpan(text.substring(cursor, match.start));
+    }
+    yield ShowNotesSpan(uri.toString(), url: uri.toString());
+    cursor = end;
+  }
+  if (cursor < text.length) {
+    yield ShowNotesSpan(text.substring(cursor));
+  }
+}
+
+Uri? _httpUrl(String raw) {
+  final value = _decodeEntities(raw).trim();
+  if (value.isEmpty) return null;
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.host.isEmpty) return null;
+  if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+  return uri;
 }
 
 String _plainLines(String text) {

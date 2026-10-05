@@ -130,7 +130,9 @@ class AppSettings {
     required this.skipBackSeconds,
     required this.skipForwardSeconds,
     required this.showRemainingTime,
+    required this.timeRespectsSpeed,
     required this.keepScreenOn,
+    required this.preferPodcastCover,
     required this.podcastColumns,
     required this.podcastList,
     required this.podcastShowNames,
@@ -153,7 +155,13 @@ class AppSettings {
   final int skipBackSeconds;
   final int skipForwardSeconds;
   final bool showRemainingTime;
+
+  /// Position / durée affichées en temps réel selon la vitesse de lecture.
+  final bool timeRespectsSpeed;
   final bool keepScreenOn;
+
+  /// Afficher la jaquette du podcast plutôt que celle de l’épisode.
+  final bool preferPodcastCover;
   final int podcastColumns;
   final bool podcastList;
   final bool podcastShowNames;
@@ -178,7 +186,9 @@ class AppSettings {
     int? skipBackSeconds,
     int? skipForwardSeconds,
     bool? showRemainingTime,
+    bool? timeRespectsSpeed,
     bool? keepScreenOn,
+    bool? preferPodcastCover,
     int? podcastColumns,
     bool? podcastList,
     bool? podcastShowNames,
@@ -202,7 +212,9 @@ class AppSettings {
       skipBackSeconds: skipBackSeconds ?? this.skipBackSeconds,
       skipForwardSeconds: skipForwardSeconds ?? this.skipForwardSeconds,
       showRemainingTime: showRemainingTime ?? this.showRemainingTime,
+      timeRespectsSpeed: timeRespectsSpeed ?? this.timeRespectsSpeed,
       keepScreenOn: keepScreenOn ?? this.keepScreenOn,
+      preferPodcastCover: preferPodcastCover ?? this.preferPodcastCover,
       podcastColumns: podcastColumns ?? this.podcastColumns,
       podcastList: podcastList ?? this.podcastList,
       podcastShowNames: podcastShowNames ?? this.podcastShowNames,
@@ -241,7 +253,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
       skipBackSeconds: preferences.getInt('skipBack') ?? 10,
       skipForwardSeconds: preferences.getInt('skipForward') ?? 30,
       showRemainingTime: preferences.getBool('showRemainingTime') ?? false,
+      timeRespectsSpeed: preferences.getBool('timeRespectsSpeed') ?? false,
       keepScreenOn: preferences.getBool('keepScreenOn') ?? false,
+      preferPodcastCover: preferences.getBool('preferPodcastCover') ?? false,
       podcastColumns: _columns(preferences.getInt('podcastColumns')),
       podcastList: preferences.getBool('podcastList') ?? false,
       podcastShowNames: preferences.getBool('podcastShowNames') ?? true,
@@ -329,9 +343,23 @@ class SettingsNotifier extends Notifier<AppSettings> {
         .setBool('showRemainingTime', enabled);
   }
 
+  Future<void> setTimeRespectsSpeed(bool enabled) async {
+    state = state.copyWith(timeRespectsSpeed: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('timeRespectsSpeed', enabled);
+  }
+
   Future<void> setKeepScreenOn(bool enabled) async {
     state = state.copyWith(keepScreenOn: enabled);
     await ref.read(sharedPreferencesProvider).setBool('keepScreenOn', enabled);
+  }
+
+  Future<void> setPreferPodcastCover(bool enabled) async {
+    state = state.copyWith(preferPodcastCover: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('preferPodcastCover', enabled);
   }
 
   Future<void> setDownloadDirectory(String? directory) async {

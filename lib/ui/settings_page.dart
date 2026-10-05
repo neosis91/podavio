@@ -476,7 +476,9 @@ class PlaybackPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Lecture')),
       body: ListView(
+        padding: const EdgeInsets.only(bottom: 32),
         children: [
+          const _SectionTitle('Commandes'),
           ListTile(
             title: const Text('Retour rapide'),
             subtitle: Text('${settings.skipBackSeconds} secondes'),
@@ -513,6 +515,7 @@ class PlaybackPage extends ConsumerWidget {
               },
             ),
           ),
+          const _SectionTitle('Lecteur'),
           SwitchListTile(
             title: const Text('Temps restant'),
             subtitle: const Text(
@@ -522,6 +525,14 @@ class PlaybackPage extends ConsumerWidget {
             onChanged: notifier.setShowRemainingTime,
           ),
           SwitchListTile(
+            title: const Text('Temps selon la vitesse'),
+            subtitle: const Text(
+              'Ajuste la position et la durée affichées selon la vitesse de lecture',
+            ),
+            value: settings.timeRespectsSpeed,
+            onChanged: notifier.setTimeRespectsSpeed,
+          ),
+          SwitchListTile(
             title: const Text('Écran allumé'),
             subtitle: const Text(
               'Empêche la mise en veille pendant la lecture',
@@ -529,6 +540,25 @@ class PlaybackPage extends ConsumerWidget {
             value: settings.keepScreenOn,
             onChanged: notifier.setKeepScreenOn,
           ),
+          ListTile(
+            leading: const Icon(Icons.keyboard_alt_outlined),
+            title: const Text('Aide du lecteur'),
+            subtitle: const Text(
+              'Gestes couverture, Espace, J, L, volume… — aussi via ?',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showPlayerKeyboardHelp(context),
+          ),
+          const _SectionTitle('Épisodes'),
+          SwitchListTile(
+            title: const Text('Jaquette du podcast'),
+            subtitle: const Text(
+              'Affiche la couverture du podcast plutôt que celle de l’épisode',
+            ),
+            value: settings.preferPodcastCover,
+            onChanged: notifier.setPreferPodcastCover,
+          ),
+          const _SectionTitle('Actualisation'),
           ListTile(
             title: const Text('Intervalle d’actualisation'),
             subtitle: Text(
@@ -551,6 +581,7 @@ class PlaybackPage extends ConsumerWidget {
               },
             ),
           ),
+          const _SectionTitle('Téléchargements'),
           SwitchListTile(
             title: const Text('Ajouter à la playlist'),
             subtitle: const Text(
@@ -558,16 +589,6 @@ class PlaybackPage extends ConsumerWidget {
             ),
             value: settings.enqueueDownloads,
             onChanged: notifier.setEnqueueDownloads,
-          ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.keyboard_alt_outlined),
-            title: const Text('Aide du lecteur'),
-            subtitle: const Text(
-              'Gestes couverture, Espace, J, L, volume… — aussi via ?',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => showPlayerKeyboardHelp(context),
           ),
         ],
       ),

@@ -11,6 +11,7 @@ import '../data/feed_service.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import 'playback_handler.dart';
+import 'player_sheet_controller.dart';
 
 class PlayerUiState {
   const PlayerUiState({
@@ -40,7 +41,7 @@ class PlayerUiState {
   final Duration duration;
   final double speed;
   final double volume;
-  /// Session-only ; non persisté (reset au redémarrage).
+  /// Persisté via SharedPreferences (`carMode`).
   final bool carMode;
   final DateTime? sleepEndsAt;
   final bool sleepAtEnd;
@@ -111,6 +112,7 @@ final hasNextInQueueProvider = StreamProvider<bool>((ref) {
 
 class PlayerNotifier extends Notifier<PlayerUiState> {
   static const _nowPlayingKey = 'nowPlayingEpisodeId';
+  static const _carModeKey = 'carMode';
 
   late AudioPlayer _player;
   PlayerUiState _ui = const PlayerUiState();
@@ -133,7 +135,13 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       _started = true;
       _player = AudioPlayer();
       final settings = ref.read(settingsProvider);
-      _ui = PlayerUiState(speed: settings.speed, volume: settings.volume);
+      final prefs = ref.read(sharedPreferencesProvider);
+      final carMode = prefs.getBool(_carModeKey) ?? false;
+      _ui = PlayerUiState(
+        speed: settings.speed,
+        volume: settings.volume,
+        carMode: carMode,
+      );
       unawaited(_player.setVolume(settings.volume));
       final handler = playbackHandler;
       if (handler != null) {
@@ -149,13 +157,15 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
           session.skipBack = Duration(seconds: next.skipBackSeconds);
           session.skipForward = Duration(seconds: next.skipForwardSeconds);
         }
-        if (next.speed != _ui.speed) {
-          unawaited(_player.setSpeed(next.speed));
-          _emit(_ui.copyWith(speed: next.speed));
+        if (previous != null && previous.speed != next.speed) {
+          unawaited(_applyDefaultSpeedIfNoPodcastOverride(next.speed));
         }
         if (next.volume != _ui.volume) {
           unawaited(_player.setVolume(next.volume));
           _emit(_ui.copyWith(volume: next.volume));
+        }
+        if (previous?.preferPodcastCover != next.preferPodcastCover) {
+          unawaited(_refreshCoverArt(next.preferPodcastCover));
         }
       });
     }
@@ -234,6 +244,67 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     return seek(target);
   }
 
+  /// Chapitre précédent (`delta < 0`) ou suivant (`delta > 0`).
+  /// Si on est à plus de 3 s dans le chapitre courant, « précédent » le reprend.
+  Future<void> skipChapter(
+    List<EpisodeChapter> chapters, {
+    required int delta,
+  }) async {
+    if (!_ui.hasEpisode || chapters.isEmpty) return;
+    final pos = _ui.position.inMilliseconds;
+    var index = -1;
+    for (var i = 0; i < chapters.length; i++) {
+      if (chapters[i].startMs <= pos) {
+        index = i;
+      } else {
+        break;
+      }
+    }
+    if (delta < 0) {
+      if (index < 0) {
+        await seek(Duration.zero);
+        return;
+      }
+      final intoChapter = pos - chapters[index].startMs;
+      if (intoChapter > 3000) {
+        await seek(Duration(milliseconds: chapters[index].startMs));
+        return;
+      }
+      final prev = index > 0 ? index - 1 : 0;
+      await seek(Duration(milliseconds: chapters[prev].startMs));
+      return;
+    }
+    final next = index + 1;
+    if (next >= chapters.length) {
+      if (_ui.duration > Duration.zero) await seek(_ui.duration);
+      return;
+    }
+    await seek(Duration(milliseconds: chapters[next].startMs));
+  }
+
+  /// Ferme le lecteur (mini compris) en gardant la position.
+  Future<void> dismiss() async {
+    if (!_ui.hasEpisode || _disposed) return;
+    await persistPosition();
+    await syncPositionToEpisode();
+    if (_disposed || !ref.mounted) return;
+    _sleepTimer?.cancel();
+    try {
+      await _player.stop();
+    } catch (error, stack) {
+      debugPrint('Arrêt lecteur: $error\n$stack');
+    }
+    if (_disposed || !ref.mounted) return;
+    final settings = ref.read(settingsProvider);
+    _hasPlayedInSession = false;
+    _emit(
+      PlayerUiState(speed: settings.speed, volume: settings.volume),
+    );
+    if (ref.mounted) {
+      ref.read(playerSheetProvider.notifier).collapse();
+    }
+  }
+
   /// Passe à l’épisode suivant dans la playlist.
   Future<void> playNextInQueue() async {
     if (_advancing || _disposed) return;
@@ -253,9 +324,33 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   }
 
   Future<void> setSpeed(double speed) async {
+    final value = _normalizeSpeed(speed);
+    await _player.setSpeed(value);
+    _emit(_ui.copyWith(speed: value));
+    final episodeId = _ui.episodeId;
+    if (episodeId == null || !ref.mounted) return;
+    final entry = await ref.read(databaseProvider).getEpisode(episodeId);
+    if (entry == null || !ref.mounted) return;
+    await ref.read(databaseProvider).setPodcastPlaybackSpeed(
+      entry.podcast.id,
+      value,
+    );
+  }
+
+  /// Remet la vitesse du podcast courant au défaut global.
+  Future<void> resetPodcastSpeed() async {
+    final episodeId = _ui.episodeId;
+    if (episodeId == null) return;
+    final entry = await ref.read(databaseProvider).getEpisode(episodeId);
+    if (entry == null || !ref.mounted) return;
+    await ref.read(databaseProvider).setPodcastPlaybackSpeed(
+      entry.podcast.id,
+      null,
+    );
+    if (!ref.mounted || _disposed) return;
+    final speed = ref.read(settingsProvider).speed;
     await _player.setSpeed(speed);
     _emit(_ui.copyWith(speed: speed));
-    await ref.read(settingsProvider.notifier).setSpeed(speed);
   }
 
   Future<void> setVolume(double volume) async {
@@ -269,8 +364,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     return setVolume(_ui.volume + delta);
   }
 
-  void setCarMode(bool enabled) {
+  Future<void> setCarMode(bool enabled) async {
     _emit(_ui.copyWith(carMode: enabled));
+    await ref.read(sharedPreferencesProvider).setBool(_carModeKey, enabled);
   }
 
   void setSleep(Duration? duration, {bool atEnd = false}) {
@@ -333,6 +429,28 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     );
   }
 
+  Future<void> _refreshCoverArt(bool preferPodcastCover) async {
+    final id = _ui.episodeId;
+    if (id == null || _disposed || !ref.mounted) return;
+    final entry = await ref.read(databaseProvider).getEpisode(id);
+    if (entry == null || _disposed || !ref.mounted) return;
+    final remote = entry.imageUrl(preferPodcastCover: preferPodcastCover);
+    final local = entry.imagePath(preferPodcastCover: preferPodcastCover);
+    _emit(
+      _ui.copyWith(
+        imageUrl: remote,
+        imagePath: local,
+        clearImage: remote == null && local == null,
+      ),
+    );
+    playbackHandler?.setEpisode(
+      title: entry.episode.title,
+      podcast: entry.podcast.title,
+      artUri: artworkUri(local ?? remote),
+      duration: _ui.duration > Duration.zero ? _ui.duration : null,
+    );
+  }
+
   Future<void> _play(
     Episode episode,
     Podcast podcast, {
@@ -357,10 +475,12 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         start >= duration - const Duration(seconds: 5)) {
       start = Duration.zero;
     }
-    final remoteImage = episode.imageUrl ?? podcast.imageUrl;
-    final localImage = (episode.imageUrl != null && episode.imageUrl!.trim().isNotEmpty)
-        ? episode.imagePath
-        : podcast.imagePath;
+    final settings = ref.read(settingsProvider);
+    final speed = podcast.playbackSpeed ?? settings.speed;
+    final preferPodcastCover = settings.preferPodcastCover;
+    final cover = EpisodeEntry(episode: episode, podcast: podcast);
+    final remoteImage = cover.imageUrl(preferPodcastCover: preferPodcastCover);
+    final localImage = cover.imagePath(preferPodcastCover: preferPodcastCover);
     if (autoplay) {
       _hasPlayedInSession = true;
     }
@@ -374,6 +494,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         clearImage: remoteImage == null && localImage == null,
         position: start,
         duration: duration,
+        speed: speed,
         playing: false,
         clearError: true,
       ),
@@ -431,6 +552,22 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (path.startsWith('content://')) return Uri.parse(path);
     if (File(path).existsSync()) return Uri.file(path);
     return Uri.parse(episode.audioUrl);
+  }
+
+  static double _normalizeSpeed(double speed) {
+    final stepped = (speed * 10).round() / 10;
+    return stepped.clamp(0.5, 3.0);
+  }
+
+  Future<void> _applyDefaultSpeedIfNoPodcastOverride(double speed) async {
+    final episodeId = _ui.episodeId;
+    if (episodeId != null) {
+      final entry = await ref.read(databaseProvider).getEpisode(episodeId);
+      if (!ref.mounted || _disposed) return;
+      if (entry?.podcast.playbackSpeed != null) return;
+    }
+    await _player.setSpeed(speed);
+    _emit(_ui.copyWith(speed: speed));
   }
 
   Future<void> _prepareSession() async {
