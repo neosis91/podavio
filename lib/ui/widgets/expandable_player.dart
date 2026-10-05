@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../player/player_controller.dart';
 import '../../player/player_sheet_controller.dart';
+import '../../settings/settings_controller.dart';
 import '../player_page.dart';
 import 'brand.dart';
 import 'cover.dart';
@@ -226,6 +227,8 @@ class _MiniPlayerBar extends ConsumerWidget {
 
   final VoidCallback onOpen;
 
+  static const _btnConstraints = BoxConstraints(minWidth: 36, minHeight: 48);
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final title = ref.watch(playerProvider.select((s) => s.title));
@@ -237,12 +240,27 @@ class _MiniPlayerBar extends ConsumerWidget {
     final playing = ref.watch(playerProvider.select((s) => s.playing));
     final position = ref.watch(playerProvider.select((s) => s.position));
     final duration = ref.watch(playerProvider.select((s) => s.duration));
+    final speed = ref.watch(playerProvider.select((s) => s.speed));
     final error = ref.watch(playerProvider.select((s) => s.error));
+    final skipBack = ref.watch(
+      settingsProvider.select((s) => s.skipBackSeconds),
+    );
+    final skipForward = ref.watch(
+      settingsProvider.select((s) => s.skipForwardSeconds),
+    );
+    final timeRespectsSpeed = ref.watch(
+      settingsProvider.select((s) => s.timeRespectsSpeed),
+    );
     final scheme = Theme.of(context).colorScheme;
+    final player = ref.read(playerProvider.notifier);
     final total = duration.inMilliseconds;
     final progress = total == 0
         ? 0.0
         : (position.inMilliseconds / total).clamp(0.0, 1.0);
+    final displayPosition = durationAtSpeed(
+      position,
+      timeRespectsSpeed ? speed : 1.0,
+    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -271,7 +289,7 @@ class _MiniPlayerBar extends ConsumerWidget {
                         ),
                         Expanded(
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,7 +304,7 @@ class _MiniPlayerBar extends ConsumerWidget {
                                 ),
                                 Text(
                                   error ??
-                                      '$podcastTitle · ${formatClock(position)}',
+                                      '$podcastTitle · ${formatClock(displayPosition)}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
@@ -297,20 +315,38 @@ class _MiniPlayerBar extends ConsumerWidget {
                             ),
                           ),
                         ),
-                        Icon(
-                          Icons.keyboard_arrow_up,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 4),
                       ],
                     ),
                   ),
                 ),
               ),
               IconButton(
+                tooltip: 'Reculer de $skipBack s',
+                visualDensity: VisualDensity.compact,
+                constraints: _btnConstraints,
+                onPressed: () => player.skipBy(-skipBack),
+                icon: SkipIcon.back(size: 22),
+              ),
+              IconButton(
                 tooltip: playing ? 'Pause (Espace)' : 'Lecture (Espace)',
-                onPressed: () => ref.read(playerProvider.notifier).toggle(),
-                icon: PlayPauseIcon(playing: playing, size: 28),
+                visualDensity: VisualDensity.compact,
+                constraints: _btnConstraints,
+                onPressed: player.toggle,
+                icon: PlayPauseIcon(playing: playing, size: 26),
+              ),
+              IconButton(
+                tooltip: 'Avancer de $skipForward s',
+                visualDensity: VisualDensity.compact,
+                constraints: _btnConstraints,
+                onPressed: () => player.skipBy(skipForward),
+                icon: SkipIcon.forward(size: 22),
+              ),
+              IconButton(
+                tooltip: 'Fermer le lecteur',
+                visualDensity: VisualDensity.compact,
+                constraints: _btnConstraints,
+                onPressed: player.dismiss,
+                icon: Icon(Icons.close, size: 22, color: scheme.onSurfaceVariant),
               ),
             ],
           ),

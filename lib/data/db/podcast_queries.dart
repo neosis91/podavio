@@ -69,6 +69,13 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     );
   }
 
+  /// `null` = utiliser le défaut global des réglages.
+  Future<void> setPodcastPlaybackSpeed(int id, double? speed) {
+    return (update(podcasts)..where((table) => table.id.equals(id))).write(
+      PodcastsCompanion(playbackSpeed: Value(speed)),
+    );
+  }
+
   Future<List<Podcast>> listPodcasts({bool subscribedOnly = true}) {
     final query = select(podcasts)
       ..orderBy([(table) => OrderingTerm.asc(table.title)]);

@@ -51,6 +51,9 @@ void main() {
       imageUrl: 'https://a.example/cover.jpg',
       subscribedAt: DateTime.utc(2026, 1, 1),
       preferred: false,
+      autoDownload: false,
+      keepUpdated: true,
+      subscribed: true,
     );
     final entries = parseOpmlEntries(buildOpml([podcast]));
     expect(entries, hasLength(1));

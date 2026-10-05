@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../data/app_database.dart';
 import '../data/providers.dart';
+import '../settings/settings_controller.dart';
 import 'router.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
@@ -160,7 +161,7 @@ class _InlineSection extends StatelessWidget {
   }
 }
 
-class _EpisodeCard extends StatelessWidget {
+class _EpisodeCard extends ConsumerWidget {
   const _EpisodeCard({
     super.key,
     required this.entry,
@@ -171,9 +172,12 @@ class _EpisodeCard extends StatelessWidget {
   final bool showProgress;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final episode = entry.episode;
+    final preferPodcastCover = ref.watch(
+      settingsProvider.select((s) => s.preferPodcastCover),
+    );
     final duration = episode.durationSeconds == null
         ? null
         : Duration(seconds: episode.durationSeconds!);
@@ -190,8 +194,9 @@ class _EpisodeCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             PodcastCover(
-              url: entry.imageUrl,
-              localPath: entry.imagePath,
+              url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+              localPath:
+                  entry.imagePath(preferPodcastCover: preferPodcastCover),
               size: _cardWidth,
               radius: 12,
             ),

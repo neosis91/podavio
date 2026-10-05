@@ -49,6 +49,18 @@ final chaptersProvider = StreamProvider.family<List<EpisodeChapter>, int>((
   return ref.watch(databaseProvider).watchChapters(id);
 });
 
+/// Résultat du fetch réseau des chapitres (le stream Drift émet `[]` tout de suite).
+enum ChaptersLoadPhase { loaded, failed }
+
+/// Suit `ensureChapters` plutôt que `AsyncValue.isLoading` du watch Drift.
+final chaptersLoadStateProvider =
+    FutureProvider.family<ChaptersLoadPhase, int>((ref, id) async {
+      final feed = ref.watch(feedServiceProvider);
+      await feed.ensureChapters(id);
+      if (feed.chaptersRecentlyFailed(id)) return ChaptersLoadPhase.failed;
+      return ChaptersLoadPhase.loaded;
+    });
+
 final podcastsProvider = StreamProvider<List<Podcast>>((ref) {
   final sort = ref.watch(settingsProvider.select((s) => s.podcastSort));
   final database = ref.watch(databaseProvider);

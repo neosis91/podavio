@@ -60,14 +60,22 @@ class PlayerPage extends ConsumerWidget {
         icon: const SkipIcon.collapse(),
       ),
       title: carMode ? null : const Text('Lecture'),
-      actions: [
-        if (!carMode) ...[
-          _FavoriteAction(episodeId: episodeId),
-          const _SleepAction(),
-          _ShareAction(episodeId: episodeId),
-        ],
-        _PlayerActions(episodeId: episodeId),
-      ],
+      actions: carMode
+          ? [
+              IconButton(
+                tooltip: 'Quitter le mode voiture',
+                onPressed: () {
+                  ref.read(playerProvider.notifier).setCarMode(false);
+                },
+                icon: const Icon(Icons.directions_car),
+              ),
+            ]
+          : [
+              _FavoriteAction(episodeId: episodeId),
+              const _SleepAction(),
+              _ShareAction(episodeId: episodeId),
+              _PlayerActions(episodeId: episodeId),
+            ],
     );
 
     return Scaffold(
@@ -333,7 +341,7 @@ class _PlayerNotesPage extends ConsumerWidget {
     final scheme = theme.colorScheme;
     final notes =
         ref.watch(episodeProvider(episodeId)).value?.episode.description ?? '';
-    final notesText = plainText(notes);
+    final hasNotes = plainText(notes).isNotEmpty;
 
     return Material(
       color: scheme.surface,
@@ -346,7 +354,7 @@ class _PlayerNotesPage extends ConsumerWidget {
           ),
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
           children: [
-            if (notesText.isEmpty)
+            if (!hasNotes)
               Text(
                 'Aucune note pour cet épisode.',
                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -354,7 +362,7 @@ class _PlayerNotesPage extends ConsumerWidget {
                 ),
               )
             else
-              Text(notesText, style: theme.textTheme.bodyMedium),
+              ShowNotes(html: notes, style: theme.textTheme.bodyMedium),
           ],
         ),
       ),
