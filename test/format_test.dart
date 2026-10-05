@@ -33,6 +33,35 @@ void main() {
     expect(plainText('<ul><li>Un</li><li>Deux</li></ul>'), '• Un\n• Deux');
   });
 
+  test('showNotesSpans keeps anchor links', () {
+    final spans = showNotesSpans(
+      '<p>Voir <a href="https://example.com/a">le site</a> ici.</p>',
+    );
+    expect(spans, hasLength(3));
+    expect(spans[0].text, 'Voir ');
+    expect(spans[0].url, isNull);
+    expect(spans[1].text, 'le site');
+    expect(spans[1].url, 'https://example.com/a');
+    expect(spans[2].text, ' ici.');
+  });
+
+  test('showNotesSpans detects bare urls', () {
+    final spans = showNotesSpans('Écoute sur https://example.com/x.');
+    expect(spans, hasLength(3));
+    expect(spans[0].text, 'Écoute sur ');
+    expect(spans[1].url, 'https://example.com/x');
+    expect(spans[1].text, 'https://example.com/x');
+    expect(spans[2].text, '.');
+  });
+
+  test('showNotesSpans ignores non-http anchors', () {
+    final spans = showNotesSpans('<a href="javascript:alert(1)">x</a>');
+    expect(spans, hasLength(1));
+    expect(spans.single.text, 'x');
+    expect(spans.single.url, isNull);
+  });
+
+
   test('audioExtension prefers the mime type', () {
     expect(audioExtension('audio/mpeg', 'https://cdn.example/a'), '.mp3');
     expect(audioExtension(null, 'https://cdn.example/a.m4a'), '.m4a');

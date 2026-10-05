@@ -7,11 +7,13 @@ import '../data/app_database.dart';
 import '../data/download_controller.dart';
 import '../data/providers.dart';
 import '../player/player_controller.dart';
+import '../settings/settings_controller.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/episode_tile.dart';
+import 'widgets/show_notes.dart';
 
 class EpisodePage extends ConsumerWidget {
   const EpisodePage({super.key, required this.episodeId});
@@ -74,7 +76,7 @@ class _EpisodeDetail extends ConsumerWidget {
     final fraction = total == null || total == Duration.zero
         ? null
         : (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
-    final notes = plainText(episode.description);
+    final hasNotes = plainText(episode.description).isNotEmpty;
     final meta = [
       formatDate(episode.publishedAt),
       if (total != null) formatClock(total),
@@ -90,6 +92,9 @@ class _EpisodeDetail extends ConsumerWidget {
         ? 'Lecture'
         : 'Streaming';
     final usePlayPause = playing || downloaded || position > Duration.zero;
+    final preferPodcastCover = ref.watch(
+      settingsProvider.select((s) => s.preferPodcastCover),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -104,8 +109,10 @@ class _EpisodeDetail extends ConsumerWidget {
             children: [
               Center(
                 child: PodcastCover(
-                  url: entry.imageUrl,
-                  localPath: entry.imagePath,
+                  url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+                  localPath: entry.imagePath(
+                    preferPodcastCover: preferPodcastCover,
+                  ),
                   size: 200,
                   radius: 16,
                 ),
@@ -213,11 +220,14 @@ class _EpisodeDetail extends ConsumerWidget {
                   ),
                 ],
               ),
-              if (notes.isNotEmpty) ...[
+              if (hasNotes) ...[
                 const SizedBox(height: 24),
                 Text('Notes', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 8),
-                SelectableText(notes, style: theme.textTheme.bodyMedium),
+                ShowNotes(
+                  html: episode.description,
+                  style: theme.textTheme.bodyMedium,
+                ),
               ],
             ],
           ),

@@ -25,6 +25,8 @@ class Podcasts extends Table {
   BoolColumn get keepUpdated => boolean().withDefault(const Constant(true))();
   /// false = aperçu (Explorer) : épisodes utilisables, hors bibliothèque.
   BoolColumn get subscribed => boolean().withDefault(const Constant(true))();
+  /// Vitesse de lecture propre au podcast ; `null` = défaut global des réglages.
+  RealColumn get playbackSpeed => real().nullable()();
 }
 
 @TableIndex(name: 'episodes_podcast_id', columns: {#podcastId})
@@ -92,22 +94,39 @@ class EpisodeEntry {
   final Episode episode;
   final Podcast podcast;
 
-  /// URL distante de la jaquette (épisode, sinon podcast).
-  String? get imageUrl {
+  /// URL distante de la jaquette.
+  ///
+  /// Par défaut : épisode si présent, sinon podcast.
+  /// Avec [preferPodcastCover] : podcast en priorité (économie réseau).
+  String? imageUrl({bool preferPodcastCover = false}) {
     final episodeImage = episode.imageUrl?.trim();
-    if (episodeImage != null && episodeImage.isNotEmpty) return episodeImage;
     final podcastImage = podcast.imageUrl?.trim();
-    if (podcastImage == null || podcastImage.isEmpty) return null;
-    return podcastImage;
+    final hasEpisode =
+        episodeImage != null && episodeImage.isNotEmpty;
+    final hasPodcast =
+        podcastImage != null && podcastImage.isNotEmpty;
+    if (preferPodcastCover) {
+      if (hasPodcast) return podcastImage;
+      return hasEpisode ? episodeImage : null;
+    }
+    if (hasEpisode) return episodeImage;
+    return hasPodcast ? podcastImage : null;
   }
 
   /// Fichier local de la jaquette, s’il a déjà été téléchargé.
-  String? get imagePath {
+  String? imagePath({bool preferPodcastCover = false}) {
     final episodeImage = episode.imageUrl?.trim();
-    if (episodeImage != null && episodeImage.isNotEmpty) {
-      return episode.imagePath;
+    final podcastImage = podcast.imageUrl?.trim();
+    final hasEpisode =
+        episodeImage != null && episodeImage.isNotEmpty;
+    final hasPodcast =
+        podcastImage != null && podcastImage.isNotEmpty;
+    if (preferPodcastCover) {
+      if (hasPodcast) return podcast.imagePath;
+      return hasEpisode ? episode.imagePath : null;
     }
-    return podcast.imagePath;
+    if (hasEpisode) return episode.imagePath;
+    return hasPodcast ? podcast.imagePath : null;
   }
 }
 
@@ -119,7 +138,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -162,6 +181,9 @@ class AppDatabase extends _$AppDatabase
           "AND chapters_url IS NOT NULL AND length(chapters_url) > 0 "
           "AND id NOT IN (SELECT DISTINCT episode_id FROM episode_chapters)",
         );
+      }
+      if (from < 10) {
+        await migrator.addColumn(podcasts, podcasts.playbackSpeed);
       }
     },
     beforeOpen: (details) async {

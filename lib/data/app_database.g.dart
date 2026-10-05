@@ -177,6 +177,17 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _playbackSpeedMeta = const VerificationMeta(
+    'playbackSpeed',
+  );
+  @override
+  late final GeneratedColumn<double> playbackSpeed = GeneratedColumn<double>(
+    'playback_speed',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -193,6 +204,7 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     autoDownload,
     keepUpdated,
     subscribed,
+    playbackSpeed,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -308,6 +320,15 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         subscribed.isAcceptableOrUnknown(data['subscribed']!, _subscribedMeta),
       );
     }
+    if (data.containsKey('playback_speed')) {
+      context.handle(
+        _playbackSpeedMeta,
+        playbackSpeed.isAcceptableOrUnknown(
+          data['playback_speed']!,
+          _playbackSpeedMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -373,6 +394,10 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         DriftSqlType.bool,
         data['${effectivePrefix}subscribed'],
       )!,
+      playbackSpeed: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}playback_speed'],
+      ),
     );
   }
 
@@ -399,6 +424,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
 
   /// false = aperçu (Explorer) : épisodes utilisables, hors bibliothèque.
   final bool subscribed;
+
+  /// Vitesse de lecture propre au podcast ; `null` = défaut global des réglages.
+  final double? playbackSpeed;
   const Podcast({
     required this.id,
     required this.feedUrl,
@@ -414,6 +442,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     required this.autoDownload,
     required this.keepUpdated,
     required this.subscribed,
+    this.playbackSpeed,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -440,6 +469,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     map['auto_download'] = Variable<bool>(autoDownload);
     map['keep_updated'] = Variable<bool>(keepUpdated);
     map['subscribed'] = Variable<bool>(subscribed);
+    if (!nullToAbsent || playbackSpeed != null) {
+      map['playback_speed'] = Variable<double>(playbackSpeed);
+    }
     return map;
   }
 
@@ -465,6 +497,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       autoDownload: Value(autoDownload),
       keepUpdated: Value(keepUpdated),
       subscribed: Value(subscribed),
+      playbackSpeed: playbackSpeed == null && nullToAbsent
+          ? const Value.absent()
+          : Value(playbackSpeed),
     );
   }
 
@@ -488,6 +523,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       autoDownload: serializer.fromJson<bool>(json['autoDownload']),
       keepUpdated: serializer.fromJson<bool>(json['keepUpdated']),
       subscribed: serializer.fromJson<bool>(json['subscribed']),
+      playbackSpeed: serializer.fromJson<double?>(json['playbackSpeed']),
     );
   }
   @override
@@ -508,6 +544,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       'autoDownload': serializer.toJson<bool>(autoDownload),
       'keepUpdated': serializer.toJson<bool>(keepUpdated),
       'subscribed': serializer.toJson<bool>(subscribed),
+      'playbackSpeed': serializer.toJson<double?>(playbackSpeed),
     };
   }
 
@@ -526,6 +563,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     bool? autoDownload,
     bool? keepUpdated,
     bool? subscribed,
+    Value<double?> playbackSpeed = const Value.absent(),
   }) => Podcast(
     id: id ?? this.id,
     feedUrl: feedUrl ?? this.feedUrl,
@@ -541,6 +579,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     autoDownload: autoDownload ?? this.autoDownload,
     keepUpdated: keepUpdated ?? this.keepUpdated,
     subscribed: subscribed ?? this.subscribed,
+    playbackSpeed: playbackSpeed.present
+        ? playbackSpeed.value
+        : this.playbackSpeed,
   );
   Podcast copyWithCompanion(PodcastsCompanion data) {
     return Podcast(
@@ -570,6 +611,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       subscribed: data.subscribed.present
           ? data.subscribed.value
           : this.subscribed,
+      playbackSpeed: data.playbackSpeed.present
+          ? data.playbackSpeed.value
+          : this.playbackSpeed,
     );
   }
 
@@ -589,7 +633,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           ..write('preferred: $preferred, ')
           ..write('autoDownload: $autoDownload, ')
           ..write('keepUpdated: $keepUpdated, ')
-          ..write('subscribed: $subscribed')
+          ..write('subscribed: $subscribed, ')
+          ..write('playbackSpeed: $playbackSpeed')
           ..write(')'))
         .toString();
   }
@@ -610,6 +655,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     autoDownload,
     keepUpdated,
     subscribed,
+    playbackSpeed,
   );
   @override
   bool operator ==(Object other) =>
@@ -628,7 +674,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           other.preferred == this.preferred &&
           other.autoDownload == this.autoDownload &&
           other.keepUpdated == this.keepUpdated &&
-          other.subscribed == this.subscribed);
+          other.subscribed == this.subscribed &&
+          other.playbackSpeed == this.playbackSpeed);
 }
 
 class PodcastsCompanion extends UpdateCompanion<Podcast> {
@@ -646,6 +693,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
   final Value<bool> autoDownload;
   final Value<bool> keepUpdated;
   final Value<bool> subscribed;
+  final Value<double?> playbackSpeed;
   const PodcastsCompanion({
     this.id = const Value.absent(),
     this.feedUrl = const Value.absent(),
@@ -661,6 +709,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.autoDownload = const Value.absent(),
     this.keepUpdated = const Value.absent(),
     this.subscribed = const Value.absent(),
+    this.playbackSpeed = const Value.absent(),
   });
   PodcastsCompanion.insert({
     this.id = const Value.absent(),
@@ -677,6 +726,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.autoDownload = const Value.absent(),
     this.keepUpdated = const Value.absent(),
     this.subscribed = const Value.absent(),
+    this.playbackSpeed = const Value.absent(),
   }) : feedUrl = Value(feedUrl),
        title = Value(title),
        subscribedAt = Value(subscribedAt);
@@ -695,6 +745,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Expression<bool>? autoDownload,
     Expression<bool>? keepUpdated,
     Expression<bool>? subscribed,
+    Expression<double>? playbackSpeed,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -711,6 +762,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       if (autoDownload != null) 'auto_download': autoDownload,
       if (keepUpdated != null) 'keep_updated': keepUpdated,
       if (subscribed != null) 'subscribed': subscribed,
+      if (playbackSpeed != null) 'playback_speed': playbackSpeed,
     });
   }
 
@@ -729,6 +781,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Value<bool>? autoDownload,
     Value<bool>? keepUpdated,
     Value<bool>? subscribed,
+    Value<double?>? playbackSpeed,
   }) {
     return PodcastsCompanion(
       id: id ?? this.id,
@@ -745,6 +798,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       autoDownload: autoDownload ?? this.autoDownload,
       keepUpdated: keepUpdated ?? this.keepUpdated,
       subscribed: subscribed ?? this.subscribed,
+      playbackSpeed: playbackSpeed ?? this.playbackSpeed,
     );
   }
 
@@ -793,6 +847,9 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     if (subscribed.present) {
       map['subscribed'] = Variable<bool>(subscribed.value);
     }
+    if (playbackSpeed.present) {
+      map['playback_speed'] = Variable<double>(playbackSpeed.value);
+    }
     return map;
   }
 
@@ -812,7 +869,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
           ..write('preferred: $preferred, ')
           ..write('autoDownload: $autoDownload, ')
           ..write('keepUpdated: $keepUpdated, ')
-          ..write('subscribed: $subscribed')
+          ..write('subscribed: $subscribed, ')
+          ..write('playbackSpeed: $playbackSpeed')
           ..write(')'))
         .toString();
   }
@@ -2696,6 +2754,7 @@ typedef $$PodcastsTableCreateCompanionBuilder = PodcastsCompanion Function({
   Value<bool> autoDownload,
   Value<bool> keepUpdated,
   Value<bool> subscribed,
+  Value<double?> playbackSpeed,
 });
 typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<int> id,
@@ -2712,6 +2771,7 @@ typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<bool> autoDownload,
   Value<bool> keepUpdated,
   Value<bool> subscribed,
+  Value<double?> playbackSpeed,
 });
 
 final class $$PodcastsTableReferences
@@ -2814,6 +2874,11 @@ class $$PodcastsTableFilterComposer
 
   ColumnFilters<bool> get subscribed => $composableBuilder(
     column: $table.subscribed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get playbackSpeed => $composableBuilder(
+    column: $table.playbackSpeed,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2921,6 +2986,11 @@ class $$PodcastsTableOrderingComposer
     column: $table.subscribed,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<double> get playbackSpeed => $composableBuilder(
+    column: $table.playbackSpeed,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PodcastsTableAnnotationComposer
@@ -2983,6 +3053,11 @@ class $$PodcastsTableAnnotationComposer
 
   GeneratedColumn<bool> get subscribed => $composableBuilder(
     column: $table.subscribed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get playbackSpeed => $composableBuilder(
+    column: $table.playbackSpeed,
     builder: (column) => column,
   );
 
@@ -3054,6 +3129,7 @@ class $$PodcastsTableTableManager
                 Value<bool> autoDownload = const Value.absent(),
                 Value<bool> keepUpdated = const Value.absent(),
                 Value<bool> subscribed = const Value.absent(),
+                Value<double?> playbackSpeed = const Value.absent(),
               }) => PodcastsCompanion(
                 id: id,
                 feedUrl: feedUrl,
@@ -3069,6 +3145,7 @@ class $$PodcastsTableTableManager
                 autoDownload: autoDownload,
                 keepUpdated: keepUpdated,
                 subscribed: subscribed,
+                playbackSpeed: playbackSpeed,
               ),
           createCompanionCallback:
               ({
@@ -3086,6 +3163,7 @@ class $$PodcastsTableTableManager
                 Value<bool> autoDownload = const Value.absent(),
                 Value<bool> keepUpdated = const Value.absent(),
                 Value<bool> subscribed = const Value.absent(),
+                Value<double?> playbackSpeed = const Value.absent(),
               }) => PodcastsCompanion.insert(
                 id: id,
                 feedUrl: feedUrl,
@@ -3101,6 +3179,7 @@ class $$PodcastsTableTableManager
                 autoDownload: autoDownload,
                 keepUpdated: keepUpdated,
                 subscribed: subscribed,
+                playbackSpeed: playbackSpeed,
               ),
           withReferenceMapper: (p0) => p0
               .map(

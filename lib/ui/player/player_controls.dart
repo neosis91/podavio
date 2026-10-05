@@ -17,8 +17,26 @@ class _PlayerTransport extends ConsumerWidget {
       0,
       totalMs == 0 ? 0 : totalMs,
     );
+    final clockSpeed = settings.timeRespectsSpeed ? speed : 1.0;
+    final displayPosition = durationAtSpeed(position, clockSpeed);
+    final displayDuration = durationAtSpeed(duration, clockSpeed);
+    final displayRemaining = durationAtSpeed(
+      duration - position,
+      clockSpeed,
+    );
     final hasNext = ref.watch(hasNextInQueueProvider).value ?? false;
+    final episodeId = ref.watch(playerProvider.select((s) => s.episodeId));
+    final chapters = episodeId == null
+        ? const <EpisodeChapter>[]
+        : (ref.watch(chaptersProvider(episodeId)).value ??
+              const <EpisodeChapter>[]);
+    final hasChapters = chapters.isNotEmpty;
+    final player = ref.read(playerProvider.notifier);
     final labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w600,
+    );
+    final clockStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
       color: Theme.of(context).colorScheme.onSurfaceVariant,
       fontWeight: FontWeight.w600,
     );
@@ -28,26 +46,103 @@ class _PlayerTransport extends ConsumerWidget {
     const playButtonSize = 56.0;
     final gap = carMode ? 12.0 : 4.0;
     final skipGap = carMode ? 12.0 : 8.0;
+    void toggleRemaining() {
+      ref
+          .read(settingsProvider.notifier)
+          .setShowRemainingTime(!settings.showRemainingTime);
+    }
+
+    final scheme = Theme.of(context).colorScheme;
+    final activeChapter = currentChapterFor(chapters, position);
+    final showChapterMarkers = totalMs > 0 && chapters.isNotEmpty;
+    final sliderTheme = SliderTheme.of(context);
+    final thumbWidth =
+        (sliderTheme.thumbShape ?? const RoundSliderThumbShape())
+            .getPreferredSize(true, false)
+            .width;
+    final overlayWidth =
+        (sliderTheme.overlayShape ?? const RoundSliderOverlayShape())
+            .getPreferredSize(true, false)
+            .width;
+    // Même inset horizontal que BaseSliderTrackShape.getPreferredRect.
+    final trackInset = sliderTheme.padding == null
+        ? math.max(overlayWidth / 2, thumbWidth / 2)
+        : 0.0;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Slider(
-          value: totalMs == 0 ? 0 : positionMs.toDouble(),
-          max: totalMs == 0 ? 1 : totalMs.toDouble(),
-          onChanged: totalMs == 0
-              ? null
-              : (value) => ref
-                    .read(playerProvider.notifier)
-                    .seek(Duration(milliseconds: value.round())),
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            if (showChapterMarkers)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _ChapterMarkersPainter(
+                      chapters: chapters,
+                      durationMs: totalMs,
+                      activeStartMs: activeChapter?.startMs,
+                      markerColor: scheme.onSurfaceVariant,
+                      activeColor: scheme.primary,
+                      trackInset: trackInset,
+                    ),
+                  ),
+                ),
+              ),
+            Slider(
+              value: totalMs == 0 ? 0 : positionMs.toDouble(),
+              max: totalMs == 0 ? 1 : totalMs.toDouble(),
+              onChanged: totalMs == 0
+                  ? null
+                  : (value) => player.seek(
+                        Duration(milliseconds: value.round()),
+                      ),
+            ),
+          ],
         ),
         Row(
           children: [
-            Text(formatClock(position)),
+            Tooltip(
+              message: settings.showRemainingTime
+                  ? 'Afficher la durée totale'
+                  : 'Afficher le temps restant',
+              child: InkWell(
+                onTap: toggleRemaining,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
+                  child: Text(
+                    formatClock(displayPosition),
+                    style: clockStyle,
+                  ),
+                ),
+              ),
+            ),
             const Spacer(),
-            Text(
-              settings.showRemainingTime
-                  ? '−${formatClock(duration - position)}'
-                  : formatClock(duration),
+            Tooltip(
+              message: settings.showRemainingTime
+                  ? 'Afficher la durée totale'
+                  : 'Afficher le temps restant',
+              child: InkWell(
+                onTap: toggleRemaining,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
+                  child: Text(
+                    settings.showRemainingTime
+                        ? '−${formatClock(displayRemaining)}'
+                        : formatClock(displayDuration),
+                    style: clockStyle,
+                  ),
+                ),
+              ),
             ),
             IconButton(
               tooltip: 'Volume (− / =)',
@@ -68,19 +163,28 @@ class _PlayerTransport extends ConsumerWidget {
                 tooltip: 'Vitesse de lecture',
                 label: _formatSpeed(speed),
                 labelStyle: labelStyle,
-                onPressed: () => _chooseSpeed(context, ref, speed),
+                onPressed: () => _chooseSpeed(context, ref),
                 icon: Icon(Icons.speed, size: sideIconSize),
                 iconSize: sideIconSize,
               ),
+              if (hasChapters) ...[
+                SizedBox(width: gap),
+                _TransportControl(
+                  tooltip: 'Chapitre précédent',
+                  label: 'Chap.',
+                  labelStyle: labelStyle,
+                  onPressed: () => player.skipChapter(chapters, delta: -1),
+                  icon: Icon(Icons.skip_previous, size: sideIconSize),
+                  iconSize: sideIconSize,
+                ),
+              ],
               SizedBox(width: gap),
               _TransportControl(
                 tooltip:
                     'Reculer de ${settings.skipBackSeconds} s (J)',
                 label: '−${settings.skipBackSeconds} s',
                 labelStyle: labelStyle,
-                onPressed: () => ref
-                    .read(playerProvider.notifier)
-                    .skipBy(-settings.skipBackSeconds),
+                onPressed: () => player.skipBy(-settings.skipBackSeconds),
                 icon: SkipIcon.back(size: skipIconSize),
                 iconSize: skipIconSize,
               ),
@@ -93,7 +197,7 @@ class _PlayerTransport extends ConsumerWidget {
                   labelStyle: labelStyle,
                   filled: true,
                   iconSize: playButtonSize,
-                  onPressed: () => ref.read(playerProvider.notifier).toggle(),
+                  onPressed: player.toggle,
                   icon: PlayPauseIcon(
                     playing: playing,
                     size: playIconSize,
@@ -105,12 +209,22 @@ class _PlayerTransport extends ConsumerWidget {
                 tooltip: 'Avancer de ${settings.skipForwardSeconds} s (L)',
                 label: '+${settings.skipForwardSeconds} s',
                 labelStyle: labelStyle,
-                onPressed: () => ref
-                    .read(playerProvider.notifier)
-                    .skipBy(settings.skipForwardSeconds),
+                onPressed: () =>
+                    player.skipBy(settings.skipForwardSeconds),
                 icon: SkipIcon.forward(size: skipIconSize),
                 iconSize: skipIconSize,
               ),
+              if (hasChapters) ...[
+                SizedBox(width: gap),
+                _TransportControl(
+                  tooltip: 'Chapitre suivant',
+                  label: 'Chap.',
+                  labelStyle: labelStyle,
+                  onPressed: () => player.skipChapter(chapters, delta: 1),
+                  icon: Icon(Icons.skip_next, size: sideIconSize),
+                  iconSize: sideIconSize,
+                ),
+              ],
               SizedBox(width: gap),
               _TransportControl(
                 tooltip: hasNext
@@ -118,9 +232,7 @@ class _PlayerTransport extends ConsumerWidget {
                     : 'Pas d’épisode suivant dans la playlist',
                 label: '',
                 labelStyle: labelStyle,
-                onPressed: hasNext
-                    ? () => ref.read(playerProvider.notifier).playNextInQueue()
-                    : null,
+                onPressed: hasNext ? player.playNextInQueue : null,
                 icon: SkipIcon.next(size: sideIconSize),
                 iconSize: sideIconSize,
               ),
@@ -129,6 +241,67 @@ class _PlayerTransport extends ConsumerWidget {
         ),
       ],
     );
+  }
+}
+
+/// Repères de chapitres alignés sur la piste du [Slider] Material.
+class _ChapterMarkersPainter extends CustomPainter {
+  const _ChapterMarkersPainter({
+    required this.chapters,
+    required this.durationMs,
+    required this.activeStartMs,
+    required this.markerColor,
+    required this.activeColor,
+    required this.trackInset,
+  });
+
+  final List<EpisodeChapter> chapters;
+  final int durationMs;
+  final int? activeStartMs;
+  final Color markerColor;
+  final Color activeColor;
+  final double trackInset;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (durationMs <= 0 || chapters.isEmpty) return;
+
+    final trackLeft = trackInset;
+    final trackWidth = size.width - trackInset * 2;
+    if (trackWidth <= 0) return;
+
+    final trackCenterY = size.height / 2;
+    const markerHalfHeight = 6.0;
+    final inactivePaint = Paint()
+      ..color = markerColor.withValues(alpha: 0.55)
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    final activePaint = Paint()
+      ..color = activeColor
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+
+    for (final chapter in chapters) {
+      final start = chapter.startMs;
+      if (start < 0 || start > durationMs) continue;
+      final x = trackLeft + trackWidth * (start / durationMs);
+      final isActive = activeStartMs != null && start == activeStartMs;
+      canvas.drawLine(
+        Offset(x, trackCenterY - markerHalfHeight),
+        Offset(x, trackCenterY + markerHalfHeight),
+        isActive ? activePaint : inactivePaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChapterMarkersPainter oldDelegate) {
+    return oldDelegate.chapters != chapters ||
+        oldDelegate.durationMs != durationMs ||
+        oldDelegate.activeStartMs != activeStartMs ||
+        oldDelegate.markerColor != markerColor ||
+        oldDelegate.activeColor != activeColor ||
+        oldDelegate.trackInset != trackInset;
   }
 }
 
@@ -204,18 +377,50 @@ class _SleepAction extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sleepAtEnd = ref.watch(
-      playerProvider.select((s) => s.sleepAtEnd),
+    // Sélectionner le libellé (change chaque seconde), pas sleepEndsAt
+    // (DateTime fixe → pas de rebuild avec select).
+    final badgeText = ref.watch(
+      playerProvider.select((s) => _sleepBadgeText(s)),
     );
-    final sleepEndsAt = ref.watch(
-      playerProvider.select((s) => s.sleepEndsAt),
-    );
+    final active = badgeText != null;
+    final scheme = Theme.of(context).colorScheme;
     return IconButton(
-      tooltip: _sleepLabel(sleepAtEnd: sleepAtEnd, sleepEndsAt: sleepEndsAt),
+      tooltip: badgeText == null
+          ? 'Minuteur'
+          : badgeText == 'Fin'
+          ? 'Fin de l’épisode'
+          : badgeText,
       onPressed: () => _chooseSleep(context, ref),
-      icon: const TimerIcon(size: 24),
+      style: active
+          ? IconButton.styleFrom(foregroundColor: scheme.primary)
+          : null,
+      icon: Badge(
+        isLabelVisible: active,
+        backgroundColor: scheme.primary,
+        textColor: scheme.onPrimary,
+        label: badgeText == null
+            ? null
+            : Text(
+                badgeText,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+        child: const TimerIcon(size: 24),
+      ),
     );
   }
+}
+
+/// Texte du badge sommeil, ou `null` si inactif.
+String? _sleepBadgeText(PlayerUiState state) {
+  if (state.sleepAtEnd) return 'Fin';
+  final ends = state.sleepEndsAt;
+  if (ends == null) return null;
+  final remaining = ends.difference(DateTime.now());
+  if (remaining.isNegative) return '0:00';
+  return formatClock(remaining);
 }
 
 class _FavoriteAction extends ConsumerWidget {
@@ -361,14 +566,4 @@ Uri? _podcastWebsite(String? link) {
   return uri;
 }
 
-String _sleepLabel({
-  required bool sleepAtEnd,
-  required DateTime? sleepEndsAt,
-}) {
-  if (sleepAtEnd) return 'Fin de l’épisode';
-  if (sleepEndsAt == null) return 'Minuteur';
-  final remaining = sleepEndsAt.difference(DateTime.now());
-  if (remaining.isNegative) return formatClock(Duration.zero);
-  return formatClock(remaining);
-}
 

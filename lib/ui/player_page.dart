@@ -19,6 +19,7 @@ import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/episode_tile.dart';
 import 'widgets/messages.dart';
+import 'widgets/show_notes.dart';
 
 part 'player/player_scaffold.dart';
 part 'player/player_now_playing.dart';

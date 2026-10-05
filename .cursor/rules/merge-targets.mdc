@@ -1,0 +1,19 @@
+---
+description: Cibles de merge request (develop→main, sinon→develop)
+alwaysApply: true
+---
+
+# Cibles de merge request
+
+Quand tu crées une merge request (GitLab) :
+
+- Branche `develop` → cible **toujours** `main`
+- Toute autre branche → cible **toujours** `develop`
+
+Ne jamais ouvrir une MR feature/fix/release vers `main` directement. Ne jamais ouvrir une MR `develop` vers autre chose que `main`.
+
+## GitLab
+
+- Branche par défaut du projet : `develop` (préremplit la cible pour les MR hors `develop`)
+- Enforcement CI : job `check:mr_target` (script `tool/ci/check_mr_target.sh`)
+- Les « Target branch rules » natives (Premium) ne sont pas disponibles sur ce projet
