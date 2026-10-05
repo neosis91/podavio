@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../data/opml.dart';
+import '../player/android_auto_bridge.dart';
 import '../player/player_controller.dart';
 import '../player/player_sheet_controller.dart';
 import '../settings/settings_controller.dart';
@@ -231,6 +232,8 @@ class _PlaybackLifecycleState extends ConsumerState<PlaybackLifecycle>
 
   @override
   Widget build(BuildContext context) {
+    // Active le pont Android Auto (browse + sync session) sur Android.
+    ref.watch(androidAutoBridgeProvider);
     final keepOn = ref.watch(
       settingsProvider.select((settings) => settings.keepScreenOn),
     );

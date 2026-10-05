@@ -93,6 +93,14 @@ void main() {
     expect(formatDate(now.subtract(const Duration(days: 1))), 'Hier');
   });
 
+  test('formatListDate stays short', () {
+    final now = DateTime.now();
+    expect(formatListDate(now), 'Auj.');
+    expect(formatListDate(now.subtract(const Duration(days: 1))), 'Hier');
+    expect(formatListDate(DateTime(now.year, 3, 5)), '5 mars');
+    expect(formatListDate(DateTime(2020, 3, 5)), '5/03/20');
+  });
+
   test('formatListeningTime formats hours and minutes', () {
     expect(formatListeningTime(0), '0 min');
     expect(formatListeningTime(90), '1 min');

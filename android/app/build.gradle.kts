@@ -87,3 +87,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // MediaBrowserServiceCompat + MediaSessionCompat pour Android Auto.
+    implementation("androidx.media:media:1.7.1")
+}

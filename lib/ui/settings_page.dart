@@ -549,6 +549,14 @@ class PlaybackPage extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => showPlayerKeyboardHelp(context),
           ),
+          const _SectionTitle('Mini player'),
+          ListTile(
+            leading: const Icon(Icons.tune),
+            title: const Text('Gestion des boutons'),
+            subtitle: Text(settings.miniPlayerButtons.summary),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showMiniPlayerButtonsSheet(context, ref),
+          ),
           const _SectionTitle('Épisodes'),
           SwitchListTile(
             title: const Text('Jaquette du podcast'),
@@ -557,6 +565,27 @@ class PlaybackPage extends ConsumerWidget {
             ),
             value: settings.preferPodcastCover,
             onChanged: notifier.setPreferPodcastCover,
+          ),
+          const ListTile(
+            title: Text('Densité des listes'),
+            subtitle: Text(
+              'Espace entre les lignes des listes d’épisodes',
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SegmentedButton<EpisodeListDensity>(
+              segments: [
+                for (final density in EpisodeListDensity.values)
+                  ButtonSegment(
+                    value: density,
+                    label: Text(density.label),
+                  ),
+              ],
+              selected: {settings.episodeListDensity},
+              onSelectionChanged: (selection) =>
+                  notifier.setEpisodeListDensity(selection.first),
+            ),
           ),
           const _SectionTitle('Actualisation'),
           ListTile(
@@ -591,6 +620,93 @@ class PlaybackPage extends ConsumerWidget {
             onChanged: notifier.setEnqueueDownloads,
           ),
         ],
+      ),
+    );
+  }
+}
+
+Future<void> _showMiniPlayerButtonsSheet(
+  BuildContext context,
+  WidgetRef ref,
+) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => const _MiniPlayerButtonsSheet(),
+  );
+}
+
+class _MiniPlayerButtonsSheet extends ConsumerWidget {
+  const _MiniPlayerButtonsSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final buttons = ref.watch(
+      settingsProvider.select((s) => s.miniPlayerButtons),
+    );
+    final notifier = ref.read(settingsProvider.notifier);
+    final theme = Theme.of(context);
+
+    Future<void> update(MiniPlayerButtons next) {
+      return notifier.setMiniPlayerButtons(next);
+    }
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+              child: Text(
+                'Boutons du mini player',
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            const CheckboxListTile(
+              value: true,
+              onChanged: null,
+              title: Text('Lecture / pause'),
+              subtitle: Text('Toujours affiché'),
+              secondary: PlayPauseIcon(playing: false, size: 24),
+            ),
+            CheckboxListTile(
+              value: buttons.skipBack,
+              onChanged: (value) => update(
+                buttons.copyWith(skipBack: value ?? false),
+              ),
+              title: const Text('Retour rapide'),
+              secondary: SkipIcon.back(size: 24),
+            ),
+            CheckboxListTile(
+              value: buttons.skipForward,
+              onChanged: (value) => update(
+                buttons.copyWith(skipForward: value ?? false),
+              ),
+              title: const Text('Avance rapide'),
+              secondary: SkipIcon.forward(size: 24),
+            ),
+            CheckboxListTile(
+              value: buttons.nextEpisode,
+              onChanged: (value) => update(
+                buttons.copyWith(nextEpisode: value ?? false),
+              ),
+              title: const Text('Épisode suivant'),
+              subtitle: const Text('Dans la playlist'),
+              secondary: SkipIcon.next(size: 24),
+            ),
+            CheckboxListTile(
+              value: buttons.close,
+              onChanged: (value) => update(
+                buttons.copyWith(close: value ?? false),
+              ),
+              title: const Text('Fermer le lecteur'),
+              secondary: const Icon(Icons.close),
+            ),
+          ],
+        ),
       ),
     );
   }

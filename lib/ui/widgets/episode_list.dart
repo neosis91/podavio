@@ -6,6 +6,7 @@ import '../../data/app_database.dart';
 import '../../data/providers.dart';
 import 'empty_state.dart';
 import 'episode_tile.dart';
+import 'list_metrics.dart';
 
 class EpisodeListBody extends ConsumerStatefulWidget {
   const EpisodeListBody({
@@ -15,6 +16,7 @@ class EpisodeListBody extends ConsumerStatefulWidget {
     this.showPodcast = true,
     this.onRefresh,
     this.reorder,
+    this.highlightQuery = '',
   });
 
   final EpisodeQuery query;
@@ -23,6 +25,7 @@ class EpisodeListBody extends ConsumerStatefulWidget {
   final Future<void> Function()? onRefresh;
   final void Function(List<EpisodeEntry> entries, int oldIndex, int newIndex)?
   reorder;
+  final String highlightQuery;
 
   @override
   ConsumerState<EpisodeListBody> createState() => _EpisodeListBodyState();
@@ -55,6 +58,7 @@ class _EpisodeListBodyState extends ConsumerState<EpisodeListBody> {
       showPodcast: widget.showPodcast,
       onRefresh: supportsPullToRefresh ? widget.onRefresh : null,
       reorder: widget.reorder,
+      highlightQuery: widget.highlightQuery,
       onLoadMore: () =>
           ref.read(episodesProvider(widget.query).notifier).loadMore(),
     );
@@ -69,6 +73,7 @@ class _EpisodeWindowList extends StatelessWidget {
     required this.onLoadMore,
     this.onRefresh,
     this.reorder,
+    this.highlightQuery = '',
   });
 
   final EpisodeWindow window;
@@ -78,6 +83,7 @@ class _EpisodeWindowList extends StatelessWidget {
   final Future<void> Function()? onRefresh;
   final void Function(List<EpisodeEntry> entries, int oldIndex, int newIndex)?
   reorder;
+  final String highlightQuery;
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +110,7 @@ class _EpisodeWindowList extends StatelessWidget {
         key: ValueKey(entry.episode.id),
         entry: entry,
         showPodcast: showPodcast,
+        highlightQuery: highlightQuery,
       );
     }
 
@@ -126,6 +133,7 @@ class _EpisodeWindowList extends StatelessWidget {
               entry: entries[index],
               showPodcast: showPodcast,
               reorderIndex: index,
+              highlightQuery: highlightQuery,
             ),
           );
     final scrollable = onRefresh == null
@@ -140,7 +148,7 @@ class _EpisodeWindowList extends StatelessWidget {
         if (notification.metrics.extentAfter < 800) onLoadMore();
         return false;
       },
-      child: scrollable,
+      child: EpisodeListViewport(child: scrollable),
     );
   }
 }
