@@ -248,6 +248,12 @@ class _MiniPlayerBar extends ConsumerWidget {
     final skipForward = ref.watch(
       settingsProvider.select((s) => s.skipForwardSeconds),
     );
+    final miniButtons = ref.watch(
+      settingsProvider.select((s) => s.miniPlayerButtons),
+    );
+    final hasNext = miniButtons.nextEpisode
+        ? (ref.watch(hasNextInQueueProvider).value ?? false)
+        : false;
     final timeRespectsSpeed = ref.watch(
       settingsProvider.select((s) => s.timeRespectsSpeed),
     );
@@ -320,13 +326,14 @@ class _MiniPlayerBar extends ConsumerWidget {
                   ),
                 ),
               ),
-              IconButton(
-                tooltip: 'Reculer de $skipBack s',
-                visualDensity: VisualDensity.compact,
-                constraints: _btnConstraints,
-                onPressed: () => player.skipBy(-skipBack),
-                icon: SkipIcon.back(size: 22),
-              ),
+              if (miniButtons.skipBack)
+                IconButton(
+                  tooltip: 'Reculer de $skipBack s',
+                  visualDensity: VisualDensity.compact,
+                  constraints: _btnConstraints,
+                  onPressed: () => player.skipBy(-skipBack),
+                  icon: SkipIcon.back(size: 22),
+                ),
               IconButton(
                 tooltip: playing ? 'Pause (Espace)' : 'Lecture (Espace)',
                 visualDensity: VisualDensity.compact,
@@ -334,20 +341,36 @@ class _MiniPlayerBar extends ConsumerWidget {
                 onPressed: player.toggle,
                 icon: PlayPauseIcon(playing: playing, size: 26),
               ),
-              IconButton(
-                tooltip: 'Avancer de $skipForward s',
-                visualDensity: VisualDensity.compact,
-                constraints: _btnConstraints,
-                onPressed: () => player.skipBy(skipForward),
-                icon: SkipIcon.forward(size: 22),
-              ),
-              IconButton(
-                tooltip: 'Fermer le lecteur',
-                visualDensity: VisualDensity.compact,
-                constraints: _btnConstraints,
-                onPressed: player.dismiss,
-                icon: Icon(Icons.close, size: 22, color: scheme.onSurfaceVariant),
-              ),
+              if (miniButtons.skipForward)
+                IconButton(
+                  tooltip: 'Avancer de $skipForward s',
+                  visualDensity: VisualDensity.compact,
+                  constraints: _btnConstraints,
+                  onPressed: () => player.skipBy(skipForward),
+                  icon: SkipIcon.forward(size: 22),
+                ),
+              if (miniButtons.nextEpisode)
+                IconButton(
+                  tooltip: hasNext
+                      ? 'Épisode suivant'
+                      : 'Pas d’épisode suivant dans la playlist',
+                  visualDensity: VisualDensity.compact,
+                  constraints: _btnConstraints,
+                  onPressed: hasNext ? player.playNextInQueue : null,
+                  icon: SkipIcon.next(size: 22),
+                ),
+              if (miniButtons.close)
+                IconButton(
+                  tooltip: 'Fermer le lecteur',
+                  visualDensity: VisualDensity.compact,
+                  constraints: _btnConstraints,
+                  onPressed: player.dismiss,
+                  icon: Icon(
+                    Icons.close,
+                    size: 22,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
             ],
           ),
         ),

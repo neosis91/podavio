@@ -93,6 +93,13 @@ void main() {
             audioUrl: 'https://example.com/3.mp3',
             publishedAt: DateTime.utc(2024, 3, 1),
           ),
+          EpisodeDraft(
+            guid: 'ep-4',
+            title: 'Épisode accentué',
+            description: '',
+            audioUrl: 'https://example.com/4.mp3',
+            publishedAt: DateTime.utc(2024, 4, 1),
+          ),
         ],
       ),
     );
@@ -100,14 +107,30 @@ void main() {
     final page = await database
         .watchEpisodeWindow(podcastId: podcastId, limit: 2)
         .first;
-    expect(page.map((entry) => entry.episode.title), ['Trois', 'Un']);
+    expect(page.map((entry) => entry.episode.title), [
+      'Épisode accentué',
+      'Trois',
+    ]);
     expect(page.first.episode.description, isEmpty);
 
     final found = await database
-        .watchEpisodeWindow(podcastId: podcastId, search: 'notes')
+        .watchEpisodeWindow(podcastId: podcastId, search: 'deux')
         .first;
-    expect(found.single.episode.title, 'Un');
+    expect(found.single.episode.title, 'Deux');
     expect(found.single.episode.description, isEmpty);
+
+    final accent = await database
+        .watchEpisodeWindow(podcastId: podcastId, search: 'episode')
+        .first;
+    expect(accent.single.episode.title, 'Épisode accentué');
+
+    final letterE = await database
+        .watchEpisodeWindow(podcastId: podcastId, search: 'e')
+        .first;
+    expect(
+      letterE.map((e) => e.episode.title),
+      containsAll(['Deux', 'Trois', 'Épisode accentué']),
+    );
   });
 
   test('subscriptions are ordered by latest episode date', () async {

@@ -14,6 +14,8 @@ import '../../settings/settings_controller.dart';
 import '../router.dart';
 import 'brand.dart';
 import 'cover.dart';
+import 'highlighted_text.dart';
+import 'list_metrics.dart';
 import 'messages.dart';
 
 class EpisodeTile extends ConsumerWidget {
@@ -22,11 +24,13 @@ class EpisodeTile extends ConsumerWidget {
     required this.entry,
     this.showPodcast = true,
     this.reorderIndex,
+    this.highlightQuery = '',
   });
 
   final EpisodeEntry entry;
   final bool showPodcast;
   final int? reorderIndex;
+  final String highlightQuery;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,201 +42,412 @@ class EpisodeTile extends ConsumerWidget {
     final playing = ref.watch(
       playerProvider.select((state) => state.episodeId == episode.id),
     );
+    final density = ref.watch(
+      settingsProvider.select((s) => s.episodeListDensity),
+    );
+    final preferPodcastCover = ref.watch(
+      settingsProvider.select((s) => s.preferPodcastCover),
+    );
     final duration = episode.durationSeconds == null
         ? null
         : Duration(seconds: episode.durationSeconds!);
     final position = Duration(milliseconds: episode.positionMs);
-    final details = <String>[
-      if (showPodcast) entry.podcast.title,
-      formatDate(episode.publishedAt),
+    final double? listenFraction;
+    if (!episode.played &&
+        position > Duration.zero &&
+        duration != null &&
+        duration > Duration.zero) {
+      listenFraction =
+          (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+    } else {
+      listenFraction = null;
+    }
+    final showListenProgress = listenFraction != null;
+    final dateLabel = formatListDate(episode.publishedAt);
+    final metaParts = <String>[
+      if (dateLabel.isNotEmpty) dateLabel,
       if (duration != null) formatClock(duration),
-      if (!episode.played && position > Duration.zero && duration != null)
+      // « reste » uniquement page podcast, et seulement sans barre de progression.
+      if (!showPodcast &&
+          !showListenProgress &&
+          !episode.played &&
+          position > Duration.zero &&
+          duration != null)
         'reste ${formatClock(duration - position)}',
-    ].where((part) => part.isNotEmpty).join(' · ');
+    ];
+    final metaSuffix = metaParts.join(' · ');
 
-    final muted = theme.colorScheme.onSurfaceVariant;
-    final preferPodcastCover = ref.watch(
-      settingsProvider.select((s) => s.preferPodcastCover),
-    );
-    return InkWell(
-      onTap: () => context.push(AppRoutes.episode(episode.id)),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(reorderIndex != null ? 4 : 16, 8, 4, 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (reorderIndex != null)
-              Tooltip(
-                message: 'Déplacer',
-                child: ReorderableDragStartListener(
-                  index: reorderIndex!,
-                  child: const SizedBox(
-                    width: 40,
-                    height: 48,
-                    child: Center(child: DragIndicatorIcon()),
-                  ),
-                ),
+    final statusIcons = <Widget>[
+      if (episode.favorite)
+        Icon(Icons.favorite, size: 16, color: theme.colorScheme.primary),
+      if (episode.queueIndex != null)
+        IconTheme(
+          data: IconThemeData(color: theme.colorScheme.primary, size: 16),
+          child: const PlaylistPlayIcon(size: 16),
+        ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final metrics = EpisodeTileMetrics.resolve(
+          width: constraints.maxWidth,
+          textTheme: theme.textTheme,
+          textScaler: MediaQuery.textScalerOf(context),
+          density: density,
+          played: episode.played,
+          onSurface: theme.colorScheme.onSurface,
+          muted: theme.colorScheme.onSurfaceVariant,
+        );
+        final coverSize = metrics.coverSize;
+        final playingHighlight = theme.colorScheme.primaryContainer.withValues(
+          alpha: 0.35,
+        );
+
+        return Material(
+          color: playing ? playingHighlight : Colors.transparent,
+          child: InkWell(
+            onTap: () => context.push(AppRoutes.episode(episode.id)),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                reorderIndex != null ? 4 : metrics.horizontalPadding,
+                metrics.verticalPadding,
+                4,
+                metrics.verticalPadding,
               ),
-            PodcastCover(
-              url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
-              localPath: entry.imagePath(preferPodcastCover: preferPodcastCover),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    episode.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: episode.played
-                          ? FontWeight.w500
-                          : FontWeight.w700,
-                      color: episode.played
-                          ? muted
-                          : theme.colorScheme.onSurface,
+                  if (reorderIndex != null)
+                    Tooltip(
+                      message: 'Déplacer',
+                      child: ReorderableDragStartListener(
+                        index: reorderIndex!,
+                        child: SizedBox(
+                          width: 40,
+                          height: coverSize,
+                          child: const Center(child: DragIndicatorIcon()),
+                        ),
+                      ),
                     ),
+                  _EpisodeCoverWithProgress(
+                    url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+                    localPath: entry.imagePath(
+                      preferPodcastCover: preferPodcastCover,
+                    ),
+                    coverSize: coverSize,
+                    listenFraction: listenFraction,
+                    progressBarHeight: metrics.progressBarHeight,
                   ),
-                  if (details.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      details,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(color: muted),
-                    ),
-                  ],
-                  if (episode.favorite || episode.queueIndex != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Row(
-                        children: [
-                          if (episode.favorite)
-                            Icon(
-                              Icons.favorite,
-                              size: 16,
-                              color: theme.colorScheme.primary,
-                            ),
-                          if (episode.queueIndex != null)
-                            IconTheme(
-                              data: IconThemeData(
-                                color: theme.colorScheme.primary,
-                                size: 16,
-                              ),
-                              child: const PlaylistPlayIcon(size: 16),
-                            ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (progress != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${(progress.clamp(0, 1) * 100).round()} %',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    DownloadProgressRing(
-                      progress: progress,
-                      onCancel: () => ref
-                          .read(downloadProgressProvider.notifier)
-                          .cancel(episode.id),
-                    ),
-                  ],
-                ),
-              )
-            else if (episode.downloadPath != null)
-              IconButton(
-                tooltip: playing ? 'Ouvrir le lecteur' : 'Lire',
-                onPressed: () async {
-                  if (playing) {
-                    openPlayer(ref);
-                    return;
-                  }
-                  await ref.read(playerProvider.notifier).playEntry(entry);
-                },
-                icon: Icon(playing ? Icons.graphic_eq : Icons.play_arrow),
-              )
-            else
-              IconButton(
-                tooltip: 'Télécharger',
-                onPressed: () => runEpisodeAction(
-                  context,
-                  ref,
-                  entry,
-                  EpisodeMenuAction.download,
-                ),
-                icon: const Icon(Icons.download_outlined),
-              ),
-            if (progress == null)
-              PopupMenuButton<EpisodeMenuAction>(
-                tooltip: 'Actions',
-                onSelected: (action) =>
-                    runEpisodeAction(context, ref, entry, action),
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: EpisodeMenuAction.queue,
-                    child: Row(
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (episode.queueIndex == null)
-                          const PlaylistAddIcon()
-                        else
-                          const PlaylistRemoveIcon(),
-                        const SizedBox(width: 12),
-                        Text(
-                          episode.queueIndex == null
-                              ? 'Ajouter à la playlist'
-                              : 'Retirer de la playlist',
+                        HighlightedText(
+                          text: episode.title,
+                          query: highlightQuery,
+                          maxLines: 2,
+                          style: metrics.titleStyle,
+                        ),
+                        SizedBox(height: metrics.gap),
+                        _EpisodeMetaRow(
+                          showPodcast: showPodcast,
+                          podcastTitle: entry.podcast.title,
+                          metaSuffix: metaSuffix,
+                          style: metrics.metaStyle,
+                          statusIcons: statusIcons,
+                          highlightQuery: highlightQuery,
                         ),
                       ],
                     ),
                   ),
-                  PopupMenuItem(
-                    value: EpisodeMenuAction.played,
-                    child: Text(
-                      episode.played
-                          ? 'Marquer comme non lu'
-                          : 'Marquer comme lu',
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: EpisodeMenuAction.favorite,
-                    child: Text(
-                      episode.favorite
-                          ? 'Retirer des favoris'
-                          : 'Ajouter aux favoris',
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: EpisodeMenuAction.download,
-                    child: Text(
-                      episode.downloadPath == null
-                          ? 'Télécharger'
-                          : 'Supprimer le téléchargement',
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: EpisodeMenuAction.share,
-                    child: Text('Partager'),
+                  _EpisodeTileTrailing(
+                    metrics: metrics,
+                    progress: progress,
+                    downloaded: episode.downloadPath != null,
+                    playing: playing,
+                    episode: episode,
+                    onCancelDownload: () => ref
+                        .read(downloadProgressProvider.notifier)
+                        .cancel(episode.id),
+                    onPlay: () async {
+                      if (playing) {
+                        openPlayer(ref);
+                        return;
+                      }
+                      await ref.read(playerProvider.notifier).playEntry(entry);
+                    },
+                    onMenuAction: (action) =>
+                        runEpisodeAction(context, ref, entry, action),
                   ),
                 ],
               ),
-          ],
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
+}
+
+/// Actions trailing : anneau DL (+ % hors étroit), play si téléchargé, sinon menu.
+class _EpisodeTileTrailing extends StatelessWidget {
+  const _EpisodeTileTrailing({
+    required this.metrics,
+    required this.progress,
+    required this.downloaded,
+    required this.playing,
+    required this.episode,
+    required this.onCancelDownload,
+    required this.onPlay,
+    required this.onMenuAction,
+  });
+
+  final EpisodeTileMetrics metrics;
+  final double? progress;
+  final bool downloaded;
+  final bool playing;
+  final Episode episode;
+  final VoidCallback onCancelDownload;
+  final VoidCallback onPlay;
+  final ValueChanged<EpisodeMenuAction> onMenuAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final value = progress;
+
+    if (value != null) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (metrics.showDownloadPercent) ...[
+              Text(
+                '${(value.clamp(0, 1) * 100).round()} %',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+            DownloadProgressRing(
+              progress: value,
+              size: metrics.progressRingSize,
+              onCancel: onCancelDownload,
+              visualDensity: metrics.trailingVisualDensity,
+              constraints: metrics.trailingConstraints,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (downloaded)
+          IconButton(
+            tooltip: playing ? 'Ouvrir le lecteur' : 'Lire',
+            onPressed: onPlay,
+            visualDensity: metrics.trailingVisualDensity,
+            constraints: metrics.trailingConstraints,
+            style: IconButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.square(metrics.trailingMinSize),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: Icon(playing ? Icons.graphic_eq : Icons.play_arrow),
+          ),
+        PopupMenuButton<EpisodeMenuAction>(
+          tooltip: 'Actions',
+          onSelected: onMenuAction,
+          padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.square(metrics.trailingMinSize),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: metrics.trailingVisualDensity,
+          ),
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: EpisodeMenuAction.queue,
+              child: Row(
+                children: [
+                  if (episode.queueIndex == null)
+                    const PlaylistAddIcon()
+                  else
+                    const PlaylistRemoveIcon(),
+                  const SizedBox(width: 12),
+                  Text(
+                    episode.queueIndex == null
+                        ? 'Ajouter à la playlist'
+                        : 'Retirer de la playlist',
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: EpisodeMenuAction.played,
+              child: Text(
+                episode.played
+                    ? 'Marquer comme non lu'
+                    : 'Marquer comme lu',
+              ),
+            ),
+            PopupMenuItem(
+              value: EpisodeMenuAction.favorite,
+              child: Text(
+                episode.favorite
+                    ? 'Retirer des favoris'
+                    : 'Ajouter aux favoris',
+              ),
+            ),
+            PopupMenuItem(
+              value: EpisodeMenuAction.download,
+              child: Text(
+                episode.downloadPath == null
+                    ? 'Télécharger'
+                    : 'Supprimer le téléchargement',
+              ),
+            ),
+            const PopupMenuItem(
+              value: EpisodeMenuAction.share,
+              child: Text('Partager'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Jaquette avec barre de progression fine en dessous (largeur = côté du carré).
+class _EpisodeCoverWithProgress extends StatelessWidget {
+  const _EpisodeCoverWithProgress({
+    required this.url,
+    required this.localPath,
+    required this.coverSize,
+    required this.listenFraction,
+    required this.progressBarHeight,
+  });
+
+  final String? url;
+  final String? localPath;
+  final double coverSize;
+  final double? listenFraction;
+  final double progressBarHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final fraction = listenFraction;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PodcastCover(
+          url: url,
+          localPath: localPath,
+          size: coverSize,
+        ),
+        if (fraction != null) ...[
+          const SizedBox(height: 2),
+          SizedBox(
+            width: coverSize,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(1),
+              child: LinearProgressIndicator(
+                value: fraction,
+                minHeight: progressBarHeight,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Ligne méta alignée à gauche : podcast · date · durée [· reste] + icônes.
+/// Le podcast est ellipsisé en premier ; méta et icônes restent à sa suite.
+class _EpisodeMetaRow extends StatelessWidget {
+  const _EpisodeMetaRow({
+    required this.showPodcast,
+    required this.podcastTitle,
+    required this.metaSuffix,
+    required this.style,
+    required this.statusIcons,
+    this.highlightQuery = '',
+  });
+
+  final bool showPodcast;
+  final String podcastTitle;
+  final String metaSuffix;
+  final TextStyle style;
+  final List<Widget> statusIcons;
+  final String highlightQuery;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasMeta = metaSuffix.isNotEmpty;
+    return Row(
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              if (showPodcast)
+                Flexible(
+                  child: HighlightedText(
+                    text: podcastTitle.isEmpty ? ' ' : podcastTitle,
+                    query: highlightQuery,
+                    maxLines: 1,
+                    style: style,
+                  ),
+                )
+              else if (hasMeta)
+                Flexible(
+                  child: Text(
+                    metaSuffix,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: style,
+                  ),
+                )
+              else
+                const Text(' '),
+              if (showPodcast && hasMeta)
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: Text(
+                    ' · $metaSuffix',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: style,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (statusIcons.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          ..._spacedIcons(statusIcons),
+        ],
+      ],
+    );
+  }
+}
+
+List<Widget> _spacedIcons(List<Widget> icons) {
+  if (icons.length <= 1) return icons;
+  final out = <Widget>[icons.first];
+  for (var i = 1; i < icons.length; i++) {
+    out
+      ..add(const SizedBox(width: 6))
+      ..add(icons[i]);
+  }
+  return out;
 }
 
 enum EpisodeMenuAction { queue, played, favorite, download, share }
@@ -244,12 +459,16 @@ class DownloadProgressRing extends StatelessWidget {
     this.onCancel,
     this.showClose = false,
     this.size = 28,
+    this.visualDensity = VisualDensity.compact,
+    this.constraints,
   });
 
   final double progress;
   final VoidCallback? onCancel;
   final bool showClose;
   final double size;
+  final VisualDensity visualDensity;
+  final BoxConstraints? constraints;
 
   @override
   Widget build(BuildContext context) {
@@ -269,15 +488,17 @@ class DownloadProgressRing extends StatelessWidget {
     );
     final cancel = onCancel;
     if (cancel == null) return ring;
+    final buttonConstraints =
+        constraints ?? BoxConstraints.tightFor(width: size, height: size);
     return IconButton(
       tooltip: 'Annuler le téléchargement',
       onPressed: cancel,
       padding: EdgeInsets.zero,
-      visualDensity: VisualDensity.compact,
-      constraints: BoxConstraints.tightFor(width: size, height: size),
+      visualDensity: visualDensity,
+      constraints: buttonConstraints,
       style: IconButton.styleFrom(
         padding: EdgeInsets.zero,
-        minimumSize: Size.square(size),
+        minimumSize: Size(buttonConstraints.minWidth, buttonConstraints.minHeight),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
       icon: ring,

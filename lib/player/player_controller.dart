@@ -64,7 +64,8 @@ class PlayerUiState {
     String? podcastTitle,
     String? imageUrl,
     String? imagePath,
-    bool clearImage = false,
+    /// Remplace [imageUrl] / [imagePath] même si la nouvelle valeur est `null`.
+    bool updateImage = false,
     bool? playing,
     Duration? position,
     Duration? duration,
@@ -81,8 +82,8 @@ class PlayerUiState {
       episodeId: clearEpisode ? null : episodeId ?? this.episodeId,
       title: title ?? this.title,
       podcastTitle: podcastTitle ?? this.podcastTitle,
-      imageUrl: clearImage ? null : imageUrl ?? this.imageUrl,
-      imagePath: clearImage ? null : imagePath ?? this.imagePath,
+      imageUrl: updateImage ? imageUrl : imageUrl ?? this.imageUrl,
+      imagePath: updateImage ? imagePath : imagePath ?? this.imagePath,
       playing: playing ?? this.playing,
       position: position ?? this.position,
       duration: duration ?? this.duration,
@@ -440,7 +441,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       _ui.copyWith(
         imageUrl: remote,
         imagePath: local,
-        clearImage: remote == null && local == null,
+        updateImage: true,
       ),
     );
     playbackHandler?.setEpisode(
@@ -491,7 +492,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         podcastTitle: podcast.title,
         imageUrl: remoteImage,
         imagePath: localImage,
-        clearImage: remoteImage == null && localImage == null,
+        updateImage: true,
         position: start,
         duration: duration,
         speed: speed,
