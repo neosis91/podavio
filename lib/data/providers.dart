@@ -151,6 +151,7 @@ class EpisodesNotifier extends Notifier<AsyncValue<EpisodeWindow>> {
           downloadsOnly: query.downloadsOnly,
           queuedOnly: query.queuedOnly,
           historyOnly: query.historyOnly,
+          inProgressOnly: query.inProgressOnly,
           podcastId: query.podcastId,
           search: query.search,
           limit: query.paginated ? _limit : null,
@@ -179,6 +180,7 @@ class EpisodeQuery {
     this.downloadsOnly = false,
     this.queuedOnly = false,
     this.historyOnly = false,
+    this.inProgressOnly = false,
     this.podcastId,
     this.search = '',
     this.paginated = true,
@@ -189,6 +191,7 @@ class EpisodeQuery {
   final bool downloadsOnly;
   final bool queuedOnly;
   final bool historyOnly;
+  final bool inProgressOnly;
   final int? podcastId;
   final String search;
   final bool paginated;
@@ -201,6 +204,7 @@ class EpisodeQuery {
         other.downloadsOnly == downloadsOnly &&
         other.queuedOnly == queuedOnly &&
         other.historyOnly == historyOnly &&
+        other.inProgressOnly == inProgressOnly &&
         other.podcastId == podcastId &&
         other.search == search &&
         other.paginated == paginated;
@@ -213,6 +217,7 @@ class EpisodeQuery {
     downloadsOnly,
     queuedOnly,
     historyOnly,
+    inProgressOnly,
     podcastId,
     search,
     paginated,

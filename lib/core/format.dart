@@ -29,6 +29,21 @@ String formatDate(DateTime? date) {
   return DateFormat.yMMMd('fr').format(local);
 }
 
+/// Date de sortie courte pour les listes (tuiles d’épisode).
+String formatListDate(DateTime? date) {
+  if (date == null) return '';
+  final local = date.toLocal();
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(local.year, local.month, local.day);
+  if (day == today) return 'Auj.';
+  if (day == today.subtract(const Duration(days: 1))) return 'Hier';
+  if (local.year == now.year) {
+    return DateFormat('d MMM', 'fr').format(local);
+  }
+  return DateFormat('d/MM/yy', 'fr').format(local);
+}
+
 /// Date de sortie : sans année si c’est l’année en cours.
 String formatReleaseDate(DateTime? date) {
   if (date == null) return '';

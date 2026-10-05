@@ -119,6 +119,135 @@ enum PodcastSort {
   }
 }
 
+/// Densité des listes d’épisodes (compose avec le palier de largeur).
+enum EpisodeListDensity {
+  comfortable('comfortable', 'Confortable'),
+  compact('compact', 'Compact');
+
+  const EpisodeListDensity(this.id, this.label);
+
+  final String id;
+  final String label;
+
+  static EpisodeListDensity byId(String? id) {
+    for (final value in values) {
+      if (value.id == id) return value;
+    }
+    return EpisodeListDensity.comfortable;
+  }
+}
+
+/// Filtres de la page Épisodes (multi-sélection, AND).
+class EpisodeFilters {
+  const EpisodeFilters({
+    this.unreadOnly = false,
+    this.downloadsOnly = false,
+    this.inProgressOnly = false,
+  });
+
+  static const empty = EpisodeFilters();
+
+  /// Défaut première ouverture (inbox non lus).
+  static const inboxDefault = EpisodeFilters(unreadOnly: true);
+
+  final bool unreadOnly;
+  final bool downloadsOnly;
+  final bool inProgressOnly;
+
+  bool get isEmpty => !unreadOnly && !downloadsOnly && !inProgressOnly;
+
+  List<String> toIds() => [
+        if (unreadOnly) 'unreadOnly',
+        if (downloadsOnly) 'downloadsOnly',
+        if (inProgressOnly) 'inProgressOnly',
+      ];
+
+  /// `null` (jamais configuré) → [inboxDefault] ; liste vide → [empty].
+  static EpisodeFilters fromIds(List<String>? ids) {
+    if (ids == null) return inboxDefault;
+    if (ids.isEmpty) return empty;
+    final set = ids.toSet();
+    return EpisodeFilters(
+      unreadOnly: set.contains('unreadOnly'),
+      downloadsOnly: set.contains('downloadsOnly'),
+      inProgressOnly: set.contains('inProgressOnly'),
+    );
+  }
+
+  EpisodeFilters copyWith({
+    bool? unreadOnly,
+    bool? downloadsOnly,
+    bool? inProgressOnly,
+  }) {
+    return EpisodeFilters(
+      unreadOnly: unreadOnly ?? this.unreadOnly,
+      downloadsOnly: downloadsOnly ?? this.downloadsOnly,
+      inProgressOnly: inProgressOnly ?? this.inProgressOnly,
+    );
+  }
+}
+
+/// Boutons optionnels du mini-lecteur (play/pause est toujours affiché).
+class MiniPlayerButtons {
+  const MiniPlayerButtons({
+    this.skipBack = true,
+    this.skipForward = true,
+    this.nextEpisode = false,
+    this.close = true,
+  });
+
+  static const defaults = MiniPlayerButtons();
+
+  final bool skipBack;
+  final bool skipForward;
+  final bool nextEpisode;
+  final bool close;
+
+  List<String> toIds() => [
+    if (skipBack) 'skipBack',
+    if (skipForward) 'skipForward',
+    if (nextEpisode) 'nextEpisode',
+    if (close) 'close',
+  ];
+
+  /// `null` (jamais configuré) → défauts ([defaults]).
+  static MiniPlayerButtons fromIds(List<String>? ids) {
+    if (ids == null) return defaults;
+    final set = ids.toSet();
+    return MiniPlayerButtons(
+      skipBack: set.contains('skipBack'),
+      skipForward: set.contains('skipForward'),
+      nextEpisode: set.contains('nextEpisode'),
+      close: set.contains('close'),
+    );
+  }
+
+  MiniPlayerButtons copyWith({
+    bool? skipBack,
+    bool? skipForward,
+    bool? nextEpisode,
+    bool? close,
+  }) {
+    return MiniPlayerButtons(
+      skipBack: skipBack ?? this.skipBack,
+      skipForward: skipForward ?? this.skipForward,
+      nextEpisode: nextEpisode ?? this.nextEpisode,
+      close: close ?? this.close,
+    );
+  }
+
+  String get summary {
+    final parts = <String>[
+      'Lecture',
+      if (skipBack) 'Retour',
+      if (skipForward) 'Avance',
+      if (nextEpisode) 'Suivant',
+      if (close) 'Fermer',
+    ];
+    return parts.join(', ');
+  }
+}
+
 class AppSettings {
   const AppSettings({
     required this.themeMode,
@@ -132,7 +261,10 @@ class AppSettings {
     required this.showRemainingTime,
     required this.timeRespectsSpeed,
     required this.keepScreenOn,
+    required this.miniPlayerButtons,
     required this.preferPodcastCover,
+    required this.episodeListDensity,
+    required this.episodeFilters,
     required this.podcastColumns,
     required this.podcastList,
     required this.podcastShowNames,
@@ -160,8 +292,17 @@ class AppSettings {
   final bool timeRespectsSpeed;
   final bool keepScreenOn;
 
+  /// Boutons affichés dans la barre mini (play/pause toujours inclus).
+  final MiniPlayerButtons miniPlayerButtons;
+
   /// Afficher la jaquette du podcast plutôt que celle de l’épisode.
   final bool preferPodcastCover;
+
+  /// Densité des tuiles d’épisodes (confortable / compact).
+  final EpisodeListDensity episodeListDensity;
+
+  /// Filtres de la page Épisodes.
+  final EpisodeFilters episodeFilters;
   final int podcastColumns;
   final bool podcastList;
   final bool podcastShowNames;
@@ -188,7 +329,10 @@ class AppSettings {
     bool? showRemainingTime,
     bool? timeRespectsSpeed,
     bool? keepScreenOn,
+    MiniPlayerButtons? miniPlayerButtons,
     bool? preferPodcastCover,
+    EpisodeListDensity? episodeListDensity,
+    EpisodeFilters? episodeFilters,
     int? podcastColumns,
     bool? podcastList,
     bool? podcastShowNames,
@@ -214,7 +358,10 @@ class AppSettings {
       showRemainingTime: showRemainingTime ?? this.showRemainingTime,
       timeRespectsSpeed: timeRespectsSpeed ?? this.timeRespectsSpeed,
       keepScreenOn: keepScreenOn ?? this.keepScreenOn,
+      miniPlayerButtons: miniPlayerButtons ?? this.miniPlayerButtons,
       preferPodcastCover: preferPodcastCover ?? this.preferPodcastCover,
+      episodeListDensity: episodeListDensity ?? this.episodeListDensity,
+      episodeFilters: episodeFilters ?? this.episodeFilters,
       podcastColumns: podcastColumns ?? this.podcastColumns,
       podcastList: podcastList ?? this.podcastList,
       podcastShowNames: podcastShowNames ?? this.podcastShowNames,
@@ -255,7 +402,16 @@ class SettingsNotifier extends Notifier<AppSettings> {
       showRemainingTime: preferences.getBool('showRemainingTime') ?? false,
       timeRespectsSpeed: preferences.getBool('timeRespectsSpeed') ?? false,
       keepScreenOn: preferences.getBool('keepScreenOn') ?? false,
+      miniPlayerButtons: MiniPlayerButtons.fromIds(
+        preferences.getStringList('miniPlayerButtons'),
+      ),
       preferPodcastCover: preferences.getBool('preferPodcastCover') ?? false,
+      episodeListDensity: EpisodeListDensity.byId(
+        preferences.getString('episodeListDensity'),
+      ),
+      episodeFilters: EpisodeFilters.fromIds(
+        preferences.getStringList('episodeFilters'),
+      ),
       podcastColumns: _columns(preferences.getInt('podcastColumns')),
       podcastList: preferences.getBool('podcastList') ?? false,
       podcastShowNames: preferences.getBool('podcastShowNames') ?? true,
@@ -355,11 +511,34 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await ref.read(sharedPreferencesProvider).setBool('keepScreenOn', enabled);
   }
 
+  Future<void> setMiniPlayerButtons(MiniPlayerButtons buttons) async {
+    state = state.copyWith(miniPlayerButtons: buttons);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setStringList('miniPlayerButtons', buttons.toIds());
+  }
+
   Future<void> setPreferPodcastCover(bool enabled) async {
     state = state.copyWith(preferPodcastCover: enabled);
     await ref
         .read(sharedPreferencesProvider)
         .setBool('preferPodcastCover', enabled);
+  }
+
+  Future<void> setEpisodeListDensity(EpisodeListDensity density) async {
+    state = state.copyWith(episodeListDensity: density);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setString('episodeListDensity', density.id);
+  }
+
+  Future<void> setEpisodeFilters(EpisodeFilters filters) async {
+    state = state.copyWith(episodeFilters: filters);
+    // Toujours écrire la liste (même vide) pour distinguer « jamais
+    // configuré » (défaut Non lus) de « Tout effacer » (tous les épisodes).
+    await ref
+        .read(sharedPreferencesProvider)
+        .setStringList('episodeFilters', filters.toIds());
   }
 
   Future<void> setDownloadDirectory(String? directory) async {

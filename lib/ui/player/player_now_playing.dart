@@ -296,35 +296,54 @@ class _CoverPlayGesturesState extends ConsumerState<_CoverPlayGestures> {
   }) {
     final showFeedback =
         _feedbackLabel != null && _feedbackOnRight == onRight;
-    final theme = Theme.of(context);
     return Expanded(
       child: Tooltip(
         message: onRight ? 'Double-tap : avancer' : 'Double-tap : reculer',
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onDoubleTap: onDoubleTap,
-          child: Center(
-            child: showFeedback
-                ? DecoratedBox(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              if (!showFeedback) return const SizedBox.expand();
+              // Taille liée à la marge L/R, pas à titleLarge fixe.
+              final width = constraints.maxWidth;
+              final fontSize = (width * 0.36).clamp(16.0, 40.0);
+              final padH = (width * 0.1).clamp(8.0, 20.0);
+              final padV = (fontSize * 0.32).clamp(6.0, 14.0);
+              final radius = (fontSize * 0.4).clamp(8.0, 16.0);
+              return Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: width * 0.92),
+                  child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(radius),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: padH,
+                        vertical: padV,
                       ),
-                      child: Text(
-                        _feedbackLabel!,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _feedbackLabel!,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: fontSize,
+                            height: 1.1,
+                          ),
                         ),
                       ),
                     ),
-                  )
-                : null,
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),

@@ -10,6 +10,7 @@ import '../data/providers.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/episode_tile.dart';
+import 'widgets/list_metrics.dart';
 import 'widgets/messages.dart';
 
 class PodcastPage extends ConsumerStatefulWidget {
@@ -252,26 +253,40 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
             ),
           )
         else
-          SliverList.separated(
-            itemCount: window.entries.length + (window.hasMore ? 1 : 0),
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              if (index >= window.entries.length) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              final entry = window.entries[index];
-              return EpisodeTile(
-                key: ValueKey(entry.episode.id),
-                entry: entry,
-                showPodcast: false,
-              );
-            },
-          ),
+          ..._episodeListSlivers(window),
       ],
     );
+  }
+
+  List<Widget> _episodeListSlivers(EpisodeWindow window) {
+    return [
+      SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final insets = episodeListViewportInsets(constraints.crossAxisExtent);
+          return SliverPadding(
+            padding: insets,
+            sliver: SliverList.separated(
+              itemCount: window.entries.length + (window.hasMore ? 1 : 0),
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                if (index >= window.entries.length) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final entry = window.entries[index];
+                return EpisodeTile(
+                  key: ValueKey(entry.episode.id),
+                  entry: entry,
+                  showPodcast: false,
+                );
+              },
+            ),
+          );
+        },
+      ),
+    ];
   }
 
   Future<void> _refresh(

@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
+import '../core/search.dart';
 import 'models.dart';
 
 part 'app_database.g.dart';

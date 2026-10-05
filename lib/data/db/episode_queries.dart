@@ -163,20 +163,35 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool downloadsOnly = false,
     bool queuedOnly = false,
     bool historyOnly = false,
+    bool inProgressOnly = false,
     int? podcastId,
     String search = '',
     int? limit,
   }) {
+    final needle = search.trim();
+    final hasSearch = needle.isNotEmpty;
+    // Recherche accent/casse-insensible comme les abonnements (`searchMatch`) :
+    // SQLite `lower()` ne plie pas les diacritiques, donc on filtre en Dart.
     return _episodeWindow(
       unreadOnly: unreadOnly,
       favoritesOnly: favoritesOnly,
       downloadsOnly: downloadsOnly,
       queuedOnly: queuedOnly,
       historyOnly: historyOnly,
+      inProgressOnly: inProgressOnly,
       podcastId: podcastId,
-      search: search,
-      limit: limit,
-    ).watch();
+      limit: hasSearch ? null : limit,
+    ).watch().map((rows) {
+      if (!hasSearch) return rows;
+      final matched = [
+        for (final entry in rows)
+          if (searchMatch(entry.episode.title, needle) ||
+              searchMatch(entry.podcast.title, needle))
+            entry,
+      ];
+      if (limit == null || matched.length <= limit) return matched;
+      return matched.sublist(0, limit);
+    });
   }
 
   Selectable<EpisodeEntry> _episodeWindow({
@@ -191,7 +206,6 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool unplayedOnly = false,
     bool randomOrder = false,
     int? podcastId,
-    String search = '',
     int? limit,
   }) {
     final query = selectOnly(episodes)
@@ -260,14 +274,6 @@ mixin _EpisodeQueries on _$AppDatabase {
         !favoritesOnly) {
       // Listes « bibliothèque » : masquer les aperçus Explorer.
       query.where(podcasts.subscribed.equals(true));
-    }
-    final needle = search.trim().toLowerCase();
-    if (needle.isNotEmpty) {
-      // Titres seulement (pas description) : LIKE sur le texte long est trop coûteux.
-      query.where(
-        episodes.title.lower().contains(needle) |
-            podcasts.title.lower().contains(needle),
-      );
     }
     if (randomOrder) {
       query.orderBy([OrderingTerm.random()]);
