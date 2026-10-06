@@ -21,5 +21,9 @@ class AppRoutes {
 
   static String podcast(int id) => '/podcasts/$id';
 
+  static String podcastAbout(int id) => '/podcasts/$id/about';
+
+  static String podcastSettings(int id) => '/podcasts/$id/settings';
+
   static String episode(int id) => '/episode/$id';
 }

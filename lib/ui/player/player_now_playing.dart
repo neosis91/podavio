@@ -32,6 +32,7 @@ class _PlayerNowPlaying extends ConsumerWidget {
     final releaseDate = formatReleaseDate(publishedAt);
     final chaptersAsync = ref.watch(chaptersProvider(episodeId));
     final chapters = chaptersAsync.value ?? const <EpisodeChapter>[];
+    final podcast = ref.watch(episodeProvider(episodeId)).value?.podcast;
     final chaptersUrl = ref
         .watch(episodeProvider(episodeId))
         .value
@@ -104,6 +105,10 @@ class _PlayerNowPlaying extends ConsumerWidget {
                         child: PodcastCover(
                           url: imageUrl,
                           localPath: imagePath,
+                          httpHeaders: podcastAuthHeaders(
+                            username: podcast?.authUsername,
+                            password: podcast?.authPassword,
+                          ),
                           size: side,
                           radius: 24,
                         ),

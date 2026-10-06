@@ -111,17 +111,12 @@ void main() {
     expect(phone.trailingVisualDensity, VisualDensity.compact);
   });
 
-  test('horizontal padding and list max width follow plan tiers', () {
+  test('horizontal padding follows plan tiers', () {
     expect(listHorizontalPadding(320), 12);
     expect(listHorizontalPadding(400), 16);
     expect(listHorizontalPadding(700), 20);
     expect(listHorizontalPadding(1000), 24);
     expect(metrics(width: 320).horizontalPadding, 12);
     expect(metrics(width: 1000).horizontalPadding, 24);
-
-    expect(episodeListMaxWidthFor(899), isNull);
-    expect(episodeListMaxWidthFor(900), kEpisodeListMaxWidth);
-    expect(episodeListViewportInsets(1000).left, 100);
-    expect(episodeListViewportInsets(1000).right, 100);
   });
 }

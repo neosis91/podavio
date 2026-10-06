@@ -188,6 +188,52 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     type: DriftSqlType.double,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _skipIntroSecondsMeta = const VerificationMeta(
+    'skipIntroSeconds',
+  );
+  @override
+  late final GeneratedColumn<int> skipIntroSeconds = GeneratedColumn<int>(
+    'skip_intro_seconds',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _skipOutroSecondsMeta = const VerificationMeta(
+    'skipOutroSeconds',
+  );
+  @override
+  late final GeneratedColumn<int> skipOutroSeconds = GeneratedColumn<int>(
+    'skip_outro_seconds',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _authUsernameMeta = const VerificationMeta(
+    'authUsername',
+  );
+  @override
+  late final GeneratedColumn<String> authUsername = GeneratedColumn<String>(
+    'auth_username',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _authPasswordMeta = const VerificationMeta(
+    'authPassword',
+  );
+  @override
+  late final GeneratedColumn<String> authPassword = GeneratedColumn<String>(
+    'auth_password',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -205,6 +251,10 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     keepUpdated,
     subscribed,
     playbackSpeed,
+    skipIntroSeconds,
+    skipOutroSeconds,
+    authUsername,
+    authPassword,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -329,6 +379,42 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         ),
       );
     }
+    if (data.containsKey('skip_intro_seconds')) {
+      context.handle(
+        _skipIntroSecondsMeta,
+        skipIntroSeconds.isAcceptableOrUnknown(
+          data['skip_intro_seconds']!,
+          _skipIntroSecondsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('skip_outro_seconds')) {
+      context.handle(
+        _skipOutroSecondsMeta,
+        skipOutroSeconds.isAcceptableOrUnknown(
+          data['skip_outro_seconds']!,
+          _skipOutroSecondsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('auth_username')) {
+      context.handle(
+        _authUsernameMeta,
+        authUsername.isAcceptableOrUnknown(
+          data['auth_username']!,
+          _authUsernameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('auth_password')) {
+      context.handle(
+        _authPasswordMeta,
+        authPassword.isAcceptableOrUnknown(
+          data['auth_password']!,
+          _authPasswordMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -398,6 +484,22 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         DriftSqlType.double,
         data['${effectivePrefix}playback_speed'],
       ),
+      skipIntroSeconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}skip_intro_seconds'],
+      )!,
+      skipOutroSeconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}skip_outro_seconds'],
+      )!,
+      authUsername: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}auth_username'],
+      ),
+      authPassword: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}auth_password'],
+      ),
     );
   }
 
@@ -427,6 +529,18 @@ class Podcast extends DataClass implements Insertable<Podcast> {
 
   /// Vitesse de lecture propre au podcast ; `null` = défaut global des réglages.
   final double? playbackSpeed;
+
+  /// Secondes ignorées au début de chaque épisode (0 = désactivé).
+  final int skipIntroSeconds;
+
+  /// Secondes ignorées à la fin de chaque épisode (0 = désactivé).
+  final int skipOutroSeconds;
+
+  /// Identifiant HTTP Basic du flux. `null` = pas d’authentification.
+  final String? authUsername;
+
+  /// Mot de passe HTTP Basic du flux. `null` = pas d’authentification.
+  final String? authPassword;
   const Podcast({
     required this.id,
     required this.feedUrl,
@@ -443,6 +557,10 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     required this.keepUpdated,
     required this.subscribed,
     this.playbackSpeed,
+    required this.skipIntroSeconds,
+    required this.skipOutroSeconds,
+    this.authUsername,
+    this.authPassword,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -472,6 +590,14 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     if (!nullToAbsent || playbackSpeed != null) {
       map['playback_speed'] = Variable<double>(playbackSpeed);
     }
+    map['skip_intro_seconds'] = Variable<int>(skipIntroSeconds);
+    map['skip_outro_seconds'] = Variable<int>(skipOutroSeconds);
+    if (!nullToAbsent || authUsername != null) {
+      map['auth_username'] = Variable<String>(authUsername);
+    }
+    if (!nullToAbsent || authPassword != null) {
+      map['auth_password'] = Variable<String>(authPassword);
+    }
     return map;
   }
 
@@ -500,6 +626,14 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       playbackSpeed: playbackSpeed == null && nullToAbsent
           ? const Value.absent()
           : Value(playbackSpeed),
+      skipIntroSeconds: Value(skipIntroSeconds),
+      skipOutroSeconds: Value(skipOutroSeconds),
+      authUsername: authUsername == null && nullToAbsent
+          ? const Value.absent()
+          : Value(authUsername),
+      authPassword: authPassword == null && nullToAbsent
+          ? const Value.absent()
+          : Value(authPassword),
     );
   }
 
@@ -524,6 +658,10 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       keepUpdated: serializer.fromJson<bool>(json['keepUpdated']),
       subscribed: serializer.fromJson<bool>(json['subscribed']),
       playbackSpeed: serializer.fromJson<double?>(json['playbackSpeed']),
+      skipIntroSeconds: serializer.fromJson<int>(json['skipIntroSeconds']),
+      skipOutroSeconds: serializer.fromJson<int>(json['skipOutroSeconds']),
+      authUsername: serializer.fromJson<String?>(json['authUsername']),
+      authPassword: serializer.fromJson<String?>(json['authPassword']),
     );
   }
   @override
@@ -545,6 +683,10 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       'keepUpdated': serializer.toJson<bool>(keepUpdated),
       'subscribed': serializer.toJson<bool>(subscribed),
       'playbackSpeed': serializer.toJson<double?>(playbackSpeed),
+      'skipIntroSeconds': serializer.toJson<int>(skipIntroSeconds),
+      'skipOutroSeconds': serializer.toJson<int>(skipOutroSeconds),
+      'authUsername': serializer.toJson<String?>(authUsername),
+      'authPassword': serializer.toJson<String?>(authPassword),
     };
   }
 
@@ -564,6 +706,10 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     bool? keepUpdated,
     bool? subscribed,
     Value<double?> playbackSpeed = const Value.absent(),
+    int? skipIntroSeconds,
+    int? skipOutroSeconds,
+    Value<String?> authUsername = const Value.absent(),
+    Value<String?> authPassword = const Value.absent(),
   }) => Podcast(
     id: id ?? this.id,
     feedUrl: feedUrl ?? this.feedUrl,
@@ -582,6 +728,10 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     playbackSpeed: playbackSpeed.present
         ? playbackSpeed.value
         : this.playbackSpeed,
+    skipIntroSeconds: skipIntroSeconds ?? this.skipIntroSeconds,
+    skipOutroSeconds: skipOutroSeconds ?? this.skipOutroSeconds,
+    authUsername: authUsername.present ? authUsername.value : this.authUsername,
+    authPassword: authPassword.present ? authPassword.value : this.authPassword,
   );
   Podcast copyWithCompanion(PodcastsCompanion data) {
     return Podcast(
@@ -614,6 +764,18 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       playbackSpeed: data.playbackSpeed.present
           ? data.playbackSpeed.value
           : this.playbackSpeed,
+      skipIntroSeconds: data.skipIntroSeconds.present
+          ? data.skipIntroSeconds.value
+          : this.skipIntroSeconds,
+      skipOutroSeconds: data.skipOutroSeconds.present
+          ? data.skipOutroSeconds.value
+          : this.skipOutroSeconds,
+      authUsername: data.authUsername.present
+          ? data.authUsername.value
+          : this.authUsername,
+      authPassword: data.authPassword.present
+          ? data.authPassword.value
+          : this.authPassword,
     );
   }
 
@@ -634,7 +796,11 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           ..write('autoDownload: $autoDownload, ')
           ..write('keepUpdated: $keepUpdated, ')
           ..write('subscribed: $subscribed, ')
-          ..write('playbackSpeed: $playbackSpeed')
+          ..write('playbackSpeed: $playbackSpeed, ')
+          ..write('skipIntroSeconds: $skipIntroSeconds, ')
+          ..write('skipOutroSeconds: $skipOutroSeconds, ')
+          ..write('authUsername: $authUsername, ')
+          ..write('authPassword: $authPassword')
           ..write(')'))
         .toString();
   }
@@ -656,6 +822,10 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     keepUpdated,
     subscribed,
     playbackSpeed,
+    skipIntroSeconds,
+    skipOutroSeconds,
+    authUsername,
+    authPassword,
   );
   @override
   bool operator ==(Object other) =>
@@ -675,7 +845,11 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           other.autoDownload == this.autoDownload &&
           other.keepUpdated == this.keepUpdated &&
           other.subscribed == this.subscribed &&
-          other.playbackSpeed == this.playbackSpeed);
+          other.playbackSpeed == this.playbackSpeed &&
+          other.skipIntroSeconds == this.skipIntroSeconds &&
+          other.skipOutroSeconds == this.skipOutroSeconds &&
+          other.authUsername == this.authUsername &&
+          other.authPassword == this.authPassword);
 }
 
 class PodcastsCompanion extends UpdateCompanion<Podcast> {
@@ -694,6 +868,10 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
   final Value<bool> keepUpdated;
   final Value<bool> subscribed;
   final Value<double?> playbackSpeed;
+  final Value<int> skipIntroSeconds;
+  final Value<int> skipOutroSeconds;
+  final Value<String?> authUsername;
+  final Value<String?> authPassword;
   const PodcastsCompanion({
     this.id = const Value.absent(),
     this.feedUrl = const Value.absent(),
@@ -710,6 +888,10 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.keepUpdated = const Value.absent(),
     this.subscribed = const Value.absent(),
     this.playbackSpeed = const Value.absent(),
+    this.skipIntroSeconds = const Value.absent(),
+    this.skipOutroSeconds = const Value.absent(),
+    this.authUsername = const Value.absent(),
+    this.authPassword = const Value.absent(),
   });
   PodcastsCompanion.insert({
     this.id = const Value.absent(),
@@ -727,6 +909,10 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.keepUpdated = const Value.absent(),
     this.subscribed = const Value.absent(),
     this.playbackSpeed = const Value.absent(),
+    this.skipIntroSeconds = const Value.absent(),
+    this.skipOutroSeconds = const Value.absent(),
+    this.authUsername = const Value.absent(),
+    this.authPassword = const Value.absent(),
   }) : feedUrl = Value(feedUrl),
        title = Value(title),
        subscribedAt = Value(subscribedAt);
@@ -746,6 +932,10 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Expression<bool>? keepUpdated,
     Expression<bool>? subscribed,
     Expression<double>? playbackSpeed,
+    Expression<int>? skipIntroSeconds,
+    Expression<int>? skipOutroSeconds,
+    Expression<String>? authUsername,
+    Expression<String>? authPassword,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -763,6 +953,10 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       if (keepUpdated != null) 'keep_updated': keepUpdated,
       if (subscribed != null) 'subscribed': subscribed,
       if (playbackSpeed != null) 'playback_speed': playbackSpeed,
+      if (skipIntroSeconds != null) 'skip_intro_seconds': skipIntroSeconds,
+      if (skipOutroSeconds != null) 'skip_outro_seconds': skipOutroSeconds,
+      if (authUsername != null) 'auth_username': authUsername,
+      if (authPassword != null) 'auth_password': authPassword,
     });
   }
 
@@ -782,6 +976,10 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Value<bool>? keepUpdated,
     Value<bool>? subscribed,
     Value<double?>? playbackSpeed,
+    Value<int>? skipIntroSeconds,
+    Value<int>? skipOutroSeconds,
+    Value<String?>? authUsername,
+    Value<String?>? authPassword,
   }) {
     return PodcastsCompanion(
       id: id ?? this.id,
@@ -799,6 +997,10 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       keepUpdated: keepUpdated ?? this.keepUpdated,
       subscribed: subscribed ?? this.subscribed,
       playbackSpeed: playbackSpeed ?? this.playbackSpeed,
+      skipIntroSeconds: skipIntroSeconds ?? this.skipIntroSeconds,
+      skipOutroSeconds: skipOutroSeconds ?? this.skipOutroSeconds,
+      authUsername: authUsername ?? this.authUsername,
+      authPassword: authPassword ?? this.authPassword,
     );
   }
 
@@ -850,6 +1052,18 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     if (playbackSpeed.present) {
       map['playback_speed'] = Variable<double>(playbackSpeed.value);
     }
+    if (skipIntroSeconds.present) {
+      map['skip_intro_seconds'] = Variable<int>(skipIntroSeconds.value);
+    }
+    if (skipOutroSeconds.present) {
+      map['skip_outro_seconds'] = Variable<int>(skipOutroSeconds.value);
+    }
+    if (authUsername.present) {
+      map['auth_username'] = Variable<String>(authUsername.value);
+    }
+    if (authPassword.present) {
+      map['auth_password'] = Variable<String>(authPassword.value);
+    }
     return map;
   }
 
@@ -870,7 +1084,11 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
           ..write('autoDownload: $autoDownload, ')
           ..write('keepUpdated: $keepUpdated, ')
           ..write('subscribed: $subscribed, ')
-          ..write('playbackSpeed: $playbackSpeed')
+          ..write('playbackSpeed: $playbackSpeed, ')
+          ..write('skipIntroSeconds: $skipIntroSeconds, ')
+          ..write('skipOutroSeconds: $skipOutroSeconds, ')
+          ..write('authUsername: $authUsername, ')
+          ..write('authPassword: $authPassword')
           ..write(')'))
         .toString();
   }
@@ -2755,6 +2973,10 @@ typedef $$PodcastsTableCreateCompanionBuilder = PodcastsCompanion Function({
   Value<bool> keepUpdated,
   Value<bool> subscribed,
   Value<double?> playbackSpeed,
+  Value<int> skipIntroSeconds,
+  Value<int> skipOutroSeconds,
+  Value<String?> authUsername,
+  Value<String?> authPassword,
 });
 typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<int> id,
@@ -2772,6 +2994,10 @@ typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<bool> keepUpdated,
   Value<bool> subscribed,
   Value<double?> playbackSpeed,
+  Value<int> skipIntroSeconds,
+  Value<int> skipOutroSeconds,
+  Value<String?> authUsername,
+  Value<String?> authPassword,
 });
 
 final class $$PodcastsTableReferences
@@ -2879,6 +3105,26 @@ class $$PodcastsTableFilterComposer
 
   ColumnFilters<double> get playbackSpeed => $composableBuilder(
     column: $table.playbackSpeed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get skipIntroSeconds => $composableBuilder(
+    column: $table.skipIntroSeconds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get skipOutroSeconds => $composableBuilder(
+    column: $table.skipOutroSeconds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get authUsername => $composableBuilder(
+    column: $table.authUsername,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get authPassword => $composableBuilder(
+    column: $table.authPassword,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2991,6 +3237,26 @@ class $$PodcastsTableOrderingComposer
     column: $table.playbackSpeed,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get skipIntroSeconds => $composableBuilder(
+    column: $table.skipIntroSeconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get skipOutroSeconds => $composableBuilder(
+    column: $table.skipOutroSeconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get authUsername => $composableBuilder(
+    column: $table.authUsername,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get authPassword => $composableBuilder(
+    column: $table.authPassword,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PodcastsTableAnnotationComposer
@@ -3058,6 +3324,26 @@ class $$PodcastsTableAnnotationComposer
 
   GeneratedColumn<double> get playbackSpeed => $composableBuilder(
     column: $table.playbackSpeed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get skipIntroSeconds => $composableBuilder(
+    column: $table.skipIntroSeconds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get skipOutroSeconds => $composableBuilder(
+    column: $table.skipOutroSeconds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get authUsername => $composableBuilder(
+    column: $table.authUsername,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get authPassword => $composableBuilder(
+    column: $table.authPassword,
     builder: (column) => column,
   );
 
@@ -3130,6 +3416,10 @@ class $$PodcastsTableTableManager
                 Value<bool> keepUpdated = const Value.absent(),
                 Value<bool> subscribed = const Value.absent(),
                 Value<double?> playbackSpeed = const Value.absent(),
+                Value<int> skipIntroSeconds = const Value.absent(),
+                Value<int> skipOutroSeconds = const Value.absent(),
+                Value<String?> authUsername = const Value.absent(),
+                Value<String?> authPassword = const Value.absent(),
               }) => PodcastsCompanion(
                 id: id,
                 feedUrl: feedUrl,
@@ -3146,6 +3436,10 @@ class $$PodcastsTableTableManager
                 keepUpdated: keepUpdated,
                 subscribed: subscribed,
                 playbackSpeed: playbackSpeed,
+                skipIntroSeconds: skipIntroSeconds,
+                skipOutroSeconds: skipOutroSeconds,
+                authUsername: authUsername,
+                authPassword: authPassword,
               ),
           createCompanionCallback:
               ({
@@ -3164,6 +3458,10 @@ class $$PodcastsTableTableManager
                 Value<bool> keepUpdated = const Value.absent(),
                 Value<bool> subscribed = const Value.absent(),
                 Value<double?> playbackSpeed = const Value.absent(),
+                Value<int> skipIntroSeconds = const Value.absent(),
+                Value<int> skipOutroSeconds = const Value.absent(),
+                Value<String?> authUsername = const Value.absent(),
+                Value<String?> authPassword = const Value.absent(),
               }) => PodcastsCompanion.insert(
                 id: id,
                 feedUrl: feedUrl,
@@ -3180,6 +3478,10 @@ class $$PodcastsTableTableManager
                 keepUpdated: keepUpdated,
                 subscribed: subscribed,
                 playbackSpeed: playbackSpeed,
+                skipIntroSeconds: skipIntroSeconds,
+                skipOutroSeconds: skipOutroSeconds,
+                authUsername: authUsername,
+                authPassword: authPassword,
               ),
           withReferenceMapper: (p0) => p0
               .map(

@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:http/http.dart' as http;
 import 'package:podcast_search/podcast_search.dart' as remote;
 
 import 'app_database.dart';
+import 'http_auth.dart';
 import 'apple_feed.dart';
 import 'chapters_parser.dart';
 import 'discover_hit.dart';
@@ -12,6 +15,37 @@ import 'podcast_index_search.dart';
 import 'spotify_feed.dart';
 
 const podavioUserAgent = 'Podavio/0.1 (podcast player)';
+
+/// Le serveur a répondu 401. [hadCredentials] : un identifiant a déjà été envoyé.
+class FeedUnauthorizedException implements Exception {
+  const FeedUnauthorizedException({this.hadCredentials = false});
+
+  final bool hadCredentials;
+
+  @override
+  String toString() => hadCredentials
+      ? 'Exception: Identifiant ou mot de passe refusé.'
+      : 'Exception: Ce flux demande un identifiant et un mot de passe.';
+}
+
+bool isFeedUnauthorized(Object error) {
+  if (error is FeedUnauthorizedException) return true;
+  return error is remote.PodcastFailedException && error.statusCode == 401;
+}
+
+/// En-têtes à passer aux jaquettes, ou `null` si le podcast n’est pas protégé.
+Map<String, String>? podcastAuthHeaders({
+  String? username,
+  String? password,
+}) {
+  final headers = podcastRequestHeaders(
+    userAgent: podavioUserAgent,
+    username: username,
+    password: password,
+  );
+  if (!headers.containsKey('Authorization')) return null;
+  return headers;
+}
 
 enum DiscoverSearchScope {
   combined,
@@ -31,7 +65,11 @@ class FeedService {
   final _chapterFailedAt = <int, DateTime>{};
   static const _chapterRetryBackoff = Duration(minutes: 5);
 
-  Future<SubscribeResult> subscribe(String rawUrl) async {
+  Future<SubscribeResult> subscribe(
+    String rawUrl, {
+    String? username,
+    String? password,
+  }) async {
     final url = await _resolveFeedUrl(rawUrl);
     final existing = await _database.findByFeedUrl(url);
     final wasSubscribed = existing?.subscribed ?? false;
@@ -39,6 +77,8 @@ class FeedService {
       url,
       subscribed: true,
       keepUpdated: true,
+      username: username,
+      password: password,
     );
     return SubscribeResult(
       podcastId: id,
@@ -47,14 +87,24 @@ class FeedService {
   }
 
   /// Charge le flux en aperçu (épisodes utilisables) sans l’ajouter à la bibliothèque.
-  Future<int> preview(String rawUrl) async {
+  Future<int> preview(
+    String rawUrl, {
+    String? username,
+    String? password,
+  }) async {
     final url = await _resolveFeedUrl(rawUrl);
     final existing = await _database.findByFeedUrl(url);
     if (existing != null) {
       // Rafraîchir les épisodes sans changer le statut d’abonnement.
-      return _refreshUrl(url);
+      return _refreshUrl(url, username: username, password: password);
     }
-    return _refreshUrl(url, subscribed: false, keepUpdated: false);
+    return _refreshUrl(
+      url,
+      subscribed: false,
+      keepUpdated: false,
+      username: username,
+      password: password,
+    );
   }
 
   /// Abonne plusieurs flux en parallèle (réseau), avec une limite de concurrence.
@@ -304,9 +354,45 @@ class FeedService {
     String url, {
     bool? subscribed,
     bool? keepUpdated,
+    String? username,
+    String? password,
   }) async {
-    final podcast =
-        await remote.Feed.loadFeed(
+    final existing = await _database.findByFeedUrl(url);
+    final explicit = username != null || password != null;
+    final user = explicit ? _blankToNull(username) : existing?.authUsername;
+    final pass = explicit
+        ? ((password ?? '').isEmpty ? null : password)
+        : existing?.authPassword;
+    final podcast = await _loadRemoteFeed(url, username: user, password: pass);
+    final pscByKey = await _loadPscChapters(
+      url,
+      username: user,
+      password: pass,
+    );
+    final id = await _database.saveFeed(
+      _draftFrom(url, podcast, pscByKey: pscByKey),
+      subscribed: subscribed,
+      keepUpdated: keepUpdated,
+    );
+    if (explicit) {
+      await _database.setPodcastCredentials(
+        id,
+        username: user,
+        password: pass,
+      );
+    }
+    return id;
+  }
+
+  Future<remote.Podcast> _loadRemoteFeed(
+    String url, {
+    String? username,
+    String? password,
+  }) async {
+    final authorization = basicAuthorization(username, password);
+    if (authorization == null) {
+      try {
+        return await remote.Feed.loadFeed(
           url: url,
           userAgent: podavioUserAgent,
           timeout: const Duration(seconds: 30),
@@ -316,22 +402,55 @@ class FeedService {
             throw Exception('Le flux met trop de temps à répondre.');
           },
         );
-    final pscByKey = await _loadPscChapters(url);
-    return _database.saveFeed(
-      _draftFrom(url, podcast, pscByKey: pscByKey),
-      subscribed: subscribed,
-      keepUpdated: keepUpdated,
+      } on remote.PodcastFailedException catch (error) {
+        if (error.statusCode == 401) {
+          throw const FeedUnauthorizedException();
+        }
+        rethrow;
+      }
+    }
+
+    final response = await getKeepingAuthorization(
+      Uri.parse(url),
+      headers: {
+        'User-Agent': podavioUserAgent,
+        'Authorization': authorization,
+      },
+      timeout: const Duration(seconds: 40),
     );
+    if (response.statusCode == 401) {
+      throw const FeedUnauthorizedException(hadCredentials: true);
+    }
+    if (response.statusCode != 200 || response.body.isEmpty) {
+      throw Exception('Erreur HTTP ${response.statusCode}');
+    }
+
+    final directory = await Directory.systemTemp.createTemp('podavio-feed-');
+    try {
+      final file = File('${directory.path}/feed.xml');
+      await file.writeAsString(response.body);
+      return await remote.Feed.loadFeedFile(file: file.path);
+    } finally {
+      await directory.delete(recursive: true);
+    }
   }
 
-  Future<Map<String, List<ChapterDraft>>> _loadPscChapters(String url) async {
+  Future<Map<String, List<ChapterDraft>>> _loadPscChapters(
+    String url, {
+    String? username,
+    String? password,
+  }) async {
     try {
-      final response = await http
-          .get(
-            Uri.parse(url),
-            headers: const {'User-Agent': podavioUserAgent},
-          )
-          .timeout(const Duration(seconds: 30));
+      final headers = podcastRequestHeaders(
+        userAgent: podavioUserAgent,
+        username: username,
+        password: password,
+      );
+      final response = headers.containsKey('Authorization')
+          ? await getKeepingAuthorization(Uri.parse(url), headers: headers)
+          : await http
+                .get(Uri.parse(url), headers: headers)
+                .timeout(const Duration(seconds: 30));
       if (response.statusCode != 200 || response.body.isEmpty) {
         return const {};
       }
@@ -444,12 +563,21 @@ class FeedService {
       return;
     }
     try {
-      final response = await http
-          .get(
-            Uri.parse(url),
-            headers: const {'User-Agent': podavioUserAgent},
-          )
-          .timeout(const Duration(seconds: 20));
+      final podcast = await _database.getPodcast(episode.podcastId);
+      final headers = podcastRequestHeaders(
+        userAgent: podavioUserAgent,
+        username: podcast?.authUsername,
+        password: podcast?.authPassword,
+      );
+      final response = headers.containsKey('Authorization')
+          ? await getKeepingAuthorization(
+              Uri.parse(url),
+              headers: headers,
+              timeout: const Duration(seconds: 20),
+            )
+          : await http
+                .get(Uri.parse(url), headers: headers)
+                .timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) {
         throw Exception('Chapitres HTTP ${response.statusCode}');
       }
@@ -548,6 +676,11 @@ class FeedService {
 }
 
 String describeFeedError(Object error) {
+  if (error is FeedUnauthorizedException) {
+    return error.hadCredentials
+        ? 'Identifiant ou mot de passe refusé.'
+        : 'Ce flux demande un identifiant et un mot de passe.';
+  }
   if (error is remote.PodcastTimeoutException) {
     return 'Délai dépassé';
   }

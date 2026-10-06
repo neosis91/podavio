@@ -142,6 +142,10 @@ class _PodcastGridTile extends StatelessWidget {
     final cover = _CoverWithCount(
       url: podcast.imageUrl,
       localPath: podcast.imagePath,
+      httpHeaders: podcastAuthHeaders(
+        username: podcast.authUsername,
+        password: podcast.authPassword,
+      ),
       radius: 16,
       count: count,
     );
@@ -206,6 +210,10 @@ class _PodcastListTile extends StatelessWidget {
     final cover = _CoverWithCount(
       url: podcast.imageUrl,
       localPath: podcast.imagePath,
+      httpHeaders: podcastAuthHeaders(
+        username: podcast.authUsername,
+        password: podcast.authPassword,
+      ),
       size: 72,
       radius: 12,
       count: count,
@@ -251,6 +259,7 @@ class _CoverWithCount extends StatelessWidget {
   const _CoverWithCount({
     required this.url,
     this.localPath,
+    this.httpHeaders,
     required this.radius,
     required this.count,
     this.size,
@@ -258,6 +267,7 @@ class _CoverWithCount extends StatelessWidget {
 
   final String? url;
   final String? localPath;
+  final Map<String, String>? httpHeaders;
   final double radius;
   final int count;
   final double? size;
@@ -271,6 +281,7 @@ class _CoverWithCount extends StatelessWidget {
         PodcastCover(
           url: url,
           localPath: localPath,
+          httpHeaders: httpHeaders,
           size: size,
           radius: radius,
         ),
