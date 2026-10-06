@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/app_database.dart';
+import '../data/feed_service.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import 'router.dart';
@@ -197,6 +198,10 @@ class _EpisodeCard extends ConsumerWidget {
               url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
               localPath:
                   entry.imagePath(preferPodcastCover: preferPodcastCover),
+              httpHeaders: podcastAuthHeaders(
+                username: entry.podcast.authUsername,
+                password: entry.podcast.authPassword,
+              ),
               size: _cardWidth,
               radius: 12,
             ),
@@ -258,6 +263,10 @@ class _PodcastCard extends StatelessWidget {
                   PodcastCover(
                     url: podcast.imageUrl,
                     localPath: podcast.imagePath,
+                    httpHeaders: podcastAuthHeaders(
+                      username: podcast.authUsername,
+                      password: podcast.authPassword,
+                    ),
                     size: _podcastWidth,
                     radius: 12,
                   ),

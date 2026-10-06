@@ -69,10 +69,43 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     );
   }
 
+  Future<void> setPodcastSkipBounds(
+    int id, {
+    int? skipIntroSeconds,
+    int? skipOutroSeconds,
+  }) {
+    return (update(podcasts)..where((table) => table.id.equals(id))).write(
+      PodcastsCompanion(
+        skipIntroSeconds: skipIntroSeconds == null
+            ? const Value.absent()
+            : Value(skipIntroSeconds),
+        skipOutroSeconds: skipOutroSeconds == null
+            ? const Value.absent()
+            : Value(skipOutroSeconds),
+      ),
+    );
+  }
+
   /// `null` = utiliser le défaut global des réglages.
   Future<void> setPodcastPlaybackSpeed(int id, double? speed) {
     return (update(podcasts)..where((table) => table.id.equals(id))).write(
       PodcastsCompanion(playbackSpeed: Value(speed)),
+    );
+  }
+
+  /// Identifiants HTTP Basic. Une chaîne vide efface la valeur.
+  Future<void> setPodcastCredentials(
+    int id, {
+    required String? username,
+    required String? password,
+  }) {
+    final user = username?.trim() ?? '';
+    final pass = password ?? '';
+    return (update(podcasts)..where((table) => table.id.equals(id))).write(
+      PodcastsCompanion(
+        authUsername: Value(user.isEmpty ? null : user),
+        authPassword: Value(pass.isEmpty ? null : pass),
+      ),
     );
   }
 

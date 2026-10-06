@@ -186,36 +186,6 @@ void main() {
     await harness.close(tester);
   });
 
-  testWidgets('list viewport caps width on large screens only', (tester) async {
-    expect(episodeListMaxWidthFor(320), isNull);
-    expect(episodeListMaxWidthFor(700), isNull);
-    expect(episodeListMaxWidthFor(900), kEpisodeListMaxWidth);
-    expect(episodeListViewportInsets(1000).horizontal, 200);
-
-    const contentKey = Key('viewport-content');
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 1200,
-            height: 400,
-            child: EpisodeListViewport(
-              child: ColoredBox(
-                key: contentKey,
-                color: Colors.red,
-                child: SizedBox.expand(),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    final box = tester.renderObject<RenderBox>(find.byKey(contentKey));
-    expect(box.size.width, kEpisodeListMaxWidth);
-  });
-
   testWidgets('horizontal padding follows width tiers', (tester) async {
     expect(listHorizontalPadding(320), 12);
     expect(listHorizontalPadding(400), 16);
@@ -282,6 +252,8 @@ EpisodeEntry _entry({
       autoDownload: false,
       keepUpdated: true,
       subscribed: true,
+      skipIntroSeconds: 0,
+      skipOutroSeconds: 0,
     ),
   );
 }

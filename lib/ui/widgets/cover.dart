@@ -12,12 +12,14 @@ class PodcastCover extends StatelessWidget {
     super.key,
     this.url,
     this.localPath,
+    this.httpHeaders,
     this.size = 56,
     this.radius = 8,
   });
 
   final String? url;
   final String? localPath;
+  final Map<String, String>? httpHeaders;
 
   /// Côté du carré. Si `null`, le widget prend le plus grand carré
   /// possible dans les contraintes du parent (`AspectRatio` 1:1).
@@ -56,6 +58,7 @@ class PodcastCover extends StatelessWidget {
           if (imageUrl == null || imageUrl.isEmpty) return placeholder;
           return CachedNetworkImage(
             imageUrl: imageUrl,
+            httpHeaders: httpHeaders,
             cacheManager: CoverCache.manager,
             cacheKey: imageUrl,
             fit: BoxFit.cover,
@@ -75,6 +78,7 @@ class PodcastCover extends StatelessWidget {
     } else if (imageUrl != null && imageUrl.isNotEmpty) {
       image = CachedNetworkImage(
         imageUrl: imageUrl,
+        httpHeaders: httpHeaders,
         cacheManager: CoverCache.manager,
         cacheKey: imageUrl,
         fit: BoxFit.cover,

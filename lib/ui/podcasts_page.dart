@@ -6,6 +6,7 @@ import '../core/platform.dart';
 import '../core/search.dart';
 import '../data/app_database.dart';
 import '../data/feed_refresh_controller.dart';
+import '../data/feed_service.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import 'episodes_page.dart';

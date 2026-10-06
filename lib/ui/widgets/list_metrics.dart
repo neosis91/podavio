@@ -10,9 +10,6 @@ enum ListWidthTier {
   large,
 }
 
-/// Largeur max du contenu des listes d’épisodes sur grand écran.
-const double kEpisodeListMaxWidth = 800;
-
 ListWidthTier listWidthTier(double width) {
   if (width < 360) return ListWidthTier.narrow;
   if (width < 600) return ListWidthTier.phone;
@@ -32,21 +29,6 @@ double listHorizontalPadding(double width) {
     case ListWidthTier.large:
       return 24;
   }
-}
-
-/// Sur grand écran, limite la largeur utile pour éviter des lignes trop longues.
-double? episodeListMaxWidthFor(double width) {
-  return listWidthTier(width) == ListWidthTier.large
-      ? kEpisodeListMaxWidth
-      : null;
-}
-
-/// Insets latéraux pour centrer une liste plafonnée à [kEpisodeListMaxWidth].
-EdgeInsets episodeListViewportInsets(double width) {
-  final maxWidth = episodeListMaxWidthFor(width);
-  if (maxWidth == null) return EdgeInsets.zero;
-  final side = ((width - maxWidth) / 2).clamp(0.0, double.infinity);
-  return EdgeInsets.symmetric(horizontal: side);
 }
 
 /// Métriques typographiques et de jaquette pour une tuile d’épisode.
@@ -164,24 +146,6 @@ class EpisodeTileMetrics {
       trailingVisualDensity: trailing.density,
       trailingMinSize: trailing.minSize,
       progressRingSize: trailing.ringSize,
-    );
-  }
-}
-
-/// Centre et plafonne le contenu des listes d’épisodes sur grand écran.
-class EpisodeListViewport extends StatelessWidget {
-  const EpisodeListViewport({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final insets = episodeListViewportInsets(constraints.maxWidth);
-        if (insets == EdgeInsets.zero) return child;
-        return Padding(padding: insets, child: child);
-      },
     );
   }
 }

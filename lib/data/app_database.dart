@@ -28,6 +28,14 @@ class Podcasts extends Table {
   BoolColumn get subscribed => boolean().withDefault(const Constant(true))();
   /// Vitesse de lecture propre au podcast ; `null` = défaut global des réglages.
   RealColumn get playbackSpeed => real().nullable()();
+  /// Secondes ignorées au début de chaque épisode (0 = désactivé).
+  IntColumn get skipIntroSeconds => integer().withDefault(const Constant(0))();
+  /// Secondes ignorées à la fin de chaque épisode (0 = désactivé).
+  IntColumn get skipOutroSeconds => integer().withDefault(const Constant(0))();
+  /// Identifiant HTTP Basic du flux. `null` = pas d’authentification.
+  TextColumn get authUsername => text().nullable()();
+  /// Mot de passe HTTP Basic du flux. `null` = pas d’authentification.
+  TextColumn get authPassword => text().nullable()();
 }
 
 @TableIndex(name: 'episodes_podcast_id', columns: {#podcastId})
@@ -139,7 +147,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -185,6 +193,14 @@ class AppDatabase extends _$AppDatabase
       }
       if (from < 10) {
         await migrator.addColumn(podcasts, podcasts.playbackSpeed);
+      }
+      if (from < 11) {
+        await migrator.addColumn(podcasts, podcasts.skipIntroSeconds);
+        await migrator.addColumn(podcasts, podcasts.skipOutroSeconds);
+      }
+      if (from < 12) {
+        await migrator.addColumn(podcasts, podcasts.authUsername);
+        await migrator.addColumn(podcasts, podcasts.authPassword);
       }
     },
     beforeOpen: (details) async {

@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/format.dart';
 import '../data/app_database.dart';
+import '../data/feed_service.dart';
 import '../data/providers.dart';
 import '../player/player_controller.dart';
 import '../player/player_sheet_controller.dart';

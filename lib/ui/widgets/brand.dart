@@ -86,6 +86,25 @@ class DragIndicatorIcon extends StatelessWidget {
   }
 }
 
+class SettingsIcon extends StatelessWidget {
+  const SettingsIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return SvgPicture.asset(
+      'assets/brand/settings.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      semanticsLabel: 'Paramètres',
+    );
+  }
+}
+
 class InfoIcon extends StatelessWidget {
   const InfoIcon({super.key, this.size = 24});
 

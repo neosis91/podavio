@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app_database.dart';
 import 'feed_service.dart';
+import 'http_auth.dart';
 
 /// Télécharge automatiquement les jaquettes de podcasts en local.
 ///
@@ -61,32 +62,48 @@ class CoverService {
     });
   }
 
-  Future<String?> ensureLocalFile(String? url) async {
+  Future<String?> ensureLocalFile(
+    String? url, {
+    String? username,
+    String? password,
+  }) async {
     final remote = url?.trim();
     if (remote == null || remote.isEmpty) return null;
-    final existing = _inflight[remote];
+    final authorization = basicAuthorization(username, password);
+    final key = authorization == null ? remote : '$remote\n$authorization';
+    final existing = _inflight[key];
     if (existing != null) return existing;
 
-    final future = _download(remote);
-    _inflight[remote] = future;
+    final future = _download(remote, username: username, password: password);
+    _inflight[key] = future;
     try {
       return await future;
     } finally {
-      _inflight.remove(remote);
+      _inflight.remove(key);
     }
   }
 
-  Future<String?> _download(String url) async {
+  Future<String?> _download(
+    String url, {
+    String? username,
+    String? password,
+  }) async {
     final file = await _fileForUrl(url);
     if (await file.exists() && await file.length() > 0) return file.path;
 
     final client = http.Client();
     try {
-      final request = http.Request('GET', Uri.parse(url));
-      request.headers['user-agent'] = podavioUserAgent;
-      final response = await client.send(request).timeout(
-        const Duration(seconds: 20),
+      final headers = podcastRequestHeaders(
+        userAgent: podavioUserAgent,
+        username: username,
+        password: password,
       );
+      final request = http.Request('GET', Uri.parse(url));
+      request.headers.addAll(headers);
+      final sent = headers.containsKey('Authorization')
+          ? sendKeepingAuthorization(client, request..followRedirects = false)
+          : client.send(request);
+      final response = await sent.timeout(const Duration(seconds: 20));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return null;
       }
@@ -116,7 +133,12 @@ class CoverService {
       for (var i = 0; i < items.length; i += concurrency) {
         final chunk = items.skip(i).take(concurrency).toList();
         final paths = await Future.wait([
-          for (final podcast in chunk) ensureLocalFile(podcast.imageUrl),
+          for (final podcast in chunk)
+            ensureLocalFile(
+              podcast.imageUrl,
+              username: podcast.authUsername,
+              password: podcast.authPassword,
+            ),
         ]);
         for (var j = 0; j < chunk.length; j++) {
           final path = paths[j];
