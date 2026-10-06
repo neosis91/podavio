@@ -60,7 +60,21 @@ git fetch --tags origin
 
 SHA_FULL="$(git rev-parse HEAD)"
 SHA="$(git rev-parse --short HEAD)"
-BUILD="${VERSION##*.}"
+# Nom affiché = tag, mois sans zéro (2026.9.12).
+# Entier Android = CalVer AAAAMMNN, le même sur chaque APK (20260912).
+rest="${VERSION#*.}"
+month="${rest%%.*}"
+patch="${VERSION##*.}"
+year="${VERSION%%.*}"
+if [ "${month}" -lt 1 ] || [ "${month}" -gt 12 ]; then
+  echo "Mois invalide dans ${VERSION}." >&2
+  exit 2
+fi
+if [ "${patch}" -gt 99 ]; then
+  echo "Le numéro ${patch} dépasse 99." >&2
+  exit 2
+fi
+BUILD="$(printf '%d%02d%02d' "${year}" "${month}" "${patch}")"
 
 if [ -n "$(git status --porcelain)" ]; then
   echo "Arbre de travail modifié. Commit ou stash avant une release." >&2
