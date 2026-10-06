@@ -164,6 +164,43 @@ cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
 cp build/app/outputs/flutter-apk/app-x86_64-release.apk \
   "dist/android/podavio-${VERSION}-android-x86_64.apk"
 
+# Un APK signé debug s'installe, mais ne met pas à jour l'application release.
+PODAVIO_STORE_PASS="$(prop storePassword)"
+export PODAVIO_STORE_PASS
+expected_sha="$(
+  keytool -list -v -keystore "${store_file}" -storepass:env PODAVIO_STORE_PASS 2>/dev/null \
+    | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f'
+)"
+unset PODAVIO_STORE_PASS
+if [ -z "${expected_sha}" ]; then
+  echo "Impossible de lire l'empreinte du keystore." >&2
+  exit 1
+fi
+apksigner=""
+for dir in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "${HOME}/Android/Sdk"; do
+  [ -n "${dir}" ] || continue
+  found="$(find "${dir}/build-tools" -name apksigner -type f 2>/dev/null | sort | tail -1)"
+  if [ -n "${found}" ]; then
+    apksigner="${found}"
+    break
+  fi
+done
+if [ -z "${apksigner}" ]; then
+  echo "apksigner introuvable : impossible de vérifier la signature des APK." >&2
+  exit 1
+fi
+for apk in dist/android/podavio-"${VERSION}"-android-*.apk; do
+  actual_sha="$(
+    "${apksigner}" verify --print-certs "${apk}" \
+      | sed -n 's/.*SHA-256 digest: //p' | head -1 | tr 'A-F' 'a-f'
+  )"
+  if [ "${actual_sha}" != "${expected_sha}" ]; then
+    echo "Signature incorrecte : ${apk}" >&2
+    echo "L'APK n'est pas signé avec android/upload-keystore.jks." >&2
+    exit 1
+  fi
+done
+
 bundle="dist/linux/podavio-${VERSION}-linux-x64"
 cp -a build/linux/x64/release/bundle "${bundle}"
 tar -C dist/linux -czf "${bundle}.tar.gz" "$(basename "${bundle}")"
