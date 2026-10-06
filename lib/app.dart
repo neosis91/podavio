@@ -8,6 +8,7 @@ import 'core/wallpaper_colors.dart';
 import 'settings/settings_controller.dart';
 import 'ui/app_router.dart';
 import 'ui/widgets/player_keyboard_shortcuts.dart';
+import 'ui/widgets/startup_splash.dart';
 
 class PodavioApp extends ConsumerWidget {
   const PodavioApp({super.key});
