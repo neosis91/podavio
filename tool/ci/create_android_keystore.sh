@@ -1,5 +1,5 @@
 #!/bin/sh
-# Génère un keystore Android release pour Podavio et affiche la config CI.
+# Génère un keystore Android release pour Podavio (android/key.properties).
 #
 # Usage :
 #   tool/ci/create_android_keystore.sh
@@ -82,21 +82,6 @@ echo
 echo "Empreinte SHA-256 (à conserver pour vérifier les APK) :"
 keytool -list -v -keystore "${KEYSTORE}" -storepass "${STORE_PASS}" -alias "${ALIAS}" \
   | grep -E 'SHA256:|SHA1:' || true
-echo
-echo "=== Variables GitLab CI/CD (Settings → CI/CD → Variables) ==="
-echo "Protège-les (Protected) ; Masked si la valeur le permet."
-echo
-echo "ANDROID_KEY_ALIAS = ${ALIAS}"
-echo "ANDROID_KEYSTORE_PASSWORD = ${STORE_PASS}"
-echo "ANDROID_KEY_PASSWORD = ${KEY_PASS}"
-echo
-echo "ANDROID_KEYSTORE_BASE64 = (contenu ci-dessous, Variable type Variable, Protected)"
-if base64 --help 2>&1 | grep -q -- '-w'; then
-  base64 -w0 "${KEYSTORE}"
-else
-  base64 "${KEYSTORE}" | tr -d '\n'
-fi
-echo
-echo
 echo "Sauvegarde le .jks et les mots de passe hors Git (coffre / gestionnaire)."
+echo "Release : tool/release_local.sh <YYYY.M.N>"
 echo "Doc : docs/android-signing.md"

@@ -1,0 +1,189 @@
+#!/usr/bin/env sh
+# Compile Android + Linux sur cette machine et publie une release GitLab.
+# Aucun runner SaaS : le tag est poussé avec ci.skip.
+#
+# Usage :
+#   tool/release_local.sh              # affiche la prochaine version CalVer
+#   tool/release_local.sh 2026.10.6
+#
+# Prérequis : flutter, glab (connecté), android/key.properties + keystore.
+# Le binaire Windows n'est pas produit ici.
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+cd "${ROOT}"
+
+if [ -x "${HOME}/development/flutter/bin/flutter" ]; then
+  PATH="${HOME}/development/flutter/bin:${PATH}"
+fi
+
+suggest_next() {
+  year="$(date -u +%Y)"
+  month="$(date -u +%m | sed 's/^0//')"
+  prefix="${year}.${month}."
+  max=0
+  for tag in $(git tag --list "${prefix}*"); do
+    n="${tag##*.}"
+    case "${n}" in
+      ''|*[!0-9]*) continue ;;
+    esac
+    if [ "${n}" -gt "${max}" ]; then
+      max="${n}"
+    fi
+  done
+  echo "${prefix}$((max + 1))"
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ] || [ $# -eq 0 ]; then
+  echo "Récupération des tags…"
+  git fetch --tags origin
+  next="$(suggest_next)"
+  echo "Usage : tool/release_local.sh <YYYY.M.N>"
+  echo "Prochaine version : ${next}"
+  echo "Exemple : tool/release_local.sh ${next}"
+  exit 0
+fi
+
+if [ $# -ne 1 ]; then
+  echo "Usage : tool/release_local.sh <YYYY.M.N>" >&2
+  exit 2
+fi
+
+VERSION="$1"
+if ! printf '%s' "${VERSION}" | grep -Eq '^[0-9]{4}\.[0-9]+\.[0-9]+$'; then
+  echo "Version invalide : ${VERSION} (attendu YYYY.M.N, ex. 2026.10.6)." >&2
+  exit 2
+fi
+
+echo "Récupération des tags…"
+git fetch --tags origin
+
+SHA_FULL="$(git rev-parse HEAD)"
+SHA="$(git rev-parse --short HEAD)"
+BUILD="${VERSION##*.}"
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Arbre de travail modifié. Commit ou stash avant une release." >&2
+  git status --porcelain >&2
+  exit 1
+fi
+
+for cmd in flutter glab git tar; do
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    echo "Commande manquante : ${cmd}" >&2
+    exit 1
+  fi
+done
+
+prop() {
+  sed -n "s/^$1=//p" android/key.properties | head -n 1
+}
+
+if [ ! -f android/key.properties ]; then
+  echo "android/key.properties manquant." >&2
+  echo "Le keystore android/upload-keystore.jks est déjà là : remets le key.properties qui va avec." >&2
+  echo "Ne relance pas create_android_keystore.sh, ça changerait la signature des mises à jour." >&2
+  exit 1
+fi
+
+for key in storePassword keyPassword keyAlias storeFile; do
+  if [ -z "$(prop "${key}")" ]; then
+    echo "android/key.properties : ${key} manquant." >&2
+    exit 1
+  fi
+done
+
+store_file="$(prop storeFile)"
+case "${store_file}" in
+  /*) ;;
+  *) store_file="android/${store_file}" ;;
+esac
+if [ ! -f "${store_file}" ]; then
+  echo "Keystore introuvable : ${store_file}" >&2
+  exit 1
+fi
+
+remote_commit="$(git ls-remote --tags origin "refs/tags/${VERSION}" | awk '/\^\{\}$/ { print $1; exit }')"
+if [ -z "${remote_commit}" ]; then
+  remote_commit="$(git ls-remote --tags origin "refs/tags/${VERSION}" | awk '{ print $1; exit }')"
+fi
+if [ -n "${remote_commit}" ] && [ "${remote_commit}" != "${SHA_FULL}" ]; then
+  echo "Le tag ${VERSION} existe déjà sur origin et pointe vers un autre commit." >&2
+  exit 1
+fi
+
+if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+  local_commit="$(git rev-parse "${VERSION}^{}")"
+  if [ "${local_commit}" != "${SHA_FULL}" ]; then
+    echo "Le tag local ${VERSION} pointe vers un autre commit." >&2
+    exit 1
+  fi
+fi
+
+echo "Podavio ${VERSION} (build ${BUILD}, commit ${SHA})"
+
+flutter build apk --release \
+  --build-name="${VERSION}" \
+  --build-number="${BUILD}" \
+  --dart-define=PODAVIO_VERSION="${VERSION}" \
+  --dart-define=GITLAB_COMMIT_SHA="${SHA}"
+flutter build apk --release --split-per-abi \
+  --build-name="${VERSION}" \
+  --build-number="${BUILD}" \
+  --dart-define=PODAVIO_VERSION="${VERSION}" \
+  --dart-define=GITLAB_COMMIT_SHA="${SHA}"
+flutter build linux --release \
+  --build-name="${VERSION}" \
+  --build-number="${BUILD}" \
+  --dart-define=PODAVIO_VERSION="${VERSION}" \
+  --dart-define=GITLAB_COMMIT_SHA="${SHA}"
+
+rm -rf dist/android dist/linux
+mkdir -p dist/android dist/linux
+
+cp build/app/outputs/flutter-apk/app-release.apk \
+  "dist/android/podavio-${VERSION}-android-universal.apk"
+cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+  "dist/android/podavio-${VERSION}-android-armeabi-v7a.apk"
+cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+  "dist/android/podavio-${VERSION}-android-arm64-v8a.apk"
+cp build/app/outputs/flutter-apk/app-x86_64-release.apk \
+  "dist/android/podavio-${VERSION}-android-x86_64.apk"
+
+bundle="dist/linux/podavio-${VERSION}-linux-x64"
+cp -a build/linux/x64/release/bundle "${bundle}"
+tar -C dist/linux -czf "${bundle}.tar.gz" "$(basename "${bundle}")"
+rm -rf "${bundle}"
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "La compilation a modifié des fichiers suivis. Tag non créé." >&2
+  git status --porcelain >&2
+  exit 1
+fi
+
+if ! git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+  git tag -a "${VERSION}" -m "Podavio ${VERSION}"
+fi
+
+git push -o ci.skip origin "refs/tags/${VERSION}"
+
+NOTES="Compilation locale **${VERSION}**
+
+- Commit : ${SHA}
+- APK universel + ABI (armeabi-v7a, arm64-v8a, x86_64)
+- Linux x64 (.tar.gz)
+
+Les archives « Source code » affichées par GitLab sont automatiques."
+
+glab release create "${VERSION}" \
+  --name "Podavio ${VERSION}" \
+  --notes "${NOTES}" \
+  --use-package-registry \
+  --package-name podavio \
+  "dist/android/podavio-${VERSION}-android-universal.apk#APK universel" \
+  "dist/android/podavio-${VERSION}-android-armeabi-v7a.apk#APK armeabi-v7a" \
+  "dist/android/podavio-${VERSION}-android-arm64-v8a.apk#APK arm64-v8a" \
+  "dist/android/podavio-${VERSION}-android-x86_64.apk#APK x86_64" \
+  "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)"
+
+echo "Release ${VERSION} publiée (commit ${SHA})."
