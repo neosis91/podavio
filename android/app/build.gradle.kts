@@ -5,6 +5,7 @@ plugins {
 }
 
 import java.util.Properties
+import java.io.File
 import java.io.FileInputStream
 
 val keystoreProperties = Properties()
@@ -20,7 +21,9 @@ fun signingValue(envName: String, propName: String): String? {
 }
 
 val releaseStoreFile = signingValue("ANDROID_KEYSTORE_PATH", "storeFile")?.let { path ->
-    val asFile = file(path)
+    // file() rend toujours un chemin absolu, donc isAbsolute ne distingue plus
+    // un chemin relatif à android/ (upload-keystore.jks).
+    val asFile = File(path)
     if (asFile.isAbsolute) asFile else rootProject.file(path)
 }
 val hasReleaseSigning =
