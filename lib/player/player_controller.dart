@@ -8,6 +8,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../data/app_database.dart';
 import '../data/feed_service.dart';
+import '../data/http_auth.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import 'playback_handler.dart';
@@ -125,6 +126,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   var _hasPlayedInSession = false;
   DateTime _lastPersist = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _lastPositionUi = DateTime.fromMillisecondsSinceEpoch(0);
+  Duration _skipIntro = Duration.zero;
+  Duration _skipOutro = Duration.zero;
+  int? _outroSkippedEpisodeId;
   Timer? _sleepTimer;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration?>? _durationSub;
@@ -338,6 +342,20 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     );
   }
 
+  /// Vitesse des épisodes de ce podcast. `null` reprend le réglage général.
+  Future<void> setPodcastSpeed(int podcastId, double? speed) async {
+    await ref.read(databaseProvider).setPodcastPlaybackSpeed(podcastId, speed);
+    if (!ref.mounted || _disposed) return;
+    final episodeId = _ui.episodeId;
+    if (episodeId == null) return;
+    final entry = await ref.read(databaseProvider).getEpisode(episodeId);
+    if (entry?.podcast.id != podcastId || !ref.mounted || _disposed) return;
+    final applied = _normalizeSpeed(speed ?? ref.read(settingsProvider).speed);
+    await _player.setSpeed(applied);
+    if (!ref.mounted || _disposed) return;
+    _emit(_ui.copyWith(speed: applied));
+  }
+
   /// Remet la vitesse du podcast courant au défaut global.
   Future<void> resetPodcastSpeed() async {
     final episodeId = _ui.episodeId;
@@ -476,6 +494,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         start >= duration - const Duration(seconds: 5)) {
       start = Duration.zero;
     }
+    _skipIntro = Duration(seconds: podcast.skipIntroSeconds);
+    _skipOutro = Duration(seconds: podcast.skipOutroSeconds);
+    _outroSkippedEpisodeId = null;
+    start = _applyIntroSkip(start, duration);
     final settings = ref.read(settingsProvider);
     final speed = podcast.playbackSpeed ?? settings.speed;
     final preferPodcastCover = settings.preferPodcastCover;
@@ -529,7 +551,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         AudioSource.uri(
           uri,
           headers: uri.scheme == 'http' || uri.scheme == 'https'
-              ? const {'User-Agent': podavioUserAgent}
+              ? podcastRequestHeaders(
+                  userAgent: podavioUserAgent,
+                  username: podcast.authUsername,
+                  password: podcast.authPassword,
+                )
               : null,
         ),
       );
@@ -594,6 +620,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       }
       final id = _ui.episodeId;
       if (id == null) return;
+      _maybeSkipOutro(position);
       if (now.difference(_lastPersist) < const Duration(seconds: 5)) return;
       _lastPersist = now;
       unawaited(
@@ -606,6 +633,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     _durationSub = _player.durationStream.listen((duration) {
       if (duration == null) return;
       _emit(_ui.copyWith(duration: duration));
+      _maybeSkipOutro(_ui.position);
     });
     _stateSub = _player.playerStateStream.listen((playerState) {
       _emit(_ui.copyWith(playing: playerState.playing));
@@ -613,6 +641,30 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         unawaited(_onCompleted());
       }
     });
+  }
+
+  /// Saute le générique de début seulement si la reprise est encore dedans.
+  Duration _applyIntroSkip(Duration start, Duration duration) {
+    if (_skipIntro <= Duration.zero || start >= _skipIntro) return start;
+    if (duration > Duration.zero) {
+      final earliestEnd = duration - _skipOutro - const Duration(seconds: 1);
+      if (_skipIntro >= earliestEnd) return start;
+    }
+    return _skipIntro;
+  }
+
+  void _maybeSkipOutro(Duration position) {
+    if (_advancing || !_ui.playing) return;
+    final id = _ui.episodeId;
+    if (id == null || _outroSkippedEpisodeId == id) return;
+    if (_skipOutro <= Duration.zero) return;
+    final duration = _ui.duration;
+    if (duration <= Duration.zero) return;
+    final limit = duration - _skipOutro;
+    if (limit <= _skipIntro + const Duration(seconds: 1)) return;
+    if (position < limit) return;
+    _outroSkippedEpisodeId = id;
+    unawaited(_onCompleted());
   }
 
   Future<void> _onCompleted() async {

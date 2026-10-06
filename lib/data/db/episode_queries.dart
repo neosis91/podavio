@@ -242,6 +242,11 @@ mixin _EpisodeQueries on _$AppDatabase {
         podcasts.autoDownload,
         podcasts.keepUpdated,
         podcasts.subscribed,
+        podcasts.playbackSpeed,
+        podcasts.skipIntroSeconds,
+        podcasts.skipOutroSeconds,
+        podcasts.authUsername,
+        podcasts.authPassword,
       ])
       ..join([innerJoin(podcasts, podcasts.id.equalsExp(episodes.podcastId))]);
     if (unreadOnly) query.where(episodes.played.equals(false));
@@ -331,6 +336,11 @@ mixin _EpisodeQueries on _$AppDatabase {
           autoDownload: row.read(podcasts.autoDownload)!,
           keepUpdated: row.read(podcasts.keepUpdated)!,
           subscribed: row.read(podcasts.subscribed)!,
+          playbackSpeed: row.read(podcasts.playbackSpeed),
+          skipIntroSeconds: row.read(podcasts.skipIntroSeconds)!,
+          skipOutroSeconds: row.read(podcasts.skipOutroSeconds)!,
+          authUsername: row.read(podcasts.authUsername),
+          authPassword: row.read(podcasts.authPassword),
         ),
       ),
     );

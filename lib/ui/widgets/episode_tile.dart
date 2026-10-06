@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/format.dart';
 import '../../data/app_database.dart';
 import '../../data/download_controller.dart';
+import '../../data/feed_service.dart';
 import '../../data/download_service.dart';
 import '../../data/providers.dart';
 import '../../player/player_controller.dart';
@@ -133,6 +134,10 @@ class EpisodeTile extends ConsumerWidget {
                     url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
                     localPath: entry.imagePath(
                       preferPodcastCover: preferPodcastCover,
+                    ),
+                    httpHeaders: podcastAuthHeaders(
+                      username: entry.podcast.authUsername,
+                      password: entry.podcast.authPassword,
                     ),
                     coverSize: coverSize,
                     listenFraction: listenFraction,
@@ -330,6 +335,7 @@ class _EpisodeCoverWithProgress extends StatelessWidget {
   const _EpisodeCoverWithProgress({
     required this.url,
     required this.localPath,
+    required this.httpHeaders,
     required this.coverSize,
     required this.listenFraction,
     required this.progressBarHeight,
@@ -337,6 +343,7 @@ class _EpisodeCoverWithProgress extends StatelessWidget {
 
   final String? url;
   final String? localPath;
+  final Map<String, String>? httpHeaders;
   final double coverSize;
   final double? listenFraction;
   final double progressBarHeight;
@@ -350,6 +357,7 @@ class _EpisodeCoverWithProgress extends StatelessWidget {
         PodcastCover(
           url: url,
           localPath: localPath,
+          httpHeaders: httpHeaders,
           size: coverSize,
         ),
         if (fraction != null) ...[

@@ -6,7 +6,6 @@ import '../../data/app_database.dart';
 import '../../data/providers.dart';
 import 'empty_state.dart';
 import 'episode_tile.dart';
-import 'list_metrics.dart';
 
 class EpisodeListBody extends ConsumerStatefulWidget {
   const EpisodeListBody({
@@ -148,7 +147,7 @@ class _EpisodeWindowList extends StatelessWidget {
         if (notification.metrics.extentAfter < 800) onLoadMore();
         return false;
       },
-      child: EpisodeListViewport(child: scrollable),
+      child: scrollable,
     );
   }
 }

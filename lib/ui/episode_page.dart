@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../core/format.dart';
 import '../data/app_database.dart';
 import '../data/download_controller.dart';
+import '../data/feed_service.dart';
 import '../data/providers.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
@@ -112,6 +113,10 @@ class _EpisodeDetail extends ConsumerWidget {
                   url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
                   localPath: entry.imagePath(
                     preferPodcastCover: preferPodcastCover,
+                  ),
+                  httpHeaders: podcastAuthHeaders(
+                    username: entry.podcast.authUsername,
+                    password: entry.podcast.authPassword,
                   ),
                   size: 200,
                   radius: 16,

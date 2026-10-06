@@ -10,6 +10,7 @@ import 'package:saf_util/saf_util.dart';
 import '../core/format.dart';
 import 'app_database.dart';
 import 'feed_service.dart';
+import 'http_auth.dart';
 
 class DownloadCancelled implements Exception {
   const DownloadCancelled();
@@ -84,10 +85,25 @@ class DownloadService {
     String? contentUri;
     String? session;
     try {
+      final headers = podcastRequestHeaders(
+        userAgent: podavioUserAgent,
+        username: podcast?.authUsername,
+        password: podcast?.authPassword,
+      );
       final request = http.Request('GET', Uri.parse(episode.audioUrl));
-      request.headers['user-agent'] = podavioUserAgent;
-      final response = await client.send(request);
+      request.headers.addAll(headers);
+      final response = headers.containsKey('Authorization')
+          ? await sendKeepingAuthorization(
+              client,
+              request..followRedirects = false,
+            )
+          : await client.send(request);
       if (_cancelled.contains(episode.id)) throw const DownloadCancelled();
+      if (response.statusCode == 401) {
+        throw Exception(
+          'Téléchargement refusé. Vérifiez l’identifiant dans les paramètres du podcast.',
+        );
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception('Téléchargement impossible (${response.statusCode}).');
       }

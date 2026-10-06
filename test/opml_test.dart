@@ -54,6 +54,8 @@ void main() {
       autoDownload: false,
       keepUpdated: true,
       subscribed: true,
+      skipIntroSeconds: 0,
+      skipOutroSeconds: 0,
     );
     final entries = parseOpmlEntries(buildOpml([podcast]));
     expect(entries, hasLength(1));

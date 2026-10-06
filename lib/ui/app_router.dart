@@ -60,6 +60,24 @@ final routerProvider = Provider<GoRouter>((ref) {
                   if (id == null) return const PodcastsPage();
                   return PodcastPage(podcastId: id);
                 },
+                routes: [
+                  GoRoute(
+                    path: 'about',
+                    builder: (context, state) {
+                      final id = int.tryParse(state.pathParameters['id'] ?? '');
+                      if (id == null) return const PodcastsPage();
+                      return PodcastAboutPage(podcastId: id);
+                    },
+                  ),
+                  GoRoute(
+                    path: 'settings',
+                    builder: (context, state) {
+                      final id = int.tryParse(state.pathParameters['id'] ?? '');
+                      if (id == null) return const PodcastsPage();
+                      return PodcastSettingsPage(podcastId: id);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
