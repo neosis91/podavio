@@ -44,15 +44,20 @@ flutter run -d windows
 flutter test
 ```
 
-## Signature Android (release / CI)
+## Publier une release
 
-Les APK de release doivent être signés avec un keystore stable (sinon les mises à
-jour in-place échouent). Création du keystore, variables GitLab et job
-`build:android` : voir [docs/android-signing.md](docs/android-signing.md).
+Les binaires sont compilés sur cette machine, puis envoyés avec `glab`. Ça ne consomme pas de minutes GitLab. Android et Linux uniquement.
 
 ```bash
-tool/ci/create_android_keystore.sh
+tool/release_local.sh              # affiche la prochaine version
+tool/release_local.sh 2026.10.6    # compile, tague, publie
 ```
+
+Le tag est poussé avec `ci.skip`. La CI ne lance plus que les contrôles de merge request.
+
+## Signature Android
+
+Les APK de release doivent être signés avec le keystore déjà en place, `android/upload-keystore.jks`, et son `android/key.properties`. Voir [docs/android-signing.md](docs/android-signing.md). Ne pas relancer la création du keystore : la signature changerait et les mises à jour in-place échoueraient.
 
 ## Suite prévue
 
