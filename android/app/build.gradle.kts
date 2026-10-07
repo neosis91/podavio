@@ -35,7 +35,8 @@ val hasReleaseSigning =
 
 android {
     namespace = "fr.podavio.podavio"
-    compileSdk = flutter.compileSdkVersion
+    // Flutter reste à 36 ; flutter_local_notifications et androidx.core exigent 37.
+    compileSdk = maxOf(flutter.compileSdkVersion, 37)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
