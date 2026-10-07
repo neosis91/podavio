@@ -8,10 +8,17 @@ import '../router.dart';
 import '../widgets/messages.dart' show showMessage;
 
 /// Demande un identifiant HTTP Basic. `null` si l’utilisateur annule.
+/// Des chaînes vides signifient que les identifiants sont effacés.
 Future<({String username, String password})?> askFeedCredentials(
   BuildContext context, {
   String? username,
   String? password,
+  String title = 'Authentification requise',
+  String message =
+      'Ce flux demande un identifiant et un mot de passe. '
+      'Ils seront enregistrés pour ce podcast.',
+  String confirmLabel = 'Continuer',
+  bool canClear = false,
 }) {
   final userController = TextEditingController(text: username ?? '');
   final passController = TextEditingController(text: password ?? '');
@@ -22,14 +29,11 @@ Future<({String username, String password})?> askFeedCredentials(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Authentification requise'),
+            title: Text(title),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Ce flux demande un identifiant et un mot de passe. '
-                  'Ils seront enregistrés pour ce podcast.',
-                ),
+                Text(message),
                 const SizedBox(height: 16),
                 TextField(
                   controller: userController,
@@ -62,7 +66,7 @@ Future<({String username, String password})?> askFeedCredentials(
                     userController,
                     passController,
                     setState,
-                    (message) => errorText = message,
+                    (text) => errorText = text,
                   ),
                 ),
                 if (errorText.isNotEmpty) ...[
@@ -75,6 +79,14 @@ Future<({String username, String password})?> askFeedCredentials(
               ],
             ),
             actions: [
+              if (canClear)
+                TextButton(
+                  onPressed: () => Navigator.pop(
+                    context,
+                    (username: '', password: ''),
+                  ),
+                  child: const Text('Effacer'),
+                ),
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Annuler'),
@@ -85,9 +97,9 @@ Future<({String username, String password})?> askFeedCredentials(
                   userController,
                   passController,
                   setState,
-                  (message) => errorText = message,
+                  (text) => errorText = text,
                 ),
-                child: const Text('Continuer'),
+                child: Text(confirmLabel),
               ),
             ],
           );

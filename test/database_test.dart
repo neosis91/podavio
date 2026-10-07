@@ -328,4 +328,68 @@ void main() {
     expect(signal.$5, 1); // favorite
     expect(signal.$6, 1); // download
   });
+
+  test('previousInQueue stays inside the playlist', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final podcastId = await database.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: '',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a',
+            title: 'Un',
+            description: '',
+            audioUrl: 'https://example.com/1.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'b',
+            title: 'Deux',
+            description: '',
+            audioUrl: 'https://example.com/2.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'c',
+            title: 'Trois',
+            description: '',
+            audioUrl: 'https://example.com/3.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'd',
+            title: 'Hors file',
+            description: '',
+            audioUrl: 'https://example.com/4.mp3',
+          ),
+        ],
+      ),
+    );
+
+    final episodes = await database.watchEpisodes(podcastId: podcastId).first;
+    final byTitle = {
+      for (final entry in episodes) entry.episode.title: entry.episode.id,
+    };
+    final first = byTitle['Un']!;
+    final second = byTitle['Deux']!;
+    final third = byTitle['Trois']!;
+    final outside = byTitle['Hors file']!;
+    await database.addToQueue(first);
+    await database.addToQueue(second);
+    await database.addToQueue(third);
+
+    expect(await database.previousInQueue(), isNull);
+    expect(await database.previousInQueue(beforeEpisodeId: first), isNull);
+    expect(
+      (await database.previousInQueue(beforeEpisodeId: second))?.episode.id,
+      first,
+    );
+    expect(
+      (await database.previousInQueue(beforeEpisodeId: third))?.episode.id,
+      second,
+    );
+    expect(await database.previousInQueue(beforeEpisodeId: outside), isNull);
+  });
 }

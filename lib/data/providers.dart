@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_database.dart';
 import 'cover_service.dart';
+import 'download_notifications.dart';
 import 'download_service.dart';
 import 'feed_service.dart';
 import 'models.dart';
@@ -26,6 +27,10 @@ final feedServiceProvider = Provider<FeedService>((ref) {
 
 final downloadServiceProvider = Provider<DownloadService>((ref) {
   return DownloadService(ref.watch(databaseProvider));
+});
+
+final downloadNotificationsProvider = Provider<DownloadNotifications>((ref) {
+  return SystemDownloadNotifications();
 });
 
 final coverServiceProvider = Provider<CoverService>((ref) {
@@ -53,13 +58,14 @@ final chaptersProvider = StreamProvider.family<List<EpisodeChapter>, int>((
 enum ChaptersLoadPhase { loaded, failed }
 
 /// Suit `ensureChapters` plutôt que `AsyncValue.isLoading` du watch Drift.
-final chaptersLoadStateProvider =
-    FutureProvider.family<ChaptersLoadPhase, int>((ref, id) async {
-      final feed = ref.watch(feedServiceProvider);
-      await feed.ensureChapters(id);
-      if (feed.chaptersRecentlyFailed(id)) return ChaptersLoadPhase.failed;
-      return ChaptersLoadPhase.loaded;
-    });
+final chaptersLoadStateProvider = FutureProvider.family<ChaptersLoadPhase, int>(
+  (ref, id) async {
+    final feed = ref.watch(feedServiceProvider);
+    await feed.ensureChapters(id);
+    if (feed.chaptersRecentlyFailed(id)) return ChaptersLoadPhase.failed;
+    return ChaptersLoadPhase.loaded;
+  },
+);
 
 final podcastsProvider = StreamProvider<List<Podcast>>((ref) {
   final sort = ref.watch(settingsProvider.select((s) => s.podcastSort));
@@ -291,21 +297,22 @@ final libraryStatsProvider = FutureProvider<LibraryStats>((ref) async {
   final bytesByPodcast = await ref
       .read(downloadServiceProvider)
       .downloadBytesByPodcast();
-  final downloads = [
-    for (final item in stats.downloads)
-      DownloadStat(
-        podcastId: item.podcastId,
-        title: item.title,
-        author: item.author,
-        imageUrl: item.imageUrl,
-        downloadCount: item.downloadCount,
-        downloadBytes: bytesByPodcast[item.podcastId] ?? 0,
-      ),
-  ]..sort((a, b) {
-    final byBytes = b.downloadBytes.compareTo(a.downloadBytes);
-    if (byBytes != 0) return byBytes;
-    return a.title.toLowerCase().compareTo(b.title.toLowerCase());
-  });
+  final downloads =
+      [
+        for (final item in stats.downloads)
+          DownloadStat(
+            podcastId: item.podcastId,
+            title: item.title,
+            author: item.author,
+            imageUrl: item.imageUrl,
+            downloadCount: item.downloadCount,
+            downloadBytes: bytesByPodcast[item.podcastId] ?? 0,
+          ),
+      ]..sort((a, b) {
+        final byBytes = b.downloadBytes.compareTo(a.downloadBytes);
+        if (byBytes != 0) return byBytes;
+        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      });
   final totalBytes = downloads.fold<int>(
     0,
     (sum, item) => sum + item.downloadBytes,

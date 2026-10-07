@@ -11,6 +11,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('OutsideAppControl.byId defaults to time skip', () {
+    expect(OutsideAppControl.byId(null), OutsideAppControl.skip);
+    expect(OutsideAppControl.byId('episode'), OutsideAppControl.episode);
+    expect(OutsideAppControl.byId('unknown'), OutsideAppControl.skip);
+  });
+
   test('EpisodeListDensity.byId defaults to comfortable', () {
     expect(EpisodeListDensity.byId(null), EpisodeListDensity.comfortable);
     expect(EpisodeListDensity.byId('unknown'), EpisodeListDensity.comfortable);
@@ -95,6 +101,45 @@ void main() {
       container.read(settingsProvider).episodeListDensity,
       EpisodeListDensity.compact,
     );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+    await database.close();
+  });
+
+  testWidgets('Lecture settings persist outside-app controls', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final database = AppDatabase(NativeDatabase.memory());
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
+          databaseProvider.overrideWithValue(database),
+        ],
+        child: const MaterialApp(home: PlaybackPage()),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Hors de l’application'), findsOneWidget);
+    expect(find.text('10 s en arrière, 30 s en avant'), findsOneWidget);
+
+    await tester.tap(find.text('Hors de l’application'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Épisode précédent et suivant'));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(PlaybackPage)),
+    );
+    expect(
+      container.read(settingsProvider).outsideApp,
+      OutsideAppControl.episode,
+    );
+    expect(preferences.getString('outsideApp'), 'episode');
+    expect(find.text('Épisode précédent et suivant'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));

@@ -119,6 +119,24 @@ enum PodcastSort {
   }
 }
 
+/// Boutons latéraux hors de l’application (notification, casque, Android Auto).
+enum OutsideAppControl {
+  skip('skip', 'Saut temporel'),
+  episode('episode', 'Épisode précédent et suivant');
+
+  const OutsideAppControl(this.id, this.label);
+
+  final String id;
+  final String label;
+
+  static OutsideAppControl byId(String? id) {
+    for (final value in values) {
+      if (value.id == id) return value;
+    }
+    return OutsideAppControl.skip;
+  }
+}
+
 /// Densité des listes d’épisodes (compose avec le palier de largeur).
 enum EpisodeListDensity {
   comfortable('comfortable', 'Confortable'),
@@ -258,6 +276,7 @@ class AppSettings {
     required this.volume,
     required this.skipBackSeconds,
     required this.skipForwardSeconds,
+    required this.outsideApp,
     required this.showRemainingTime,
     required this.timeRespectsSpeed,
     required this.keepScreenOn,
@@ -286,6 +305,9 @@ class AppSettings {
   final double volume;
   final int skipBackSeconds;
   final int skipForwardSeconds;
+
+  /// Saut temporel ou épisode précédent / suivant, hors de l’application.
+  final OutsideAppControl outsideApp;
   final bool showRemainingTime;
 
   /// Position / durée affichées en temps réel selon la vitesse de lecture.
@@ -326,6 +348,7 @@ class AppSettings {
     double? volume,
     int? skipBackSeconds,
     int? skipForwardSeconds,
+    OutsideAppControl? outsideApp,
     bool? showRemainingTime,
     bool? timeRespectsSpeed,
     bool? keepScreenOn,
@@ -355,6 +378,7 @@ class AppSettings {
       volume: volume ?? this.volume,
       skipBackSeconds: skipBackSeconds ?? this.skipBackSeconds,
       skipForwardSeconds: skipForwardSeconds ?? this.skipForwardSeconds,
+      outsideApp: outsideApp ?? this.outsideApp,
       showRemainingTime: showRemainingTime ?? this.showRemainingTime,
       timeRespectsSpeed: timeRespectsSpeed ?? this.timeRespectsSpeed,
       keepScreenOn: keepScreenOn ?? this.keepScreenOn,
@@ -399,6 +423,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       volume: _volume(preferences.getDouble('volume')),
       skipBackSeconds: preferences.getInt('skipBack') ?? 10,
       skipForwardSeconds: preferences.getInt('skipForward') ?? 30,
+      outsideApp: OutsideAppControl.byId(preferences.getString('outsideApp')),
       showRemainingTime: preferences.getBool('showRemainingTime') ?? false,
       timeRespectsSpeed: preferences.getBool('timeRespectsSpeed') ?? false,
       keepScreenOn: preferences.getBool('keepScreenOn') ?? false,
@@ -490,6 +515,11 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setSkipForward(int seconds) async {
     state = state.copyWith(skipForwardSeconds: seconds);
     await ref.read(sharedPreferencesProvider).setInt('skipForward', seconds);
+  }
+
+  Future<void> setOutsideApp(OutsideAppControl control) async {
+    state = state.copyWith(outsideApp: control);
+    await ref.read(sharedPreferencesProvider).setString('outsideApp', control.id);
   }
 
   Future<void> setShowRemainingTime(bool enabled) async {

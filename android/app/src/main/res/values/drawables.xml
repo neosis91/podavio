@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Même onde que la notification de lecture (assets/brand/icon.svg). -->
+    <drawable name="ic_notification">@drawable/media3_notification_small_icon</drawable>
+</resources>
