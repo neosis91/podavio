@@ -100,14 +100,15 @@ install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/podavio.png"
+# Onde assets/brand/icon.svg : fenêtre et thème hicolor (nom = application-id).
+set(PODAVIO_ICON_SVG "${CMAKE_CURRENT_SOURCE_DIR}/../assets/brand/icon.svg")
+install(FILES "${PODAVIO_ICON_SVG}"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
+  RENAME "icon.svg"
   COMPONENT Runtime)
-
-# Icône thème hicolor + .desktop (nom = application-id) pour Wayland.
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/podavio.png"
-  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/256x256/apps"
-  RENAME "fr.podavio.podavio.png"
+install(FILES "${PODAVIO_ICON_SVG}"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/scalable/apps"
+  RENAME "fr.podavio.podavio.svg"
   COMPONENT Runtime)
 install(FILES "${CMAKE_BINARY_DIR}/runner/fr.podavio.podavio.desktop"
   DESTINATION "${CMAKE_INSTALL_PREFIX}/share/applications"

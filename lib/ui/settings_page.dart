@@ -14,6 +14,7 @@ import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import 'nav_catalog.dart';
 import 'widgets/brand.dart';
+import 'widgets/choice_dialog.dart';
 import 'widgets/messages.dart';
 import 'widgets/player_keyboard_shortcuts.dart';
 
@@ -319,10 +320,7 @@ Future<void> _confirmDeleteAllDownloads(
   await _deleteAllDownloads(context, ref);
 }
 
-Future<void> _deleteAllDownloads(
-  BuildContext context,
-  WidgetRef ref,
-) async {
+Future<void> _deleteAllDownloads(BuildContext context, WidgetRef ref) async {
   if (ref.read(downloadProgressProvider).isNotEmpty) {
     showMessage(context, 'Attendez la fin des téléchargements en cours.');
     return;
@@ -482,38 +480,34 @@ class PlaybackPage extends ConsumerWidget {
           ListTile(
             title: const Text('Retour rapide'),
             subtitle: Text('${settings.skipBackSeconds} secondes'),
-            trailing: DropdownButton<int>(
-              value: settings.skipBackSeconds,
-              items: const [5, 10, 15, 30]
-                  .map(
-                    (seconds) => DropdownMenuItem(
-                      value: seconds,
-                      child: Text('$seconds s'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) notifier.setSkipBack(value);
-              },
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _pickIntSetting(
+              context,
+              title: 'Retour rapide',
+              selected: settings.skipBackSeconds,
+              values: const [5, 10, 15, 30],
+              label: (seconds) => '$seconds s',
+              onChanged: notifier.setSkipBack,
             ),
           ),
           ListTile(
             title: const Text('Avance rapide'),
             subtitle: Text('${settings.skipForwardSeconds} secondes'),
-            trailing: DropdownButton<int>(
-              value: settings.skipForwardSeconds,
-              items: const [10, 15, 30, 45, 60]
-                  .map(
-                    (seconds) => DropdownMenuItem(
-                      value: seconds,
-                      child: Text('$seconds s'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) notifier.setSkipForward(value);
-              },
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _pickIntSetting(
+              context,
+              title: 'Avance rapide',
+              selected: settings.skipForwardSeconds,
+              values: const [10, 15, 30, 45, 60],
+              label: (seconds) => '$seconds s',
+              onChanged: notifier.setSkipForward,
             ),
+          ),
+          ListTile(
+            title: const Text('Hors de l’application'),
+            subtitle: Text(_outsideAppSubtitle(settings)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _pickOutsideApp(context, ref),
           ),
           const _SectionTitle('Lecteur'),
           SwitchListTile(
@@ -568,19 +562,14 @@ class PlaybackPage extends ConsumerWidget {
           ),
           const ListTile(
             title: Text('Densité des listes'),
-            subtitle: Text(
-              'Espace entre les lignes des listes d’épisodes',
-            ),
+            subtitle: Text('Espace entre les lignes des listes d’épisodes'),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SegmentedButton<EpisodeListDensity>(
               segments: [
                 for (final density in EpisodeListDensity.values)
-                  ButtonSegment(
-                    value: density,
-                    label: Text(density.label),
-                  ),
+                  ButtonSegment(value: density, label: Text(density.label)),
               ],
               selected: {settings.episodeListDensity},
               onSelectionChanged: (selection) =>
@@ -595,19 +584,14 @@ class PlaybackPage extends ConsumerWidget {
                   ? 'Pas de limite entre deux actualisations'
                   : 'Minimum ${settings.refreshIntervalMinutes} min entre deux actualisations',
             ),
-            trailing: DropdownButton<int>(
-              value: settings.refreshIntervalMinutes,
-              items: const [
-                DropdownMenuItem(value: 0, child: Text('Aucune')),
-                DropdownMenuItem(value: 1, child: Text('1 min')),
-                DropdownMenuItem(value: 5, child: Text('5 min')),
-                DropdownMenuItem(value: 15, child: Text('15 min')),
-                DropdownMenuItem(value: 30, child: Text('30 min')),
-                DropdownMenuItem(value: 60, child: Text('1 h')),
-              ],
-              onChanged: (value) {
-                if (value != null) notifier.setRefreshIntervalMinutes(value);
-              },
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _pickIntSetting(
+              context,
+              title: 'Intervalle d’actualisation',
+              selected: settings.refreshIntervalMinutes,
+              values: const [0, 1, 5, 15, 30, 60],
+              label: _refreshIntervalLabel,
+              onChanged: notifier.setRefreshIntervalMinutes,
             ),
           ),
           const _SectionTitle('Téléchargements'),
@@ -625,10 +609,63 @@ class PlaybackPage extends ConsumerWidget {
   }
 }
 
-Future<void> _showMiniPlayerButtonsSheet(
-  BuildContext context,
-  WidgetRef ref,
-) {
+Future<void> _pickIntSetting(
+  BuildContext context, {
+  required String title,
+  required int selected,
+  required List<int> values,
+  required String Function(int value) label,
+  required ValueChanged<int> onChanged,
+}) async {
+  final choices = [...values];
+  if (!choices.contains(selected)) {
+    choices
+      ..add(selected)
+      ..sort();
+  }
+  final choice = await showChoiceDialog<int>(
+    context,
+    title: title,
+    selected: selected,
+    options: [for (final value in choices) (value: value, label: label(value))],
+  );
+  if (choice != null) onChanged(choice);
+}
+
+String _outsideAppSubtitle(AppSettings settings) {
+  return switch (settings.outsideApp) {
+    OutsideAppControl.skip =>
+      '${settings.skipBackSeconds} s en arrière, '
+          '${settings.skipForwardSeconds} s en avant',
+    OutsideAppControl.episode => OutsideAppControl.episode.label,
+  };
+}
+
+Future<void> _pickOutsideApp(BuildContext context, WidgetRef ref) async {
+  final settings = ref.read(settingsProvider);
+  final choice = await showChoiceDialog<OutsideAppControl>(
+    context,
+    title: 'Hors de l’application',
+    selected: settings.outsideApp,
+    options: [
+      for (final mode in OutsideAppControl.values)
+        (value: mode, label: mode.label),
+    ],
+  );
+  if (choice != null) {
+    await ref.read(settingsProvider.notifier).setOutsideApp(choice);
+  }
+}
+
+String _refreshIntervalLabel(int minutes) {
+  return switch (minutes) {
+    0 => 'Aucune',
+    60 => '1 h',
+    _ => '$minutes min',
+  };
+}
+
+Future<void> _showMiniPlayerButtonsSheet(BuildContext context, WidgetRef ref) {
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
@@ -674,34 +711,30 @@ class _MiniPlayerButtonsSheet extends ConsumerWidget {
             ),
             CheckboxListTile(
               value: buttons.skipBack,
-              onChanged: (value) => update(
-                buttons.copyWith(skipBack: value ?? false),
-              ),
+              onChanged: (value) =>
+                  update(buttons.copyWith(skipBack: value ?? false)),
               title: const Text('Retour rapide'),
               secondary: SkipIcon.back(size: 24),
             ),
             CheckboxListTile(
               value: buttons.skipForward,
-              onChanged: (value) => update(
-                buttons.copyWith(skipForward: value ?? false),
-              ),
+              onChanged: (value) =>
+                  update(buttons.copyWith(skipForward: value ?? false)),
               title: const Text('Avance rapide'),
               secondary: SkipIcon.forward(size: 24),
             ),
             CheckboxListTile(
               value: buttons.nextEpisode,
-              onChanged: (value) => update(
-                buttons.copyWith(nextEpisode: value ?? false),
-              ),
+              onChanged: (value) =>
+                  update(buttons.copyWith(nextEpisode: value ?? false)),
               title: const Text('Épisode suivant'),
               subtitle: const Text('Dans la playlist'),
               secondary: SkipIcon.next(size: 24),
             ),
             CheckboxListTile(
               value: buttons.close,
-              onChanged: (value) => update(
-                buttons.copyWith(close: value ?? false),
-              ),
+              onChanged: (value) =>
+                  update(buttons.copyWith(close: value ?? false)),
               title: const Text('Fermer le lecteur'),
               secondary: const Icon(Icons.close),
             ),

@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/app_database.dart';
 import '../data/providers.dart';
-import '../settings/settings_controller.dart';
+import 'playback_handler.dart';
 import 'player_controller.dart';
 
 /// Pont Android Auto : browse (Playlist / Non lus / Téléchargements) + contrôles.
@@ -64,12 +64,13 @@ class AndroidAutoBridge {
           await _ref.read(playerProvider.notifier).toggle();
         }
       case 'skipForward':
-        final seconds =
-            _ref.read(settingsProvider).skipForwardSeconds;
-        await _ref.read(playerProvider.notifier).skipBy(seconds);
+        await _ref.read(playerProvider.notifier).skipOutside(
+          PlaybackDirection.forward,
+        );
       case 'skipBack':
-        final seconds = _ref.read(settingsProvider).skipBackSeconds;
-        await _ref.read(playerProvider.notifier).skipBy(-seconds);
+        await _ref.read(playerProvider.notifier).skipOutside(
+          PlaybackDirection.backward,
+        );
       case 'seek':
         final ms = (call.arguments as num?)?.toInt() ?? 0;
         await _ref.read(playerProvider.notifier).seek(Duration(milliseconds: ms));

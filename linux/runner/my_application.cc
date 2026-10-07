@@ -1,5 +1,6 @@
 #include "my_application.h"
 
+#include <glib/gstdio.h>
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
@@ -23,6 +24,7 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 static gchar* resolve_podavio_icon_path();
 static gchar* resolve_exe_path();
+static GdkPixbuf* fit_icon_square(GdkPixbuf* source, int side);
 static void install_wayland_desktop_entry();
 static void set_podavio_icon(GtkWindow* window);
 
@@ -141,8 +143,8 @@ static gchar* resolve_podavio_icon_path() {
   g_autofree gchar* exe_dir = g_path_get_dirname(exe_path);
 
   const gchar* candidates[] = {
-      "data/podavio.png",
-      "data/flutter_assets/assets/brand/icon.png",
+      "data/icon.svg",
+      "data/flutter_assets/assets/brand/icon.svg",
       nullptr,
   };
   for (int i = 0; candidates[i] != nullptr; i++) {
@@ -165,30 +167,53 @@ static void install_wayland_desktop_entry() {
   const gchar* home = g_get_home_dir();
   if (home == nullptr) return;
 
-  const int sizes[] = {256, 128, 64, 48, 32, 24, 16};
-  g_autoptr(GError) error = nullptr;
-  g_autoptr(GdkPixbuf) source = gdk_pixbuf_new_from_file(icon_src, &error);
+  g_autoptr(GError) load_error = nullptr;
+  g_autoptr(GdkPixbuf) source = gdk_pixbuf_new_from_file(icon_src, &load_error);
+  g_autofree gchar* icon_256 = nullptr;
   if (source == nullptr) {
-    g_warning("Icône Podavio illisible pour le thème : %s", error->message);
-    return;
-  }
+    g_warning("Icône Podavio illisible pour le thème : %s", load_error->message);
+  } else {
+    // Le bureau lit ces PNG, pas le SVG seul. flutter run les réécrit.
+    const int sizes[] = {256, 128, 64, 48, 32, 24, 16};
+    for (guint i = 0; i < G_N_ELEMENTS(sizes); i++) {
+      g_autofree gchar* size_dir = g_strdup_printf("%dx%d", sizes[i], sizes[i]);
+      g_autofree gchar* icon_dir = g_build_filename(
+          home, ".local", "share", "icons", "hicolor", size_dir, "apps",
+          nullptr);
+      if (g_mkdir_with_parents(icon_dir, 0755) != 0) continue;
 
-  for (guint i = 0; i < G_N_ELEMENTS(sizes); i++) {
-    g_autofree gchar* size_dir = g_strdup_printf("%dx%d", sizes[i], sizes[i]);
-    g_autofree gchar* icon_dir = g_build_filename(
-        home, ".local", "share", "icons", "hicolor", size_dir, "apps", nullptr);
-    if (g_mkdir_with_parents(icon_dir, 0755) != 0) continue;
-
-    g_autofree gchar* icon_dst = g_build_filename(
-        icon_dir, APPLICATION_ID ".png", nullptr);
-    g_autoptr(GdkPixbuf) scaled = gdk_pixbuf_scale_simple(
-        source, sizes[i], sizes[i], GDK_INTERP_BILINEAR);
-    if (scaled == nullptr) continue;
-    g_autoptr(GError) save_error = nullptr;
-    if (!gdk_pixbuf_save(scaled, icon_dst, "png", &save_error, nullptr)) {
-      g_warning("Impossible d’écrire %s : %s", icon_dst, save_error->message);
+      g_autofree gchar* icon_dst =
+          g_build_filename(icon_dir, APPLICATION_ID ".png", nullptr);
+      g_autoptr(GdkPixbuf) scaled = fit_icon_square(source, sizes[i]);
+      if (scaled == nullptr) continue;
+      g_autoptr(GError) save_error = nullptr;
+      if (!gdk_pixbuf_save(scaled, icon_dst, "png", &save_error, nullptr)) {
+        g_warning("Impossible d’écrire %s : %s", icon_dst, save_error->message);
+        continue;
+      }
+      if (sizes[i] == 256) icon_256 = g_strdup(icon_dst);
     }
   }
+
+  g_autofree gchar* scalable_dir = g_build_filename(
+      home, ".local", "share", "icons", "hicolor", "scalable", "apps", nullptr);
+  if (g_mkdir_with_parents(scalable_dir, 0755) == 0) {
+    g_autofree gchar* icon_dst =
+        g_build_filename(scalable_dir, APPLICATION_ID ".svg", nullptr);
+    g_autofree gchar* svg = nullptr;
+    gsize svg_len = 0;
+    g_autoptr(GError) read_error = nullptr;
+    if (g_file_get_contents(icon_src, &svg, &svg_len, &read_error)) {
+      g_autoptr(GError) write_error = nullptr;
+      if (!g_file_set_contents(icon_dst, svg, (gssize)svg_len, &write_error)) {
+        g_warning(
+            "Impossible d’écrire %s : %s", icon_dst, write_error->message);
+      }
+    }
+  }
+
+  // Chemin absolu : le compositeur recharge le fichier, pas une icône en cache.
+  const gchar* icon_field = icon_256 != nullptr ? icon_256 : APPLICATION_ID;
 
   g_autofree gchar* apps_dir =
       g_build_filename(home, ".local", "share", "applications", nullptr);
@@ -196,6 +221,7 @@ static void install_wayland_desktop_entry() {
 
   g_autofree gchar* desktop_path = g_build_filename(
       apps_dir, APPLICATION_ID ".desktop", nullptr);
+  g_autoptr(GError) error = nullptr;
   // Même CalVer que BuildInfo.version (injecté à la compile depuis le tag CI).
   g_autofree gchar* desktop = g_strdup_printf(
       "[Desktop Entry]\n"
@@ -209,22 +235,55 @@ static void install_wayland_desktop_entry() {
       "Categories=AudioVideo;Audio;Player;\n"
       "StartupWMClass=%s\n"
       "Keywords=podcast;audio;rss;\n",
-      PODAVIO_DESKTOP_VERSION, exe_path, APPLICATION_ID, APPLICATION_ID);
+      PODAVIO_DESKTOP_VERSION, exe_path, icon_field, APPLICATION_ID);
 
   if (!g_file_set_contents(desktop_path, desktop, -1, &error)) {
     g_warning("Impossible d’écrire %s : %s", desktop_path, error->message);
     return;
   }
 
-  // Rafraîchir les caches si les outils sont présents (best-effort).
-  g_autofree gchar* update_desktop = g_strdup_printf(
-      "update-desktop-database \"%s\" >/dev/null 2>&1", apps_dir);
+  // Avant l’affichage de la fenêtre, pour que flutter run voie la nouvelle onde.
   g_autofree gchar* icon_root =
       g_build_filename(home, ".local", "share", "icons", "hicolor", nullptr);
-  g_autofree gchar* update_icons = g_strdup_printf(
-      "gtk-update-icon-cache -f -t \"%s\" >/dev/null 2>&1", icon_root);
-  g_spawn_command_line_async(update_desktop, nullptr);
-  g_spawn_command_line_async(update_icons, nullptr);
+  gchar* cache_argv[] = {
+      (gchar*)"gtk-update-icon-cache", (gchar*)"-f", (gchar*)"-t", icon_root,
+      nullptr};
+  g_spawn_sync(
+      nullptr, cache_argv, nullptr, G_SPAWN_SEARCH_PATH, nullptr, nullptr,
+      nullptr, nullptr, nullptr, nullptr);
+  g_autofree gchar* update_desktop = g_strdup_printf(
+      "update-desktop-database \"%s\" >/dev/null 2>&1", apps_dir);
+  g_spawn_command_line_sync(update_desktop, nullptr, nullptr, nullptr, nullptr);
+}
+
+// L’onde est plus large que haute : on la centre dans un carré transparent.
+static GdkPixbuf* fit_icon_square(GdkPixbuf* source, int side) {
+  const int src_w = gdk_pixbuf_get_width(source);
+  const int src_h = gdk_pixbuf_get_height(source);
+  if (src_w <= 0 || src_h <= 0 || side <= 0) return nullptr;
+
+  int dst_w = side;
+  int dst_h = side;
+  if (src_w > src_h) {
+    dst_h = MAX(1, (src_h * side + src_w / 2) / src_w);
+  } else if (src_h > src_w) {
+    dst_w = MAX(1, (src_w * side + src_h / 2) / src_h);
+  }
+
+  g_autoptr(GdkPixbuf) fitted =
+      gdk_pixbuf_scale_simple(source, dst_w, dst_h, GDK_INTERP_BILINEAR);
+  if (fitted == nullptr) return nullptr;
+
+  GdkPixbuf* canvas = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, side, side);
+  if (canvas == nullptr) return nullptr;
+  gdk_pixbuf_fill(canvas, 0x00000000);
+
+  const int x = (side - dst_w) / 2;
+  const int y = (side - dst_h) / 2;
+  gdk_pixbuf_composite(
+      fitted, canvas, x, y, dst_w, dst_h, (double)x, (double)y, 1.0, 1.0,
+      GDK_INTERP_BILINEAR, 255);
+  return canvas;
 }
 
 static void set_podavio_icon(GtkWindow* window) {
@@ -244,8 +303,7 @@ static void set_podavio_icon(GtkWindow* window) {
   const int sizes[] = {256, 128, 64, 48, 32, 24, 16};
   GList* icons = nullptr;
   for (guint i = 0; i < G_N_ELEMENTS(sizes); i++) {
-    GdkPixbuf* scaled = gdk_pixbuf_scale_simple(
-        source, sizes[i], sizes[i], GDK_INTERP_BILINEAR);
+    GdkPixbuf* scaled = fit_icon_square(source, sizes[i]);
     if (scaled != nullptr) {
       icons = g_list_append(icons, scaled);
     }
