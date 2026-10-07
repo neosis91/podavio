@@ -14,6 +14,7 @@ import '../settings/settings_controller.dart';
 import 'podcasts/podcast_feed_actions.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
+import 'widgets/choice_dialog.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/episode_tile.dart';
@@ -356,10 +357,7 @@ class PodcastSettingsPage extends ConsumerWidget {
                     'Les $seconds premières secondes ne sont pas lues',
                 onChanged: (seconds) => ref
                     .read(databaseProvider)
-                    .setPodcastSkipBounds(
-                      item.id,
-                      skipIntroSeconds: seconds,
-                    ),
+                    .setPodcastSkipBounds(item.id, skipIntroSeconds: seconds),
               ),
               _SkipSecondsTile(
                 title: 'Sauter la fin',
@@ -368,10 +366,7 @@ class PodcastSettingsPage extends ConsumerWidget {
                     'Les $seconds dernières secondes sont passées',
                 onChanged: (seconds) => ref
                     .read(databaseProvider)
-                    .setPodcastSkipBounds(
-                      item.id,
-                      skipOutroSeconds: seconds,
-                    ),
+                    .setPodcastSkipBounds(item.id, skipOutroSeconds: seconds),
               ),
               const _PodcastSettingsSection('Authentification'),
               _PodcastAuthSection(podcast: item),
@@ -405,9 +400,8 @@ class _PodcastSettingsSection extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: Theme.of(context).colorScheme.primary,
-        ),
+        style: Theme.of(context).textTheme.titleSmall
+            ?.copyWith(color: Theme.of(context).colorScheme.primary),
       ),
     );
   }
@@ -424,34 +418,32 @@ class _PodcastAuthSection extends ConsumerStatefulWidget {
 }
 
 class _PodcastAuthSectionState extends ConsumerState<_PodcastAuthSection> {
-  late final TextEditingController _username;
-  late final TextEditingController _password;
   var _saving = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _username = TextEditingController(text: widget.podcast.authUsername ?? '');
-    _password = TextEditingController(text: widget.podcast.authPassword ?? '');
-  }
-
-  @override
-  void dispose() {
-    _username.dispose();
-    _password.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
+  Future<void> _edit() async {
     if (_saving) return;
+    final podcast = widget.podcast;
+    final stored = _hasCredentials(podcast);
+    final credentials = await askFeedCredentials(
+      context,
+      username: podcast.authUsername,
+      password: podcast.authPassword,
+      title: 'Identifiants',
+      message:
+          'Pour un flux privé qui demande un identifiant HTTP. '
+          'La plupart des podcasts n’en ont pas besoin.',
+      confirmLabel: 'Enregistrer',
+      canClear: stored,
+    );
+    if (!mounted || credentials == null) return;
     setState(() => _saving = true);
-    final username = _username.text;
-    final password = _password.text;
+    final username = credentials.username;
+    final password = credentials.password;
     try {
       await ref
           .read(databaseProvider)
           .setPodcastCredentials(
-            widget.podcast.id,
+            podcast.id,
             username: username,
             password: password,
           );
@@ -459,7 +451,7 @@ class _PodcastAuthSectionState extends ConsumerState<_PodcastAuthSection> {
       final cleared = username.trim().isEmpty && password.isEmpty;
       if (!cleared) {
         try {
-          await ref.read(feedServiceProvider).refresh(widget.podcast.feedUrl);
+          await ref.read(feedServiceProvider).refresh(podcast.feedUrl);
         } catch (error) {
           if (!mounted) return;
           showMessage(context, describeFeedError(error));
@@ -478,75 +470,25 @@ class _PodcastAuthSectionState extends ConsumerState<_PodcastAuthSection> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final stored =
-        (widget.podcast.authUsername ?? '').isNotEmpty ||
-        (widget.podcast.authPassword ?? '').isNotEmpty;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Pour un flux privé qui demande un identifiant HTTP. '
-            'La plupart des podcasts n’en ont pas besoin.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _username,
-            autocorrect: false,
-            enableSuggestions: false,
-            autofillHints: const [AutofillHints.username],
-            textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(
-              labelText: 'Identifiant',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _password,
-            obscureText: true,
-            autocorrect: false,
-            enableSuggestions: false,
-            autofillHints: const [AutofillHints.password],
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _save(),
-            decoration: const InputDecoration(
-              labelText: 'Mot de passe',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              if (stored)
-                TextButton(
-                  onPressed: _saving
-                      ? null
-                      : () {
-                          _username.clear();
-                          _password.clear();
-                          _save();
-                        },
-                  child: const Text('Effacer'),
-                ),
-              const Spacer(),
-              FilledButton(
-                onPressed: _saving ? null : _save,
-                child: Text(_saving ? 'Enregistrement…' : 'Enregistrer'),
-              ),
-            ],
-          ),
-        ],
-      ),
+    final stored = _hasCredentials(widget.podcast);
+    final subtitle = _saving
+        ? 'Enregistrement…'
+        : stored
+        ? 'Renseigné'
+        : 'Aucun';
+    return ListTile(
+      title: const Text('Identifiants'),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right),
+      enabled: !_saving,
+      onTap: _saving ? null : _edit,
     );
   }
+}
+
+bool _hasCredentials(Podcast podcast) {
+  return (podcast.authUsername ?? '').isNotEmpty ||
+      (podcast.authPassword ?? '').isNotEmpty;
 }
 
 class _PodcastSpeedTile extends StatelessWidget {
@@ -569,7 +511,14 @@ class _PodcastSpeedTile extends StatelessWidget {
           !_podcastSpeedChoices.any((preset) => (preset - custom).abs() < 0.05))
         custom,
     ]..sort();
-    final selected = custom ?? _defaultPodcastSpeed;
+    final rawSelected = custom ?? _defaultPodcastSpeed;
+    var selected = rawSelected;
+    for (final preset in choices) {
+      if ((preset - rawSelected).abs() < 0.05) {
+        selected = preset;
+        break;
+      }
+    }
     return ListTile(
       title: const Text('Vitesse de lecture'),
       subtitle: Text(
@@ -577,26 +526,21 @@ class _PodcastSpeedTile extends StatelessWidget {
             ? 'Réglage général (${_formatPlaybackSpeed(globalSpeed)})'
             : '${_formatPlaybackSpeed(custom)} pour les épisodes de ce podcast',
       ),
-      trailing: DropdownButton<double>(
-        value: choices.any((preset) => (preset - selected).abs() < 0.05)
-            ? choices.firstWhere((preset) => (preset - selected).abs() < 0.05)
-            : selected,
-        items: [
-          const DropdownMenuItem(
-            value: _defaultPodcastSpeed,
-            child: Text('Défaut'),
-          ),
-          for (final choice in choices)
-            DropdownMenuItem(
-              value: choice,
-              child: Text(_formatPlaybackSpeed(choice)),
-            ),
-        ],
-        onChanged: (value) {
-          if (value == null) return;
-          onChanged(value == _defaultPodcastSpeed ? null : value);
-        },
-      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () async {
+        final choice = await showChoiceDialog<double>(
+          context,
+          title: 'Vitesse de lecture',
+          selected: selected,
+          options: [
+            (value: _defaultPodcastSpeed, label: 'Défaut'),
+            for (final preset in choices)
+              (value: preset, label: _formatPlaybackSpeed(preset)),
+          ],
+        );
+        if (choice == null) return;
+        onChanged(choice == _defaultPodcastSpeed ? null : choice);
+      },
     );
   }
 }
@@ -623,19 +567,19 @@ class _SkipSecondsTile extends StatelessWidget {
     return ListTile(
       title: Text(title),
       subtitle: Text(seconds == 0 ? 'Désactivé' : activeLabel(seconds)),
-      trailing: DropdownButton<int>(
-        value: seconds,
-        items: [
-          for (final choice in choices)
-            DropdownMenuItem(
-              value: choice,
-              child: Text(choice == 0 ? 'Non' : '$choice s'),
-            ),
-        ],
-        onChanged: (value) {
-          if (value != null) onChanged(value);
-        },
-      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () async {
+        final choice = await showChoiceDialog<int>(
+          context,
+          title: title,
+          selected: seconds,
+          options: [
+            for (final choice in choices)
+              (value: choice, label: choice == 0 ? 'Non' : '$choice s'),
+          ],
+        );
+        if (choice != null) onChanged(choice);
+      },
     );
   }
 }
@@ -669,9 +613,8 @@ class PodcastAboutPage extends ConsumerWidget {
           );
         }
         final description = plainText(item.description);
-        final titleStyle = Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: Theme.of(context).colorScheme.primary,
-        );
+        final titleStyle = Theme.of(context).textTheme.titleSmall
+            ?.copyWith(color: Theme.of(context).colorScheme.primary);
         return Scaffold(
           appBar: AppBar(
             title: Text(item.title, overflow: TextOverflow.ellipsis),
@@ -832,10 +775,8 @@ class _PodcastStatsSection extends ConsumerWidget {
                 color: theme.colorScheme.error,
               ),
             ),
-            data: (value) => _PodcastStatsBody(
-              stats: value,
-              subscribedAt: subscribedAt,
-            ),
+            data: (value) =>
+                _PodcastStatsBody(stats: value, subscribedAt: subscribedAt),
           ),
         ],
       ),
@@ -844,10 +785,7 @@ class _PodcastStatsSection extends ConsumerWidget {
 }
 
 class _PodcastStatsBody extends StatelessWidget {
-  const _PodcastStatsBody({
-    required this.stats,
-    required this.subscribedAt,
-  });
+  const _PodcastStatsBody({required this.stats, required this.subscribedAt});
 
   final PodcastStats stats;
   final DateTime subscribedAt;
@@ -1040,7 +978,8 @@ class _PodcastStatsBody extends StatelessWidget {
           children: [
             _InfoChip(
               icon: Icons.library_music_outlined,
-              label: 'Catalogue ${formatListeningTime(stats.totalDurationSeconds)}',
+              label:
+                  'Catalogue ${formatListeningTime(stats.totalDurationSeconds)}',
             ),
             if (stats.favoriteCount > 0)
               _InfoChip(
@@ -1080,10 +1019,7 @@ class _LegendDot extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
         ),
       ],
     );
@@ -1176,13 +1112,11 @@ class _InfoChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
+            style: Theme.of(context).textTheme.labelMedium
+                ?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ],
       ),
     );
   }
 }
-

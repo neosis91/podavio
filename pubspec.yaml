@@ -67,6 +67,7 @@ dependencies:
   flutter_cache_manager: ^3.4.5
   url_launcher: ^6.3.2
   wakelock_plus: ^1.8.1
+  flutter_local_notifications: ^23.0.0-dev.3
 
 dev_dependencies:
   flutter_test:
@@ -94,7 +95,7 @@ flutter:
 
   assets:
     - assets/brand/logo.png
-    - assets/brand/icon.png
+    - assets/brand/icon.svg
     - assets/brand/fast_rewind.svg
     - assets/brand/fast_forward.svg
     - assets/brand/skip_next.svg

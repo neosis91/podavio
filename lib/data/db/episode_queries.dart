@@ -111,6 +111,17 @@ mixin _EpisodeQueries on _$AppDatabase {
     return items.first;
   }
 
+  /// Épisode juste avant [beforeEpisodeId] dans la playlist.
+  /// `null` sans précédent, ou si l’épisode courant n’est pas dans la file.
+  Future<EpisodeEntry?> previousInQueue({int? beforeEpisodeId}) async {
+    if (beforeEpisodeId == null) return null;
+    final items = await _episodeQuery(queuedOnly: true).get();
+    if (items.isEmpty) return null;
+    final index = items.indexWhere((e) => e.episode.id == beforeEpisodeId);
+    if (index <= 0) return null;
+    return items[index - 1];
+  }
+
   Stream<bool> watchHasNextInQueue({int? afterEpisodeId}) {
     return watchEpisodeWindow(queuedOnly: true).map((items) {
       if (items.isEmpty) return false;

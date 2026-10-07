@@ -152,6 +152,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       if (handler != null) {
         handler.skipBack = Duration(seconds: settings.skipBackSeconds);
         handler.skipForward = Duration(seconds: settings.skipForwardSeconds);
+        handler.onDirectionalSkip = skipOutside;
         handler.attach(_player);
       }
       _bind();
@@ -161,6 +162,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         if (session != null) {
           session.skipBack = Duration(seconds: next.skipBackSeconds);
           session.skipForward = Duration(seconds: next.skipForwardSeconds);
+          session.onDirectionalSkip = skipOutside;
         }
         if (previous != null && previous.speed != next.speed) {
           unawaited(_applyDefaultSpeedIfNoPodcastOverride(next.speed));
@@ -240,6 +242,25 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     await persistPosition();
   }
 
+  /// Notification, casque et Android Auto : saut ou épisode selon le réglage.
+  Future<void> skipOutside(PlaybackDirection direction) async {
+    if (_disposed || !_ui.hasEpisode) return;
+    final settings = ref.read(settingsProvider);
+    switch (settings.outsideApp) {
+      case OutsideAppControl.skip:
+        final seconds = direction == PlaybackDirection.forward
+            ? settings.skipForwardSeconds
+            : -settings.skipBackSeconds;
+        await skipBy(seconds);
+      case OutsideAppControl.episode:
+        if (direction == PlaybackDirection.forward) {
+          await playNextInQueue();
+        } else {
+          await playPreviousInQueue();
+        }
+    }
+  }
+
   Future<void> skipBy(int seconds) {
     var target = _ui.position + Duration(seconds: seconds);
     if (target < Duration.zero) target = Duration.zero;
@@ -307,6 +328,33 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     );
     if (ref.mounted) {
       ref.read(playerSheetProvider.notifier).collapse();
+    }
+  }
+
+  /// Épisode précédent dans la playlist.
+  /// Au-delà de 3 s, reprend l’épisode courant depuis le début (comme [skipChapter]).
+  /// Sans précédent, revient aussi au début.
+  Future<void> playPreviousInQueue() async {
+    if (_advancing || _disposed || !_ui.hasEpisode) return;
+    if (_ui.position.inMilliseconds > 3000) {
+      await seek(Duration.zero);
+      return;
+    }
+    final currentId = _ui.episodeId;
+    if (currentId == null) return;
+    final previous = await ref.read(databaseProvider).previousInQueue(
+      beforeEpisodeId: currentId,
+    );
+    if (_disposed || !ref.mounted) return;
+    if (previous == null) {
+      await seek(Duration.zero);
+      return;
+    }
+    _advancing = true;
+    try {
+      await _play(previous.episode, previous.podcast);
+    } finally {
+      _advancing = false;
     }
   }
 
@@ -706,7 +754,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   Future<void> _dispose() async {
     _disposed = true;
-    playbackHandler?.detach();
+    final handler = playbackHandler;
+    if (handler != null) {
+      handler.onDirectionalSkip = null;
+      handler.detach();
+    }
     _sleepTimer?.cancel();
     await _positionSub?.cancel();
     await _durationSub?.cancel();

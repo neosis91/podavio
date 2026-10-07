@@ -9,6 +9,12 @@ import 'package:just_audio/just_audio.dart';
 /// Session système (notification média, écran de verrouillage, centre de contrôle).
 PlaybackHandler? playbackHandler;
 
+/// Sens des boutons latéraux (notification, casque, écran de verrouillage).
+enum PlaybackDirection { backward, forward }
+
+/// Décision de saut ou de changement d’épisode, lue à chaque appui.
+typedef DirectionalSkip = Future<void> Function(PlaybackDirection direction);
+
 class PlaybackHandler {
   PlaybackHandler(this._session) {
     // flutter_media_session : Android, iOS, macOS, Windows, Web — pas Linux.
@@ -27,6 +33,9 @@ class PlaybackHandler {
   Future<void>? _starting;
   DateTime _lastPush = DateTime.fromMillisecondsSinceEpoch(0);
   final List<StreamSubscription<dynamic>> _subscriptions = [];
+
+  /// Appelé par précédent, suivant, retour et avance (notification et casque).
+  DirectionalSkip? onDirectionalSkip;
 
   Duration get skipBack => _skipBack;
 
@@ -122,10 +131,11 @@ class PlaybackHandler {
         onPause: () => unawaited(_player?.pause()),
         onStop: () => unawaited(_stop()),
         onSeekTo: (position) => unawaited(_player?.seek(position)),
-        onSkipToNext: () => unawaited(_skip(_skipForward)),
-        onSkipToPrevious: () => unawaited(_skip(-_skipBack)),
-        onFastForward: () => unawaited(_skip(_skipForward)),
-        onRewind: () => unawaited(_skip(-_skipBack)),
+        onSkipToNext: () => unawaited(_directional(PlaybackDirection.forward)),
+        onSkipToPrevious: () =>
+            unawaited(_directional(PlaybackDirection.backward)),
+        onFastForward: () => unawaited(_directional(PlaybackDirection.forward)),
+        onRewind: () => unawaited(_directional(PlaybackDirection.backward)),
       );
       await FlutterMediaSessionPlatform.instance.updateAvailableActions(
         _actions,
@@ -152,6 +162,17 @@ class PlaybackHandler {
     } catch (error, stack) {
       debugPrint('Arrêt des contrôles média impossible: $error\n$stack');
     }
+  }
+
+  Future<void> _directional(PlaybackDirection direction) async {
+    final skip = onDirectionalSkip;
+    if (skip != null) {
+      await skip(direction);
+      return;
+    }
+    await _skip(
+      direction == PlaybackDirection.forward ? _skipForward : -_skipBack,
+    );
   }
 
   Future<void> _skip(Duration offset) async {

@@ -23,11 +23,12 @@ class PodavioIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image.asset(
-      'assets/brand/icon.png',
+    return SvgPicture.asset(
+      'assets/brand/icon.svg',
       width: size,
       height: size,
-      semanticLabel: 'Podavio',
+      fit: BoxFit.contain,
+      semanticsLabel: 'Podavio',
     );
   }
 }
