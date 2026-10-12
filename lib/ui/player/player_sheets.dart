@@ -13,6 +13,424 @@ Future<void> showChaptersSheet({
   );
 }
 
+class _PlayerQueue extends ConsumerStatefulWidget {
+  const _PlayerQueue();
+
+  @override
+  ConsumerState<_PlayerQueue> createState() => _PlayerQueueState();
+}
+
+class _PlayerQueueState extends ConsumerState<_PlayerQueue> {
+  List<int>? _orderIds;
+
+  List<EpisodeEntry> _ordered(List<EpisodeEntry> entries) {
+    final ids = _orderIds;
+    if (ids == null) return entries;
+    final byId = {for (final entry in entries) entry.episode.id: entry};
+    final ordered = <EpisodeEntry>[];
+    for (final id in ids) {
+      final entry = byId[id];
+      if (entry != null) ordered.add(entry);
+    }
+    if (ordered.length != entries.length) return entries;
+    return ordered;
+  }
+
+  void _commit(List<EpisodeEntry> next) {
+    final ids = next.map((entry) => entry.episode.id).toList();
+    setState(() => _orderIds = ids);
+    ref.read(databaseProvider).setQueueOrder(ids);
+  }
+
+  void _move(List<EpisodeEntry> entries, int from, int delta) {
+    final to = from + delta;
+    if (from < 0 || to < 0 || to >= entries.length) return;
+    final next = [...entries];
+    final moved = next.removeAt(from);
+    next.insert(to, moved);
+    _commit(next);
+  }
+
+  void _showActions({
+    required EpisodeEntry entry,
+    required int position,
+    required int count,
+    required List<EpisodeEntry> entries,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (position > 0)
+                ListTile(
+                  leading: const MoveUpIcon(),
+                  title: const Text('Monter'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _move(entries, position, -1);
+                  },
+                ),
+              if (position < count - 1)
+                ListTile(
+                  leading: const MoveDownIcon(),
+                  title: const Text('Descendre'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _move(entries, position, 1);
+                  },
+                ),
+              ListTile(
+                leading: const DeleteIcon(),
+                title: const Text('Supprimer'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  setState(() {
+                    _orderIds = _orderIds
+                        ?.where((id) => id != entry.episode.id)
+                        .toList();
+                  });
+                  ref.read(databaseProvider).removeFromQueue(entry.episode.id);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final window = ref.watch(
+      episodesProvider(const EpisodeQuery(queuedOnly: true, paginated: false)),
+    );
+    final currentId = ref.watch(
+      playerProvider.select((state) => state.episodeId),
+    );
+    final current = currentId == null
+        ? null
+        : ref.watch(episodeProvider(currentId)).value;
+    final loaded = window.asData?.value.entries ?? const <EpisodeEntry>[];
+    final entries = _ordered(loaded);
+    final currentInQueue =
+        currentId != null &&
+        entries.any((entry) => entry.episode.id == currentId);
+    final currentIndex = currentId == null
+        ? -1
+        : entries.indexWhere((entry) => entry.episode.id == currentId);
+    final upcoming = currentIndex < 0
+        ? entries
+        : entries.sublist(currentIndex + 1);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (current != null)
+          _QueueNowPlaying(
+            entry: current,
+            canAdd: !currentInQueue && !window.isLoading,
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+          child: Text(
+            'À suivre',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ),
+        Expanded(
+          child: window.isLoading && entries.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : upcoming.isEmpty
+              ? EmptyState(
+                  title: entries.isEmpty
+                      ? 'La playlist est vide'
+                      : 'Rien à suivre',
+                  message: entries.isEmpty
+                      ? 'Ajoutez des épisodes pour les écouter les uns à la suite des autres.'
+                      : 'Les épisodes suivants apparaîtront ici.',
+                )
+              : ReorderableListView.builder(
+                  padding: const EdgeInsets.only(top: 4, bottom: 24),
+                  buildDefaultDragHandles: false,
+                  itemCount: upcoming.length,
+                  proxyDecorator: _queueDragProxy,
+                  onReorderItem: (oldIndex, newIndex) {
+                    final next = [...upcoming];
+                    final moved = next.removeAt(oldIndex);
+                    next.insert(newIndex, moved);
+                    final head = currentIndex < 0
+                        ? const <EpisodeEntry>[]
+                        : entries.sublist(0, currentIndex + 1);
+                    _commit([...head, ...next]);
+                  },
+                  itemBuilder: (context, index) {
+                    final entry = upcoming[index];
+                    final position = currentIndex < 0
+                        ? index
+                        : currentIndex + 1 + index;
+                    return _QueueRow(
+                      key: ValueKey(entry.episode.id),
+                      entry: entry,
+                      index: index,
+                      onMore: () => _showActions(
+                        entry: entry,
+                        position: position,
+                        count: entries.length,
+                        entries: entries,
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+Widget _queueDragProxy(Widget child, int index, Animation<double> animation) {
+  return AnimatedBuilder(
+    animation: animation,
+    builder: (context, child) {
+      final t = Curves.easeOutCubic.transform(animation.value);
+      return Material(
+        elevation: 8 * t,
+        shadowColor: Colors.black45,
+        color: const Color(0xFF242424),
+        borderRadius: BorderRadius.circular(8),
+        child: child,
+      );
+    },
+    child: child,
+  );
+}
+
+class _QueueNowPlaying extends ConsumerWidget {
+  const _QueueNowPlaying({required this.entry, required this.canAdd});
+
+  final EpisodeEntry entry;
+  final bool canAdd;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final preferPodcastCover = ref.watch(
+      settingsProvider.select((settings) => settings.preferPodcastCover),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
+      child: Row(
+        children: [
+          PodcastCover(
+            url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+            localPath: entry.imagePath(preferPodcastCover: preferPodcastCover),
+            httpHeaders: podcastAuthHeaders(
+              username: entry.podcast.authUsername,
+              password: entry.podcast.authPassword,
+            ),
+            size: 55,
+            radius: 4,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.episode.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  entry.podcast.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (canAdd)
+            IconButton(
+              tooltip: 'Ajouter l’épisode',
+              onPressed: () =>
+                  ref.read(databaseProvider).addToQueue(entry.episode.id),
+              icon: const PlaylistAddIcon(),
+            ),
+          IconButton(
+            tooltip: 'Fermer la playlist',
+            onPressed: () => ref.read(_playerPanelProvider.notifier).close(),
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QueueRow extends ConsumerWidget {
+  const _QueueRow({
+    super.key,
+    required this.entry,
+    required this.index,
+    required this.onMore,
+  });
+
+  final EpisodeEntry entry;
+  final int index;
+  final VoidCallback onMore;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final preferPodcastCover = ref.watch(
+      settingsProvider.select((settings) => settings.preferPodcastCover),
+    );
+    return Material(
+      color: Colors.transparent,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: ReorderableDelayedDragStartListener(
+                index: index,
+                child: InkWell(
+                  onTap: () =>
+                      ref.read(playerProvider.notifier).playEntry(entry),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 6, 8, 6),
+                    child: Row(
+                      children: [
+                        PodcastCover(
+                          url: entry.imageUrl(
+                            preferPodcastCover: preferPodcastCover,
+                          ),
+                          localPath: entry.imagePath(
+                            preferPodcastCover: preferPodcastCover,
+                          ),
+                          httpHeaders: podcastAuthHeaders(
+                            username: entry.podcast.authUsername,
+                            password: entry.podcast.authPassword,
+                          ),
+                          size: 48,
+                          radius: 4,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                entry.episode.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                entry.podcast.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Actions',
+              onPressed: onMore,
+              icon: const MoreVertIcon(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> showNotesSheet({
+  required BuildContext context,
+  required int episodeId,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (context) {
+      return DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.62,
+        minChildSize: 0.35,
+        maxChildSize: 0.92,
+        builder: (context, scrollController) {
+          return _NotesSheet(
+            episodeId: episodeId,
+            scrollController: scrollController,
+          );
+        },
+      );
+    },
+  );
+}
+
+class _NotesSheet extends ConsumerWidget {
+  const _NotesSheet({required this.episodeId, required this.scrollController});
+
+  final int episodeId;
+  final ScrollController scrollController;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final notes =
+        ref.watch(episodeProvider(episodeId)).value?.episode.description ?? '';
+    final hasNotes = plainText(notes).isNotEmpty;
+    return ListView(
+      controller: scrollController,
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+      children: [
+        Text('Notes', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 12),
+        if (!hasNotes)
+          Text(
+            'Aucune note pour cet épisode.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          )
+        else
+          ShowNotes(html: notes, style: theme.textTheme.bodyMedium),
+      ],
+    );
+  }
+}
+
 Future<void> _chooseSpeed(BuildContext context, WidgetRef ref) {
   return showModalBottomSheet<void>(
     context: context,
@@ -253,9 +671,7 @@ class _ChaptersSheetState extends ConsumerState<_ChaptersSheet> {
       Scrollable.ensureVisible(
         ctx,
         alignment: 0.35,
-        duration: animate
-            ? const Duration(milliseconds: 250)
-            : Duration.zero,
+        duration: animate ? const Duration(milliseconds: 250) : Duration.zero,
         curve: Curves.easeOut,
       );
     });
@@ -278,16 +694,14 @@ class _ChaptersSheetState extends ConsumerState<_ChaptersSheet> {
 
     final phase = loadAsync.asData?.value;
     final pendingFetch = chaptersUrl.isNotEmpty && !fetched;
-    final showLoading = chapters.isEmpty &&
+    final showLoading =
+        chapters.isEmpty &&
         (loadAsync.isLoading ||
             (pendingFetch && phase != ChaptersLoadPhase.failed));
     final showError = chapters.isEmpty && phase == ChaptersLoadPhase.failed;
 
     if (chapters.isNotEmpty) {
-      _scrollToActive(
-        active,
-        animate: _lastScrolledChapterId != null,
-      );
+      _scrollToActive(active, animate: _lastScrolledChapterId != null);
     }
 
     final muted = theme.textTheme.bodyMedium?.copyWith(

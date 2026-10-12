@@ -391,5 +391,14 @@ void main() {
       second,
     );
     expect(await database.previousInQueue(beforeEpisodeId: outside), isNull);
+
+    await database.queueNext(outside, afterEpisodeId: first);
+    final queued = await database.watchEpisodeWindow(queuedOnly: true).first;
+    expect(queued.map((entry) => entry.episode.id).toList(), [
+      first,
+      outside,
+      second,
+      third,
+    ]);
   });
 }

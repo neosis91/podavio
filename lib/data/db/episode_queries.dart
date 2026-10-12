@@ -389,9 +389,9 @@ mixin _EpisodeQueries on _$AppDatabase {
   }
 
   Future<int?> playbackPositionMs(int episodeId) async {
-    final row = await (select(playbackPositions)
-          ..where((table) => table.episodeId.equals(episodeId)))
-        .getSingleOrNull();
+    final row = await (select(
+      playbackPositions,
+    )..where((table) => table.episodeId.equals(episodeId))).getSingleOrNull();
     return row?.positionMs;
   }
 
@@ -475,6 +475,19 @@ mixin _EpisodeQueries on _$AppDatabase {
         .write(const EpisodesCompanion(queueIndex: Value(null)));
   }
 
+  /// Place [episodeId] juste après [afterEpisodeId], ou en tête de file.
+  Future<void> queueNext(int episodeId, {int? afterEpisodeId}) async {
+    final items = await _episodeQuery(queuedOnly: true).get();
+    final ids = [for (final item in items) item.episode.id]..remove(episodeId);
+    var insertAt = 0;
+    if (afterEpisodeId != null) {
+      final index = ids.indexOf(afterEpisodeId);
+      if (index >= 0) insertAt = index + 1;
+    }
+    ids.insert(insertAt, episodeId);
+    await setQueueOrder(ids);
+  }
+
   Future<void> setQueueOrder(List<int> episodeIds) {
     return transaction(() async {
       for (var index = 0; index < episodeIds.length; index++) {
@@ -484,5 +497,4 @@ mixin _EpisodeQueries on _$AppDatabase {
       }
     });
   }
-
 }

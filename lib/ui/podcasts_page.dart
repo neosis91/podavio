@@ -12,6 +12,7 @@ import '../settings/settings_controller.dart';
 import 'episodes_page.dart';
 import 'router.dart';
 import 'widgets/cover.dart';
+import 'widgets/list_metrics.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/highlighted_text.dart';
 
@@ -70,13 +71,9 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
     final showNames = ref.watch(
       settingsProvider.select((s) => s.podcastShowNames),
     );
-    final counter = ref.watch(
-      settingsProvider.select((s) => s.podcastCounter),
-    );
+    final counter = ref.watch(settingsProvider.select((s) => s.podcastCounter));
     final sort = ref.watch(settingsProvider.select((s) => s.podcastSort));
-    final filters = ref.watch(
-      settingsProvider.select((s) => s.podcastFilters),
-    );
+    final filters = ref.watch(settingsProvider.select((s) => s.podcastFilters));
     final refreshing = ref.watch(
       feedRefreshProvider.select((s) => s.isRunning),
     );
@@ -194,18 +191,9 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                   checked: showNames,
                   child: const Text('Afficher les noms'),
                 ),
-                const PopupMenuItem(
-                  value: 'counter',
-                  child: Text('Compteur'),
-                ),
-                const PopupMenuItem(
-                  value: 'filter',
-                  child: Text('Filtrer'),
-                ),
-                const PopupMenuItem(
-                  value: 'sort',
-                  child: Text('Trier'),
-                ),
+                const PopupMenuItem(value: 'counter', child: Text('Compteur')),
+                const PopupMenuItem(value: 'filter', child: Text('Filtrer')),
+                const PopupMenuItem(value: 'sort', child: Text('Trier')),
                 PopupMenuItem(
                   value: 'refresh',
                   enabled: !refreshing,
@@ -232,8 +220,7 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
             ),
           Expanded(
             child: podcasts.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => EmptyState(
                 title: 'Abonnements indisponibles',
                 message: error.toString(),
@@ -254,9 +241,7 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                 final needle = _query.trim();
                 final searched = needle.isEmpty
                     ? items
-                    : items
-                          .where((p) => searchMatch(p.title, needle))
-                          .toList();
+                    : items.where((p) => searchMatch(p.title, needle)).toList();
 
                 final filtered = _filterPodcasts(
                   searched,
@@ -305,7 +290,10 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
 
                 final child = podcastList
                     ? ListView.separated(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: underChrome(
+                          context,
+                          const EdgeInsets.symmetric(vertical: 8),
+                        ),
                         itemCount: visible.length,
                         separatorBuilder: (_, _) => const Divider(height: 1),
                         itemBuilder: (context, index) {
@@ -341,4 +329,3 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
     );
   }
 }
-

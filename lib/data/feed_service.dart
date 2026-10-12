@@ -34,10 +34,7 @@ bool isFeedUnauthorized(Object error) {
 }
 
 /// En-têtes à passer aux jaquettes, ou `null` si le podcast n’est pas protégé.
-Map<String, String>? podcastAuthHeaders({
-  String? username,
-  String? password,
-}) {
+Map<String, String>? podcastAuthHeaders({String? username, String? password}) {
   final headers = podcastRequestHeaders(
     userAgent: podavioUserAgent,
     username: username,
@@ -47,12 +44,7 @@ Map<String, String>? podcastAuthHeaders({
   return headers;
 }
 
-enum DiscoverSearchScope {
-  combined,
-  apple,
-  podcastIndex,
-  fyyd,
-}
+enum DiscoverSearchScope { combined, apple, podcastIndex, fyyd }
 
 class FeedService {
   FeedService(this._database);
@@ -218,10 +210,40 @@ class FeedService {
     return ordered.sublist(0, limit);
   }
 
-  Future<List<DiscoverHit>> _appleChartHits() async {
+  /// Une page de suggestions. La page 0 mêle les tops Apple ; les suivantes
+  /// avancent dans Podcast Index (top élargi) et fyyd (page suivante).
+  Future<List<DiscoverHit>> discoverChartsPage({
+    required int page,
+    int pageSize = 16,
+  }) async {
+    Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
+      try {
+        return await future;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final results = await Future.wait([
+      safe(
+        page == 0
+            ? _appleChartHits(limit: 24)
+            : Future.value(const <DiscoverHit>[]),
+      ),
+      safe(_podcastIndex.trending(lang: 'fr', max: (page + 1) * pageSize)),
+      safe(_fyyd.suggestions(count: pageSize, page: page)),
+    ]);
+
+    final merged = _mergeHits(results, const [1.0, 1.0, 0.8]);
+    final withArt = merged.where((h) => (h.imageUrl ?? '').isNotEmpty).toList();
+    final without = merged.where((h) => (h.imageUrl ?? '').isEmpty).toList();
+    return [...withArt, ...without];
+  }
+
+  Future<List<DiscoverHit>> _appleChartHits({int limit = 24}) async {
     final result = await _search.charts(
       country: remote.Country.france,
-      limit: 24,
+      limit: limit,
     );
     if (!result.successful) {
       throw Exception(
@@ -375,11 +397,7 @@ class FeedService {
       keepUpdated: keepUpdated,
     );
     if (explicit) {
-      await _database.setPodcastCredentials(
-        id,
-        username: user,
-        password: pass,
-      );
+      await _database.setPodcastCredentials(id, username: user, password: pass);
     }
     return id;
   }
@@ -412,10 +430,7 @@ class FeedService {
 
     final response = await getKeepingAuthorization(
       Uri.parse(url),
-      headers: {
-        'User-Agent': podavioUserAgent,
-        'Authorization': authorization,
-      },
+      headers: {'User-Agent': podavioUserAgent, 'Authorization': authorization},
       timeout: const Duration(seconds: 40),
     );
     if (response.statusCode == 401) {

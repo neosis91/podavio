@@ -19,20 +19,6 @@ class FavoritesPage extends ConsumerWidget {
   }
 }
 
-class HistoryPage extends ConsumerWidget {
-  const HistoryPage({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return _LibraryPage(
-      title: 'Historique',
-      query: const EpisodeQuery(historyOnly: true),
-      emptyTitle: 'Aucun historique',
-      emptyMessage: 'Les épisodes que vous lancez apparaîtront ici.',
-    );
-  }
-}
-
 class DownloadsPage extends ConsumerWidget {
   const DownloadsPage({super.key});
 

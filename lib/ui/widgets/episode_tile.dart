@@ -58,8 +58,8 @@ class EpisodeTile extends ConsumerWidget {
         position > Duration.zero &&
         duration != null &&
         duration > Duration.zero) {
-      listenFraction =
-          (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+      listenFraction = (position.inMilliseconds / duration.inMilliseconds)
+          .clamp(0.0, 1.0);
     } else {
       listenFraction = null;
     }
@@ -298,9 +298,7 @@ class _EpisodeTileTrailing extends StatelessWidget {
             PopupMenuItem(
               value: EpisodeMenuAction.played,
               child: Text(
-                episode.played
-                    ? 'Marquer comme non lu'
-                    : 'Marquer comme lu',
+                episode.played ? 'Marquer comme non lu' : 'Marquer comme lu',
               ),
             ),
             PopupMenuItem(
@@ -506,7 +504,10 @@ class DownloadProgressRing extends StatelessWidget {
       constraints: buttonConstraints,
       style: IconButton.styleFrom(
         padding: EdgeInsets.zero,
-        minimumSize: Size(buttonConstraints.minWidth, buttonConstraints.minHeight),
+        minimumSize: Size(
+          buttonConstraints.minWidth,
+          buttonConstraints.minHeight,
+        ),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
       icon: ring,
@@ -518,10 +519,7 @@ Future<void> shareEpisode(EpisodeEntry entry) {
   return shareEpisodeAsMessage(entry, position: null);
 }
 
-Future<void> shareEpisodeAsMessage(
-  EpisodeEntry entry, {
-  Duration? position,
-}) {
+Future<void> shareEpisodeAsMessage(EpisodeEntry entry, {Duration? position}) {
   final text = [
     entry.episode.title,
     entry.podcast.title,
@@ -615,8 +613,7 @@ class _ShareEpisodeSheetState extends ConsumerState<_ShareEpisodeSheet> {
             CheckboxListTile(
               value: _includePosition,
               onChanged: position > Duration.zero
-                  ? (value) =>
-                        setState(() => _includePosition = value ?? false)
+                  ? (value) => setState(() => _includePosition = value ?? false)
                   : null,
               title: const Text('Inclure la position de lecture'),
               subtitle: Text(
@@ -646,6 +643,263 @@ class _ShareEpisodeSheetState extends ConsumerState<_ShareEpisodeSheet> {
                 Navigator.pop(context);
                 await shareEpisodeAudioUrl(widget.entry);
               },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> showEpisodeActionsSheet(
+  BuildContext context,
+  WidgetRef ref,
+  EpisodeEntry entry,
+) {
+  return showModalBottomSheet<void>(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    showDragHandle: false,
+    builder: (sheetContext) => _EpisodeActionsSheet(
+      episodeId: entry.episode.id,
+      fallback: entry,
+      onOpenPodcast: (podcastId) {
+        Navigator.pop(sheetContext);
+        context.push(AppRoutes.podcast(podcastId));
+      },
+      onShare: (current) async {
+        Navigator.pop(sheetContext);
+        await showShareEpisodeSheet(context, ref, current);
+      },
+    ),
+  );
+}
+
+class _EpisodeActionsSheet extends ConsumerWidget {
+  const _EpisodeActionsSheet({
+    required this.episodeId,
+    required this.fallback,
+    required this.onOpenPodcast,
+    required this.onShare,
+  });
+
+  final int episodeId;
+  final EpisodeEntry fallback;
+  final ValueChanged<int> onOpenPodcast;
+  final Future<void> Function(EpisodeEntry entry) onShare;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final entry =
+        ref.watch(episodeProvider(episodeId)).asData?.value ?? fallback;
+    final episode = entry.episode;
+    final downloading = ref.watch(
+      downloadProgressProvider.select((items) => items.containsKey(episode.id)),
+    );
+    final preferPodcastCover = ref.watch(
+      settingsProvider.select((settings) => settings.preferPodcastCover),
+    );
+    final playingId = ref.watch(
+      playerProvider.select((state) => state.episodeId),
+    );
+
+    final actions = <Widget>[
+      _SheetAction(
+        icon: Icon(
+          episode.favorite ? Icons.favorite : Icons.favorite_border,
+          size: 30,
+        ),
+        iconPadding: 10,
+        label: episode.favorite ? 'Aimé' : "J'aime",
+        onTap: () => ref
+            .read(databaseProvider)
+            .setFavorite(episode.id, favorite: !episode.favorite),
+      ),
+      _SheetAction(
+        icon: Icon(
+          downloading
+              ? Icons.downloading
+              : episode.downloadPath != null
+              ? Icons.download_for_offline
+              : Icons.download_for_offline_outlined,
+          color: episode.downloadPath != null ? const Color(0xFF00A0CB) : null,
+        ),
+        label: downloading
+            ? 'Téléchargement'
+            : episode.downloadPath != null
+            ? 'Téléchargé'
+            : 'Télécharger',
+        onTap: downloading
+            ? null
+            : () => runEpisodeAction(
+                context,
+                ref,
+                entry,
+                EpisodeMenuAction.download,
+              ),
+      ),
+      if (playingId != episode.id)
+        _SheetAction(
+          icon: const Icon(Icons.play_circle),
+          label: 'Lire ensuite',
+          onTap: () async {
+            await ref
+                .read(databaseProvider)
+                .queueNext(episode.id, afterEpisodeId: playingId);
+            if (context.mounted) Navigator.pop(context);
+          },
+        ),
+      _SheetAction(
+        icon: episode.queueIndex == null
+            ? const PlaylistAddIcon()
+            : const PlaylistRemoveIcon(),
+        label: episode.queueIndex == null
+            ? 'Ajouter à la playlist'
+            : 'Retirer de la playlist',
+        onTap: () async {
+          await runEpisodeAction(context, ref, entry, EpisodeMenuAction.queue);
+          if (context.mounted) Navigator.pop(context);
+        },
+      ),
+      _SheetAction(
+        icon: const SubscriptionsIcon(),
+        label: entry.podcast.title,
+        onTap: () => onOpenPodcast(entry.podcast.id),
+      ),
+      _SheetAction(
+        icon: const ShareIcon(),
+        label: 'Partager',
+        onTap: () async {
+          final full = await ref.read(databaseProvider).getEpisode(episode.id);
+          if (!context.mounted) return;
+          await onShare(full ?? entry);
+        },
+      ),
+    ];
+
+    return Material(
+      color: scheme.surfaceContainerHigh,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(50),
+              ),
+              child: const SizedBox(width: 32, height: 4),
+            ),
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
+              child: Row(
+                children: [
+                  PodcastCover(
+                    url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+                    localPath: entry.imagePath(
+                      preferPodcastCover: preferPodcastCover,
+                    ),
+                    httpHeaders: podcastAuthHeaders(
+                      username: entry.podcast.authUsername,
+                      password: entry.podcast.authPassword,
+                    ),
+                    size: 44,
+                    radius: 6,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          episode.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall,
+                        ),
+                        Text(
+                          entry.podcast.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Divider(
+                height: 1,
+                thickness: 1,
+                color: scheme.outlineVariant,
+              ),
+            ),
+            const SizedBox(height: 2),
+            ...actions,
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetAction extends StatelessWidget {
+  const _SheetAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.iconPadding = 12,
+  });
+
+  final Widget icon;
+  final String label;
+  final VoidCallback? onTap;
+  final double iconPadding;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final enabled = onTap != null;
+    final color = enabled
+        ? scheme.onSurface
+        : scheme.onSurface.withValues(alpha: 0.38);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          children: [
+            Padding(
+              padding: EdgeInsets.all(iconPadding),
+              child: IconTheme(
+                data: IconThemeData(color: color, size: 24),
+                child: icon,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: color),
+              ),
             ),
           ],
         ),

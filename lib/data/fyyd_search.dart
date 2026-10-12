@@ -29,10 +29,7 @@ class FyydSearch {
       'count': '$count',
     });
     final response = await _client
-        .get(
-          uri,
-          headers: const {'User-Agent': podavioUserAgent},
-        )
+        .get(uri, headers: const {'User-Agent': podavioUserAgent})
         .timeout(const Duration(seconds: 25));
 
     if (response.statusCode != 200) {
@@ -47,14 +44,16 @@ class FyydSearch {
   }
 
   /// Suggestions via quelques catégories (jaquettes incluses, FR d’abord).
-  Future<List<DiscoverHit>> suggestions({int count = 24}) async {
+  ///
+  /// [page] est l’index fyyd (0 = première page) pour enchaîner les lots.
+  Future<List<DiscoverHit>> suggestions({int count = 24, int page = 0}) async {
     final perCategory = (count / _suggestionCategories.length).ceil().clamp(
       4,
       12,
     );
     final batches = await Future.wait([
       for (final id in _suggestionCategories)
-        _categoryPodcasts(id, count: perCategory),
+        _categoryPodcasts(id, count: perCategory, page: page),
     ]);
 
     final queues = [for (final batch in batches) List<DiscoverHit>.from(batch)];
@@ -80,16 +79,15 @@ class FyydSearch {
   Future<List<DiscoverHit>> _categoryPodcasts(
     int categoryId, {
     required int count,
+    int page = 0,
   }) async {
     final uri = Uri.https('api.fyyd.de', '/0.2/category', {
       'category_id': '$categoryId',
       'count': '$count',
+      'page': '$page',
     });
     final response = await _client
-        .get(
-          uri,
-          headers: const {'User-Agent': podavioUserAgent},
-        )
+        .get(uri, headers: const {'User-Agent': podavioUserAgent})
         .timeout(const Duration(seconds: 25));
     if (response.statusCode != 200) return const [];
 

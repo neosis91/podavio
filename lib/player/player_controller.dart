@@ -485,7 +485,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     );
   }
 
-  /// Sync métier vers `episodes` (tuiles « en cours », historique, lastPlayedAt).
+  /// Sync métier vers `episodes` (tuiles « en cours », lectures récentes, lastPlayedAt).
   Future<void> syncPositionToEpisode({bool? touchLastPlayed}) async {
     final id = _ui.episodeId;
     if (id == null || _disposed || !ref.mounted) return;

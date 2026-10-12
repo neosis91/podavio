@@ -7,7 +7,9 @@
 #   tool/release_local.sh 2026.10.6
 #
 # Prérequis : flutter, glab (connecté), android/key.properties + keystore.
-# Le binaire Windows n'est pas produit ici.
+# Le dépôt du site (../podavio-site, ou PODAVIO_SITE_DIR) doit être sur main,
+# propre et à jour : les binaires y sont commités puis poussés. La CI du site
+# les copie sur le VPS. Le binaire Windows n'est pas produit ici.
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
@@ -41,6 +43,7 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ] || [ $# -eq 0 ]; then
   echo "Usage : tool/release_local.sh <YYYY.M.N>"
   echo "Prochaine version : ${next}"
   echo "Exemple : tool/release_local.sh ${next}"
+  echo "Journal : un titre ## ${next} dans CHANGELOG.md, avec une puce par changement."
   exit 0
 fi
 
@@ -82,7 +85,7 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
-for cmd in flutter glab git tar; do
+for cmd in flutter glab git tar python3; do
   if ! command -v "${cmd}" >/dev/null 2>&1; then
     echo "Commande manquante : ${cmd}" >&2
     exit 1
@@ -133,6 +136,8 @@ if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
     exit 1
   fi
 fi
+
+python3 tool/changelog.py check "${VERSION}"
 
 echo "Podavio ${VERSION} (build ${BUILD}, commit ${SHA})"
 
@@ -218,23 +223,87 @@ fi
 
 git push -o ci.skip origin "refs/tags/${VERSION}"
 
-NOTES="Compilation locale **${VERSION}**
+NOTES="$(python3 tool/changelog.py gitlab "${VERSION}")
+Commit : ${SHA}"
 
-- Commit : ${SHA}
-- APK universel + ABI (armeabi-v7a, arm64-v8a, x86_64)
-- Linux x64 (.tar.gz)
+if glab release view "${VERSION}" >/dev/null 2>&1; then
+  echo "Release GitLab ${VERSION} déjà présente."
+else
+  glab release create "${VERSION}" \
+    --name "Podavio ${VERSION}" \
+    --notes "${NOTES}" \
+    --use-package-registry \
+    --package-name podavio \
+    "dist/android/podavio-${VERSION}-android-universal.apk#APK universel" \
+    "dist/android/podavio-${VERSION}-android-armeabi-v7a.apk#APK armeabi-v7a" \
+    "dist/android/podavio-${VERSION}-android-arm64-v8a.apk#APK arm64-v8a" \
+    "dist/android/podavio-${VERSION}-android-x86_64.apk#APK x86_64" \
+    "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)"
+fi
 
-Les archives « Source code » affichées par GitLab sont automatiques."
+publish_site() {
+  if [ -n "${PODAVIO_SITE_DIR:-}" ]; then
+    site="${PODAVIO_SITE_DIR}"
+  else
+    site="${ROOT}/../podavio-site"
+  fi
+  if [ ! -d "${site}/.git" ]; then
+    echo "Dépôt du site introuvable : ${site}" >&2
+    exit 1
+  fi
+  site="$(CDPATH= cd -- "${site}" && pwd)"
 
-glab release create "${VERSION}" \
-  --name "Podavio ${VERSION}" \
-  --notes "${NOTES}" \
-  --use-package-registry \
-  --package-name podavio \
-  "dist/android/podavio-${VERSION}-android-universal.apk#APK universel" \
-  "dist/android/podavio-${VERSION}-android-armeabi-v7a.apk#APK armeabi-v7a" \
-  "dist/android/podavio-${VERSION}-android-arm64-v8a.apk#APK arm64-v8a" \
-  "dist/android/podavio-${VERSION}-android-x86_64.apk#APK x86_64" \
-  "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)"
+  if [ "$(git -C "${site}" branch --show-current)" != "main" ]; then
+    echo "Le dépôt du site n'est pas sur main (${site})." >&2
+    exit 1
+  fi
+  if [ -n "$(git -C "${site}" status --porcelain)" ]; then
+    echo "Le dépôt du site a des modifications. Commit ou stash avant une release." >&2
+    git -C "${site}" status --porcelain >&2
+    exit 1
+  fi
+
+  echo "Mise à jour du site…"
+  git -C "${site}" fetch origin main
+  if [ "$(git -C "${site}" rev-parse HEAD)" != "$(git -C "${site}" rev-parse origin/main)" ]; then
+    echo "Le dépôt du site n'est pas à jour avec origin/main." >&2
+    exit 1
+  fi
+
+  dest="${site}/releases/${VERSION}"
+  rm -rf "${dest}"
+  mkdir -p "${dest}"
+  for name in \
+    "podavio-${VERSION}-android-universal.apk" \
+    "podavio-${VERSION}-android-armeabi-v7a.apk" \
+    "podavio-${VERSION}-android-arm64-v8a.apk" \
+    "podavio-${VERSION}-android-x86_64.apk"
+  do
+    cp "dist/android/${name}" "${dest}/${name}"
+  done
+  cp "dist/linux/podavio-${VERSION}-linux-x64.tar.gz" \
+    "${dest}/podavio-${VERSION}-linux-x64.tar.gz"
+
+  python3 "${ROOT}/tool/changelog.py" publish \
+    --version "${VERSION}" \
+    --date "$(date -u +%F)" \
+    --site "${site}"
+
+  git -C "${site}" add latest.json changelog.json journal/index.html "releases/${VERSION}"
+  if git -C "${site}" diff --cached --quiet; then
+    echo "Le site contient déjà les fichiers ${VERSION}."
+    return 0
+  fi
+
+  git -C "${site}" commit -m "$(cat <<EOF
+Publier Podavio ${VERSION} sur podavio.com.
+
+EOF
+)"
+  git -C "${site}" push origin main
+  echo "Site poussé. La CI copie les fichiers sur le serveur."
+}
+
+publish_site
 
 echo "Release ${VERSION} publiée (commit ${SHA})."
