@@ -3,18 +3,21 @@ import 'package:flutter/material.dart';
 import '../../settings/settings_controller.dart';
 
 /// Paliers de largeur utiles pour les listes (alignés sur les abonnements).
-enum ListWidthTier {
-  narrow,
-  phone,
-  tablet,
-  large,
-}
+enum ListWidthTier { narrow, phone, tablet, large }
 
 ListWidthTier listWidthTier(double width) {
   if (width < 360) return ListWidthTier.narrow;
   if (width < 600) return ListWidthTier.phone;
   if (width < 900) return ListWidthTier.tablet;
   return ListWidthTier.large;
+}
+
+/// Ajoute la hauteur du chrome flottant (barre, mini-lecteur) au padding
+/// déjà prévu, pour que le dernier élément puisse défiler au-dessus.
+EdgeInsets underChrome(BuildContext context, EdgeInsets padding) {
+  return padding.copyWith(
+    bottom: padding.bottom + MediaQuery.paddingOf(context).bottom,
+  );
 }
 
 /// Padding horizontal de la tuile selon le palier de largeur utile.
@@ -73,10 +76,8 @@ class EpisodeTileMetrics {
   /// Taille de l’anneau de progression de téléchargement.
   final double progressRingSize;
 
-  BoxConstraints get trailingConstraints => BoxConstraints.tightFor(
-        width: trailingMinSize,
-        height: trailingMinSize,
-      );
+  BoxConstraints get trailingConstraints =>
+      BoxConstraints.tightFor(width: trailingMinSize, height: trailingMinSize);
 
   /// Calcule les styles et la jaquette selon largeur utile, densité et textScaler.
   factory EpisodeTileMetrics.resolve({
@@ -140,7 +141,9 @@ class EpisodeTileMetrics {
       coverSize: coverSize,
       gap: gap,
       horizontalPadding: listHorizontalPadding(width),
-      verticalPadding: compact ? (tier == ListWidthTier.narrow ? 4.0 : 6.0) : 8.0,
+      verticalPadding: compact
+          ? (tier == ListWidthTier.narrow ? 4.0 : 6.0)
+          : 8.0,
       progressBarHeight: _progressBarHeight(tier, compact),
       showDownloadPercent: trailing.showPercent,
       trailingVisualDensity: trailing.density,
@@ -151,12 +154,8 @@ class EpisodeTileMetrics {
 }
 
 /// Densité / hit-target des actions trailing selon palier × densité liste.
-({
-  bool showPercent,
-  VisualDensity density,
-  double minSize,
-  double ringSize,
-}) _trailingMetrics(ListWidthTier tier, bool compact) {
+({bool showPercent, VisualDensity density, double minSize, double ringSize})
+_trailingMetrics(ListWidthTier tier, bool compact) {
   switch (tier) {
     case ListWidthTier.narrow:
       return (

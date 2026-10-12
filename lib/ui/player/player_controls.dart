@@ -20,10 +20,7 @@ class _PlayerTransport extends ConsumerWidget {
     final clockSpeed = settings.timeRespectsSpeed ? speed : 1.0;
     final displayPosition = durationAtSpeed(position, clockSpeed);
     final displayDuration = durationAtSpeed(duration, clockSpeed);
-    final displayRemaining = durationAtSpeed(
-      duration - position,
-      clockSpeed,
-    );
+    final displayRemaining = durationAtSpeed(duration - position, clockSpeed);
     final hasNext = ref.watch(hasNextInQueueProvider).value ?? false;
     final episodeId = ref.watch(playerProvider.select((s) => s.episodeId));
     final chapters = episodeId == null
@@ -40,12 +37,10 @@ class _PlayerTransport extends ConsumerWidget {
       color: Theme.of(context).colorScheme.onSurfaceVariant,
       fontWeight: FontWeight.w600,
     );
-    final sideIconSize = carMode ? 48.0 : 36.0;
-    final skipIconSize = carMode ? 56.0 : 36.0;
+    final sideIconSize = carMode ? 48.0 : 32.0;
+    final skipIconSize = carMode ? 48.0 : 28.0;
     const playIconSize = 36.0;
     const playButtonSize = 56.0;
-    final gap = carMode ? 12.0 : 4.0;
-    final skipGap = carMode ? 12.0 : 8.0;
     void toggleRemaining() {
       ref
           .read(settingsProvider.notifier)
@@ -56,10 +51,9 @@ class _PlayerTransport extends ConsumerWidget {
     final activeChapter = currentChapterFor(chapters, position);
     final showChapterMarkers = totalMs > 0 && chapters.isNotEmpty;
     final sliderTheme = SliderTheme.of(context);
-    final thumbWidth =
-        (sliderTheme.thumbShape ?? const RoundSliderThumbShape())
-            .getPreferredSize(true, false)
-            .width;
+    final thumbWidth = (sliderTheme.thumbShape ?? const RoundSliderThumbShape())
+        .getPreferredSize(true, false)
+        .width;
     final overlayWidth =
         (sliderTheme.overlayShape ?? const RoundSliderOverlayShape())
             .getPreferredSize(true, false)
@@ -95,9 +89,8 @@ class _PlayerTransport extends ConsumerWidget {
               max: totalMs == 0 ? 1 : totalMs.toDouble(),
               onChanged: totalMs == 0
                   ? null
-                  : (value) => player.seek(
-                        Duration(milliseconds: value.round()),
-                      ),
+                  : (value) =>
+                        player.seek(Duration(milliseconds: value.round())),
             ),
           ],
         ),
@@ -115,10 +108,7 @@ class _PlayerTransport extends ConsumerWidget {
                     horizontal: 4,
                     vertical: 4,
                   ),
-                  child: Text(
-                    formatClock(displayPosition),
-                    style: clockStyle,
-                  ),
+                  child: Text(formatClock(displayPosition), style: clockStyle),
                 ),
               ),
             ),
@@ -144,101 +134,114 @@ class _PlayerTransport extends ConsumerWidget {
                 ),
               ),
             ),
+          ],
+        ),
+        SizedBox(height: carMode ? 8 : 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
             IconButton(
-              tooltip: 'Volume (− / =)',
-              visualDensity: VisualDensity.compact,
-              onPressed: () => _chooseVolume(context, ref),
-              icon: Icon(_volumeIcon(volume)),
+              tooltip: 'Reculer de ${settings.skipBackSeconds} s (J)',
+              onPressed: () => player.skipBy(-settings.skipBackSeconds),
+              icon: SkipIcon.back(size: skipIconSize),
+            ),
+            IconButton(
+              tooltip: 'Épisode précédent',
+              iconSize: sideIconSize,
+              onPressed: player.playPreviousInQueue,
+              icon: Icon(Icons.skip_previous, size: sideIconSize),
+            ),
+            if (!carMode)
+              IconButton.filled(
+                tooltip: playing ? 'Pause (Espace)' : 'Lecture (Espace)',
+                iconSize: playIconSize,
+                style: IconButton.styleFrom(
+                  backgroundColor: scheme.onSurface,
+                  foregroundColor: scheme.surface,
+                  fixedSize: const Size(
+                    playButtonSize + 16,
+                    playButtonSize + 16,
+                  ),
+                ),
+                onPressed: player.toggle,
+                icon: PlayPauseIcon(
+                  playing: playing,
+                  size: playIconSize,
+                  color: scheme.surface,
+                ),
+              ),
+            IconButton(
+              tooltip: hasNext
+                  ? 'Épisode suivant'
+                  : 'Pas d’épisode suivant dans la playlist',
+              iconSize: sideIconSize,
+              onPressed: hasNext ? player.playNextInQueue : null,
+              icon: SkipIcon.next(size: sideIconSize),
+            ),
+            IconButton(
+              tooltip: 'Avancer de ${settings.skipForwardSeconds} s (L)',
+              onPressed: () => player.skipBy(settings.skipForwardSeconds),
+              icon: SkipIcon.forward(size: skipIconSize),
             ),
           ],
         ),
-        SizedBox(height: carMode ? 12 : 8),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _TransportControl(
-                tooltip: 'Vitesse de lecture',
-                label: _formatSpeed(speed),
-                labelStyle: labelStyle,
-                onPressed: () => _chooseSpeed(context, ref),
-                icon: Icon(Icons.speed, size: sideIconSize),
-                iconSize: sideIconSize,
-              ),
-              if (hasChapters) ...[
-                SizedBox(width: gap),
-                _TransportControl(
-                  tooltip: 'Chapitre précédent',
-                  label: 'Chap.',
-                  labelStyle: labelStyle,
-                  onPressed: () => player.skipChapter(chapters, delta: -1),
-                  icon: Icon(Icons.skip_previous, size: sideIconSize),
-                  iconSize: sideIconSize,
-                ),
-              ],
-              SizedBox(width: gap),
-              _TransportControl(
-                tooltip:
-                    'Reculer de ${settings.skipBackSeconds} s (J)',
-                label: '−${settings.skipBackSeconds} s',
-                labelStyle: labelStyle,
-                onPressed: () => player.skipBy(-settings.skipBackSeconds),
-                icon: SkipIcon.back(size: skipIconSize),
-                iconSize: skipIconSize,
-              ),
-              if (!carMode) ...[
-                SizedBox(width: skipGap),
-                _TransportControl(
-                  tooltip:
-                      playing ? 'Pause (Espace)' : 'Lecture (Espace)',
-                  label: '',
-                  labelStyle: labelStyle,
-                  filled: true,
-                  iconSize: playButtonSize,
-                  onPressed: player.toggle,
-                  icon: PlayPauseIcon(
-                    playing: playing,
-                    size: playIconSize,
+        if (!carMode) ...[
+          const SizedBox(height: 4),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      IconButton(
+                        tooltip: 'Vitesse ${_formatSpeed(speed)}',
+                        onPressed: () => _chooseSpeed(context, ref),
+                        icon: Text(
+                          _formatSpeed(speed),
+                          style: labelStyle?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (hasChapters)
+                        IconButton(
+                          tooltip: 'Chapitres',
+                          onPressed: episodeId == null
+                              ? null
+                              : () => showChaptersSheet(
+                                  context: context,
+                                  ref: ref,
+                                  episodeId: episodeId,
+                                ),
+                          icon: const Icon(Icons.list_alt),
+                        ),
+                      IconButton(
+                        tooltip: 'Notes',
+                        onPressed: episodeId == null
+                            ? null
+                            : () => showNotesSheet(
+                                context: context,
+                                episodeId: episodeId,
+                              ),
+                        icon: const InfoIcon(),
+                      ),
+                      const _QueueAction(),
+                      const _SleepAction(),
+                      IconButton(
+                        tooltip: 'Volume (− / =)',
+                        onPressed: () => _chooseVolume(context, ref),
+                        icon: Icon(_volumeIcon(volume)),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-              SizedBox(width: skipGap),
-              _TransportControl(
-                tooltip: 'Avancer de ${settings.skipForwardSeconds} s (L)',
-                label: '+${settings.skipForwardSeconds} s',
-                labelStyle: labelStyle,
-                onPressed: () =>
-                    player.skipBy(settings.skipForwardSeconds),
-                icon: SkipIcon.forward(size: skipIconSize),
-                iconSize: skipIconSize,
-              ),
-              if (hasChapters) ...[
-                SizedBox(width: gap),
-                _TransportControl(
-                  tooltip: 'Chapitre suivant',
-                  label: 'Chap.',
-                  labelStyle: labelStyle,
-                  onPressed: () => player.skipChapter(chapters, delta: 1),
-                  icon: Icon(Icons.skip_next, size: sideIconSize),
-                  iconSize: sideIconSize,
-                ),
-              ],
-              SizedBox(width: gap),
-              _TransportControl(
-                tooltip: hasNext
-                    ? 'Épisode suivant'
-                    : 'Pas d’épisode suivant dans la playlist',
-                label: '',
-                labelStyle: labelStyle,
-                onPressed: hasNext ? player.playNextInQueue : null,
-                icon: SkipIcon.next(size: sideIconSize),
-                iconSize: sideIconSize,
-              ),
-            ],
+              );
+            },
           ),
-        ),
+        ],
       ],
     );
   }
@@ -323,51 +326,34 @@ IconData _volumeIcon(double volume) {
   return Icons.volume_up;
 }
 
-class _TransportControl extends StatelessWidget {
-  const _TransportControl({
-    required this.icon,
-    required this.label,
-    required this.labelStyle,
-    required this.tooltip,
-    required this.onPressed,
-    this.filled = false,
-    this.iconSize = 36,
-  });
-
-  final Widget icon;
-  final String label;
-  final TextStyle? labelStyle;
-  final String tooltip;
-  final VoidCallback? onPressed;
-  final bool filled;
-  final double iconSize;
+class _QueueAction extends ConsumerWidget {
+  const _QueueAction();
 
   @override
-  Widget build(BuildContext context) {
-    final button = filled
-        ? IconButton.filled(
-            tooltip: tooltip,
-            iconSize: iconSize,
-            onPressed: onPressed,
-            icon: icon,
-          )
-        : IconButton(
-            tooltip: tooltip,
-            iconSize: iconSize,
-            onPressed: onPressed,
-            icon: icon,
-          );
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        button,
-        SizedBox(
-          height: 16,
-          child: label.isEmpty
-              ? null
-              : Text(label, style: labelStyle, textAlign: TextAlign.center),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(queueCountProvider).value ?? 0;
+    final open = ref.watch(_playerPanelProvider) == _PlayerPanel.playlist;
+    final scheme = Theme.of(context).colorScheme;
+    final label = count > 99 ? '99+' : '$count';
+    return IconButton(
+      tooltip: open
+          ? 'Revenir à l’épisode'
+          : (count == 0 ? 'Playlist' : 'Playlist ($count)'),
+      isSelected: open,
+      style: IconButton.styleFrom(
+        backgroundColor: open ? scheme.secondaryContainer : null,
+      ),
+      onPressed: () => ref.read(_playerPanelProvider.notifier).toggle(),
+      icon: Badge(
+        isLabelVisible: count > 0,
+        backgroundColor: scheme.primary,
+        textColor: scheme.onPrimary,
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
         ),
-      ],
+        child: const PlaylistPlayIcon(),
+      ),
     );
   }
 }
@@ -435,12 +421,8 @@ class _FavoriteAction extends ConsumerWidget {
     final favorite = entry.episode.favorite;
     return IconButton(
       tooltip: favorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
-      onPressed: () => runEpisodeAction(
-        context,
-        ref,
-        entry,
-        EpisodeMenuAction.favorite,
-      ),
+      onPressed: () =>
+          runEpisodeAction(context, ref, entry, EpisodeMenuAction.favorite),
       icon: Icon(favorite ? Icons.favorite : Icons.favorite_outline),
     );
   }
@@ -457,12 +439,8 @@ class _ShareAction extends ConsumerWidget {
     if (entry == null) return const SizedBox.shrink();
     return IconButton(
       tooltip: 'Partager',
-      onPressed: () => runEpisodeAction(
-        context,
-        ref,
-        entry,
-        EpisodeMenuAction.share,
-      ),
+      onPressed: () =>
+          runEpisodeAction(context, ref, entry, EpisodeMenuAction.share),
       icon: const ShareIcon(size: 24),
     );
   }
@@ -565,5 +543,3 @@ Uri? _podcastWebsite(String? link) {
   if (uri.host.isEmpty) return null;
   return uri;
 }
-
-

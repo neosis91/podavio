@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/cover_tone.dart';
 import '../../core/format.dart';
 import '../../player/player_controller.dart';
 import '../../player/player_sheet_controller.dart';
@@ -119,98 +120,125 @@ class _ExpandablePlayerState extends ConsumerState<ExpandablePlayer>
     if (!hasEpisode) return const SizedBox.shrink();
 
     final size = MediaQuery.sizeOf(context);
-    final bottom = widget.bottomInset;
-    final maxHeight = (size.height - bottom - widget.topInset).clamp(
-      miniPlayerHeight,
+    final scheme = Theme.of(context).colorScheme;
+    final tone = watchPlayerCoverTone(ref);
+    // Course du haut de la carte, du mini-lecteur jusqu’au haut de l’écran.
+    final extent = (size.height - widget.bottomInset - miniPlayerHeight).clamp(
+      1.0,
       size.height,
     );
-    final scheme = Theme.of(context).colorScheme;
-    final extent = maxHeight - miniPlayerHeight;
 
     return Positioned(
       left: widget.leftInset,
       right: 0,
-      bottom: bottom,
+      top: 0,
+      bottom: 0,
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
           final t = _controller.value;
-          final height = miniPlayerHeight + extent * t;
+          final bottom = widget.bottomInset * (1 - t);
+          final span = size.height - bottom;
+          final height = (miniPlayerHeight + (span - miniPlayerHeight) * t)
+              .clamp(miniPlayerHeight, span);
+          final margin = 12 * (1 - t);
 
-          return SizedBox(
-            height: height.clamp(miniPlayerHeight, maxHeight),
-            child: BackButtonListener(
-              onBackButtonPressed: () async {
-                if (_controller.value <= 0.05) return false;
-                ref.read(playerSheetProvider.notifier).collapse();
-                return true;
-              },
-              child: MediaQuery.removePadding(
-                context: context,
-                removeBottom: bottom > 0,
-                removeLeft: widget.leftInset > 0,
-                removeTop: widget.topInset > 0,
-                // Drag sur la mini-barre (expand) et le header (collapse) :
-                // pas de GestureDetector parent (conflit avec le PageView vertical).
-                // `_dragging` empêche IgnorePointer de couper le geste à mi-course.
-                child: Material(
-                  elevation: 6 + 6 * t,
-                  color: Color.lerp(
-                    scheme.surfaceContainer,
-                    scheme.surface,
-                    t,
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          ignoring: t < 0.5 && !_dragging,
-                          child: Opacity(
-                            opacity: Curves.easeOut.transform(
-                              ((t - 0.08) / 0.92).clamp(0.0, 1.0),
-                            ),
-                            child: PlayerPage(
-                              embedded: true,
-                              onCollapse: () => ref
-                                  .read(playerSheetProvider.notifier)
-                                  .collapse(),
-                              onHeaderDragStart: _onDragStart,
-                              onHeaderDragUpdate: (details) =>
-                                  _onDragUpdate(details, extent),
-                              onHeaderDragEnd: _onDragEnd,
-                              onHeaderDragCancel: _onDragCancel,
-                            ),
+          return Padding(
+            padding: EdgeInsets.only(
+              left: margin,
+              right: margin,
+              bottom: bottom,
+            ),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                height: height,
+                child: BackButtonListener(
+                  onBackButtonPressed: () async {
+                    if (_controller.value <= 0.05) return false;
+                    if (closePlayerPlaylistIfOpen(ref)) return true;
+                    ref.read(playerSheetProvider.notifier).collapse();
+                    return true;
+                  },
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeBottom: bottom > 0,
+                    removeLeft: widget.leftInset > 0,
+                    removeTop: widget.topInset > 0 && t < 1,
+                    // Drag sur la mini-barre (expand) et le header (collapse) :
+                    // pas de GestureDetector parent (conflit avec le PageView vertical).
+                    // `_dragging` empêche IgnorePointer de couper le geste à mi-course.
+                    child: Material(
+                      elevation: 0,
+                      color:
+                          tone?.background ??
+                          Color.lerp(
+                            scheme.surfaceContainerHigh,
+                            scheme.surface,
+                            t,
                           ),
-                        ),
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18 * (1 - t)),
                       ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: 0,
-                        height: miniPlayerHeight,
-                        child: IgnorePointer(
-                          ignoring: t > 0.5 && !_dragging,
-                          child: Opacity(
-                            opacity: (1 - t / 0.4).clamp(0.0, 1.0),
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onVerticalDragStart: _onDragStart,
-                              onVerticalDragUpdate: (details) =>
-                                  _onDragUpdate(details, extent),
-                              onVerticalDragEnd: _onDragEnd,
-                              onVerticalDragCancel: _onDragCancel,
-                              child: _MiniPlayerBar(
-                                onOpen: () => ref
-                                    .read(playerSheetProvider.notifier)
-                                    .expand(),
+                      clipBehavior: Clip.antiAlias,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              ignoring: t < 0.5 && !_dragging,
+                              child: Opacity(
+                                opacity: Curves.easeOut.transform(
+                                  ((t - 0.08) / 0.92).clamp(0.0, 1.0),
+                                ),
+                                child: PlayerPage(
+                                  embedded: true,
+                                  onCollapse: () => ref
+                                      .read(playerSheetProvider.notifier)
+                                      .collapse(),
+                                  onHeaderDragStart: _onDragStart,
+                                  onHeaderDragUpdate: (details) =>
+                                      _onDragUpdate(details, extent),
+                                  onHeaderDragEnd: _onDragEnd,
+                                  onHeaderDragCancel: _onDragCancel,
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: 0,
+                            height: miniPlayerHeight,
+                            child: IgnorePointer(
+                              ignoring: t > 0.5 && !_dragging,
+                              child: Opacity(
+                                opacity: (1 - t / 0.4).clamp(0.0, 1.0),
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onVerticalDragStart: _onDragStart,
+                                  onVerticalDragUpdate: (details) =>
+                                      _onDragUpdate(details, extent),
+                                  onVerticalDragEnd: _onDragEnd,
+                                  onVerticalDragCancel: _onDragCancel,
+                                  child: Theme(
+                                    data: tone == null
+                                        ? Theme.of(context)
+                                        : miniPlayerTheme(tone.background),
+                                    child: _MiniPlayerBar(
+                                      onOpen: () => ref
+                                          .read(playerSheetProvider.notifier)
+                                          .expand(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -258,6 +286,8 @@ class _MiniPlayerBar extends ConsumerWidget {
       settingsProvider.select((s) => s.timeRespectsSpeed),
     );
     final scheme = Theme.of(context).colorScheme;
+    final onCard = scheme.onSurface;
+    final onCardMuted = scheme.onSurfaceVariant;
     final player = ref.read(playerProvider.notifier);
     final total = duration.inMilliseconds;
     final progress = total == 0
@@ -271,7 +301,6 @@ class _MiniPlayerBar extends ConsumerWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        LinearProgressIndicator(value: progress, minHeight: 2),
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -284,13 +313,16 @@ class _MiniPlayerBar extends ConsumerWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        AspectRatio(
-                          aspectRatio: 1,
-                          child: PodcastCover(
-                            url: imageUrl,
-                            localPath: imagePath,
-                            size: null,
-                            radius: 0,
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 6, 0, 6),
+                          child: AspectRatio(
+                            aspectRatio: 1,
+                            child: PodcastCover(
+                              url: imageUrl,
+                              localPath: imagePath,
+                              size: null,
+                              radius: 8,
+                            ),
                           ),
                         ),
                         Expanded(
@@ -304,8 +336,9 @@ class _MiniPlayerBar extends ConsumerWidget {
                                   title,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w700,
+                                    color: onCard,
                                   ),
                                 ),
                                 Text(
@@ -313,9 +346,7 @@ class _MiniPlayerBar extends ConsumerWidget {
                                       '$podcastTitle · ${formatClock(displayPosition)}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: scheme.onSurfaceVariant,
-                                  ),
+                                  style: TextStyle(color: onCardMuted),
                                 ),
                               ],
                             ),
@@ -339,7 +370,7 @@ class _MiniPlayerBar extends ConsumerWidget {
                 visualDensity: VisualDensity.compact,
                 constraints: _btnConstraints,
                 onPressed: player.toggle,
-                icon: PlayPauseIcon(playing: playing, size: 26),
+                icon: PlayPauseIcon(playing: playing, size: 26, color: onCard),
               ),
               if (miniButtons.skipForward)
                 IconButton(
@@ -365,14 +396,16 @@ class _MiniPlayerBar extends ConsumerWidget {
                   visualDensity: VisualDensity.compact,
                   constraints: _btnConstraints,
                   onPressed: player.dismiss,
-                  icon: Icon(
-                    Icons.close,
-                    size: 22,
-                    color: scheme.onSurfaceVariant,
-                  ),
+                  icon: Icon(Icons.close, size: 22, color: onCardMuted),
                 ),
             ],
           ),
+        ),
+        LinearProgressIndicator(
+          value: progress,
+          minHeight: 2,
+          color: onCard,
+          backgroundColor: onCard.withValues(alpha: 0.24),
         ),
       ],
     );
