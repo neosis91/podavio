@@ -242,6 +242,29 @@ final recentDownloadsProvider = StreamProvider<List<EpisodeEntry>>((ref) {
   return ref.watch(databaseProvider).watchRecentDownloads();
 });
 
+final favoriteEpisodesProvider = StreamProvider<List<EpisodeEntry>>((ref) {
+  return ref
+      .watch(databaseProvider)
+      .watchEpisodeWindow(favoritesOnly: true, limit: 16);
+});
+
+/// Lectures récentes, sans les épisodes encore dans « Continuer d’écouter ».
+final recentPlayedProvider = StreamProvider<List<EpisodeEntry>>((ref) {
+  final playing = ref.watch(inProgressProvider).asData?.value ?? const [];
+  final playingIds = {for (final entry in playing) entry.episode.id};
+  return ref
+      .watch(databaseProvider)
+      .watchEpisodeWindow(historyOnly: true, limit: 28)
+      .map((rows) {
+        final played = [
+          for (final entry in rows)
+            if (!playingIds.contains(entry.episode.id)) entry,
+        ];
+        if (played.length <= 12) return played;
+        return played.sublist(0, 12);
+      });
+});
+
 final preferredPodcastsProvider = StreamProvider<List<Podcast>>((ref) {
   return ref.watch(databaseProvider).watchPodcastsByPreference();
 });

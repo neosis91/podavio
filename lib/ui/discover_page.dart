@@ -7,18 +7,20 @@ import '../data/discover_hit.dart';
 import '../data/discover_providers.dart';
 import '../data/feed_service.dart';
 import 'discover/discover_hit_actions.dart';
+import 'library_hub_page.dart';
 import 'discover/discover_search_host.dart';
 import 'more_page.dart';
 import 'podcasts_page.dart';
 import 'router.dart';
 import 'widgets/cover.dart';
+import 'widgets/list_metrics.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/highlighted_text.dart';
 import 'widgets/messages.dart';
 
 export '../data/discover_providers.dart';
 
-const _quickSuggestions = 12;
+const _quickSuggestions = 16;
 const _tabletBreakpoint = 600.0;
 
 class DiscoverPage extends ConsumerStatefulWidget {
@@ -82,6 +84,7 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
               )
             : null,
         actions: [
+          if (!searching) const PreferencesButton(),
           if (searching)
             IconButton(
               tooltip: 'Effacer',
@@ -202,10 +205,36 @@ class DiscoverMorePage extends ConsumerStatefulWidget {
 
 class _DiscoverMorePageState extends ConsumerState<DiscoverMorePage>
     with DiscoverSearchHost, DiscoverHitActions {
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+  }
+
   @override
   void dispose() {
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
     disposeSearchHost();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    if (_scroll.position.extentAfter < 800) {
+      ref.read(discoverChartsProvider.notifier).loadMore();
+    }
+  }
+
+  void _fillIfShort() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      if (_scroll.position.maxScrollExtent < 800) {
+        ref.read(discoverChartsProvider.notifier).loadMore();
+      }
+    });
   }
 
   @override
@@ -255,6 +284,7 @@ class _DiscoverMorePageState extends ConsumerState<DiscoverMorePage>
               )
             : null,
         actions: [
+          if (!searching) const PreferencesButton(),
           if (searching)
             IconButton(
               tooltip: 'Effacer',
@@ -289,28 +319,66 @@ class _DiscoverMorePageState extends ConsumerState<DiscoverMorePage>
                   child: const Text('Réessayer'),
                 ),
               ),
-              data: (items) {
+              data: (charts) {
+                final items = charts.hits;
                 if (items.isEmpty) {
                   return const EmptyState(
                     title: 'Aucune suggestion',
                     message: 'Réessayez plus tard.',
                   );
                 }
-                return ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                  children: [
-                    Text(
-                      'Apple Podcasts · Podcast Index · fyyd',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                if (charts.hasMore && !charts.loadingMore) _fillIfShort();
+                return CustomScrollView(
+                  controller: _scroll,
+                  slivers: [
+                    SliverPadding(
+                      padding: underChrome(
+                        context,
+                        const EdgeInsets.fromLTRB(16, 8, 16, 24),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    _CoverGrid(
-                      items: items,
-                      columns: columns,
-                      opening: busyHits,
-                      onOpen: openHit,
+                      sliver: SliverMainAxisGroup(
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: Text(
+                              'Apple Podcasts · Podcast Index · fyyd',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                          SliverGrid(
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: columns,
+                                  crossAxisSpacing: 8,
+                                  mainAxisSpacing: 8,
+                                ),
+                            delegate: SliverChildBuilderDelegate((
+                              context,
+                              index,
+                            ) {
+                              return _DiscoverCover(
+                                hit: items[index],
+                                busy: busyHits.contains(items[index].dedupeKey),
+                                onOpen: openHit,
+                              );
+                            }, childCount: items.length),
+                          ),
+                          if (charts.loadingMore)
+                            const SliverToBoxAdapter(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 24),
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ],
                 );
@@ -343,7 +411,7 @@ class _DiscoverHomeBody extends ConsumerWidget {
     final columns = width >= _tabletBreakpoint ? 6 : 4;
 
     return ListView(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: underChrome(context, const EdgeInsets.only(bottom: 24)),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -351,10 +419,10 @@ class _DiscoverHomeBody extends ConsumerWidget {
             loading: () => _ChartsPlaceholderGrid(columns: columns),
             error: (error, _) => _ChartsError(
               message: errorText(error),
-              onRetry: () =>
-                  ref.read(discoverChartsProvider.notifier).reload(),
+              onRetry: () => ref.read(discoverChartsProvider.notifier).reload(),
             ),
-            data: (items) {
+            data: (charts) {
+              final items = charts.hits;
               if (items.isEmpty) {
                 return const Padding(
                   padding: EdgeInsets.all(24),
@@ -382,10 +450,9 @@ class _DiscoverHomeBody extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      if (items.length > _quickSuggestions)
+                      if (items.length > _quickSuggestions || charts.hasMore)
                         TextButton(
-                          onPressed: () =>
-                              context.push(AppRoutes.discoverMore),
+                          onPressed: () => context.push(AppRoutes.discoverMore),
                           child: const Text('Découvrir plus »'),
                         ),
                     ],
@@ -466,6 +533,7 @@ class _CoverGrid extends StatelessWidget {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
       itemCount: items.length,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
@@ -474,43 +542,58 @@ class _CoverGrid extends StatelessWidget {
       ),
       itemBuilder: (context, index) {
         final hit = items[index];
-        final key = hit.dedupeKey;
-        final busy = opening.contains(key);
-
-        return Tooltip(
-          message: hit.title,
-          child: Material(
-            elevation: 2,
-            shadowColor: Colors.black26,
-            borderRadius: BorderRadius.circular(8),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: busy ? null : () => onOpen(hit, key),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  PodcastCover(
-                    url: hit.imageUrl,
-                    size: null,
-                    radius: 0,
-                  ),
-                  if (busy)
-                    const ColoredBox(
-                      color: Color(0x66000000),
-                      child: Center(
-                        child: SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
+        return _DiscoverCover(
+          hit: hit,
+          busy: opening.contains(hit.dedupeKey),
+          onOpen: onOpen,
         );
       },
+    );
+  }
+}
+
+class _DiscoverCover extends StatelessWidget {
+  const _DiscoverCover({
+    required this.hit,
+    required this.busy,
+    required this.onOpen,
+  });
+
+  final DiscoverHit hit;
+  final bool busy;
+  final Future<void> Function(DiscoverHit hit, String key) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final key = hit.dedupeKey;
+    return Tooltip(
+      message: hit.title,
+      child: Material(
+        elevation: 2,
+        shadowColor: Colors.black26,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: busy ? null : () => onOpen(hit, key),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              PodcastCover(url: hit.imageUrl, size: null, radius: 0),
+              if (busy)
+                const ColoredBox(
+                  color: Color(0x66000000),
+                  child: Center(
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -526,6 +609,7 @@ class _ChartsPlaceholderGrid extends StatelessWidget {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
       itemCount: _quickSuggestions,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
@@ -619,11 +703,7 @@ class _SearchResultsBody extends StatelessWidget {
                 horizontal: 16,
                 vertical: 6,
               ),
-              leading: PodcastCover(
-                url: hit.imageUrl,
-                size: 64,
-                radius: 8,
-              ),
+              leading: PodcastCover(url: hit.imageUrl, size: 64, radius: 8),
               title: HighlightedText(
                 text: hit.title,
                 query: needle,
@@ -660,9 +740,7 @@ class _SearchResultsBody extends StatelessWidget {
                       tooltip: !canOpen
                           ? 'Pas de flux RSS public'
                           : 'S’abonner',
-                      onPressed: !canOpen
-                          ? null
-                          : () => onSubscribe(hit, key),
+                      onPressed: !canOpen ? null : () => onSubscribe(hit, key),
                       icon: const Icon(Icons.add_circle_outline),
                     ),
             );

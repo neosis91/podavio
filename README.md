@@ -7,7 +7,7 @@ Podavio est un lecteur de podcasts pour Android, iOS, Windows, macOS et Linux. O
 - Recherche et tendances via l’annuaire iTunes, centré sur la France
 - Ajout d’un podcast par adresse RSS
 - Import et export OPML des abonnements
-- Épisodes non lus, playlist réordonnable, favoris et historique
+- Épisodes non lus, playlist réordonnable, favoris et lectures récentes
 - Lecteur avec position mémorisée, vitesse, sauts et minuteur de sommeil
 - Téléchargement des épisodes pour les écouter hors ligne
 - Thème clair, sombre ou système
@@ -54,6 +54,10 @@ tool/release_local.sh 2026.10.6    # compile, tague, publie
 ```
 
 Le tag est poussé avec `ci.skip`. La CI ne lance plus que les contrôles de merge request.
+
+Le script copie ensuite les APK et l’archive Linux dans `../podavio-site/releases/<version>/`, met à jour `latest.json` et le journal, puis pousse `main` de ce dépôt. Sa CI envoie le tout sur le serveur. Le dépôt du site doit être propre, sur `main`, et déjà à jour. Un autre chemin se passe avec `PODAVIO_SITE_DIR`.
+
+Les nouveautés se rédigent dans `CHANGELOG.md`, sous un titre `## AAAA.M.N`, une puce par ligne. Ce texte devient les notes de la release GitLab et la page Journal du site. La section `## Non publié` reste un brouillon.
 
 ## Signature Android
 

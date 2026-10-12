@@ -201,6 +201,25 @@ class LinkIcon extends StatelessWidget {
   }
 }
 
+class HistoryIcon extends StatelessWidget {
+  const HistoryIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return SvgPicture.asset(
+      'assets/brand/history.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      semanticsLabel: 'Lectures récentes',
+    );
+  }
+}
+
 class PlaylistPlayIcon extends StatelessWidget {
   const PlaylistPlayIcon({super.key, this.size = 24});
 
@@ -258,6 +277,82 @@ class PlaylistAddIcon extends StatelessWidget {
   }
 }
 
+class MoreVertIcon extends StatelessWidget {
+  const MoreVertIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return SvgPicture.asset(
+      'assets/brand/more_vert.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      semanticsLabel: 'Actions',
+    );
+  }
+}
+
+class MoveUpIcon extends StatelessWidget {
+  const MoveUpIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return SvgPicture.asset(
+      'assets/brand/keyboard_double_arrow_up.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      semanticsLabel: 'Monter',
+    );
+  }
+}
+
+class MoveDownIcon extends StatelessWidget {
+  const MoveDownIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return SvgPicture.asset(
+      'assets/brand/keyboard_double_arrow_down.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      semanticsLabel: 'Descendre',
+    );
+  }
+}
+
+class DeleteIcon extends StatelessWidget {
+  const DeleteIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return SvgPicture.asset(
+      'assets/brand/delete.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      semanticsLabel: 'Supprimer',
+    );
+  }
+}
+
 class PlaylistRemoveIcon extends StatelessWidget {
   const PlaylistRemoveIcon({super.key, this.size = 24});
 
@@ -279,15 +374,23 @@ class PlaylistRemoveIcon extends StatelessWidget {
 
 /// Bouton lecture / pause avec morph entre les deux logos.
 class PlayPauseIcon extends StatelessWidget {
-  const PlayPauseIcon({super.key, required this.playing, this.size = 24});
+  const PlayPauseIcon({
+    super.key,
+    required this.playing,
+    this.size = 24,
+    this.color,
+  });
 
   final bool playing;
   final double size;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final color =
-        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+        this.color ??
+        IconTheme.of(context).color ??
+        Theme.of(context).colorScheme.onSurface;
     return TweenAnimationBuilder<double>(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOutCubic,

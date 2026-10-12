@@ -113,6 +113,11 @@ flutter:
     - assets/brand/playlist_add.svg
     - assets/brand/playlist_remove.svg
     - assets/brand/subscriptions.svg
+    - assets/brand/more_vert.svg
+    - assets/brand/keyboard_double_arrow_up.svg
+    - assets/brand/keyboard_double_arrow_down.svg
+    - assets/brand/delete.svg
+    - assets/brand/history.svg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

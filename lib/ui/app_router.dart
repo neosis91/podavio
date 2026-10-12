@@ -13,7 +13,9 @@ import '../settings/settings_controller.dart';
 import 'discover_page.dart';
 import 'episode_page.dart';
 import 'episodes_page.dart';
+import 'history_page.dart';
 import 'home_page.dart';
+import 'library_hub_page.dart';
 import 'library_pages.dart';
 import 'licenses_page.dart';
 import 'more_page.dart';
@@ -29,10 +31,9 @@ import 'stats_page.dart';
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final start = ref.read(settingsProvider).navOrder.first;
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: start,
+    initialLocation: AppRoutes.home,
     routes: [
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
@@ -40,6 +41,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.home,
             builder: (context, state) => const HomePage(),
+          ),
+          GoRoute(
+            path: AppRoutes.library,
+            builder: (context, state) => const LibraryPage(),
           ),
           GoRoute(
             path: AppRoutes.episodes,
@@ -191,16 +196,14 @@ class _PlayerExpandGateState extends ConsumerState<_PlayerExpandGate> {
       if (context.canPop()) {
         context.pop();
       } else {
-        context.go(ref.read(settingsProvider).navOrder.first);
+        context.go(AppRoutes.home);
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
@@ -255,9 +258,7 @@ class _PlaybackLifecycleState extends ConsumerState<PlaybackLifecycle>
     final keepOn = ref.watch(
       settingsProvider.select((settings) => settings.keepScreenOn),
     );
-    final playing = ref.watch(
-      playerProvider.select((state) => state.playing),
-    );
+    final playing = ref.watch(playerProvider.select((state) => state.playing));
     _syncWakelock(keepOn: keepOn, playing: playing);
     return widget.child;
   }

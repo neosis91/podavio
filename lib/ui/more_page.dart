@@ -125,6 +125,11 @@ class PreferencesPage extends ConsumerWidget {
             onTap: () => context.push(AppRoutes.downloadSettings),
           ),
           ListTile(
+            leading: const Icon(Icons.insights_outlined),
+            title: const Text('Statistiques'),
+            onTap: () => context.push(AppRoutes.stats),
+          ),
+          ListTile(
             leading: const Icon(Icons.archive_outlined),
             title: const Text('Sauvegarde et restauration'),
             onTap: () => context.push(AppRoutes.backupRestore),

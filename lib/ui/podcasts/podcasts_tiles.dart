@@ -85,7 +85,7 @@ class _PodcastGrid extends StatelessWidget {
             : 0.0;
         final textHeight = showNames ? gap + titleHeight : 0.0;
         return GridView.builder(
-          padding: const EdgeInsets.all(_gridPadding),
+          padding: underChrome(context, const EdgeInsets.all(_gridPadding)),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
             mainAxisSpacing: _gridSpacing,
@@ -159,11 +159,7 @@ class _PodcastGridTile extends StatelessWidget {
             aspectRatio: 1,
             child: showName
                 ? cover
-                : Semantics(
-                    label: podcast.title,
-                    button: true,
-                    child: cover,
-                  ),
+                : Semantics(label: podcast.title, button: true, child: cover),
           ),
           if (showName) ...[
             SizedBox(height: gap),

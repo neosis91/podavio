@@ -63,7 +63,7 @@ final navPages = <NavPage>[
     _material(Icons.explore_outlined),
     _material(Icons.explore),
   ),
-  NavPage(AppRoutes.history, 'Historique', _material(Icons.history)),
+  NavPage(AppRoutes.history, 'Lectures récentes', _material(Icons.history)),
   NavPage(
     AppRoutes.favorites,
     'Favoris',

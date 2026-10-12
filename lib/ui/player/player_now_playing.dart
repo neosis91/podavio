@@ -1,14 +1,9 @@
 part of '../player_page.dart';
 
 class _PlayerNowPlaying extends ConsumerWidget {
-  const _PlayerNowPlaying({
-    required this.episodeId,
-    required this.onOpenNotes,
-    this.carMode = false,
-  });
+  const _PlayerNowPlaying({required this.episodeId, this.carMode = false});
 
   final int episodeId;
-  final VoidCallback onOpenNotes;
   final bool carMode;
 
   @override
@@ -33,18 +28,11 @@ class _PlayerNowPlaying extends ConsumerWidget {
     final chaptersAsync = ref.watch(chaptersProvider(episodeId));
     final chapters = chaptersAsync.value ?? const <EpisodeChapter>[];
     final podcast = ref.watch(episodeProvider(episodeId)).value?.podcast;
-    final chaptersUrl = ref
-        .watch(episodeProvider(episodeId))
-        .value
-        ?.episode
-        .chaptersUrl;
-    final showChapters = !carMode &&
-        (chapters.isNotEmpty ||
-            (chaptersUrl != null && chaptersUrl.trim().isNotEmpty));
     final position = ref.watch(playerProvider.select((s) => s.position));
     final playing = ref.watch(playerProvider.select((s) => s.playing));
-    final activeChapter =
-        carMode ? null : currentChapterFor(chapters, position);
+    final activeChapter = carMode
+        ? null
+        : currentChapterFor(chapters, position);
     final theme = Theme.of(context);
 
     Widget content({required bool compact}) {
@@ -64,6 +52,8 @@ class _PlayerNowPlaying extends ConsumerWidget {
                     child: IconButton.filled(
                       tooltip: playing ? 'Pause' : 'Lecture',
                       style: IconButton.styleFrom(
+                        backgroundColor: theme.colorScheme.onSurface,
+                        foregroundColor: theme.colorScheme.surface,
                         fixedSize: Size(side, side),
                         iconSize: iconSize,
                       ),
@@ -72,17 +62,17 @@ class _PlayerNowPlaying extends ConsumerWidget {
                       icon: PlayPauseIcon(
                         playing: playing,
                         size: iconSize,
+                        color: theme.colorScheme.surface,
                       ),
                     ),
                   );
                 }
-                // Marges L/R hors image pour le double-tap saut.
-                const sideGutter = 64.0;
-                final maxByWidth = (constraints.maxWidth - 2 * sideGutter)
-                    .clamp(48.0, 320.0)
+                final maxByWidth = constraints.maxWidth
+                    .clamp(48.0, 480.0)
                     .toDouble();
-                final sideCap =
-                    compact ? math.min(200.0, maxByWidth) : maxByWidth;
+                final sideCap = compact
+                    ? math.min(240.0, maxByWidth)
+                    : maxByWidth;
                 // Ne pas utiliser shortestSide seul : dans un Expanded haut,
                 // un SizedBox(height: side) est forcé à minHeight = maxHeight
                 // et la cover s’étire en rectangle.
@@ -94,25 +84,17 @@ class _PlayerNowPlaying extends ConsumerWidget {
                 // Center assouplit les contraintes du Expanded (sinon la
                 // hauteur min = zone entière et casse le carré).
                 return Center(
-                  child: SizedBox(
-                    width: constraints.maxWidth,
-                    height: side,
-                    child: _CoverPlayGestures(
-                      playing: playing,
-                      child: SizedBox(
-                        width: side,
-                        height: side,
-                        child: PodcastCover(
-                          url: imageUrl,
-                          localPath: imagePath,
-                          httpHeaders: podcastAuthHeaders(
-                            username: podcast?.authUsername,
-                            password: podcast?.authPassword,
-                          ),
-                          size: side,
-                          radius: 24,
-                        ),
+                  child: _CoverPlayGestures(
+                    playing: playing,
+                    child: PodcastCover(
+                      url: imageUrl,
+                      localPath: imagePath,
+                      httpHeaders: podcastAuthHeaders(
+                        username: podcast?.authUsername,
+                        password: podcast?.authPassword,
                       ),
+                      size: side,
+                      radius: 16,
                     ),
                   ),
                 );
@@ -120,82 +102,66 @@ class _PlayerNowPlaying extends ConsumerWidget {
             ),
           ),
           SizedBox(height: compact ? 8 : 16),
-          if (!carMode) ...[
-            Text(
-              podcastTitle,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: carMode
+                      ? CrossAxisAlignment.center
+                      : CrossAxisAlignment.start,
+                  children: [
+                    if (!carMode)
+                      Text(
+                        podcastTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    Text(
+                      title,
+                      textAlign: carMode ? TextAlign.center : TextAlign.start,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (!carMode && releaseDate.isNotEmpty)
+                      Text(
+                        releaseDate,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    if (!carMode &&
+                        activeChapter != null &&
+                        activeChapter.title.isNotEmpty)
+                      Text(
+                        activeChapter.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-          ],
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+              if (!carMode) _FavoriteAction(episodeId: episodeId),
+            ],
           ),
-          if (!carMode && releaseDate.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              releaseDate,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-          if (!carMode &&
-              activeChapter != null &&
-              activeChapter.title.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              activeChapter.title,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
           if (error != null) ...[
             const SizedBox(height: 8),
             Text(
               error,
-              textAlign: TextAlign.center,
+              textAlign: carMode ? TextAlign.center : TextAlign.start,
               style: TextStyle(color: theme.colorScheme.error),
-            ),
-          ],
-          if (!carMode) ...[
-            SizedBox(height: compact ? 4 : 12),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              children: [
-                TextButton.icon(
-                  onPressed: onOpenNotes,
-                  icon: const InfoIcon(size: 20),
-                  label: const Text('Notes'),
-                ),
-                if (showChapters)
-                  TextButton.icon(
-                    onPressed: () => showChaptersSheet(
-                      context: context,
-                      ref: ref,
-                      episodeId: episodeId,
-                    ),
-                    icon: const Icon(Icons.list_alt, size: 20),
-                    label: const Text('Chapitres'),
-                  ),
-              ],
             ),
           ],
         ],
@@ -225,13 +191,10 @@ class _PlayerNowPlaying extends ConsumerWidget {
   }
 }
 
-/// Gestes autour de la couverture : tap sur l’image = lecture/pause ;
-/// double-tap dans les marges L/R = saut ; swipe horizontal sur l’image = saut.
+/// Tap = lecture/pause. Double-tap à gauche ou à droite = saut temporel.
+/// Glisser horizontalement = épisode précédent ou suivant.
 class _CoverPlayGestures extends ConsumerStatefulWidget {
-  const _CoverPlayGestures({
-    required this.playing,
-    required this.child,
-  });
+  const _CoverPlayGestures({required this.playing, required this.child});
 
   final bool playing;
   final Widget child;
@@ -241,11 +204,13 @@ class _CoverPlayGestures extends ConsumerStatefulWidget {
 }
 
 class _CoverPlayGesturesState extends ConsumerState<_CoverPlayGestures> {
-  static const _swipeThresholdPx = 40.0;
+  static const _swipeThresholdPx = 48.0;
 
   double _dragDx = 0;
+  Offset? _doubleTapPosition;
   String? _feedbackLabel;
-  /// `true` = marge droite (avance), `false` = marge gauche (recul).
+
+  /// `true` = moitié droite, `false` = moitié gauche.
   bool _feedbackOnRight = true;
   Timer? _feedbackTimer;
 
@@ -272,10 +237,7 @@ class _CoverPlayGesturesState extends ConsumerState<_CoverPlayGestures> {
   void _skip(int seconds) {
     ref.read(playerProvider.notifier).skipBy(seconds);
     final sign = seconds < 0 ? '−' : '+';
-    _flashFeedback(
-      '$sign${seconds.abs()} s',
-      onRight: seconds > 0,
-    );
+    _flashFeedback('$sign${seconds.abs()} s', onRight: seconds > 0);
   }
 
   void _skipBack() {
@@ -286,95 +248,98 @@ class _CoverPlayGesturesState extends ConsumerState<_CoverPlayGestures> {
     _skip(ref.read(settingsProvider).skipForwardSeconds);
   }
 
+  void _previousEpisode() {
+    final position = ref.read(playerProvider).position;
+    final restart = position.inMilliseconds > 3000;
+    ref.read(playerProvider.notifier).playPreviousInQueue();
+    _flashFeedback(restart ? 'Début' : 'Précédent', onRight: false);
+  }
+
+  void _nextEpisode() {
+    final hasNext = ref.read(hasNextInQueueProvider).value ?? false;
+    if (!hasNext) return;
+    ref.read(playerProvider.notifier).playNextInQueue();
+    _flashFeedback('Suivant', onRight: true);
+  }
+
   void _skipFromSwipe() {
-    if (_dragDx.abs() < _swipeThresholdPx) return;
-    if (_dragDx < 0) {
+    final dx = _dragDx;
+    setState(() => _dragDx = 0);
+    if (dx.abs() < _swipeThresholdPx) return;
+    if (dx < 0) {
+      _nextEpisode();
+    } else {
+      _previousEpisode();
+    }
+  }
+
+  void _onDoubleTap() {
+    final box = context.findRenderObject();
+    final width = box is RenderBox ? box.size.width : 0.0;
+    final x = _doubleTapPosition?.dx ?? width / 2;
+    if (x < width / 2) {
       _skipBack();
     } else {
       _skipForward();
     }
   }
 
-  Widget _sideHitTarget({
-    required bool onRight,
-    required VoidCallback onDoubleTap,
-  }) {
-    final showFeedback =
-        _feedbackLabel != null && _feedbackOnRight == onRight;
-    return Expanded(
-      child: Tooltip(
-        message: onRight ? 'Double-tap : avancer' : 'Double-tap : reculer',
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onDoubleTap: onDoubleTap,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              if (!showFeedback) return const SizedBox.expand();
-              // Taille liée à la marge L/R, pas à titleLarge fixe.
-              final width = constraints.maxWidth;
-              final fontSize = (width * 0.36).clamp(16.0, 40.0);
-              final padH = (width * 0.1).clamp(8.0, 20.0);
-              final padV = (fontSize * 0.32).clamp(6.0, 14.0);
-              final radius = (fontSize * 0.4).clamp(8.0, 16.0);
-              return Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: width * 0.92),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(radius),
-                    ),
+  @override
+  Widget build(BuildContext context) {
+    final shift = _dragDx.clamp(-56.0, 56.0);
+    return Tooltip(
+      message: widget.playing ? 'Pause' : 'Lecture',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _toggle,
+        onDoubleTapDown: (details) =>
+            _doubleTapPosition = details.localPosition,
+        onDoubleTap: _onDoubleTap,
+        onHorizontalDragStart: (_) => _dragDx = 0,
+        onHorizontalDragUpdate: (details) {
+          setState(() => _dragDx += details.delta.dx);
+        },
+        onHorizontalDragEnd: (_) => _skipFromSwipe(),
+        onHorizontalDragCancel: () => setState(() => _dragDx = 0),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Transform.translate(offset: Offset(shift, 0), child: widget.child),
+            if (_feedbackLabel != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Align(
+                    alignment: _feedbackOnRight
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
                     child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: padH,
-                        vertical: padV,
-                      ),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          _feedbackLabel!,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          softWrap: false,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: fontSize,
-                            height: 1.1,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.72),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          child: Text(
+                            _feedbackLabel!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+          ],
         ),
       ),
     );
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        _sideHitTarget(onRight: false, onDoubleTap: _skipBack),
-        Tooltip(
-          message: widget.playing ? 'Pause' : 'Lecture',
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _toggle,
-            onHorizontalDragStart: (_) => _dragDx = 0,
-            onHorizontalDragUpdate: (details) => _dragDx += details.delta.dx,
-            onHorizontalDragEnd: (_) => _skipFromSwipe(),
-            child: widget.child,
-          ),
-        ),
-        _sideHitTarget(onRight: true, onDoubleTap: _skipForward),
-      ],
-    );
-  }
 }
-

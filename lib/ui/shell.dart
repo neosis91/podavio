@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,14 +5,54 @@ import 'package:go_router/go_router.dart';
 import '../data/providers.dart';
 import '../player/player_controller.dart';
 import '../player/player_sheet_controller.dart';
-import '../settings/settings_controller.dart';
 import 'nav_catalog.dart';
 import 'router.dart';
+import 'widgets/brand.dart';
 import 'widgets/expandable_player.dart';
 import 'widgets/feed_refresh_banner.dart';
 import 'widgets/opml_import_banner.dart';
+import 'widgets/update_prompt.dart';
 
-final _plusButtonKey = GlobalKey();
+/// Capsule Accueil / Abonnements / Bibliothèque, loupe à part pour Explorer.
+final shellTabs = <NavPage>[
+  NavPage(AppRoutes.home, 'Accueil', _material(Icons.home)),
+  NavPage(
+    AppRoutes.podcasts,
+    'Abonnements',
+    ({required Color color, double size = 24}) => IconTheme(
+      data: IconThemeData(color: color, size: size),
+      child: SubscriptionsIcon(size: size),
+    ),
+  ),
+  NavPage(AppRoutes.library, 'Bibliothèque', _material(Icons.library_music)),
+];
+
+final _searchTab = NavPage(
+  AppRoutes.discover,
+  'Explorer',
+  _material(Icons.search),
+);
+
+NavIconBuilder _material(IconData data) {
+  return ({required Color color, double size = 24}) =>
+      Icon(data, color: color, size: size);
+}
+
+const _libraryRoots = <String>[
+  AppRoutes.library,
+  AppRoutes.episodes,
+  AppRoutes.queue,
+  AppRoutes.favorites,
+  AppRoutes.downloads,
+  AppRoutes.stats,
+  AppRoutes.preferences,
+  AppRoutes.appearance,
+  AppRoutes.playback,
+  AppRoutes.downloadSettings,
+  AppRoutes.about,
+  AppRoutes.licenses,
+  AppRoutes.backupRestore,
+];
 
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.child});
@@ -25,325 +63,447 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(coverPrefetchProvider);
     final path = GoRouterState.of(context).uri.path;
-    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final wide = MediaQuery.sizeOf(context).width >= 600;
+    final desktop = wide && _desktopPlatform(Theme.of(context).platform);
     final padding = MediaQuery.paddingOf(context);
-    final order = ref.watch(
-      settingsProvider.select((settings) => settings.navOrder),
-    );
-    final pages = [
-      for (final path in order) _pageDestination(path),
-    ];
-    final plus = _Destination(
-      '',
-      'Plus',
-      _navMaterial(Icons.menu_outlined),
-      _navMaterial(Icons.menu),
-      menu: true,
-    );
-    final size = MediaQuery.sizeOf(context);
-    final safeHeight = size.height - padding.vertical;
-    final railLayout = _layoutNav(
-      pages: pages,
-      plus: plus,
-      rail: true,
-      available: safeHeight,
-    );
-    final barLayout = _layoutNav(
-      pages: pages,
-      plus: plus,
-      rail: false,
-      available: size.width,
-    );
-    final useRail =
-        wide && railLayout.visible.length >= barLayout.visible.length;
-    final layout = useRail ? railLayout : barLayout;
-    final destinations = layout.visible;
-    final index = _indexFor(path, destinations, layout.overflow);
-
-    void select(int selected) {
-      final destination = destinations[selected];
-      ref.read(playerSheetProvider.notifier).collapse();
-      if (destination.menu) {
-        _openPlusMenu(context, layout.overflow, ref);
-        return;
-      }
-      context.go(destination.path);
-    }
-
+    final selected = _selectedTab(path);
     final hasEpisode = ref.watch(
       playerProvider.select((state) => state.hasEpisode),
     );
-    final miniReserve = hasEpisode ? miniPlayerHeight : 0.0;
 
-    final content = Column(
-      children: [
-        Expanded(child: child),
-        const OpmlImportBanner(),
-        const FeedRefreshBanner(),
-        SizedBox(height: miniReserve),
-      ],
-    );
+    void select(int index) {
+      ref.read(playerSheetProvider.notifier).collapse();
+      final target = index < 0 ? _searchTab.path : shellTabs[index].path;
+      context.go(target);
+    }
 
-    final navigation = _NavStrip(
-      destinations: destinations,
-      selectedIndex: index,
+    final navigation = _NavChrome(
+      selectedIndex: selected,
       onSelected: select,
-      rail: useRail,
+      rail: wide,
+      reservePlayer: hasEpisode && !wide,
+      windowColor: desktop ? _desktopWindow(context) : null,
     );
 
-    final bottomInset = useRail
-        ? padding.bottom
-        : 1.0 + _barHeight + padding.bottom;
-    final leftInset = useRail
-        ? padding.left + _railWidth(destinations) + 1.0
-        : 0.0;
-    final topInset = useRail ? padding.top : 0.0;
+    final page = _UnderChrome(child: child);
 
-    final shell = useRail
-        ? Scaffold(
-            body: SafeArea(
-              child: Row(
-                children: [
-                  navigation,
-                  const VerticalDivider(width: 1),
-                  Expanded(child: content),
-                ],
-              ),
+    if (!wide) {
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Scaffold(
+            extendBody: true,
+            body: page,
+            bottomNavigationBar: navigation,
+          ),
+          ExpandablePlayer(
+            bottomInset: padding.bottom + _expandedBody + _playerGap,
+          ),
+          const UpdatePrompt(),
+        ],
+      );
+    }
+
+    final scheme = Theme.of(context).colorScheme;
+    final content = Builder(
+      builder: (context) {
+        final metrics = MediaQuery.of(context);
+        final player = hasEpisode ? miniPlayerHeight + _playerGap : 0.0;
+        return MediaQuery(
+          data: metrics.copyWith(
+            padding: metrics.padding.copyWith(
+              bottom: metrics.padding.bottom + player,
             ),
-          )
-        : Scaffold(body: content, bottomNavigationBar: navigation);
+          ),
+          child: page,
+        );
+      },
+    );
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        shell,
-        ExpandablePlayer(
-          bottomInset: bottomInset,
-          leftInset: leftInset,
-          topInset: topInset,
-        ),
-      ],
+    return Scaffold(
+      backgroundColor: desktop ? _desktopWindow(context) : null,
+      body: Row(
+        children: [
+          navigation,
+          Expanded(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Padding(
+                  padding: desktop
+                      ? const EdgeInsets.all(_desktopInset)
+                      : EdgeInsets.zero,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(desktop ? 12 : 0),
+                    child: ColoredBox(
+                      color: desktop ? scheme.surfaceContainer : scheme.surface,
+                      child: content,
+                    ),
+                  ),
+                ),
+                ExpandablePlayer(
+                  bottomInset: desktop ? 12 : padding.bottom + 12,
+                  topInset: desktop ? 0 : padding.top,
+                ),
+                const UpdatePrompt(),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
-
-  int _indexFor(
-    String path,
-    List<_Destination> visible,
-    List<_Destination> overflow,
-  ) {
-    for (var i = 0; i < visible.length; i++) {
-      final destination = visible[i];
-      if (!destination.menu && _belongs(path, destination.path)) return i;
-    }
-    if (overflow.any((destination) => _belongs(path, destination.path))) {
-      final plus = visible.lastIndexWhere((destination) => destination.menu);
-      if (plus >= 0) return plus;
-    }
-    return -1;
-  }
 }
 
-const _barLabelStyle = TextStyle(
-  fontSize: 12,
-  fontWeight: FontWeight.w600,
-  height: 1.1,
-);
-const _railLabelStyle = TextStyle(
-  fontSize: 14,
-  fontWeight: FontWeight.w600,
-  height: 1.2,
-);
-const _railItemExtent = 56.0;
-const _barHeight = 80.0;
-
-class _NavLayout {
-  const _NavLayout(this.visible, this.overflow);
-
-  final List<_Destination> visible;
-  final List<_Destination> overflow;
+bool _desktopPlatform(TargetPlatform platform) {
+  return switch (platform) {
+    TargetPlatform.linux ||
+    TargetPlatform.windows ||
+    TargetPlatform.macOS => true,
+    _ => false,
+  };
 }
 
-_Destination _pageDestination(String path) {
-  final page = navPageByPath(path)!;
-  return _Destination(
-    page.path,
-    page.label,
-    page.icon,
-    page.selectedIcon ?? page.icon,
-  );
+Color _desktopWindow(BuildContext context) {
+  return Theme.of(context).brightness == Brightness.dark
+      ? Colors.black
+      : Colors.white;
 }
 
-NavIconBuilder _navMaterial(IconData data) {
-  return ({required Color color, double size = 24}) =>
-      Icon(data, color: color, size: size);
-}
+class _UnderChrome extends StatelessWidget {
+  const _UnderChrome({required this.child});
 
-_NavLayout _layoutNav({
-  required List<_Destination> pages,
-  required _Destination plus,
-  required bool rail,
-  required double available,
-}) {
-  if (rail) {
-    final capacity = math.max(1, available ~/ _railItemExtent);
-    if (pages.length <= capacity) return _NavLayout(pages, const []);
-    final take = math.max(0, capacity - 1);
-    return _NavLayout([...pages.take(take), plus], pages.skip(take).toList());
-  }
+  final Widget child;
 
-  double total(List<_Destination> items) => items.fold(
-    0,
-    (sum, item) => sum + _slotWidth(item.label, _barLabelStyle),
-  );
-
-  if (total(pages) <= available) return _NavLayout(pages, const []);
-  var take = pages.length;
-  while (take > 0 && total([...pages.take(take), plus]) > available) {
-    take--;
-  }
-  if (take < 4) take = math.min(4, pages.length);
-  if (take + 1 == 6) take = 4;
-  return _NavLayout([...pages.take(take), plus], pages.skip(take).toList());
-}
-
-double _textWidth(String label, TextStyle style) {
-  final painter = TextPainter(
-    text: TextSpan(text: label, style: style),
-    textDirection: TextDirection.ltr,
-    maxLines: 1,
-  )..layout();
-  final width = painter.width;
-  painter.dispose();
-  return width;
-}
-
-double _slotWidth(String label, TextStyle style) =>
-    math.max(72, _textWidth(label, style) + 12);
-
-double _railWidth(List<_Destination> items) {
-  var text = 0.0;
-  for (final item in items) {
-    text = math.max(text, _textWidth(item.label, _railLabelStyle));
-  }
-  return math.min(248, math.max(196, 88 + text));
-}
-
-bool _belongs(String path, String route) {
-  if (route == AppRoutes.home) return path == AppRoutes.home;
-  if (route == AppRoutes.preferences) {
-    return path == AppRoutes.preferences ||
-        path == AppRoutes.appearance ||
-        path == AppRoutes.playback ||
-        path == AppRoutes.downloadSettings ||
-        path == AppRoutes.about ||
-        path == AppRoutes.licenses ||
-        path == AppRoutes.backupRestore ||
-        path == AppRoutes.opmlImport;
-  }
-  return path == route || path.startsWith('$route/');
-}
-
-Future<void> _openPlusMenu(
-  BuildContext context,
-  List<_Destination> overflow,
-  WidgetRef ref,
-) async {
-  final path = GoRouterState.of(context).uri.path;
-  final choice = await showMenu<String>(
-    context: context,
-    position: _plusMenuAnchor(context),
-    items: [
-      for (final entry in overflow)
-        PopupMenuItem(
-          value: entry.path,
-          child: _PlusMenuRow(
-            icon: entry.icon,
-            label: entry.label,
-            selected: _belongs(path, entry.path),
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    return Stack(
+      children: [
+        Positioned.fill(child: child),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: bottom,
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [OpmlImportBanner(), FeedRefreshBanner()],
           ),
         ),
-    ],
-  );
-  if (choice != null && context.mounted) {
-    ref.read(playerSheetProvider.notifier).collapse();
-    context.go(choice);
+      ],
+    );
   }
 }
 
-RelativeRect _plusMenuAnchor(BuildContext context) {
-  final overlay =
-      Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-  final box = _plusButtonKey.currentContext?.findRenderObject() as RenderBox?;
-  if (box != null && box.hasSize) {
-    final offset = box.localToGlobal(Offset.zero, ancestor: overlay);
-    return RelativeRect.fromRect(offset & box.size, Offset.zero & overlay.size);
+const _barHeight = 64.0;
+const _barPaddingTop = 4.0;
+const _barPaddingBottom = 8.0;
+const _expandedBody = _barPaddingTop + _barHeight + _barPaddingBottom;
+const _indicatorSize = 56.0;
+const _tabCap = 96.0;
+const _capsuleInset = 6.0;
+const _searchGap = 12.0;
+const _playerGap = 8.0;
+const _desktopInset = 8.0;
+
+int _selectedTab(String path) {
+  if (_owns(path, _searchTab.path)) return -1;
+  for (var i = 0; i < shellTabs.length; i++) {
+    if (_owns(path, shellTabs[i].path)) return i;
   }
-  final size = overlay.size;
-  return RelativeRect.fromLTRB(0, size.height - _barHeight, 0, _barHeight);
+  return -2;
 }
 
-class _NavStrip extends StatelessWidget {
-  const _NavStrip({
-    required this.destinations,
+bool _owns(String path, String tab) {
+  if (tab == AppRoutes.home) {
+    return path == AppRoutes.home || path == AppRoutes.history;
+  }
+  if (tab == AppRoutes.podcasts || tab == AppRoutes.discover) {
+    return path == tab || path.startsWith('$tab/');
+  }
+  if (tab == AppRoutes.library) {
+    for (final root in _libraryRoots) {
+      if (path == root || path.startsWith('$root/')) return true;
+    }
+  }
+  return false;
+}
+
+class _NavChrome extends StatelessWidget {
+  const _NavChrome({
     required this.selectedIndex,
     required this.onSelected,
     required this.rail,
+    required this.reservePlayer,
+    this.windowColor,
   });
 
-  final List<_Destination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
   final bool rail;
+  final bool reservePlayer;
+  final Color? windowColor;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rail) {
+      return _AppRail(
+        selectedIndex: selectedIndex,
+        onSelected: onSelected,
+        background: windowColor,
+      );
+    }
+    final slot = reservePlayer ? miniPlayerHeight + _playerGap : 0.0;
+    return SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(height: slot),
+          _OpenBar(selectedIndex: selectedIndex, onSelected: onSelected),
+        ],
+      ),
+    );
+  }
+}
+
+class _AppRail extends StatelessWidget {
+  const _AppRail({
+    required this.selectedIndex,
+    required this.onSelected,
+    required this.background,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+  final Color? background;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final buttons = [
-      for (var i = 0; i < destinations.length; i++)
-        _NavButton(
-          key: destinations[i].menu
-              ? _plusButtonKey
-              : ValueKey(destinations[i].path),
-          destination: destinations[i],
-          selected: i == selectedIndex,
-          rail: rail,
-          onPressed: () => onSelected(i),
+    final pages = [...shellTabs, _searchTab];
+    final selected = selectedIndex == -1
+        ? pages.length - 1
+        : (selectedIndex >= 0 && selectedIndex < pages.length
+              ? selectedIndex
+              : null);
+    return NavigationRail(
+      backgroundColor: background ?? scheme.surface,
+      selectedIndex: selected,
+      groupAlignment: 1,
+      labelType: NavigationRailLabelType.all,
+      onDestinationSelected: (index) {
+        onSelected(index == pages.length - 1 ? -1 : index);
+      },
+      leading: Padding(
+        padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 16),
+        child: const SizedBox.square(
+          dimension: 48,
+          child: Center(child: PodavioIcon(size: 32)),
         ),
-    ];
-    if (rail) {
-      return SizedBox(
-        width: _railWidth(destinations),
-        child: Material(
-          color: scheme.surface,
-          child: Column(children: buttons),
-        ),
-      );
-    }
-    return Material(
-      color: scheme.surfaceContainer,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Divider(height: 1),
-          SafeArea(
-            top: false,
-            child: SizedBox(
-              height: _barHeight,
-              child: Row(
-                children: [
-                  for (var i = 0; i < buttons.length; i++)
-                    Expanded(
-                      flex: _slotWidth(
-                        destinations[i].label,
-                        _barLabelStyle,
-                      ).round(),
-                      child: buttons[i],
-                    ),
-                ],
+      ),
+      trailing: const SizedBox(height: 32),
+      destinations: [
+        for (final page in pages)
+          NavigationRailDestination(
+            icon: _RailIcon(page: page),
+            selectedIcon: _RailIcon(page: page),
+            label: Text(page.label),
+          ),
+      ],
+    );
+  }
+}
+
+class _RailIcon extends StatelessWidget {
+  const _RailIcon({required this.page});
+
+  final NavPage page;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = IconTheme.of(context).color;
+    if (color == null) return page.buildIcon(color: Colors.transparent);
+    return page.buildIcon(color: color);
+  }
+}
+
+class _OpenBar extends StatelessWidget {
+  const _OpenBar({required this.selectedIndex, required this.onSelected});
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        _barPaddingTop,
+        16,
+        _barPaddingBottom,
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final available = constraints.maxWidth - _indicatorSize - _searchGap;
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _TabCapsule(
+                selectedIndex: selectedIndex,
+                availableWidth: available,
+                onSelected: onSelected,
+              ),
+              const SizedBox(width: _searchGap),
+              _SearchButton(
+                selected: selectedIndex == -1,
+                onPressed: () => onSelected(-1),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TabCapsule extends StatefulWidget {
+  const _TabCapsule({
+    required this.selectedIndex,
+    required this.onSelected,
+    this.availableWidth,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+  final double? availableWidth;
+
+  @override
+  State<_TabCapsule> createState() => _TabCapsuleState();
+}
+
+class _TabCapsuleState extends State<_TabCapsule> {
+  double? _drag;
+
+  double _tabExtent(int count) {
+    final available = widget.availableWidth ?? _tabCap * count;
+    final raw = (available - _capsuleInset * 2) / count;
+    return raw.clamp(56.0, _tabCap);
+  }
+
+  void _dragTo(double local, double extent, int count) {
+    final fromStart = (local - _capsuleInset).clamp(0.0, extent * count);
+    setState(() {
+      _drag = (fromStart / extent - 0.5).clamp(0.0, count - 1.0);
+    });
+  }
+
+  void _drop(int count) {
+    final drag = _drag;
+    setState(() => _drag = null);
+    if (drag == null) return;
+    final index = drag.round().clamp(0, count - 1);
+    if (index != widget.selectedIndex) widget.onSelected(index);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final count = shellTabs.length;
+    final extent = _tabExtent(count);
+    final selected = widget.selectedIndex;
+    final active = _drag ?? (selected < 0 ? null : selected.toDouble());
+    final along = extent * (active ?? 0);
+    final length = extent * count + _capsuleInset * 2;
+    final indicator = active == null
+        ? null
+        : AnimatedPositioned(
+            duration: _drag == null
+                ? const Duration(milliseconds: 320)
+                : Duration.zero,
+            curve: Curves.easeOutCubic,
+            left: along,
+            top: (_barHeight - _indicatorSize) / 2,
+            width: extent,
+            height: _indicatorSize,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(_indicatorSize / 2),
               ),
             ),
+          );
+
+    final tabs = [
+      for (var i = 0; i < count; i++)
+        SizedBox(
+          width: extent,
+          height: _barHeight,
+          child: _NavButton(
+            page: shellTabs[i],
+            selected: (_drag?.round() ?? selected) == i,
+            onPressed: () => widget.onSelected(i),
           ),
-        ],
+        ),
+    ];
+
+    return Material(
+      color: scheme.surfaceContainer,
+      borderRadius: BorderRadius.circular(_barHeight / 2),
+      clipBehavior: Clip.antiAlias,
+      child: GestureDetector(
+        onHorizontalDragStart: (details) =>
+            _dragTo(details.localPosition.dx, extent, count),
+        onHorizontalDragUpdate: (details) =>
+            _dragTo(details.localPosition.dx, extent, count),
+        onHorizontalDragEnd: (_) => _drop(count),
+        onHorizontalDragCancel: () => setState(() => _drag = null),
+        child: SizedBox(
+          width: length,
+          height: _barHeight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _capsuleInset),
+            child: Stack(
+              children: [
+                ?indicator,
+                Row(children: tabs),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchButton extends StatelessWidget {
+  const _SearchButton({required this.selected, required this.onPressed});
+
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = selected ? scheme.primary : scheme.onSurfaceVariant;
+    return Material(
+      color: selected
+          ? scheme.surfaceContainerHighest
+          : scheme.surfaceContainer,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        child: SizedBox.square(
+          dimension: _indicatorSize,
+          child: Tooltip(
+            message: _searchTab.label,
+            child: Center(
+              child: _searchTab.buildIcon(color: color, selected: selected),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -351,137 +511,35 @@ class _NavStrip extends StatelessWidget {
 
 class _NavButton extends StatelessWidget {
   const _NavButton({
-    super.key,
-    required this.destination,
+    required this.page,
     required this.selected,
-    required this.rail,
     required this.onPressed,
   });
 
-  final _Destination destination;
+  final NavPage page;
   final bool selected;
-  final bool rail;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final foreground = selected
-        ? scheme.onSecondaryContainer
-        : scheme.onSurfaceVariant;
-    final iconWidget = destination.buildIcon(
-      color: foreground,
-      selected: selected,
-    );
-    final label = Text(
-      destination.label,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      textAlign: rail ? TextAlign.start : TextAlign.center,
-      style: (rail ? _railLabelStyle : _barLabelStyle).copyWith(
-        color: foreground,
-      ),
-    );
-    final child = rail
-        ? Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: selected ? scheme.secondaryContainer : null,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    iconWidget,
-                    const SizedBox(width: 12),
-                    Expanded(child: label),
-                  ],
-                ),
-              ),
-            ),
-          )
-        : Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: selected ? scheme.secondaryContainer : null,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: iconWidget,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: label,
-              ),
-            ],
-          );
-    return SizedBox(
-      height: rail ? _railItemExtent : _barHeight,
-      child: InkWell(onTap: onPressed, child: child),
-    );
-  }
-}
-
-class _PlusMenuRow extends StatelessWidget {
-  const _PlusMenuRow({
-    required this.icon,
-    required this.label,
-    required this.selected,
-  });
-
-  final NavIconBuilder icon;
-  final String label;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = IconTheme.of(context).color ??
-        Theme.of(context).colorScheme.onSurface;
-    return SizedBox(
-      width: 220,
-      child: Row(
+    final foreground = selected ? scheme.primary : scheme.onSurfaceVariant;
+    return InkWell(
+      onTap: onPressed,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          icon(color: color),
-          const SizedBox(width: 12),
-          Expanded(child: Text(label)),
-          if (selected) const Icon(Icons.check, size: 18),
+          page.buildIcon(color: foreground, selected: selected),
+          Text(
+            page.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: foreground),
+          ),
         ],
       ),
     );
-  }
-}
-
-class _Destination {
-  const _Destination(
-    this.path,
-    this.label,
-    this.icon,
-    this.selectedIcon, {
-    this.menu = false,
-  });
-
-  final String path;
-  final String label;
-  final NavIconBuilder icon;
-  final NavIconBuilder selectedIcon;
-  final bool menu;
-
-  Widget buildIcon({
-    required Color color,
-    double size = 24,
-    bool selected = false,
-  }) {
-    final builder = selected ? selectedIcon : icon;
-    return builder(color: color, size: size);
   }
 }

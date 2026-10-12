@@ -12,7 +12,6 @@ import '../data/download_controller.dart';
 import '../data/download_service.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
-import 'nav_catalog.dart';
 import 'widgets/brand.dart';
 import 'widgets/choice_dialog.dart';
 import 'widgets/messages.dart';
@@ -77,26 +76,10 @@ class AppearancePage extends ConsumerWidget {
               ),
             ),
           ],
-          const _SectionTitle('Préférences du volet'),
-          ListTile(
-            leading: const Icon(Icons.reorder),
-            title: const Text('Ordre des pages'),
-            subtitle: const Text('L’ordre utilisé par le menu'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showPanelOrder(context),
-          ),
         ],
       ),
     );
   }
-}
-
-void _showPanelOrder(BuildContext context) {
-  showDialog<void>(
-    context: context,
-    useRootNavigator: true,
-    builder: (context) => const _PanelOrderDialog(),
-  );
 }
 
 class _SectionTitle extends StatelessWidget {
@@ -114,108 +97,6 @@ class _SectionTitle extends StatelessWidget {
             ?.copyWith(color: Theme.of(context).colorScheme.primary),
       ),
     );
-  }
-}
-
-class _PanelOrderDialog extends ConsumerStatefulWidget {
-  const _PanelOrderDialog();
-
-  @override
-  ConsumerState<_PanelOrderDialog> createState() => _PanelOrderDialogState();
-}
-
-class _PanelOrderDialogState extends ConsumerState<_PanelOrderDialog> {
-  late final List<String> _order;
-
-  @override
-  void initState() {
-    super.initState();
-    _order = List<String>.of(ref.read(settingsProvider).navOrder);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final availableWidth = size.width - 80;
-    final dialogWidth = availableWidth < 420 ? availableWidth : 420.0;
-    final dialogHeight = size.height - 96 > 640 ? 640.0 : size.height - 96;
-    return Dialog(
-      child: SizedBox(
-        width: dialogWidth,
-        height: dialogHeight,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-              child: Text(
-                'Ordre des pages',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
-              child: Text(
-                'Les pages s’affichent dans cet ordre. Celles qui ne tiennent pas restent dans Plus.',
-              ),
-            ),
-            Expanded(
-              child: ReorderableListView.builder(
-                buildDefaultDragHandles: false,
-                itemCount: _order.length,
-                onReorderItem: _reorder,
-                itemBuilder: (context, index) {
-                  final page = navPageByPath(_order[index])!;
-                  return ListTile(
-                    key: ValueKey(page.path),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    leading: ReorderableDragStartListener(
-                      index: index,
-                      child: const Tooltip(
-                        message: 'Déplacer',
-                        child: SizedBox(
-                          width: 40,
-                          height: 48,
-                          child: Center(child: DragIndicatorIcon()),
-                        ),
-                      ),
-                    ),
-                    title: Row(
-                      children: [
-                        page.buildIcon(
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(child: Text(page.label)),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: TextButton(
-                  onPressed: () =>
-                      Navigator.of(context, rootNavigator: true).pop(),
-                  child: const Text('Fermer'),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _reorder(int oldIndex, int newIndex) {
-    setState(() {
-      final path = _order.removeAt(oldIndex);
-      _order.insert(newIndex, path);
-    });
-    ref.read(settingsProvider.notifier).setNavOrder(_order);
   }
 }
 
