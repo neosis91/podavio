@@ -4,7 +4,9 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
-## Non publié
+## 2026.10.13
+
+- La mise en ligne sur podavio.com part de la version déjà publiée du site. Une copie locale modifiée n’empêche plus la publication.
 
 ## 2026.10.12
 
