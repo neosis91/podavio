@@ -7,13 +7,49 @@
 #   tool/release_local.sh 2026.10.6
 #
 # Prérequis : flutter, glab (connecté), android/key.properties + keystore.
-# Le dépôt du site (../podavio-site, ou PODAVIO_SITE_DIR) doit être sur main,
-# propre et à jour : les binaires y sont commités puis poussés. La CI du site
+# Le dépôt du site (../podavio-site, ou PODAVIO_SITE_DIR) est mis à jour
+# depuis origin/main, même si la copie locale a des modifications.
+# Les binaires y sont commités puis poussés avant le tag. La CI du site
 # les copie sur le VPS. Le binaire Windows n'est pas produit ici.
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
+
+resolve_site() {
+  if [ -n "${PODAVIO_SITE_DIR:-}" ]; then
+    site="${PODAVIO_SITE_DIR}"
+  else
+    site="${ROOT}/../podavio-site"
+  fi
+  if [ ! -d "${site}/.git" ]; then
+    echo "Dépôt du site introuvable : ${site}" >&2
+    exit 1
+  fi
+  site="$(CDPATH= cd -- "${site}" && pwd)"
+}
+
+require_site_ready() {
+  resolve_site
+  echo "Vérification du dépôt du site…"
+  git -C "${site}" fetch origin main
+  page="$(git -C "${site}" show "origin/main:journal/index.html" 2>/dev/null || true)"
+  case "${page}" in
+    *"<!-- journal:start -->"*"<!-- journal:end -->"*) ;;
+    *)
+      echo "origin/main du site n'a pas journal/index.html avec les balises journal:start et journal:end." >&2
+      echo "Sans cette page, latest.json ne serait pas mis à jour." >&2
+      exit 1
+      ;;
+  esac
+}
+
+remove_site_worktree() {
+  if [ -n "${site_work:-}" ] && [ -n "${site:-}" ]; then
+    git -C "${site}" worktree remove --force "${site_work}" >/dev/null 2>&1 || rm -rf "${site_work}"
+    site_work=""
+  fi
+}
 
 if [ -x "${HOME}/development/flutter/bin/flutter" ]; then
   PATH="${HOME}/development/flutter/bin:${PATH}"
@@ -130,7 +166,7 @@ if [ -n "${remote_commit}" ] && [ "${remote_commit}" != "${SHA_FULL}" ]; then
 fi
 
 if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
-  local_commit="$(git rev-parse "${VERSION}^{}")"
+  local_commit="$(git rev-parse "refs/tags/${VERSION}^{}")"
   if [ "${local_commit}" != "${SHA_FULL}" ]; then
     echo "Le tag local ${VERSION} pointe vers un autre commit." >&2
     exit 1
@@ -138,6 +174,7 @@ if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
 fi
 
 python3 tool/changelog.py check "${VERSION}"
+require_site_ready
 
 echo "Podavio ${VERSION} (build ${BUILD}, commit ${SHA})"
 
@@ -212,10 +249,63 @@ tar -C dist/linux -czf "${bundle}.tar.gz" "$(basename "${bundle}")"
 rm -rf "${bundle}"
 
 if [ -n "$(git status --porcelain)" ]; then
-  echo "La compilation a modifié des fichiers suivis. Tag non créé." >&2
+  echo "La compilation a modifié des fichiers suivis. Publication annulée." >&2
   git status --porcelain >&2
   exit 1
 fi
+
+publish_site() {
+  resolve_site
+  echo "Mise à jour du site…"
+  git -C "${site}" fetch origin main
+  site_work="$(mktemp -d "${TMPDIR:-/tmp}/podavio-site.XXXXXX")"
+  trap remove_site_worktree EXIT
+  git -C "${site}" worktree add --detach "${site_work}" origin/main
+
+  dest="${site_work}/releases/${VERSION}"
+  rm -rf "${dest}"
+  mkdir -p "${dest}"
+  for name in \
+    "podavio-${VERSION}-android-universal.apk" \
+    "podavio-${VERSION}-android-armeabi-v7a.apk" \
+    "podavio-${VERSION}-android-arm64-v8a.apk" \
+    "podavio-${VERSION}-android-x86_64.apk"
+  do
+    cp "dist/android/${name}" "${dest}/${name}"
+  done
+  cp "dist/linux/podavio-${VERSION}-linux-x64.tar.gz" \
+    "${dest}/podavio-${VERSION}-linux-x64.tar.gz"
+
+  python3 "${ROOT}/tool/changelog.py" publish \
+    --version "${VERSION}" \
+    --date "$(date -u +%F)" \
+    --site "${site_work}"
+
+  git -C "${site_work}" add latest.json changelog.json journal/index.html "releases/${VERSION}"
+  if git -C "${site_work}" diff --cached --quiet; then
+    echo "Le site contient déjà les fichiers ${VERSION}."
+    remove_site_worktree
+    trap - EXIT
+    return 0
+  fi
+
+  git -C "${site_work}" commit -m "$(cat <<EOF
+Publier Podavio ${VERSION} sur podavio.com.
+
+EOF
+)"
+  git -C "${site_work}" push origin HEAD:main
+  remove_site_worktree
+  trap - EXIT
+  if [ "$(git -C "${site}" branch --show-current)" = "main" ] \
+    && [ -z "$(git -C "${site}" status --porcelain)" ] \
+    && git -C "${site}" merge-base --is-ancestor HEAD origin/main; then
+    git -C "${site}" merge --ff-only origin/main
+  fi
+  echo "Site poussé. La CI copie les fichiers sur le serveur."
+}
+
+publish_site
 
 if ! git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
   git tag -a "${VERSION}" -m "Podavio ${VERSION}"
@@ -240,70 +330,5 @@ else
     "dist/android/podavio-${VERSION}-android-x86_64.apk#APK x86_64" \
     "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)"
 fi
-
-publish_site() {
-  if [ -n "${PODAVIO_SITE_DIR:-}" ]; then
-    site="${PODAVIO_SITE_DIR}"
-  else
-    site="${ROOT}/../podavio-site"
-  fi
-  if [ ! -d "${site}/.git" ]; then
-    echo "Dépôt du site introuvable : ${site}" >&2
-    exit 1
-  fi
-  site="$(CDPATH= cd -- "${site}" && pwd)"
-
-  if [ "$(git -C "${site}" branch --show-current)" != "main" ]; then
-    echo "Le dépôt du site n'est pas sur main (${site})." >&2
-    exit 1
-  fi
-  if [ -n "$(git -C "${site}" status --porcelain)" ]; then
-    echo "Le dépôt du site a des modifications. Commit ou stash avant une release." >&2
-    git -C "${site}" status --porcelain >&2
-    exit 1
-  fi
-
-  echo "Mise à jour du site…"
-  git -C "${site}" fetch origin main
-  if [ "$(git -C "${site}" rev-parse HEAD)" != "$(git -C "${site}" rev-parse origin/main)" ]; then
-    echo "Le dépôt du site n'est pas à jour avec origin/main." >&2
-    exit 1
-  fi
-
-  dest="${site}/releases/${VERSION}"
-  rm -rf "${dest}"
-  mkdir -p "${dest}"
-  for name in \
-    "podavio-${VERSION}-android-universal.apk" \
-    "podavio-${VERSION}-android-armeabi-v7a.apk" \
-    "podavio-${VERSION}-android-arm64-v8a.apk" \
-    "podavio-${VERSION}-android-x86_64.apk"
-  do
-    cp "dist/android/${name}" "${dest}/${name}"
-  done
-  cp "dist/linux/podavio-${VERSION}-linux-x64.tar.gz" \
-    "${dest}/podavio-${VERSION}-linux-x64.tar.gz"
-
-  python3 "${ROOT}/tool/changelog.py" publish \
-    --version "${VERSION}" \
-    --date "$(date -u +%F)" \
-    --site "${site}"
-
-  git -C "${site}" add latest.json changelog.json journal/index.html "releases/${VERSION}"
-  if git -C "${site}" diff --cached --quiet; then
-    echo "Le site contient déjà les fichiers ${VERSION}."
-    return 0
-  fi
-
-  git -C "${site}" commit -m "$(cat <<EOF
-Publier Podavio ${VERSION} sur podavio.com.
-
-EOF
-)"
-  git -C "${site}" push origin main
-  echo "Site poussé. La CI copie les fichiers sur le serveur."
-}
-
-publish_site
 
 echo "Release ${VERSION} publiée (commit ${SHA})."

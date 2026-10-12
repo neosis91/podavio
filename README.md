@@ -55,7 +55,7 @@ tool/release_local.sh 2026.10.6    # compile, tague, publie
 
 Le tag est poussé avec `ci.skip`. La CI ne lance plus que les contrôles de merge request.
 
-Le script copie ensuite les APK et l’archive Linux dans `../podavio-site/releases/<version>/`, met à jour `latest.json` et le journal, puis pousse `main` de ce dépôt. Sa CI envoie le tout sur le serveur. Le dépôt du site doit être propre, sur `main`, et déjà à jour. Un autre chemin se passe avec `PODAVIO_SITE_DIR`.
+Le script copie ensuite les APK et l’archive Linux dans `../podavio-site/releases/<version>/`, met à jour `latest.json` et le journal, puis pousse `main` de ce dépôt. Cela se fait avant le tag, à partir de `origin/main`, donc des modifications locales dans le dépôt du site n’empêchent pas la publication. Sa CI envoie le tout sur le serveur. Un autre chemin se passe avec `PODAVIO_SITE_DIR`.
 
 Les nouveautés se rédigent dans `CHANGELOG.md`, sous un titre `## AAAA.M.N`, une puce par ligne. Ce texte devient les notes de la release GitLab et la page Journal du site. La section `## Non publié` reste un brouillon.
 
