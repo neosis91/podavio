@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
 import '../../data/app_database.dart';
@@ -9,12 +10,15 @@ import '../../data/download_controller.dart';
 import '../../data/feed_service.dart';
 import '../../data/download_service.dart';
 import '../../data/providers.dart';
+import '../../player/playback_source.dart';
 import '../../player/player_controller.dart';
 import '../../player/player_sheet_controller.dart';
 import '../../settings/settings_controller.dart';
+import '../playlist_membership.dart';
 import '../router.dart';
 import 'brand.dart';
 import 'cover.dart';
+import 'playing_cover.dart';
 import 'highlighted_text.dart';
 import 'list_metrics.dart';
 import 'messages.dart';
@@ -26,12 +30,26 @@ class EpisodeTile extends ConsumerWidget {
     this.showPodcast = true,
     this.reorderIndex,
     this.highlightQuery = '',
+    this.queueStyle = false,
+    this.playbackSource,
+    this.onMoveUp,
+    this.onMoveDown,
+    this.onRemove,
   });
 
   final EpisodeEntry entry;
   final bool showPodcast;
   final int? reorderIndex;
   final String highlightQuery;
+
+  /// Ligne proche de la file du lecteur : pochette, titre, podcast, menu.
+  final bool queueStyle;
+
+  /// Liste à reprendre dans le lecteur quand la lecture part de cette ligne.
+  final PlaybackSource? playbackSource;
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -78,12 +96,50 @@ class EpisodeTile extends ConsumerWidget {
     ];
     final metaSuffix = metaParts.join(' · ');
 
+    if (queueStyle) {
+      return _QueueStyleRow(
+        entry: entry,
+        playing: playing,
+        progress: progress,
+        preferPodcastCover: preferPodcastCover,
+        reorderIndex: reorderIndex,
+        highlightQuery: highlightQuery,
+        showPodcast: showPodcast,
+        onTap: () => ref
+            .read(playerProvider.notifier)
+            .playOrPauseEntry(entry, source: playbackSource),
+        onCancelDownload: () =>
+            ref.read(downloadProgressProvider.notifier).cancel(episode.id),
+        onMore: () => showEpisodeActionsSheet(
+          context,
+          ref,
+          entry,
+          onMoveUp: onMoveUp,
+          onMoveDown: onMoveDown,
+          onRemove: onRemove,
+        ),
+      );
+    }
+
+    final inCustomPlaylist =
+        ref
+            .watch(customPlaylistEpisodeIdsProvider)
+            .asData
+            ?.value
+            .contains(episode.id) ??
+        false;
     final statusIcons = <Widget>[
+      if (episode.downloadPath != null)
+        Icon(
+          Icons.download_for_offline,
+          size: 16,
+          color: theme.colorScheme.onSurface,
+        ),
       if (episode.favorite)
-        Icon(Icons.favorite, size: 16, color: theme.colorScheme.primary),
-      if (episode.queueIndex != null)
+        Icon(Icons.favorite, size: 16, color: favoriteHeartColor),
+      if (episode.queueIndex != null || inCustomPlaylist)
         IconTheme(
-          data: IconThemeData(color: theme.colorScheme.primary, size: 16),
+          data: IconThemeData(color: theme.colorScheme.onSurface, size: 16),
           child: const PlaylistPlayIcon(size: 16),
         ),
     ];
@@ -131,6 +187,7 @@ class EpisodeTile extends ConsumerWidget {
                       ),
                     ),
                   _EpisodeCoverWithProgress(
+                    episodeId: episode.id,
                     url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
                     localPath: entry.imagePath(
                       preferPodcastCover: preferPodcastCover,
@@ -181,10 +238,17 @@ class EpisodeTile extends ConsumerWidget {
                         openPlayer(ref);
                         return;
                       }
-                      await ref.read(playerProvider.notifier).playEntry(entry);
+                      await ref
+                          .read(playerProvider.notifier)
+                          .playEntry(entry, source: playbackSource);
                     },
-                    onMenuAction: (action) =>
-                        runEpisodeAction(context, ref, entry, action),
+                    onMenuAction: (action) {
+                      if (action == EpisodeMenuAction.queue) {
+                        showPlaylistMembershipSheet(context, ref, entry);
+                        return;
+                      }
+                      runEpisodeAction(context, ref, entry, action);
+                    },
                   ),
                 ],
               ),
@@ -278,20 +342,13 @@ class _EpisodeTileTrailing extends StatelessWidget {
             visualDensity: metrics.trailingVisualDensity,
           ),
           itemBuilder: (context) => [
-            PopupMenuItem(
+            const PopupMenuItem(
               value: EpisodeMenuAction.queue,
               child: Row(
                 children: [
-                  if (episode.queueIndex == null)
-                    const PlaylistAddIcon()
-                  else
-                    const PlaylistRemoveIcon(),
-                  const SizedBox(width: 12),
-                  Text(
-                    episode.queueIndex == null
-                        ? 'Ajouter à la playlist'
-                        : 'Retirer de la playlist',
-                  ),
+                  PlaylistAddIcon(),
+                  SizedBox(width: 12),
+                  Text('Playlists'),
                 ],
               ),
             ),
@@ -331,6 +388,7 @@ class _EpisodeTileTrailing extends StatelessWidget {
 /// Jaquette avec barre de progression fine en dessous (largeur = côté du carré).
 class _EpisodeCoverWithProgress extends StatelessWidget {
   const _EpisodeCoverWithProgress({
+    required this.episodeId,
     required this.url,
     required this.localPath,
     required this.httpHeaders,
@@ -339,6 +397,7 @@ class _EpisodeCoverWithProgress extends StatelessWidget {
     required this.progressBarHeight,
   });
 
+  final int episodeId;
   final String? url;
   final String? localPath;
   final Map<String, String>? httpHeaders;
@@ -352,11 +411,13 @@ class _EpisodeCoverWithProgress extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        PodcastCover(
+        PlayingEpisodeCover(
+          episodeId: episodeId,
           url: url,
           localPath: localPath,
           httpHeaders: httpHeaders,
           size: coverSize,
+          radius: 8,
         ),
         if (fraction != null) ...[
           const SizedBox(height: 2),
@@ -457,6 +518,205 @@ List<Widget> _spacedIcons(List<Widget> icons) {
 }
 
 enum EpisodeMenuAction { queue, played, favorite, download, share }
+
+/// Podcast, date de sortie, durée, et logos téléchargé / favori / playlist.
+class EpisodeListSubtitle extends ConsumerWidget {
+  const EpisodeListSubtitle({
+    super.key,
+    required this.entry,
+    this.showPodcast = true,
+    this.highlightQuery = '',
+    this.style,
+  });
+
+  final EpisodeEntry entry;
+  final bool showPodcast;
+  final String highlightQuery;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final episode = entry.episode;
+    final scheme = Theme.of(context).colorScheme;
+    final textStyle =
+        style ??
+        Theme.of(context).textTheme.bodySmall
+            ?.copyWith(color: scheme.onSurfaceVariant);
+    final seconds = episode.durationSeconds;
+    final duration = seconds == null
+        ? null
+        : formatClock(Duration(seconds: seconds));
+    final dateLabel = formatListDate(episode.publishedAt);
+    final inCustomPlaylist =
+        ref
+            .watch(customPlaylistEpisodeIdsProvider)
+            .asData
+            ?.value
+            .contains(episode.id) ??
+        false;
+    final inPlaylist = episode.queueIndex != null || inCustomPlaylist;
+    final downloaded = episode.downloadPath != null;
+    if (!showPodcast &&
+        dateLabel.isEmpty &&
+        duration == null &&
+        !downloaded &&
+        !episode.favorite &&
+        !inPlaylist) {
+      return const SizedBox.shrink();
+    }
+
+    return Row(
+      children: [
+        if (showPodcast)
+          Flexible(
+            child: HighlightedText(
+              text: entry.podcast.title,
+              query: highlightQuery,
+              maxLines: 1,
+              style: textStyle,
+            ),
+          ),
+        if (dateLabel.isNotEmpty) ...[
+          if (showPodcast) Text(' · ', style: textStyle),
+          Text(dateLabel, style: textStyle),
+        ],
+        if (duration != null) ...[
+          if (showPodcast || dateLabel.isNotEmpty)
+            Text(' · ', style: textStyle),
+          Text(duration, style: textStyle),
+        ],
+        if (downloaded) ...[
+          const SizedBox(width: 6),
+          Icon(Icons.download_for_offline, size: 16, color: scheme.onSurface),
+        ],
+        if (episode.favorite) ...[
+          const SizedBox(width: 6),
+          Icon(Icons.favorite, size: 16, color: favoriteHeartColor),
+        ],
+        if (inPlaylist) ...[
+          const SizedBox(width: 6),
+          IconTheme(
+            data: IconThemeData(color: scheme.onSurface, size: 16),
+            child: const PlaylistPlayIcon(size: 16),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _QueueStyleRow extends StatelessWidget {
+  const _QueueStyleRow({
+    required this.entry,
+    required this.playing,
+    required this.progress,
+    required this.preferPodcastCover,
+    required this.reorderIndex,
+    required this.highlightQuery,
+    required this.showPodcast,
+    required this.onTap,
+    required this.onCancelDownload,
+    required this.onMore,
+  });
+
+  final EpisodeEntry entry;
+  final bool playing;
+  final double? progress;
+  final bool preferPodcastCover;
+  final int? reorderIndex;
+  final String highlightQuery;
+  final bool showPodcast;
+  final VoidCallback onTap;
+  final VoidCallback onCancelDownload;
+  final VoidCallback onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final episode = entry.episode;
+    final titleStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    final podcastStyle = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final row = InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 6, 8, 6),
+        child: Row(
+          children: [
+            PlayingEpisodeCover(
+              episodeId: episode.id,
+              url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+              localPath: entry.imagePath(
+                preferPodcastCover: preferPodcastCover,
+              ),
+              httpHeaders: podcastAuthHeaders(
+                username: entry.podcast.authUsername,
+                password: entry.podcast.authPassword,
+              ),
+              size: 48,
+              radius: 4,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  HighlightedText(
+                    text: episode.title,
+                    query: highlightQuery,
+                    maxLines: 1,
+                    style: titleStyle,
+                  ),
+                  EpisodeListSubtitle(
+                    entry: entry,
+                    showPodcast: showPodcast,
+                    highlightQuery: highlightQuery,
+                    style: podcastStyle,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    final dragIndex = reorderIndex;
+    return Material(
+      color: playing
+          ? scheme.primaryContainer.withValues(alpha: 0.35)
+          : Colors.transparent,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: dragIndex == null
+                  ? row
+                  : ReorderableDelayedDragStartListener(
+                      index: dragIndex,
+                      child: row,
+                    ),
+            ),
+            if (progress != null)
+              DownloadProgressRing(
+                progress: progress!,
+                onCancel: onCancelDownload,
+              ),
+            IconButton(
+              tooltip: 'Actions',
+              onPressed: onMore,
+              icon: const MoreVertIcon(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class DownloadProgressRing extends StatelessWidget {
   const DownloadProgressRing({
@@ -654,41 +914,127 @@ class _ShareEpisodeSheetState extends ConsumerState<_ShareEpisodeSheet> {
 Future<void> showEpisodeActionsSheet(
   BuildContext context,
   WidgetRef ref,
-  EpisodeEntry entry,
-) {
+  EpisodeEntry entry, {
+  VoidCallback? onMoveUp,
+  VoidCallback? onMoveDown,
+  VoidCallback? onRemove,
+  bool fromPlayer = false,
+  VoidCallback? onSpeed,
+  VoidCallback? onSleep,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     showDragHandle: false,
-    builder: (sheetContext) => _EpisodeActionsSheet(
-      episodeId: entry.episode.id,
-      fallback: entry,
-      onOpenPodcast: (podcastId) {
-        Navigator.pop(sheetContext);
-        context.push(AppRoutes.podcast(podcastId));
-      },
-      onShare: (current) async {
-        Navigator.pop(sheetContext);
-        await showShareEpisodeSheet(context, ref, current);
-      },
-    ),
+    builder: (sheetContext) {
+      final sheet = _EpisodeActionsSheet(
+        episodeId: entry.episode.id,
+        fallback: entry,
+        fromPlayer: fromPlayer,
+        onOpenEpisode: () {
+          Navigator.pop(sheetContext);
+          if (fromPlayer) ref.read(playerSheetProvider.notifier).collapse();
+          context.push(AppRoutes.episode(entry.episode.id));
+        },
+        onOpenPodcast: (podcastId) {
+          Navigator.pop(sheetContext);
+          if (fromPlayer) ref.read(playerSheetProvider.notifier).collapse();
+          context.push(AppRoutes.podcast(podcastId));
+        },
+        onShare: (current) async {
+          Navigator.pop(sheetContext);
+          await showShareEpisodeSheet(context, ref, current);
+        },
+        onPlaylists: (current) async {
+          Navigator.pop(sheetContext);
+          await showPlaylistMembershipSheet(context, ref, current);
+        },
+        onMoveUp: onMoveUp == null
+            ? null
+            : () {
+                Navigator.pop(sheetContext);
+                onMoveUp();
+              },
+        onMoveDown: onMoveDown == null
+            ? null
+            : () {
+                Navigator.pop(sheetContext);
+                onMoveDown();
+              },
+        onRemove: onRemove == null
+            ? null
+            : () {
+                Navigator.pop(sheetContext);
+                onRemove();
+              },
+        onSpeed: onSpeed == null
+            ? null
+            : () {
+                Navigator.pop(sheetContext);
+                onSpeed();
+              },
+        onSleep: onSleep == null
+            ? null
+            : () {
+                Navigator.pop(sheetContext);
+                onSleep();
+              },
+      );
+      if (!fromPlayer) return sheet;
+      final theme = _themeAbovePlayer(context);
+      if (theme == null) return sheet;
+      return Theme(data: theme, child: sheet);
+    },
   );
+}
+
+/// Thème de l’application, au-dessus du thème teinté par la pochette.
+ThemeData? _themeAbovePlayer(BuildContext context) {
+  var seenTheme = false;
+  ThemeData? outer;
+  context.visitAncestorElements((element) {
+    final widget = element.widget;
+    if (widget is! Theme) return true;
+    if (!seenTheme) {
+      seenTheme = true;
+      return true;
+    }
+    outer = widget.data;
+    return false;
+  });
+  return outer;
 }
 
 class _EpisodeActionsSheet extends ConsumerWidget {
   const _EpisodeActionsSheet({
     required this.episodeId,
     required this.fallback,
+    required this.onOpenEpisode,
     required this.onOpenPodcast,
     required this.onShare,
+    required this.onPlaylists,
+    this.onMoveUp,
+    this.onMoveDown,
+    this.onRemove,
+    this.onSpeed,
+    this.onSleep,
+    this.fromPlayer = false,
   });
 
   final int episodeId;
   final EpisodeEntry fallback;
+  final bool fromPlayer;
+  final VoidCallback onOpenEpisode;
   final ValueChanged<int> onOpenPodcast;
   final Future<void> Function(EpisodeEntry entry) onShare;
+  final Future<void> Function(EpisodeEntry entry) onPlaylists;
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
+  final VoidCallback? onRemove;
+  final VoidCallback? onSpeed;
+  final VoidCallback? onSleep;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -697,21 +1043,31 @@ class _EpisodeActionsSheet extends ConsumerWidget {
     final entry =
         ref.watch(episodeProvider(episodeId)).asData?.value ?? fallback;
     final episode = entry.episode;
-    final downloading = ref.watch(
-      downloadProgressProvider.select((items) => items.containsKey(episode.id)),
+    final progress = ref.watch(
+      downloadProgressProvider.select((items) => items[episode.id]),
     );
+    final downloading = progress != null;
     final preferPodcastCover = ref.watch(
       settingsProvider.select((settings) => settings.preferPodcastCover),
     );
     final playingId = ref.watch(
       playerProvider.select((state) => state.episodeId),
     );
+    final carMode = ref.watch(playerProvider.select((state) => state.carMode));
+    final speed = fromPlayer
+        ? ref.watch(playerProvider.select((state) => state.speed))
+        : null;
+    final sleepDetail = fromPlayer
+        ? ref.watch(playerProvider.select(_playerSleepDetail))
+        : null;
+    final website = fromPlayer ? _podcastWebsite(entry.podcast.link) : null;
 
     final actions = <Widget>[
       _SheetAction(
         icon: Icon(
           episode.favorite ? Icons.favorite : Icons.favorite_border,
           size: 30,
+          color: episode.favorite ? favoriteHeartColor : null,
         ),
         iconPadding: 10,
         label: episode.favorite ? 'Aimé' : "J'aime",
@@ -733,6 +1089,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
             : episode.downloadPath != null
             ? 'Téléchargé'
             : 'Télécharger',
+        detail: progress == null ? null : '${(progress * 100).round()} %',
         onTap: downloading
             ? null
             : () => runEpisodeAction(
@@ -754,16 +1111,9 @@ class _EpisodeActionsSheet extends ConsumerWidget {
           },
         ),
       _SheetAction(
-        icon: episode.queueIndex == null
-            ? const PlaylistAddIcon()
-            : const PlaylistRemoveIcon(),
-        label: episode.queueIndex == null
-            ? 'Ajouter à la playlist'
-            : 'Retirer de la playlist',
-        onTap: () async {
-          await runEpisodeAction(context, ref, entry, EpisodeMenuAction.queue);
-          if (context.mounted) Navigator.pop(context);
-        },
+        icon: const PlaylistAddIcon(),
+        label: 'Playlists',
+        onTap: () => onPlaylists(entry),
       ),
       _SheetAction(
         icon: const SubscriptionsIcon(),
@@ -779,79 +1129,156 @@ class _EpisodeActionsSheet extends ConsumerWidget {
           await onShare(full ?? entry);
         },
       ),
+      if (onMoveUp != null)
+        _SheetAction(
+          icon: const MoveUpIcon(),
+          label: 'Monter',
+          onTap: onMoveUp,
+        ),
+      if (onMoveDown != null)
+        _SheetAction(
+          icon: const MoveDownIcon(),
+          label: 'Descendre',
+          onTap: onMoveDown,
+        ),
+      if (onRemove != null)
+        _SheetAction(
+          icon: const DeleteIcon(),
+          label: 'Supprimer',
+          onTap: onRemove,
+        ),
+      if (onSpeed != null && speed != null)
+        _SheetAction(
+          icon: const Icon(Icons.speed),
+          label: 'Vitesse',
+          detail: _playbackSpeedLabel(speed),
+          onTap: onSpeed,
+        ),
+      if (onSleep != null)
+        _SheetAction(
+          icon: const TimerIcon(),
+          label: 'Minuteur',
+          detail: sleepDetail,
+          onTap: onSleep,
+        ),
+      if (fromPlayer)
+        _SheetAction(
+          icon: Icon(
+            carMode ? Icons.directions_car : Icons.directions_car_outlined,
+          ),
+          label: carMode ? 'Quitter le mode voiture' : 'Mode voiture',
+          onTap: () {
+            ref.read(playerProvider.notifier).setCarMode(!carMode);
+            Navigator.pop(context);
+          },
+        ),
+      if (website != null)
+        _SheetAction(
+          icon: const LinkIcon(),
+          label: 'Ouvrir le site web',
+          onTap: () async {
+            final messenger = ScaffoldMessenger.of(context);
+            Navigator.pop(context);
+            final opened = await launchUrl(
+              website,
+              mode: LaunchMode.externalApplication,
+            );
+            if (!opened) {
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text('Impossible d’ouvrir le site web'),
+                ),
+              );
+            }
+          },
+        ),
     ];
 
     return Material(
       color: scheme.surfaceContainerHigh,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(50),
-              ),
-              child: const SizedBox(width: 32, height: 4),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+        ),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.paddingOf(context).bottom,
             ),
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
-              child: Row(
-                children: [
-                  PodcastCover(
-                    url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
-                    localPath: entry.imagePath(
-                      preferPodcastCover: preferPodcastCover,
-                    ),
-                    httpHeaders: podcastAuthHeaders(
-                      username: entry.podcast.authUsername,
-                      password: entry.podcast.authPassword,
-                    ),
-                    size: 44,
-                    radius: 6,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(50),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  child: const SizedBox(width: 32, height: 4),
+                ),
+                const SizedBox(height: 6),
+                InkWell(
+                  onTap: onOpenEpisode,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
+                    child: Row(
                       children: [
-                        Text(
-                          episode.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall,
+                        PodcastCover(
+                          url: entry.imageUrl(
+                            preferPodcastCover: preferPodcastCover,
+                          ),
+                          localPath: entry.imagePath(
+                            preferPodcastCover: preferPodcastCover,
+                          ),
+                          httpHeaders: podcastAuthHeaders(
+                            username: entry.podcast.authUsername,
+                            password: entry.podcast.authPassword,
+                          ),
+                          size: 44,
+                          radius: 6,
                         ),
-                        Text(
-                          entry.podcast.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                episode.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelSmall,
+                              ),
+                              Text(
+                                entry.podcast.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: scheme.outlineVariant,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                ...actions,
+                const SizedBox(height: 8),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Divider(
-                height: 1,
-                thickness: 1,
-                color: scheme.outlineVariant,
-              ),
-            ),
-            const SizedBox(height: 2),
-            ...actions,
-            const SizedBox(height: 8),
-          ],
+          ),
         ),
       ),
     );
@@ -864,12 +1291,14 @@ class _SheetAction extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.iconPadding = 12,
+    this.detail,
   });
 
   final Widget icon;
   final String label;
   final VoidCallback? onTap;
   final double iconPadding;
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -892,7 +1321,7 @@ class _SheetAction extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            Expanded(
+            Flexible(
               child: Text(
                 label,
                 maxLines: 1,
@@ -901,11 +1330,45 @@ class _SheetAction extends StatelessWidget {
                     ?.copyWith(color: color),
               ),
             ),
+            if (detail != null) ...[
+              const SizedBox(width: 8),
+              Text(
+                detail!,
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: color),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
+}
+
+String _playbackSpeedLabel(double speed) {
+  final text = speed == speed.roundToDouble()
+      ? speed.toInt().toString()
+      : speed.toString();
+  return '$text×';
+}
+
+/// Temps restant du minuteur, ou « Fin de l’épisode ». `null` s’il est arrêté.
+String? _playerSleepDetail(PlayerUiState state) {
+  if (state.sleepAtEnd) return 'Fin de l’épisode';
+  final remaining = state.sleepRemaining;
+  if (remaining == null) return null;
+  return formatClock(remaining);
+}
+
+Uri? _podcastWebsite(String? link) {
+  final raw = link?.trim();
+  if (raw == null || raw.isEmpty) return null;
+  final withScheme = raw.contains('://') ? raw : 'https://$raw';
+  final uri = Uri.tryParse(withScheme);
+  if (uri == null) return null;
+  if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+  if (uri.host.isEmpty) return null;
+  return uri;
 }
 
 Future<void> runEpisodeAction(

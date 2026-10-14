@@ -66,14 +66,10 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
     final refreshing = ref.watch(
       feedRefreshProvider.select((s) => s.isRunning),
     );
-    final filters = ref.watch(
-      settingsProvider.select((s) => s.episodeFilters),
-    );
+    final filters = ref.watch(settingsProvider.select((s) => s.episodeFilters));
     final hasFilters = !filters.isEmpty;
     final isInboxDefault =
-        filters.unreadOnly &&
-        !filters.downloadsOnly &&
-        !filters.inProgressOnly;
+        filters.unreadOnly && !filters.downloadsOnly && !filters.inProgressOnly;
     final hasSearch = _search.isNotEmpty;
     final showFilterEmpty = hasFilters && !isInboxDefault;
 
@@ -140,10 +136,7 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
                 }
               },
               itemBuilder: (context) => const [
-                PopupMenuItem(
-                  value: 'filter',
-                  child: Text('Filtrer'),
-                ),
+                PopupMenuItem(value: 'filter', child: Text('Filtrer')),
                 PopupMenuItem(
                   value: 'played',
                   child: Text('Tout marquer comme lu'),
@@ -165,6 +158,7 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
             ),
           Expanded(
             child: EpisodeListBody(
+              queueStyle: true,
               query: EpisodeQuery(
                 unreadOnly: filters.unreadOnly,
                 downloadsOnly: filters.downloadsOnly,
@@ -233,13 +227,8 @@ Future<void> refreshSubscriptions(BuildContext context, WidgetRef ref) async {
       showMessage(context, 'Aucun abonnement à actualiser');
       break;
     case FeedRefreshStartResult.throttled:
-      final wait = formatRefreshRetryAfter(
-        outcome.retryAfter ?? Duration.zero,
-      );
-      showMessage(
-        context,
-        'Actualisation récente — réessayez dans $wait',
-      );
+      final wait = formatRefreshRetryAfter(outcome.retryAfter ?? Duration.zero);
+      showMessage(context, 'Actualisation récente — réessayez dans $wait');
       break;
   }
 }

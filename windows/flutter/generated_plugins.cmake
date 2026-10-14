@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  bonsoir_windows
   dynamic_color
   flutter_media_session
   media_kit_libs_windows_audio

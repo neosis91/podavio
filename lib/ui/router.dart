@@ -3,6 +3,7 @@ class AppRoutes {
   static const library = '/library';
   static const episodes = '/episodes';
   static const queue = '/queue';
+  static const playlists = '/playlists';
   static const podcasts = '/podcasts';
   static const discover = '/discover';
   static const discoverMore = '/discover/more';
@@ -27,4 +28,6 @@ class AppRoutes {
   static String podcastSettings(int id) => '/podcasts/$id/settings';
 
   static String episode(int id) => '/episode/$id';
+
+  static String playlist(int id) => '/playlists/$id';
 }

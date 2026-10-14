@@ -550,6 +550,7 @@ Future<void> _showMiniPlayerButtonsSheet(BuildContext context, WidgetRef ref) {
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    isScrollControlled: true,
     builder: (context) => const _MiniPlayerButtonsSheet(),
   );
 }
@@ -569,61 +570,128 @@ class _MiniPlayerButtonsSheet extends ConsumerWidget {
       return notifier.setMiniPlayerButtons(next);
     }
 
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.9;
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: ReorderableListView(
+          shrinkWrap: true,
+          buildDefaultDragHandles: false,
+          header: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text(
+              'Boutons du mini player',
+              style: theme.textTheme.titleMedium,
+            ),
+          ),
+          onReorderItem: (oldIndex, newIndex) {
+            final order = [...buttons.order];
+            final moved = order.removeAt(oldIndex);
+            order.insert(newIndex, moved);
+            update(buttons.copyWith(order: order));
+          },
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-              child: Text(
-                'Boutons du mini player',
-                style: theme.textTheme.titleMedium,
+            for (final entry in buttons.order.indexed)
+              _MiniPlayerButtonRow(
+                key: ValueKey(entry.$2),
+                id: entry.$2,
+                index: entry.$1,
+                checked: buttons.isOn(entry.$2),
+                onChanged: entry.$2 == 'play'
+                    ? null
+                    : (value) {
+                        final id = entry.$2;
+                        final enabled = {...buttons.enabled};
+                        if (value) {
+                          enabled.add(id);
+                        } else {
+                          enabled.remove(id);
+                        }
+                        enabled.add('play');
+                        update(buttons.copyWith(enabled: enabled));
+                      },
               ),
-            ),
-            const CheckboxListTile(
-              value: true,
-              onChanged: null,
-              title: Text('Lecture / pause'),
-              subtitle: Text('Toujours affiché'),
-              secondary: PlayPauseIcon(playing: false, size: 24),
-            ),
-            CheckboxListTile(
-              value: buttons.skipBack,
-              onChanged: (value) =>
-                  update(buttons.copyWith(skipBack: value ?? false)),
-              title: const Text('Retour rapide'),
-              secondary: SkipIcon.back(size: 24),
-            ),
-            CheckboxListTile(
-              value: buttons.skipForward,
-              onChanged: (value) =>
-                  update(buttons.copyWith(skipForward: value ?? false)),
-              title: const Text('Avance rapide'),
-              secondary: SkipIcon.forward(size: 24),
-            ),
-            CheckboxListTile(
-              value: buttons.nextEpisode,
-              onChanged: (value) =>
-                  update(buttons.copyWith(nextEpisode: value ?? false)),
-              title: const Text('Épisode suivant'),
-              subtitle: const Text('Dans la playlist'),
-              secondary: SkipIcon.next(size: 24),
-            ),
-            CheckboxListTile(
-              value: buttons.close,
-              onChanged: (value) =>
-                  update(buttons.copyWith(close: value ?? false)),
-              title: const Text('Fermer le lecteur'),
-              secondary: const Icon(Icons.close),
-            ),
           ],
         ),
       ),
     );
   }
+}
+
+class _MiniPlayerButtonRow extends StatelessWidget {
+  const _MiniPlayerButtonRow({
+    super.key,
+    required this.id,
+    required this.index,
+    required this.checked,
+    required this.onChanged,
+  });
+
+  final String id;
+  final int index;
+  final bool checked;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      child: Row(
+        children: [
+          Tooltip(
+            message: 'Déplacer',
+            child: ReorderableDragStartListener(
+              index: index,
+              child: const SizedBox(
+                width: 48,
+                height: 56,
+                child: Center(child: DragIndicatorIcon()),
+              ),
+            ),
+          ),
+          Expanded(
+            child: CheckboxListTile(
+              value: checked,
+              onChanged: onChanged == null
+                  ? null
+                  : (value) => onChanged!(value ?? false),
+              title: Text(_miniPlayerButtonTitle(id)),
+              subtitle: switch (id) {
+                'play' => const Text('Toujours affiché'),
+                'nextEpisode' => const Text('Dans la file d’attente'),
+                _ => null,
+              },
+              secondary: _miniPlayerButtonIcon(id),
+              contentPadding: const EdgeInsets.only(right: 8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _miniPlayerButtonTitle(String id) {
+  return switch (id) {
+    'play' => 'Lecture / pause',
+    'favorite' => 'Favoris',
+    'skipBack' => 'Retour rapide',
+    'skipForward' => 'Avance rapide',
+    'nextEpisode' => 'Épisode suivant',
+    'close' => 'Fermer le lecteur',
+    _ => id,
+  };
+}
+
+Widget _miniPlayerButtonIcon(String id) {
+  return switch (id) {
+    'play' => const Icon(Icons.play_arrow),
+    'favorite' => const Icon(Icons.favorite_border),
+    'skipBack' => SkipIcon.back(size: 24),
+    'skipForward' => SkipIcon.forward(size: 24),
+    'nextEpisode' => SkipIcon.next(size: 24),
+    'close' => const Icon(Icons.close),
+    _ => const SizedBox.shrink(),
+  };
 }
 
 class _AccentChoice extends StatelessWidget {

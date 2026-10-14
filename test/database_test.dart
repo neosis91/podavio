@@ -401,4 +401,75 @@ void main() {
       third,
     ]);
   });
+
+  test('custom playlists keep order and the default one stays', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final initial = await database.watchPlaylists().first;
+    expect(initial, hasLength(1));
+    expect(initial.single.isDefault, isTrue);
+    expect(initial.single.name, 'Playlist');
+    await database.deletePlaylist(initial.single.id);
+    expect(await database.watchPlaylists().first, hasLength(1));
+
+    final podcastId = await database.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: '',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a',
+            title: 'Un',
+            description: '',
+            audioUrl: 'https://example.com/1.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'b',
+            title: 'Deux',
+            description: '',
+            audioUrl: 'https://example.com/2.mp3',
+          ),
+        ],
+      ),
+    );
+    final episodes = await database.watchEpisodes(podcastId: podcastId).first;
+    final byTitle = {
+      for (final entry in episodes) entry.episode.title: entry.episode.id,
+    };
+    final first = byTitle['Un']!;
+    final second = byTitle['Deux']!;
+    final custom = await database.createPlaylist('Soir');
+    await database.addToPlaylist(custom, second);
+    await database.addToPlaylist(custom, first);
+    expect(
+      (await database.watchPlaylistEpisodes(custom).first)
+          .map((entry) => entry.episode.id)
+          .toList(),
+      [second, first],
+    );
+    await database.setPlaylistOrder(custom, [first, second]);
+    expect(
+      (await database.watchPlaylistEpisodes(custom).first)
+          .map((entry) => entry.episode.id)
+          .toList(),
+      [first, second],
+    );
+
+    await database.addToPlaylist(initial.single.id, first);
+    final queued = await database.watchEpisodeWindow(queuedOnly: true).first;
+    expect(queued.single.episode.id, first);
+
+    await database.renamePlaylist(custom, 'Matin');
+    final named = await database.watchPlaylists().first;
+    expect(named.map((playlist) => playlist.name), ['Playlist', 'Matin']);
+    expect(named.first.episodeCount, 1);
+    expect(named.last.episodeCount, 2);
+
+    await database.deletePlaylist(custom);
+    final remaining = await database.watchPlaylists().first;
+    expect(remaining.map((playlist) => playlist.id), [initial.single.id]);
+  });
 }

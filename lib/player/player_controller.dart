@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_session/audio_session.dart';
+import 'package:cast/device.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
@@ -11,7 +12,10 @@ import '../data/feed_service.dart';
 import '../data/http_auth.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
+import 'cast_playback.dart';
 import 'playback_handler.dart';
+import 'stream_quality.dart';
+import 'playback_source.dart';
 import 'player_sheet_controller.dart';
 
 class PlayerUiState {
@@ -30,6 +34,9 @@ class PlayerUiState {
     this.sleepEndsAt,
     this.sleepAtEnd = false,
     this.error,
+    this.playbackSource = PlaybackSource.queue,
+    this.streamQualityLabel,
+    this.castDeviceName,
   });
 
   final int? episodeId;
@@ -42,11 +49,21 @@ class PlayerUiState {
   final Duration duration;
   final double speed;
   final double volume;
+
   /// Persisté via SharedPreferences (`carMode`).
   final bool carMode;
   final DateTime? sleepEndsAt;
   final bool sleepAtEnd;
   final String? error;
+
+  /// Liste d’où l’épisode en cours a été lancé.
+  final PlaybackSource playbackSource;
+
+  /// « 154 kbps · 48 kHz », ou `null` tant que le flux n’est pas identifié.
+  final String? streamQualityLabel;
+
+  /// Nom du récepteur Cast, ou `null` si la lecture est locale.
+  final String? castDeviceName;
 
   bool get hasEpisode => episodeId != null;
 
@@ -65,6 +82,7 @@ class PlayerUiState {
     String? podcastTitle,
     String? imageUrl,
     String? imagePath,
+
     /// Remplace [imageUrl] / [imagePath] même si la nouvelle valeur est `null`.
     bool updateImage = false,
     bool? playing,
@@ -78,6 +96,11 @@ class PlayerUiState {
     bool clearSleep = false,
     String? error,
     bool clearError = false,
+    PlaybackSource? playbackSource,
+    String? streamQualityLabel,
+    bool clearStreamQuality = false,
+    String? castDeviceName,
+    bool clearCast = false,
   }) {
     return PlayerUiState(
       episodeId: clearEpisode ? null : episodeId ?? this.episodeId,
@@ -94,6 +117,11 @@ class PlayerUiState {
       sleepEndsAt: clearSleep ? null : sleepEndsAt ?? this.sleepEndsAt,
       sleepAtEnd: sleepAtEnd ?? (clearSleep ? false : this.sleepAtEnd),
       error: clearError ? null : error ?? this.error,
+      playbackSource: playbackSource ?? this.playbackSource,
+      streamQualityLabel: clearStreamQuality
+          ? null
+          : streamQualityLabel ?? this.streamQualityLabel,
+      castDeviceName: clearCast ? null : castDeviceName ?? this.castDeviceName,
     );
   }
 }
@@ -107,9 +135,16 @@ final hasNextInQueueProvider = StreamProvider<bool>((ref) {
   final episodeId = ref.watch(
     playerProvider.select((state) => state.episodeId),
   );
-  return ref.watch(databaseProvider).watchHasNextInQueue(
-    afterEpisodeId: episodeId,
+  final source = ref.watch(
+    playerProvider.select((state) => state.playbackSource),
   );
+  return source.watch(ref.watch(databaseProvider)).map((items) {
+    if (items.isEmpty) return false;
+    if (episodeId == null) return source.isQueue;
+    final index = items.indexWhere((entry) => entry.episode.id == episodeId);
+    if (index < 0) return source.isQueue;
+    return index + 1 < items.length;
+  });
 });
 
 class PlayerNotifier extends Notifier<PlayerUiState> {
@@ -122,6 +157,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   var _disposed = false;
   var _advancing = false;
   var _sessionReady = false;
+
   /// True une fois que l’utilisateur a vraiment lancé la lecture cette session.
   var _hasPlayedInSession = false;
   DateTime _lastPersist = DateTime.fromMillisecondsSinceEpoch(0);
@@ -133,6 +169,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration?>? _durationSub;
   StreamSubscription<PlayerState>? _stateSub;
+  StreamSubscription<CastPlaybackUpdate>? _castSub;
+  CastPlayback? _cast;
 
   @override
   PlayerUiState build() {
@@ -179,8 +217,23 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     return _ui;
   }
 
-  Future<void> playEntry(EpisodeEntry entry) {
+  Future<void> playEntry(EpisodeEntry entry, {PlaybackSource? source}) {
+    if (source != null) _emit(_ui.copyWith(playbackSource: source));
     return _play(entry.episode, entry.podcast);
+  }
+
+  /// Lance l’épisode, ou bascule lecture / pause s’il est déjà chargé.
+  /// [source] retient la liste d’origine pour la playlist du lecteur.
+  Future<void> playOrPauseEntry(
+    EpisodeEntry entry, {
+    PlaybackSource? source,
+  }) async {
+    if (source != null) _emit(_ui.copyWith(playbackSource: source));
+    if (_ui.episodeId == entry.episode.id) {
+      await toggle();
+      return;
+    }
+    await playEntry(entry);
   }
 
   /// Recharge le dernier épisode en cours sans démarrer la lecture.
@@ -223,6 +276,15 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   Future<void> toggle() async {
     if (!_ui.hasEpisode) return;
+    final cast = _cast;
+    if (cast != null) {
+      if (_ui.playing) {
+        cast.pause();
+      } else {
+        cast.play();
+      }
+      return;
+    }
     if (_player.playing) {
       await _player.pause();
       await persistPosition();
@@ -237,6 +299,13 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   Future<void> seek(Duration position) async {
     if (!_ui.hasEpisode) return;
+    final cast = _cast;
+    if (cast != null) {
+      cast.seek(position);
+      _emit(_ui.copyWith(position: position));
+      await persistPosition();
+      return;
+    }
     await _player.seek(position);
     _emit(_ui.copyWith(position: position));
     await persistPosition();
@@ -323,12 +392,29 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (_disposed || !ref.mounted) return;
     final settings = ref.read(settingsProvider);
     _hasPlayedInSession = false;
-    _emit(
-      PlayerUiState(speed: settings.speed, volume: settings.volume),
-    );
+    _emit(PlayerUiState(speed: settings.speed, volume: settings.volume));
     if (ref.mounted) {
       ref.read(playerSheetProvider.notifier).collapse();
     }
+  }
+
+  /// Voisin dans la liste d’origine. `1` = suivant, `-1` = précédent.
+  /// Hors de la file de lecture, le suivant retombe sur le premier, comme avant.
+  Future<EpisodeEntry?> _relativeEntry(int delta) async {
+    final source = _ui.playbackSource;
+    final items = await source.watch(ref.read(databaseProvider)).first;
+    if (_disposed || items.isEmpty) return null;
+    final currentId = _ui.episodeId;
+    if (currentId == null) {
+      return delta > 0 && source.isQueue ? items.first : null;
+    }
+    final index = items.indexWhere((entry) => entry.episode.id == currentId);
+    if (index < 0) {
+      return delta > 0 && source.isQueue ? items.first : null;
+    }
+    final target = index + delta;
+    if (target < 0 || target >= items.length) return null;
+    return items[target];
   }
 
   /// Épisode précédent dans la playlist.
@@ -342,9 +428,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
     final currentId = _ui.episodeId;
     if (currentId == null) return;
-    final previous = await ref.read(databaseProvider).previousInQueue(
-      beforeEpisodeId: currentId,
-    );
+    final previous = await _relativeEntry(-1);
     if (_disposed || !ref.mounted) return;
     if (previous == null) {
       await seek(Duration.zero);
@@ -361,10 +445,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   /// Passe à l’épisode suivant dans la playlist.
   Future<void> playNextInQueue() async {
     if (_advancing || _disposed) return;
-    final currentId = _ui.episodeId;
-    final next = await ref.read(databaseProvider).nextInQueue(
-      afterEpisodeId: currentId,
-    );
+    final next = await _relativeEntry(1);
     if (next == null || _disposed) return;
     _advancing = true;
     try {
@@ -384,10 +465,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (episodeId == null || !ref.mounted) return;
     final entry = await ref.read(databaseProvider).getEpisode(episodeId);
     if (entry == null || !ref.mounted) return;
-    await ref.read(databaseProvider).setPodcastPlaybackSpeed(
-      entry.podcast.id,
-      value,
-    );
+    await ref
+        .read(databaseProvider)
+        .setPodcastPlaybackSpeed(entry.podcast.id, value);
   }
 
   /// Vitesse des épisodes de ce podcast. `null` reprend le réglage général.
@@ -410,10 +490,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (episodeId == null) return;
     final entry = await ref.read(databaseProvider).getEpisode(episodeId);
     if (entry == null || !ref.mounted) return;
-    await ref.read(databaseProvider).setPodcastPlaybackSpeed(
-      entry.podcast.id,
-      null,
-    );
+    await ref
+        .read(databaseProvider)
+        .setPodcastPlaybackSpeed(entry.podcast.id, null);
     if (!ref.mounted || _disposed) return;
     final speed = ref.read(settingsProvider).speed;
     await _player.setSpeed(speed);
@@ -479,21 +558,22 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     final id = _ui.episodeId;
     if (id == null || _disposed || !ref.mounted) return;
     _lastPersist = DateTime.now();
-    await ref.read(databaseProvider).upsertPlaybackPosition(
-      id,
-      _ui.position.inMilliseconds,
-    );
+    await ref
+        .read(databaseProvider)
+        .upsertPlaybackPosition(id, _ui.position.inMilliseconds);
   }
 
   /// Sync métier vers `episodes` (tuiles « en cours », lectures récentes, lastPlayedAt).
   Future<void> syncPositionToEpisode({bool? touchLastPlayed}) async {
     final id = _ui.episodeId;
     if (id == null || _disposed || !ref.mounted) return;
-    await ref.read(databaseProvider).setPosition(
-      id,
-      _ui.position.inMilliseconds,
-      touchLastPlayed: touchLastPlayed ?? _hasPlayedInSession,
-    );
+    await ref
+        .read(databaseProvider)
+        .setPosition(
+          id,
+          _ui.position.inMilliseconds,
+          touchLastPlayed: touchLastPlayed ?? _hasPlayedInSession,
+        );
   }
 
   Future<void> _refreshCoverArt(bool preferPodcastCover) async {
@@ -503,13 +583,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (entry == null || _disposed || !ref.mounted) return;
     final remote = entry.imageUrl(preferPodcastCover: preferPodcastCover);
     final local = entry.imagePath(preferPodcastCover: preferPodcastCover);
-    _emit(
-      _ui.copyWith(
-        imageUrl: remote,
-        imagePath: local,
-        updateImage: true,
-      ),
-    );
+    _emit(_ui.copyWith(imageUrl: remote, imagePath: local, updateImage: true));
     playbackHandler?.setEpisode(
       title: entry.episode.title,
       podcast: entry.podcast.title,
@@ -568,6 +642,22 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         speed: speed,
         playing: false,
         clearError: true,
+        clearStreamQuality: true,
+      ),
+    );
+    final sourceUri = _sourceUri(episode);
+    unawaited(
+      _publishStreamQuality(
+        episodeId: episode.id,
+        uri: sourceUri,
+        headers: sourceUri.scheme == 'http' || sourceUri.scheme == 'https'
+            ? podcastRequestHeaders(
+                userAgent: podavioUserAgent,
+                username: podcast.authUsername,
+                password: podcast.authPassword,
+              )
+            : null,
+        duration: duration,
       ),
     );
     if (!ref.mounted) return;
@@ -594,7 +684,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       }
       await _prepareSession();
       if (!ref.mounted || _disposed) return;
-      final uri = _sourceUri(episode);
+      final uri = sourceUri;
       await _player.setAudioSource(
         AudioSource.uri(
           uri,
@@ -611,13 +701,152 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       await _player.setVolume(_ui.volume);
       if (start > Duration.zero) await _player.seek(start);
       if (!ref.mounted || _disposed) return;
-      if (autoplay) {
+      if (_cast != null) {
+        await _player.pause();
+        final error = await _loadOnCast(episode, podcast, start);
+        if (error != null && !_disposed) {
+          _emit(_ui.copyWith(error: error, playing: false));
+        }
+      } else if (autoplay) {
         await _player.play();
       }
     } catch (_) {
       _emit(
         _ui.copyWith(playing: false, error: 'Impossible de lire cet épisode.'),
       );
+    }
+  }
+
+  /// Envoie l’épisode sur [device] et met le lecteur local en pause.
+  /// Renvoie un message si le flux ne peut pas être casté.
+  Future<String?> castTo(CastDevice device) async {
+    if (!_ui.hasEpisode) return 'Aucune lecture en cours';
+    final entry = await ref.read(databaseProvider).getEpisode(_ui.episodeId!);
+    if (!ref.mounted || _disposed || entry == null) return null;
+    final url = entry.episode.audioUrl.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return 'Cet épisode n’a pas d’adresse que le Cast peut lire';
+    }
+    final playback = CastPlayback();
+    try {
+      await playback.open(device);
+    } catch (_) {
+      await playback.close();
+      return 'Connexion à ${device.name} impossible';
+    }
+    if (_disposed || !ref.mounted) {
+      await playback.close();
+      return null;
+    }
+    await _castSub?.cancel();
+    await _cast?.close();
+    _cast = playback;
+    _castSub = playback.updates.listen(_onCastUpdate);
+    await _player.pause();
+    _emit(_ui.copyWith(castDeviceName: device.name, playing: true));
+    final error = await _loadOnCast(entry.episode, entry.podcast, _ui.position);
+    if (error != null) {
+      await playHere();
+      return error;
+    }
+    return null;
+  }
+
+  /// Revient sur l’appareil, à la position du Cast.
+  Future<void> playHere() async {
+    final cast = _cast;
+    if (cast == null) return;
+    final position = _ui.position;
+    final wasPlaying = _ui.playing;
+    _cast = null;
+    await _castSub?.cancel();
+    _castSub = null;
+    await cast.close();
+    if (_disposed || !ref.mounted) return;
+    _emit(_ui.copyWith(clearCast: true, playing: false, position: position));
+    await _player.seek(position);
+    if (wasPlaying && !_disposed) {
+      await _player.play();
+    }
+  }
+
+  Future<String?> _loadOnCast(
+    Episode episode,
+    Podcast podcast,
+    Duration position,
+  ) async {
+    final cast = _cast;
+    if (cast == null) return null;
+    final url = episode.audioUrl.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return 'Cet épisode n’a pas d’adresse que le Cast peut lire';
+    }
+    final settings = ref.read(settingsProvider);
+    final cover = EpisodeEntry(episode: episode, podcast: podcast);
+    try {
+      cast.load(
+        url: url,
+        contentType: _castContentType(episode),
+        title: episode.title,
+        artist: podcast.title,
+        imageUrl: cover.imageUrl(
+          preferPodcastCover: settings.preferPodcastCover,
+        ),
+        position: position,
+      );
+    } catch (_) {
+      return 'Envoi vers le Cast impossible';
+    }
+    return null;
+  }
+
+  String _castContentType(Episode episode) {
+    final mime = episode.mimeType?.trim();
+    if (mime != null && mime.isNotEmpty) return mime;
+    final url = episode.audioUrl.toLowerCase();
+    if (url.contains('.m4a') || url.contains('.mp4') || url.contains('.aac')) {
+      return 'audio/mp4';
+    }
+    if (url.contains('.ogg') || url.contains('.opus')) return 'audio/ogg';
+    return 'audio/mpeg';
+  }
+
+  void _onCastUpdate(CastPlaybackUpdate update) {
+    if (_disposed || _cast == null || !ref.mounted) return;
+    if (update.completed) {
+      unawaited(_onCompleted());
+      return;
+    }
+    _emit(_ui.copyWith(position: update.position, playing: update.playing));
+    final id = _ui.episodeId;
+    if (id == null) return;
+    final now = DateTime.now();
+    if (now.difference(_lastPersist) < const Duration(seconds: 5)) return;
+    _lastPersist = now;
+    unawaited(
+      ref
+          .read(databaseProvider)
+          .upsertPlaybackPosition(id, update.position.inMilliseconds),
+    );
+  }
+
+  Future<void> _publishStreamQuality({
+    required int episodeId,
+    required Uri uri,
+    required Map<String, String>? headers,
+    required Duration duration,
+  }) async {
+    try {
+      final label = await loadStreamQualityLabel(
+        uri: uri,
+        headers: headers,
+        duration: duration > Duration.zero ? duration : null,
+      );
+      if (_disposed || !ref.mounted || _ui.episodeId != episodeId) return;
+      if (label == null || label == _ui.streamQualityLabel) return;
+      _emit(_ui.copyWith(streamQualityLabel: label));
+    } catch (_) {
+      // Le flux reste lisible sans la ligne de qualité.
     }
   }
 
@@ -658,6 +887,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   void _bind() {
     _positionSub = _player.positionStream.listen((position) {
+      if (_cast != null) return;
       final now = DateTime.now();
       if (now.difference(_lastPositionUi) >=
           const Duration(milliseconds: 250)) {
@@ -672,10 +902,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       if (now.difference(_lastPersist) < const Duration(seconds: 5)) return;
       _lastPersist = now;
       unawaited(
-        ref.read(databaseProvider).upsertPlaybackPosition(
-          id,
-          position.inMilliseconds,
-        ),
+        ref
+            .read(databaseProvider)
+            .upsertPlaybackPosition(id, position.inMilliseconds),
       );
     });
     _durationSub = _player.durationStream.listen((duration) {
@@ -684,6 +913,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       _maybeSkipOutro(_ui.position);
     });
     _stateSub = _player.playerStateStream.listen((playerState) {
+      if (_cast != null) return;
       _emit(_ui.copyWith(playing: playerState.playing));
       if (playerState.processingState == ProcessingState.completed) {
         unawaited(_onCompleted());
@@ -722,11 +952,16 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     _advancing = true;
     try {
       final db = ref.read(databaseProvider);
+      final source = _ui.playbackSource;
+      // Avant le marquage : un filtre « non lus » ou « en cours » retire
+      // l’épisode de la liste dès qu’il est terminé.
+      final following = source.isQueue ? null : await _relativeEntry(1);
       // Sync finale puis marquage terminé (position épisode → 0).
       await syncPositionToEpisode();
       await db.setPlayed(id, played: true);
-      // Retrait auto de la file uniquement quand l’épisode est terminé.
-      await db.removeFromQueue(id);
+      // Retrait auto de la file uniquement quand l’épisode est terminé,
+      // et seulement si la lecture vient de cette file.
+      if (source.isQueue) await db.removeFromQueue(id);
       // Garder l’épisode en « en cours » pour le mini-player au prochain lancement.
       await _rememberNowPlaying(id);
       final sleepAtEnd = _ui.sleepAtEnd;
@@ -738,7 +973,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         ),
       );
       if (sleepAtEnd) return;
-      final next = await db.nextInQueue(afterEpisodeId: id);
+      final next = source.isQueue
+          ? await db.nextInQueue(afterEpisodeId: id)
+          : following;
       if (next == null || _disposed) return;
       await _play(next.episode, next.podcast);
     } finally {
@@ -760,6 +997,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       handler.detach();
     }
     _sleepTimer?.cancel();
+    final cast = _cast;
+    _cast = null;
+    await _castSub?.cancel();
+    await cast?.close();
     await _positionSub?.cancel();
     await _durationSub?.cancel();
     await _stateSub?.cancel();

@@ -101,6 +101,27 @@ final queueCountProvider = StreamProvider<int>((ref) {
   return ref.watch(databaseProvider).watchQueueCount();
 });
 
+final playlistsProvider = StreamProvider<List<PlaylistSummary>>((ref) {
+  return ref.watch(databaseProvider).watchPlaylists();
+});
+
+final playlistEpisodesProvider = StreamProvider.family<List<EpisodeEntry>, int>(
+  (ref, playlistId) {
+    return ref.watch(databaseProvider).watchPlaylistEpisodes(playlistId);
+  },
+);
+
+final customPlaylistEpisodeIdsProvider = StreamProvider<Set<int>>((ref) {
+  return ref.watch(databaseProvider).watchCustomPlaylistEpisodeIds();
+});
+
+final customPlaylistIdsProvider = StreamProvider.family<Set<int>, int>((
+  ref,
+  episodeId,
+) {
+  return ref.watch(databaseProvider).watchCustomPlaylistIds(episodeId);
+});
+
 final episodesProvider =
     NotifierProvider.family<
       EpisodesNotifier,
@@ -159,6 +180,7 @@ class EpisodesNotifier extends Notifier<AsyncValue<EpisodeWindow>> {
           historyOnly: query.historyOnly,
           inProgressOnly: query.inProgressOnly,
           podcastId: query.podcastId,
+          playlistId: query.playlistId,
           search: query.search,
           limit: query.paginated ? _limit : null,
         )
@@ -188,6 +210,7 @@ class EpisodeQuery {
     this.historyOnly = false,
     this.inProgressOnly = false,
     this.podcastId,
+    this.playlistId,
     this.search = '',
     this.paginated = true,
   });
@@ -199,6 +222,7 @@ class EpisodeQuery {
   final bool historyOnly;
   final bool inProgressOnly;
   final int? podcastId;
+  final int? playlistId;
   final String search;
   final bool paginated;
 
@@ -212,6 +236,7 @@ class EpisodeQuery {
         other.historyOnly == historyOnly &&
         other.inProgressOnly == inProgressOnly &&
         other.podcastId == podcastId &&
+        other.playlistId == playlistId &&
         other.search == search &&
         other.paginated == paginated;
   }
@@ -225,6 +250,7 @@ class EpisodeQuery {
     historyOnly,
     inProgressOnly,
     podcastId,
+    playlistId,
     search,
     paginated,
   );

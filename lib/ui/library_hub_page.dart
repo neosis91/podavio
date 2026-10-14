@@ -31,12 +31,14 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     final favorites = navPageByPath(AppRoutes.favorites)!;
     final episodes = navPageByPath(AppRoutes.episodes)!;
     final downloads = navPageByPath(AppRoutes.downloads)!;
+    final playlists = navPageByPath(AppRoutes.playlists)!;
+    final stats = navPageByPath(AppRoutes.stats)!;
     const tiles = <_LibraryTileData>[
       _LibraryTileData(
         path: AppRoutes.favorites,
         background: Color(0xffff99ae),
         icon: Icons.favorite,
-        iconColor: Color(0xffD10000),
+        iconColor: favoriteHeartColor,
       ),
       _LibraryTileData(
         path: AppRoutes.episodes,
@@ -50,11 +52,25 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         icon: Icons.downloading,
         iconColor: Colors.black,
       ),
+      _LibraryTileData(
+        path: AppRoutes.playlists,
+        background: Color(0xffFFEB3B),
+        icon: Icons.playlist_play,
+        iconColor: Colors.black,
+      ),
+      _LibraryTileData(
+        path: AppRoutes.stats,
+        background: Color(0xffCE93D8),
+        icon: Icons.insights,
+        iconColor: Colors.black,
+      ),
     ];
     final pages = {
       favorites.path: favorites,
       episodes.path: episodes,
       downloads.path: downloads,
+      playlists.path: playlists,
+      stats.path: stats,
     };
     final recentCount = entries == null
         ? 1

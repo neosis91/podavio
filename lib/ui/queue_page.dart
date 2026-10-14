@@ -13,6 +13,7 @@ class QueuePage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Playlist')),
       body: EpisodeListBody(
+        queueStyle: true,
         query: const EpisodeQuery(queuedOnly: true, paginated: false),
         reorder: (entries, oldIndex, newIndex) {
           final next = [...entries];
@@ -22,6 +23,8 @@ class QueuePage extends ConsumerWidget {
               .read(databaseProvider)
               .setQueueOrder(next.map((entry) => entry.episode.id).toList());
         },
+        onRemove: (entry) =>
+            ref.read(databaseProvider).removeFromQueue(entry.episode.id),
         empty: const EmptyState(
           title: 'La file est vide',
           message: 'Ajoutez des épisodes pour les écouter les uns à la suite des autres.',

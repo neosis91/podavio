@@ -42,6 +42,8 @@ dependencies:
   drift_flutter: ^0.3.1
   sqlite3_flutter_libs: ^0.6.0+eol
   just_audio: ^0.10.6
+  cast: ^2.1.0
+  bonsoir: ^7.1.5
   flutter_media_session: ^3.0.8
   audio_session: ^0.2.4
   podcast_search: ^0.7.15
@@ -82,6 +84,10 @@ dev_dependencies:
   drift_dev: ^2.35.0
   build_runner: ^2.16.1
 
+# `cast` (via bonsoir) demande encore dbus 0.7, wakelock_plus demande 0.8.
+dependency_overrides:
+  dbus: ^0.8.0
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
@@ -99,6 +105,7 @@ flutter:
     - assets/brand/fast_rewind.svg
     - assets/brand/fast_forward.svg
     - assets/brand/skip_next.svg
+    - assets/brand/skip_previous.svg
     - assets/brand/keyboard_arrow_down.svg
     - assets/brand/play_arrow.svg
     - assets/brand/pause.svg
@@ -110,6 +117,7 @@ flutter:
     - assets/brand/podcasts.svg
     - assets/brand/link.svg
     - assets/brand/playlist_play.svg
+    - assets/brand/queue_music.svg
     - assets/brand/playlist_add.svg
     - assets/brand/playlist_remove.svg
     - assets/brand/subscriptions.svg

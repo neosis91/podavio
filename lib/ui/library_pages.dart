@@ -52,6 +52,7 @@ class _LibraryPage extends StatelessWidget {
       appBar: AppBar(title: Text(title)),
       body: EpisodeListBody(
         query: query,
+        queueStyle: true,
         empty: EmptyState(title: emptyTitle, message: emptyMessage),
       ),
     );

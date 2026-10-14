@@ -176,6 +176,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool historyOnly = false,
     bool inProgressOnly = false,
     int? podcastId,
+    int? playlistId,
     String search = '',
     int? limit,
   }) {
@@ -191,6 +192,7 @@ mixin _EpisodeQueries on _$AppDatabase {
       historyOnly: historyOnly,
       inProgressOnly: inProgressOnly,
       podcastId: podcastId,
+      playlistId: playlistId,
       limit: hasSearch ? null : limit,
     ).watch().map((rows) {
       if (!hasSearch) return rows;
@@ -217,6 +219,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool unplayedOnly = false,
     bool randomOrder = false,
     int? podcastId,
+    int? playlistId,
     int? limit,
   }) {
     final query = selectOnly(episodes)
@@ -260,6 +263,15 @@ mixin _EpisodeQueries on _$AppDatabase {
         podcasts.authPassword,
       ])
       ..join([innerJoin(podcasts, podcasts.id.equalsExp(episodes.podcastId))]);
+    if (playlistId != null) {
+      query.join([
+        innerJoin(
+          playlistEpisodes,
+          playlistEpisodes.episodeId.equalsExp(episodes.id) &
+              playlistEpisodes.playlistId.equals(playlistId),
+        ),
+      ]);
+    }
     if (unreadOnly) query.where(episodes.played.equals(false));
     if (favoritesOnly) query.where(episodes.favorite.equals(true));
     if (downloadsOnly) query.where(episodes.downloadPath.isNotNull());
@@ -287,7 +299,8 @@ mixin _EpisodeQueries on _$AppDatabase {
         !historyOnly &&
         !inProgressOnly &&
         !recentDownloads &&
-        !favoritesOnly) {
+        !favoritesOnly &&
+        playlistId == null) {
       // Listes « bibliothèque » : masquer les aperçus Explorer.
       query.where(podcasts.subscribed.equals(true));
     }
@@ -302,6 +315,8 @@ mixin _EpisodeQueries on _$AppDatabase {
       ]);
     } else if (queuedOnly) {
       query.orderBy([OrderingTerm.asc(episodes.queueIndex)]);
+    } else if (playlistId != null) {
+      query.orderBy([OrderingTerm.asc(playlistEpisodes.position)]);
     } else if (historyOnly) {
       query.orderBy([OrderingTerm.desc(episodes.lastPlayedAt)]);
     } else {
