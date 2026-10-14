@@ -22,6 +22,7 @@ import 'more_page.dart';
 import 'opml_import_page.dart';
 import 'podcast_page.dart';
 import 'podcasts_page.dart';
+import 'playlists_page.dart';
 import 'queue_page.dart';
 import 'router.dart';
 import 'settings_page.dart';
@@ -53,6 +54,20 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.queue,
             builder: (context, state) => const QueuePage(),
+          ),
+          GoRoute(
+            path: AppRoutes.playlists,
+            builder: (context, state) => const PlaylistsPage(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                builder: (context, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '');
+                  if (id == null) return const PlaylistsPage();
+                  return PlaylistPage(playlistId: id);
+                },
+              ),
+            ],
           ),
           GoRoute(
             path: AppRoutes.podcasts,

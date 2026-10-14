@@ -7,6 +7,7 @@ import 'models.dart';
 part 'app_database.g.dart';
 part 'db/chapter_queries.dart';
 part 'db/episode_queries.dart';
+part 'db/playlist_queries.dart';
 part 'db/podcast_queries.dart';
 part 'db/stats_queries.dart';
 
@@ -24,16 +25,22 @@ class Podcasts extends Table {
   BoolColumn get preferred => boolean().withDefault(const Constant(false))();
   BoolColumn get autoDownload => boolean().withDefault(const Constant(false))();
   BoolColumn get keepUpdated => boolean().withDefault(const Constant(true))();
+
   /// false = aperçu (Explorer) : épisodes utilisables, hors bibliothèque.
   BoolColumn get subscribed => boolean().withDefault(const Constant(true))();
+
   /// Vitesse de lecture propre au podcast ; `null` = défaut global des réglages.
   RealColumn get playbackSpeed => real().nullable()();
+
   /// Secondes ignorées au début de chaque épisode (0 = désactivé).
   IntColumn get skipIntroSeconds => integer().withDefault(const Constant(0))();
+
   /// Secondes ignorées à la fin de chaque épisode (0 = désactivé).
   IntColumn get skipOutroSeconds => integer().withDefault(const Constant(0))();
+
   /// Identifiant HTTP Basic du flux. `null` = pas d’authentification.
   TextColumn get authUsername => text().nullable()();
+
   /// Mot de passe HTTP Basic du flux. `null` = pas d’authentification.
   TextColumn get authPassword => text().nullable()();
 }
@@ -97,6 +104,26 @@ class PlaybackPositions extends Table {
   Set<Column<Object>> get primaryKey => {episodeId};
 }
 
+/// Listes d’épisodes. Une seule est marquée par défaut : la file de lecture.
+class Playlists extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
+@TableIndex(name: 'playlist_episodes_playlist_id', columns: {#playlistId})
+class PlaylistEpisodes extends Table {
+  IntColumn get playlistId =>
+      integer().references(Playlists, #id, onDelete: KeyAction.cascade)();
+  IntColumn get episodeId =>
+      integer().references(Episodes, #id, onDelete: KeyAction.cascade)();
+  IntColumn get position => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {playlistId, episodeId};
+}
+
 class EpisodeEntry {
   const EpisodeEntry({required this.episode, required this.podcast});
 
@@ -110,10 +137,8 @@ class EpisodeEntry {
   String? imageUrl({bool preferPodcastCover = false}) {
     final episodeImage = episode.imageUrl?.trim();
     final podcastImage = podcast.imageUrl?.trim();
-    final hasEpisode =
-        episodeImage != null && episodeImage.isNotEmpty;
-    final hasPodcast =
-        podcastImage != null && podcastImage.isNotEmpty;
+    final hasEpisode = episodeImage != null && episodeImage.isNotEmpty;
+    final hasPodcast = podcastImage != null && podcastImage.isNotEmpty;
     if (preferPodcastCover) {
       if (hasPodcast) return podcastImage;
       return hasEpisode ? episodeImage : null;
@@ -126,10 +151,8 @@ class EpisodeEntry {
   String? imagePath({bool preferPodcastCover = false}) {
     final episodeImage = episode.imageUrl?.trim();
     final podcastImage = podcast.imageUrl?.trim();
-    final hasEpisode =
-        episodeImage != null && episodeImage.isNotEmpty;
-    final hasPodcast =
-        podcastImage != null && podcastImage.isNotEmpty;
+    final hasEpisode = episodeImage != null && episodeImage.isNotEmpty;
+    final hasPodcast = podcastImage != null && podcastImage.isNotEmpty;
     if (preferPodcastCover) {
       if (hasPodcast) return podcast.imagePath;
       return hasEpisode ? episode.imagePath : null;
@@ -139,15 +162,29 @@ class EpisodeEntry {
   }
 }
 
-@DriftDatabase(tables: [Podcasts, Episodes, EpisodeChapters, PlaybackPositions])
+@DriftDatabase(
+  tables: [
+    Podcasts,
+    Episodes,
+    EpisodeChapters,
+    PlaybackPositions,
+    Playlists,
+    PlaylistEpisodes,
+  ],
+)
 class AppDatabase extends _$AppDatabase
-    with _ChapterQueries, _EpisodeQueries, _PodcastQueries, _StatsQueries {
+    with
+        _ChapterQueries,
+        _EpisodeQueries,
+        _PlaylistQueries,
+        _PodcastQueries,
+        _StatsQueries {
   AppDatabase(super.executor);
 
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -202,13 +239,33 @@ class AppDatabase extends _$AppDatabase
         await migrator.addColumn(podcasts, podcasts.authUsername);
         await migrator.addColumn(podcasts, podcasts.authPassword);
       }
+      if (from < 13) {
+        await migrator.createTable(playlists);
+        await migrator.createTable(playlistEpisodes);
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
       // Idempotent : v8 a pu être appliqué avant l’ajout des indexes.
       await _createEpisodeIndexes();
+      await _ensureDefaultPlaylist();
     },
   );
+
+  /// La file de lecture existe toujours, et ne se supprime pas.
+  Future<void> _ensureDefaultPlaylist() async {
+    final existing = await (select(
+      playlists,
+    )..where((table) => table.isDefault.equals(true))).get();
+    if (existing.isNotEmpty) return;
+    await into(playlists).insert(
+      PlaylistsCompanion.insert(
+        name: 'Playlist',
+        isDefault: const Value(true),
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
 
   /// Indexes listes / filtres (`_episodeWindow`). IF NOT EXISTS pour upgrades partiels.
   Future<void> _createEpisodeIndexes() async {

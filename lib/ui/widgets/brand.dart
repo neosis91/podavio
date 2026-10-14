@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+/// Rouge du cœur déjà en favori, le même que la carte Bibliothèque.
+const favoriteHeartColor = Color(0xffD10000);
+
 class PodavioLogo extends StatelessWidget {
   const PodavioLogo({super.key, this.width = 240});
 
@@ -45,6 +48,10 @@ class SkipIcon extends StatelessWidget {
   const SkipIcon.next({super.key, this.size = 24})
     : asset = 'assets/brand/skip_next.svg',
       label = 'Épisode suivant';
+
+  const SkipIcon.previous({super.key, this.size = 24})
+    : asset = 'assets/brand/skip_previous.svg',
+      label = 'Épisode précédent';
 
   const SkipIcon.collapse({super.key, this.size = 24})
     : asset = 'assets/brand/keyboard_arrow_down.svg',
@@ -216,6 +223,25 @@ class HistoryIcon extends StatelessWidget {
       height: size,
       colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
       semanticsLabel: 'Lectures récentes',
+    );
+  }
+}
+
+class QueueMusicIcon extends StatelessWidget {
+  const QueueMusicIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return SvgPicture.asset(
+      'assets/brand/queue_music.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      semanticsLabel: 'File d’attente',
     );
   }
 }

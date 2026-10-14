@@ -8,11 +8,14 @@ import '../core/cover_tone.dart';
 import '../data/app_database.dart';
 import '../data/feed_service.dart';
 import '../data/providers.dart';
+import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
 import 'library_hub_page.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/cover.dart';
+import 'widgets/playing_cover.dart';
+import 'widgets/episode_tile.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/list_metrics.dart';
 
@@ -418,60 +421,67 @@ class _ContinueRow extends ConsumerWidget {
     final fraction = duration == null || duration == 0
         ? null
         : (episode.positionMs / (duration * 1000)).clamp(0.0, 1.0);
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () => context.push(AppRoutes.episode(episode.id)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(
-          children: [
-            PodcastCover(
-              url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
-              localPath: entry.imagePath(
-                preferPodcastCover: preferPodcastCover,
+    final current = ref.watch(
+      playerProvider.select((state) => state.episodeId == episode.id),
+    );
+    return Material(
+      color: current
+          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
+          : Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => context.push(AppRoutes.episode(episode.id)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              PlayingEpisodeCover(
+                episodeId: episode.id,
+                url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+                localPath: entry.imagePath(
+                  preferPodcastCover: preferPodcastCover,
+                ),
+                httpHeaders: podcastAuthHeaders(
+                  username: entry.podcast.authUsername,
+                  password: entry.podcast.authPassword,
+                ),
+                size: 44,
+                radius: 10,
               ),
-              httpHeaders: podcastAuthHeaders(
-                username: entry.podcast.authUsername,
-                password: entry.podcast.authPassword,
-              ),
-              size: 44,
-              radius: 10,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    episode.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    entry.podcast.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      episode.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall,
                     ),
-                  ),
-                  if (fraction != null) ...[
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: fraction,
-                        minHeight: 2,
+                    const SizedBox(height: 2),
+                    EpisodeListSubtitle(
+                      entry: entry,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
+                    if (fraction != null) ...[
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: fraction,
+                          minHeight: 2,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

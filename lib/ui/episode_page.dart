@@ -9,6 +9,7 @@ import '../data/feed_service.dart';
 import '../data/providers.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
+import 'playlist_membership.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/cover.dart';
@@ -171,23 +172,25 @@ class _EpisodeDetail extends ConsumerWidget {
                 alignment: WrapAlignment.spaceEvenly,
                 children: [
                   _DetailAction(
-                    icon: episode.queueIndex == null
-                        ? const PlaylistAddIcon()
-                        : const PlaylistRemoveIcon(),
-                    label: episode.queueIndex == null ? 'Playlist' : 'Retirer',
-                    selected: episode.queueIndex != null,
-                    onPressed: () => runEpisodeAction(
-                      context,
-                      ref,
-                      entry,
-                      EpisodeMenuAction.queue,
-                    ),
+                    icon: const PlaylistAddIcon(),
+                    label: 'Playlists',
+                    selected:
+                        episode.queueIndex != null ||
+                        (ref
+                                .watch(customPlaylistIdsProvider(episode.id))
+                                .asData
+                                ?.value
+                                .isNotEmpty ??
+                            false),
+                    onPressed: () =>
+                        showPlaylistMembershipSheet(context, ref, entry),
                   ),
                   _DetailAction(
                     icon: Icon(
                       episode.favorite
                           ? Icons.favorite
                           : Icons.favorite_outline,
+                      color: episode.favorite ? favoriteHeartColor : null,
                     ),
                     label: 'Favori',
                     selected: episode.favorite,

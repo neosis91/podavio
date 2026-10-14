@@ -9,6 +9,7 @@ import '../data/app_database.dart';
 import '../data/feed_service.dart';
 import '../data/models.dart';
 import '../data/providers.dart';
+import '../player/playback_source.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
 import 'podcasts/podcast_feed_actions.dart';
@@ -233,6 +234,9 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
             key: ValueKey(entry.episode.id),
             entry: entry,
             showPodcast: false,
+            playbackSource: PlaybackSource(
+              EpisodeQuery(podcastId: widget.podcastId, paginated: false),
+            ),
           );
         },
       ),

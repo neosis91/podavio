@@ -7,10 +7,11 @@ import 'package:go_router/go_router.dart';
 import '../data/app_database.dart';
 import '../data/feed_service.dart';
 import '../data/providers.dart';
+import '../player/playback_source.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
 import 'router.dart';
-import 'widgets/cover.dart';
+import 'widgets/playing_cover.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/episode_tile.dart';
 import 'widgets/list_metrics.dart';
@@ -184,139 +185,78 @@ class HistoryEpisodeRow extends ConsumerWidget {
     final preferPodcastCover = ref.watch(
       settingsProvider.select((s) => s.preferPodcastCover),
     );
-    final playing = ref.watch(
+    final current = ref.watch(
       playerProvider.select((state) => state.episodeId == episode.id),
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 15),
-      child: Row(
-        children: [
-          Expanded(
-            child: InkWell(
-              onTap: () => context.push(AppRoutes.episode(episode.id)),
-              child: Row(
-                children: [
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: playing
-                        ? const _PlayingBars()
-                        : PodcastCover(
-                            url: entry.imageUrl(
-                              preferPodcastCover: preferPodcastCover,
-                            ),
-                            localPath: entry.imagePath(
-                              preferPodcastCover: preferPodcastCover,
-                            ),
-                            httpHeaders: podcastAuthHeaders(
-                              username: entry.podcast.authUsername,
-                              password: entry.podcast.authPassword,
-                            ),
-                            size: 48,
-                            radius: 4,
-                          ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          episode.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall,
-                        ),
-                        Row(
-                          children: [
-                            if (episode.downloadPath != null) ...[
-                              Icon(
-                                Icons.download_for_offline,
-                                size: 16,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                              const SizedBox(width: 4),
-                            ],
-                            Expanded(
-                              child: Text(
-                                entry.podcast.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (showMenu)
-            IconButton(
-              tooltip: 'Actions',
-              onPressed: () => showEpisodeActionsSheet(context, ref, entry),
-              icon: const Icon(Icons.more_vert),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PlayingBars extends StatefulWidget {
-  const _PlayingBars();
-
-  @override
-  State<_PlayingBars> createState() => _PlayingBarsState();
-}
-
-class _PlayingBarsState extends State<_PlayingBars>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.primary;
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
+    return Material(
+      color: current
+          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
+          : Colors.transparent,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 15),
+        child: Row(
           children: [
-            for (var i = 0; i < 3; i++)
-              Container(
-                width: 4,
-                height: 10 + 22 * _level(i),
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(2),
+            Expanded(
+              child: InkWell(
+                onTap: () => ref
+                    .read(playerProvider.notifier)
+                    .playOrPauseEntry(
+                      entry,
+                      source: const PlaybackSource(
+                        EpisodeQuery(historyOnly: true, paginated: false),
+                      ),
+                    ),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 8),
+                    PlayingEpisodeCover(
+                      episodeId: episode.id,
+                      url: entry.imageUrl(
+                        preferPodcastCover: preferPodcastCover,
+                      ),
+                      localPath: entry.imagePath(
+                        preferPodcastCover: preferPodcastCover,
+                      ),
+                      httpHeaders: podcastAuthHeaders(
+                        username: entry.podcast.authUsername,
+                        password: entry.podcast.authPassword,
+                      ),
+                      size: 48,
+                      radius: 4,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            episode.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall,
+                          ),
+                          EpisodeListSubtitle(
+                            entry: entry,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
+            ),
+            if (showMenu)
+              IconButton(
+                tooltip: 'Actions',
+                onPressed: () => showEpisodeActionsSheet(context, ref, entry),
+                icon: const Icon(Icons.more_vert),
+              ),
           ],
-        );
-      },
+        ),
+      ),
     );
-  }
-
-  double _level(int index) {
-    final t = (_controller.value + index / 3) % 1;
-    return t < 0.5 ? t * 2 : (1 - t) * 2;
   }
 }

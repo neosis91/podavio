@@ -14,7 +14,17 @@ Future<void> showChaptersSheet({
 }
 
 class _PlayerQueue extends ConsumerStatefulWidget {
-  const _PlayerQueue();
+  const _PlayerQueue({
+    required this.onDragStart,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+    required this.onDragCancel,
+  });
+
+  final GestureDragStartCallback onDragStart;
+  final GestureDragUpdateCallback onDragUpdate;
+  final GestureDragEndCallback onDragEnd;
+  final GestureDragCancelCallback onDragCancel;
 
   @override
   ConsumerState<_PlayerQueue> createState() => _PlayerQueueState();
@@ -22,9 +32,13 @@ class _PlayerQueue extends ConsumerStatefulWidget {
 
 class _PlayerQueueState extends ConsumerState<_PlayerQueue> {
   List<int>? _orderIds;
+  PlaybackSource? _orderSource;
 
-  List<EpisodeEntry> _ordered(List<EpisodeEntry> entries) {
-    final ids = _orderIds;
+  List<EpisodeEntry> _ordered(
+    List<EpisodeEntry> entries,
+    PlaybackSource source,
+  ) {
+    final ids = _orderSource == source ? _orderIds : null;
     if (ids == null) return entries;
     final byId = {for (final entry in entries) entry.episode.id: entry};
     final ordered = <EpisodeEntry>[];
@@ -37,9 +51,18 @@ class _PlayerQueueState extends ConsumerState<_PlayerQueue> {
   }
 
   void _commit(List<EpisodeEntry> next) {
+    final source = ref.read(playerProvider).playbackSource;
     final ids = next.map((entry) => entry.episode.id).toList();
-    setState(() => _orderIds = ids);
-    ref.read(databaseProvider).setQueueOrder(ids);
+    setState(() {
+      _orderIds = ids;
+      _orderSource = source;
+    });
+    final playlistId = source.query.playlistId;
+    if (playlistId != null) {
+      ref.read(databaseProvider).setPlaylistOrder(playlistId, ids);
+    } else {
+      ref.read(databaseProvider).setQueueOrder(ids);
+    }
   }
 
   void _move(List<EpisodeEntry> entries, int from, int delta) {
@@ -88,12 +111,23 @@ class _PlayerQueueState extends ConsumerState<_PlayerQueue> {
                 title: const Text('Supprimer'),
                 onTap: () {
                   Navigator.pop(sheetContext);
+                  final source = ref.read(playerProvider).playbackSource;
                   setState(() {
                     _orderIds = _orderIds
                         ?.where((id) => id != entry.episode.id)
                         .toList();
+                    _orderSource = source;
                   });
-                  ref.read(databaseProvider).removeFromQueue(entry.episode.id);
+                  final playlistId = source.query.playlistId;
+                  if (playlistId != null) {
+                    ref
+                        .read(databaseProvider)
+                        .removeFromPlaylist(playlistId, entry.episode.id);
+                  } else {
+                    ref
+                        .read(databaseProvider)
+                        .removeFromQueue(entry.episode.id);
+                  }
                 },
               ),
             ],
@@ -105,9 +139,10 @@ class _PlayerQueueState extends ConsumerState<_PlayerQueue> {
 
   @override
   Widget build(BuildContext context) {
-    final window = ref.watch(
-      episodesProvider(const EpisodeQuery(queuedOnly: true, paginated: false)),
+    final source = ref.watch(
+      playerProvider.select((state) => state.playbackSource),
     );
+    final window = ref.watch(episodesProvider(source.query));
     final currentId = ref.watch(
       playerProvider.select((state) => state.episodeId),
     );
@@ -115,84 +150,207 @@ class _PlayerQueueState extends ConsumerState<_PlayerQueue> {
         ? null
         : ref.watch(episodeProvider(currentId)).value;
     final loaded = window.asData?.value.entries ?? const <EpisodeEntry>[];
-    final entries = _ordered(loaded);
+    final entries = _ordered(loaded, source);
+    final editable = source.canEditOrder;
     final currentInQueue =
         currentId != null &&
         entries.any((entry) => entry.episode.id == currentId);
     final currentIndex = currentId == null
         ? -1
         : entries.indexWhere((entry) => entry.episode.id == currentId);
+    final previous = currentIndex <= 0
+        ? const <EpisodeEntry>[]
+        : entries.sublist(0, currentIndex);
     final upcoming = currentIndex < 0
         ? entries
         : entries.sublist(currentIndex + 1);
+    final emptyQueue = !window.isLoading && entries.isEmpty;
 
+    final collapseBar = AppBar(
+      leading: IconButton(
+        tooltip: 'Réduire',
+        onPressed: () => ref.read(_playerPanelProvider.notifier).close(),
+        icon: const SkipIcon.collapse(),
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        PlayerCollapseHeader(
+          onVerticalDragStart: widget.onDragStart,
+          onVerticalDragUpdate: widget.onDragUpdate,
+          onVerticalDragEnd: widget.onDragEnd,
+          onVerticalDragCancel: widget.onDragCancel,
+          child: collapseBar,
+        ),
         if (current != null)
           _QueueNowPlaying(
             entry: current,
-            canAdd: !currentInQueue && !window.isLoading,
+            canAdd: source.isQueue && !currentInQueue && !window.isLoading,
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-          child: Text(
-            'À suivre',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.2,
-            ),
-          ),
-        ),
         Expanded(
           child: window.isLoading && entries.isEmpty
               ? const Center(child: CircularProgressIndicator())
-              : upcoming.isEmpty
-              ? EmptyState(
-                  title: entries.isEmpty
-                      ? 'La playlist est vide'
-                      : 'Rien à suivre',
-                  message: entries.isEmpty
-                      ? 'Ajoutez des épisodes pour les écouter les uns à la suite des autres.'
-                      : 'Les épisodes suivants apparaîtront ici.',
-                )
-              : ReorderableListView.builder(
-                  padding: const EdgeInsets.only(top: 4, bottom: 24),
-                  buildDefaultDragHandles: false,
-                  itemCount: upcoming.length,
-                  proxyDecorator: _queueDragProxy,
-                  onReorderItem: (oldIndex, newIndex) {
-                    final next = [...upcoming];
-                    final moved = next.removeAt(oldIndex);
-                    next.insert(newIndex, moved);
-                    final head = currentIndex < 0
-                        ? const <EpisodeEntry>[]
-                        : entries.sublist(0, currentIndex + 1);
-                    _commit([...head, ...next]);
-                  },
-                  itemBuilder: (context, index) {
-                    final entry = upcoming[index];
-                    final position = currentIndex < 0
-                        ? index
-                        : currentIndex + 1 + index;
-                    return _QueueRow(
-                      key: ValueKey(entry.episode.id),
-                      entry: entry,
-                      index: index,
-                      onMore: () => _showActions(
-                        entry: entry,
-                        position: position,
-                        count: entries.length,
-                        entries: entries,
+              : CustomScrollView(
+                  slivers: [
+                    if (previous.isNotEmpty) ...[
+                      SliverToBoxAdapter(
+                        child: _QueueSectionTitle('Précédents'),
                       ),
-                    );
-                  },
+                      SliverList.builder(
+                        itemCount: previous.length,
+                        itemBuilder: (context, index) {
+                          final entry = previous[index];
+                          return _QueueRow(
+                            key: ValueKey('prev-${entry.episode.id}'),
+                            entry: entry,
+                            index: index,
+                            reorderable: false,
+                            onMore: editable
+                                ? () => _showActions(
+                                    entry: entry,
+                                    position: index,
+                                    count: entries.length,
+                                    entries: entries,
+                                  )
+                                : null,
+                          );
+                        },
+                      ),
+                    ],
+                    SliverToBoxAdapter(child: _QueueSectionTitle('À suivre')),
+                    if (emptyQueue || upcoming.isEmpty)
+                      SliverToBoxAdapter(
+                        child: EmptyState(
+                          title: emptyQueue
+                              ? (source.isQueue
+                                    ? 'La file d’attente est vide'
+                                    : 'Cette liste est vide')
+                              : 'Rien à suivre',
+                          message: emptyQueue
+                              ? (source.isQueue
+                                    ? 'Ajoutez des épisodes pour les écouter les uns à la suite des autres.'
+                                    : 'Les épisodes de cette liste apparaîtront ici.')
+                              : 'Les épisodes suivants apparaîtront ici.',
+                        ),
+                      )
+                    else if (editable)
+                      SliverReorderableList(
+                        itemCount: upcoming.length,
+                        proxyDecorator: _queueDragProxy,
+                        onReorder: (oldIndex, newIndex) {
+                          if (newIndex > oldIndex) newIndex -= 1;
+                          final next = [...upcoming];
+                          final moved = next.removeAt(oldIndex);
+                          next.insert(newIndex, moved);
+                          final head = entries.sublist(0, currentIndex + 1);
+                          _commit([...head, ...next]);
+                        },
+                        itemBuilder: (context, index) {
+                          final entry = upcoming[index];
+                          final position = currentIndex + 1 + index;
+                          return _QueueRow(
+                            key: ValueKey(entry.episode.id),
+                            entry: entry,
+                            index: index,
+                            onMore: () => _showActions(
+                              entry: entry,
+                              position: position,
+                              count: entries.length,
+                              entries: entries,
+                            ),
+                          );
+                        },
+                      )
+                    else
+                      SliverList.builder(
+                        itemCount: upcoming.length,
+                        itemBuilder: (context, index) {
+                          final entry = upcoming[index];
+                          return _QueueRow(
+                            key: ValueKey(entry.episode.id),
+                            entry: entry,
+                            index: index,
+                            reorderable: false,
+                          );
+                        },
+                      ),
+                    const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+                  ],
                 ),
         ),
       ],
     );
   }
+}
+
+class _QueueSectionTitle extends StatelessWidget {
+  const _QueueSectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+}
+
+bool _queueWide(BuildContext context) {
+  return MediaQuery.sizeOf(context).width >= 840;
+}
+
+class _QueueHold {
+  const _QueueHold(this.index, this.context, this.event);
+
+  final int index;
+  final BuildContext context;
+  final PointerDownEvent event;
+}
+
+final _queueHolds = <int, _QueueHold>{};
+
+/// Mémorise la ligne touchée pour réordonner si le glisser n’est pas vers le bas.
+class _QueueReorderHold extends StatelessWidget {
+  const _QueueReorderHold({required this.index, required this.child});
+
+  final int index;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (event) {
+        _queueHolds[event.pointer] = _QueueHold(index, context, event);
+      },
+      onPointerUp: (event) => _queueHolds.remove(event.pointer),
+      onPointerCancel: (event) => _queueHolds.remove(event.pointer),
+      child: child,
+    );
+  }
+}
+
+void _startQueueReorder() {
+  if (_queueHolds.length != 1) return;
+  final hold = _queueHolds.values.single;
+  if (!hold.context.mounted) return;
+  final list = SliverReorderableList.maybeOf(hold.context);
+  if (list == null) return;
+  list.startItemDragReorder(
+    index: hold.index,
+    event: hold.event,
+    recognizer: ImmediateMultiDragGestureRecognizer()
+      ..gestureSettings = MediaQuery.maybeGestureSettingsOf(hold.context),
+  );
 }
 
 Widget _queueDragProxy(Widget child, int index, Animation<double> animation) {
@@ -225,58 +383,59 @@ class _QueueNowPlaying extends ConsumerWidget {
     final preferPodcastCover = ref.watch(
       settingsProvider.select((settings) => settings.preferPodcastCover),
     );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
-      child: Row(
-        children: [
-          PodcastCover(
-            url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
-            localPath: entry.imagePath(preferPodcastCover: preferPodcastCover),
-            httpHeaders: podcastAuthHeaders(
-              username: entry.podcast.authUsername,
-              password: entry.podcast.authPassword,
+    return Material(
+      color: scheme.primaryContainer.withValues(alpha: 0.35),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(_queueWide(context) ? 28 : 20, 12, 8, 4),
+        child: Row(
+          children: [
+            PlayingEpisodeCover(
+              episodeId: entry.episode.id,
+              url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+              localPath: entry.imagePath(
+                preferPodcastCover: preferPodcastCover,
+              ),
+              httpHeaders: podcastAuthHeaders(
+                username: entry.podcast.authUsername,
+                password: entry.podcast.authPassword,
+              ),
+              size: _queueWide(context) ? 72 : 55,
+              radius: 4,
             ),
-            size: 55,
-            radius: 4,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  entry.episode.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+            SizedBox(width: _queueWide(context) ? 16 : 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.episode.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  entry.podcast.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
+                  const SizedBox(height: 2),
+                  Text(
+                    entry.podcast.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          if (canAdd)
-            IconButton(
-              tooltip: 'Ajouter l’épisode',
-              onPressed: () =>
-                  ref.read(databaseProvider).addToQueue(entry.episode.id),
-              icon: const PlaylistAddIcon(),
-            ),
-          IconButton(
-            tooltip: 'Fermer la playlist',
-            onPressed: () => ref.read(_playerPanelProvider.notifier).close(),
-            icon: const Icon(Icons.close),
-          ),
-        ],
+            if (canAdd)
+              IconButton(
+                tooltip: 'Ajouter l’épisode',
+                onPressed: () =>
+                    ref.read(databaseProvider).addToQueue(entry.episode.id),
+                icon: const PlaylistAddIcon(),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -287,84 +446,100 @@ class _QueueRow extends ConsumerWidget {
     super.key,
     required this.entry,
     required this.index,
-    required this.onMore,
+    this.onMore,
+    this.reorderable = true,
   });
 
   final EpisodeEntry entry;
   final int index;
-  final VoidCallback onMore;
+  final VoidCallback? onMore;
+  final bool reorderable;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final preferPodcastCover = ref.watch(
-      settingsProvider.select((settings) => settings.preferPodcastCover),
+    final scheme = Theme.of(context).colorScheme;
+    final current = ref.watch(
+      playerProvider.select((state) => state.episodeId == entry.episode.id),
     );
+    final tap = _queueEntryTap(context, ref);
     return Material(
-      color: Colors.transparent,
+      color: current
+          ? scheme.primaryContainer.withValues(alpha: 0.35)
+          : Colors.transparent,
       child: Padding(
         padding: const EdgeInsets.only(right: 4),
         child: Row(
           children: [
             Expanded(
-              child: ReorderableDelayedDragStartListener(
-                index: index,
-                child: InkWell(
-                  onTap: () =>
-                      ref.read(playerProvider.notifier).playEntry(entry),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 6, 8, 6),
-                    child: Row(
-                      children: [
-                        PodcastCover(
-                          url: entry.imageUrl(
-                            preferPodcastCover: preferPodcastCover,
-                          ),
-                          localPath: entry.imagePath(
-                            preferPodcastCover: preferPodcastCover,
-                          ),
-                          httpHeaders: podcastAuthHeaders(
-                            username: entry.podcast.authUsername,
-                            password: entry.podcast.authPassword,
-                          ),
-                          size: 48,
-                          radius: 4,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                entry.episode.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                entry.podcast.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+              child: reorderable
+                  ? _QueueReorderHold(index: index, child: tap)
+                  : tap,
+            ),
+            if (onMore != null)
+              IconButton(
+                tooltip: 'Actions',
+                onPressed: onMore,
+                icon: const MoreVertIcon(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _queueEntryTap(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final preferPodcastCover = ref.watch(
+      settingsProvider.select((settings) => settings.preferPodcastCover),
+    );
+    return InkWell(
+      onTap: () => ref.read(playerProvider.notifier).playOrPauseEntry(entry),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          _queueWide(context) ? 28 : 20,
+          _queueWide(context) ? 10 : 6,
+          8,
+          _queueWide(context) ? 10 : 6,
+        ),
+        child: Row(
+          children: [
+            PlayingEpisodeCover(
+              episodeId: entry.episode.id,
+              url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+              localPath: entry.imagePath(
+                preferPodcastCover: preferPodcastCover,
+              ),
+              httpHeaders: podcastAuthHeaders(
+                username: entry.podcast.authUsername,
+                password: entry.podcast.authPassword,
+              ),
+              size: _queueWide(context) ? 64 : 48,
+              radius: 4,
+            ),
+            SizedBox(width: _queueWide(context) ? 16 : 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.episode.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        (_queueWide(context)
+                                ? theme.textTheme.titleMedium
+                                : theme.textTheme.titleSmall)
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  EpisodeListSubtitle(
+                    entry: entry,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
                     ),
                   ),
-                ),
+                ],
               ),
-            ),
-            IconButton(
-              tooltip: 'Actions',
-              onPressed: onMore,
-              icon: const MoreVertIcon(),
             ),
           ],
         ),
@@ -536,60 +711,6 @@ class _SpeedSheet extends ConsumerWidget {
                 ),
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-Future<void> _chooseVolume(BuildContext context, WidgetRef ref) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) => const _VolumeSheet(),
-  );
-}
-
-class _VolumeSheet extends ConsumerWidget {
-  const _VolumeSheet();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final volume = ref.watch(playerProvider.select((state) => state.volume));
-    final theme = Theme.of(context);
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Volume', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(_volumeIcon(volume)),
-                Expanded(
-                  child: Slider(
-                    value: volume,
-                    onChanged: (value) {
-                      unawaited(
-                        ref.read(playerProvider.notifier).setVolume(value),
-                      );
-                    },
-                  ),
-                ),
-                SizedBox(
-                  width: 48,
-                  child: Text(
-                    _formatVolume(volume),
-                    textAlign: TextAlign.end,
-                    style: theme.textTheme.labelLarge,
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/platform.dart';
 import '../../data/app_database.dart';
 import '../../data/providers.dart';
+import '../../player/playback_source.dart';
 import 'empty_state.dart';
 import 'episode_tile.dart';
 
@@ -16,6 +17,8 @@ class EpisodeListBody extends ConsumerStatefulWidget {
     this.onRefresh,
     this.reorder,
     this.highlightQuery = '',
+    this.queueStyle = false,
+    this.onRemove,
   });
 
   final EpisodeQuery query;
@@ -25,6 +28,8 @@ class EpisodeListBody extends ConsumerStatefulWidget {
   final void Function(List<EpisodeEntry> entries, int oldIndex, int newIndex)?
   reorder;
   final String highlightQuery;
+  final bool queueStyle;
+  final void Function(EpisodeEntry entry)? onRemove;
 
   @override
   ConsumerState<EpisodeListBody> createState() => _EpisodeListBodyState();
@@ -58,6 +63,9 @@ class _EpisodeListBodyState extends ConsumerState<EpisodeListBody> {
       onRefresh: supportsPullToRefresh ? widget.onRefresh : null,
       reorder: widget.reorder,
       highlightQuery: widget.highlightQuery,
+      queueStyle: widget.queueStyle,
+      playbackSource: PlaybackSource.fromQuery(widget.query),
+      onRemove: widget.onRemove,
       onLoadMore: () =>
           ref.read(episodesProvider(widget.query).notifier).loadMore(),
     );
@@ -73,6 +81,9 @@ class _EpisodeWindowList extends StatelessWidget {
     this.onRefresh,
     this.reorder,
     this.highlightQuery = '',
+    this.queueStyle = false,
+    this.playbackSource,
+    this.onRemove,
   });
 
   final EpisodeWindow window;
@@ -83,6 +94,9 @@ class _EpisodeWindowList extends StatelessWidget {
   final void Function(List<EpisodeEntry> entries, int oldIndex, int newIndex)?
   reorder;
   final String highlightQuery;
+  final bool queueStyle;
+  final PlaybackSource? playbackSource;
+  final void Function(EpisodeEntry entry)? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -110,30 +124,58 @@ class _EpisodeWindowList extends StatelessWidget {
         entry: entry,
         showPodcast: showPodcast,
         highlightQuery: highlightQuery,
+        queueStyle: queueStyle,
+        playbackSource: playbackSource,
+        onRemove: onRemove == null ? null : () => onRemove!(entry),
       );
     }
 
+    final listPadding = queueStyle
+        ? const EdgeInsets.only(top: 4, bottom: 24)
+        : null;
     final list = reorder == null
-        ? ListView.separated(
-            physics: physics,
-            addAutomaticKeepAlives: false,
-            itemCount: itemCount,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, index) => tile(index),
-          )
+        ? (queueStyle
+              ? ListView.builder(
+                  padding: listPadding,
+                  physics: physics,
+                  addAutomaticKeepAlives: false,
+                  itemCount: itemCount,
+                  itemBuilder: (context, index) => tile(index),
+                )
+              : ListView.separated(
+                  physics: physics,
+                  addAutomaticKeepAlives: false,
+                  itemCount: itemCount,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) => tile(index),
+                ))
         : ReorderableListView.builder(
+            padding: listPadding,
             physics: physics,
             buildDefaultDragHandles: false,
+            proxyDecorator: queueStyle ? queueStyleDragProxy : null,
             itemCount: entries.length,
             onReorderItem: (oldIndex, newIndex) =>
                 reorder!(entries, oldIndex, newIndex),
-            itemBuilder: (context, index) => EpisodeTile(
-              key: ValueKey(entries[index].episode.id),
-              entry: entries[index],
-              showPodcast: showPodcast,
-              reorderIndex: index,
-              highlightQuery: highlightQuery,
-            ),
+            itemBuilder: (context, index) {
+              final entry = entries[index];
+              return EpisodeTile(
+                key: ValueKey(entry.episode.id),
+                entry: entry,
+                showPodcast: showPodcast,
+                reorderIndex: index,
+                highlightQuery: highlightQuery,
+                queueStyle: queueStyle,
+                playbackSource: playbackSource,
+                onMoveUp: index == 0
+                    ? null
+                    : () => reorder!(entries, index, index - 1),
+                onMoveDown: index >= entries.length - 1
+                    ? null
+                    : () => reorder!(entries, index, index + 1),
+                onRemove: onRemove == null ? null : () => onRemove!(entry),
+              );
+            },
           );
     final scrollable = onRefresh == null
         ? list
@@ -150,6 +192,28 @@ class _EpisodeWindowList extends StatelessWidget {
       child: scrollable,
     );
   }
+}
+
+Widget queueStyleDragProxy(
+  Widget child,
+  int index,
+  Animation<double> animation,
+) {
+  return AnimatedBuilder(
+    animation: animation,
+    builder: (context, child) {
+      final t = Curves.easeOutCubic.transform(animation.value);
+      final scheme = Theme.of(context).colorScheme;
+      return Material(
+        elevation: 8 * t,
+        shadowColor: Colors.black45,
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(8),
+        child: child,
+      );
+    },
+    child: child,
+  );
 }
 
 class _LoadMoreTile extends StatelessWidget {
