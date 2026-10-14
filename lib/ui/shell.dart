@@ -42,6 +42,7 @@ const _libraryRoots = <String>[
   AppRoutes.library,
   AppRoutes.episodes,
   AppRoutes.queue,
+  AppRoutes.playlists,
   AppRoutes.favorites,
   AppRoutes.downloads,
   AppRoutes.stats,

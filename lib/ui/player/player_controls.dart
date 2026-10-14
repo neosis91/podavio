@@ -8,9 +8,12 @@ class _PlayerTransport extends ConsumerWidget {
     final position = ref.watch(playerProvider.select((s) => s.position));
     final duration = ref.watch(playerProvider.select((s) => s.duration));
     final playing = ref.watch(playerProvider.select((s) => s.playing));
+    final streamQuality = ref.watch(
+      playerProvider.select((s) => s.streamQualityLabel),
+    );
+    final castName = ref.watch(playerProvider.select((s) => s.castDeviceName));
     final carMode = ref.watch(playerProvider.select((s) => s.carMode));
     final speed = ref.watch(playerProvider.select((s) => s.speed));
-    final volume = ref.watch(playerProvider.select((s) => s.volume));
     final settings = ref.watch(settingsProvider);
     final totalMs = duration.inMilliseconds;
     final positionMs = position.inMilliseconds.clamp(
@@ -29,10 +32,6 @@ class _PlayerTransport extends ConsumerWidget {
               const <EpisodeChapter>[]);
     final hasChapters = chapters.isNotEmpty;
     final player = ref.read(playerProvider.notifier);
-    final labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-      fontWeight: FontWeight.w600,
-    );
     final clockStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
       color: Theme.of(context).colorScheme.onSurfaceVariant,
       fontWeight: FontWeight.w600,
@@ -94,44 +93,64 @@ class _PlayerTransport extends ConsumerWidget {
             ),
           ],
         ),
-        Row(
+        Stack(
+          alignment: Alignment.center,
           children: [
-            Tooltip(
-              message: settings.showRemainingTime
-                  ? 'Afficher la durée totale'
-                  : 'Afficher le temps restant',
-              child: InkWell(
-                onTap: toggleRemaining,
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 4,
+            Row(
+              children: [
+                Tooltip(
+                  message: settings.showRemainingTime
+                      ? 'Afficher la durée totale'
+                      : 'Afficher le temps restant',
+                  child: InkWell(
+                    onTap: toggleRemaining,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 4,
+                      ),
+                      child: Text(
+                        formatClock(displayPosition),
+                        style: clockStyle,
+                      ),
+                    ),
                   ),
-                  child: Text(formatClock(displayPosition), style: clockStyle),
                 ),
-              ),
+                const Spacer(),
+                Tooltip(
+                  message: settings.showRemainingTime
+                      ? 'Afficher la durée totale'
+                      : 'Afficher le temps restant',
+                  child: InkWell(
+                    onTap: toggleRemaining,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 4,
+                      ),
+                      child: Text(
+                        settings.showRemainingTime
+                            ? '−${formatClock(displayRemaining)}'
+                            : formatClock(displayDuration),
+                        style: clockStyle,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const Spacer(),
-            Tooltip(
-              message: settings.showRemainingTime
-                  ? 'Afficher la durée totale'
-                  : 'Afficher le temps restant',
-              child: InkWell(
-                onTap: toggleRemaining,
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 4,
-                  ),
-                  child: Text(
-                    settings.showRemainingTime
-                        ? '−${formatClock(displayRemaining)}'
-                        : formatClock(displayDuration),
-                    style: clockStyle,
-                  ),
-                ),
+            IgnorePointer(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: streamQuality == null
+                    ? const SizedBox.shrink(key: ValueKey('stream-quality'))
+                    : _StreamQualityLabel(
+                        key: ValueKey(streamQuality),
+                        label: streamQuality,
+                        style: clockStyle,
+                      ),
               ),
             ),
           ],
@@ -141,15 +160,15 @@ class _PlayerTransport extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             IconButton(
-              tooltip: 'Reculer de ${settings.skipBackSeconds} s (J)',
-              onPressed: () => player.skipBy(-settings.skipBackSeconds),
-              icon: SkipIcon.back(size: skipIconSize),
-            ),
-            IconButton(
               tooltip: 'Épisode précédent',
               iconSize: sideIconSize,
               onPressed: player.playPreviousInQueue,
-              icon: Icon(Icons.skip_previous, size: sideIconSize),
+              icon: SkipIcon.previous(size: sideIconSize),
+            ),
+            IconButton(
+              tooltip: 'Reculer de ${settings.skipBackSeconds} s (J)',
+              onPressed: () => player.skipBy(-settings.skipBackSeconds),
+              icon: SkipIcon.back(size: skipIconSize),
             ),
             if (!carMode)
               IconButton.filled(
@@ -171,75 +190,55 @@ class _PlayerTransport extends ConsumerWidget {
                 ),
               ),
             IconButton(
-              tooltip: hasNext
-                  ? 'Épisode suivant'
-                  : 'Pas d’épisode suivant dans la playlist',
-              iconSize: sideIconSize,
-              onPressed: hasNext ? player.playNextInQueue : null,
-              icon: SkipIcon.next(size: sideIconSize),
-            ),
-            IconButton(
               tooltip: 'Avancer de ${settings.skipForwardSeconds} s (L)',
               onPressed: () => player.skipBy(settings.skipForwardSeconds),
               icon: SkipIcon.forward(size: skipIconSize),
+            ),
+            IconButton(
+              tooltip: hasNext
+                  ? 'Épisode suivant'
+                  : 'Pas d’épisode suivant dans la file d’attente',
+              iconSize: sideIconSize,
+              onPressed: hasNext ? player.playNextInQueue : null,
+              icon: SkipIcon.next(size: sideIconSize),
             ),
           ],
         ),
         if (!carMode) ...[
           const SizedBox(height: 4),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      IconButton(
-                        tooltip: 'Vitesse ${_formatSpeed(speed)}',
-                        onPressed: () => _chooseSpeed(context, ref),
-                        icon: Text(
-                          _formatSpeed(speed),
-                          style: labelStyle?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Notes',
+                onPressed: episodeId == null
+                    ? null
+                    : () => showNotesSheet(
+                        context: context,
+                        episodeId: episodeId,
+                      ),
+                icon: const InfoIcon(),
+              ),
+              IconButton(
+                tooltip: castName ?? 'Sortie audio',
+                color: castName == null ? null : const Color(0xFF4FC3F7),
+                onPressed: () => showAudioOutputSheet(context, ref),
+                icon: const Icon(Icons.headphones),
+              ),
+              const Spacer(),
+              if (hasChapters)
+                IconButton(
+                  tooltip: 'Chapitres',
+                  onPressed: episodeId == null
+                      ? null
+                      : () => showChaptersSheet(
+                          context: context,
+                          ref: ref,
+                          episodeId: episodeId,
                         ),
-                      ),
-                      if (hasChapters)
-                        IconButton(
-                          tooltip: 'Chapitres',
-                          onPressed: episodeId == null
-                              ? null
-                              : () => showChaptersSheet(
-                                  context: context,
-                                  ref: ref,
-                                  episodeId: episodeId,
-                                ),
-                          icon: const Icon(Icons.list_alt),
-                        ),
-                      IconButton(
-                        tooltip: 'Notes',
-                        onPressed: episodeId == null
-                            ? null
-                            : () => showNotesSheet(
-                                context: context,
-                                episodeId: episodeId,
-                              ),
-                        icon: const InfoIcon(),
-                      ),
-                      const _QueueAction(),
-                      const _SleepAction(),
-                      IconButton(
-                        tooltip: 'Volume (− / =)',
-                        onPressed: () => _chooseVolume(context, ref),
-                        icon: Icon(_volumeIcon(volume)),
-                      ),
-                    ],
-                  ),
+                  icon: const Icon(Icons.list_alt),
                 ),
-              );
-            },
+              const _QueueAction(),
+            ],
           ),
         ],
       ],
@@ -308,22 +307,37 @@ class _ChapterMarkersPainter extends CustomPainter {
   }
 }
 
+/// Casque 13 px puis « 154 kbps · 48 kHz », plus pâle que les temps.
+class _StreamQualityLabel extends StatelessWidget {
+  const _StreamQualityLabel({
+    super.key,
+    required this.label,
+    required this.style,
+  });
+
+  final String label;
+  final TextStyle? style;
+
+  static const _color = Color(0x73FFFFFF);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.headphones, size: 13, color: _color),
+        const SizedBox(width: 4),
+        Text(label, maxLines: 1, style: style?.copyWith(color: _color)),
+      ],
+    );
+  }
+}
+
 String _formatSpeed(double speed) {
   final text = speed == speed.roundToDouble()
       ? speed.toInt().toString()
       : speed.toString();
   return '$text×';
-}
-
-String _formatVolume(double volume) {
-  return '${(volume * 100).round()} %';
-}
-
-IconData _volumeIcon(double volume) {
-  if (volume <= 0) return Icons.volume_off;
-  if (volume < 0.34) return Icons.volume_mute;
-  if (volume < 0.67) return Icons.volume_down;
-  return Icons.volume_up;
 }
 
 class _QueueAction extends ConsumerWidget {
@@ -338,7 +352,7 @@ class _QueueAction extends ConsumerWidget {
     return IconButton(
       tooltip: open
           ? 'Revenir à l’épisode'
-          : (count == 0 ? 'Playlist' : 'Playlist ($count)'),
+          : (count == 0 ? 'File d’attente' : 'File d’attente ($count)'),
       isSelected: open,
       style: IconButton.styleFrom(
         backgroundColor: open ? scheme.secondaryContainer : null,
@@ -352,61 +366,10 @@ class _QueueAction extends ConsumerWidget {
           label,
           style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
         ),
-        child: const PlaylistPlayIcon(),
+        child: const QueueMusicIcon(),
       ),
     );
   }
-}
-
-class _SleepAction extends ConsumerWidget {
-  const _SleepAction();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Sélectionner le libellé (change chaque seconde), pas sleepEndsAt
-    // (DateTime fixe → pas de rebuild avec select).
-    final badgeText = ref.watch(
-      playerProvider.select((s) => _sleepBadgeText(s)),
-    );
-    final active = badgeText != null;
-    final scheme = Theme.of(context).colorScheme;
-    return IconButton(
-      tooltip: badgeText == null
-          ? 'Minuteur'
-          : badgeText == 'Fin'
-          ? 'Fin de l’épisode'
-          : badgeText,
-      onPressed: () => _chooseSleep(context, ref),
-      style: active
-          ? IconButton.styleFrom(foregroundColor: scheme.primary)
-          : null,
-      icon: Badge(
-        isLabelVisible: active,
-        backgroundColor: scheme.primary,
-        textColor: scheme.onPrimary,
-        label: badgeText == null
-            ? null
-            : Text(
-                badgeText,
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-        child: const TimerIcon(size: 24),
-      ),
-    );
-  }
-}
-
-/// Texte du badge sommeil, ou `null` si inactif.
-String? _sleepBadgeText(PlayerUiState state) {
-  if (state.sleepAtEnd) return 'Fin';
-  final ends = state.sleepEndsAt;
-  if (ends == null) return null;
-  final remaining = ends.difference(DateTime.now());
-  if (remaining.isNegative) return '0:00';
-  return formatClock(remaining);
 }
 
 class _FavoriteAction extends ConsumerWidget {
@@ -423,13 +386,16 @@ class _FavoriteAction extends ConsumerWidget {
       tooltip: favorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
       onPressed: () =>
           runEpisodeAction(context, ref, entry, EpisodeMenuAction.favorite),
-      icon: Icon(favorite ? Icons.favorite : Icons.favorite_outline),
+      icon: Icon(
+        favorite ? Icons.favorite : Icons.favorite_outline,
+        color: favorite ? favoriteHeartColor : null,
+      ),
     );
   }
 }
 
-class _ShareAction extends ConsumerWidget {
-  const _ShareAction({required this.episodeId});
+class _PlayerEpisodeActions extends ConsumerWidget {
+  const _PlayerEpisodeActions({required this.episodeId});
 
   final int episodeId;
 
@@ -438,108 +404,16 @@ class _ShareAction extends ConsumerWidget {
     final entry = ref.watch(episodeProvider(episodeId)).value;
     if (entry == null) return const SizedBox.shrink();
     return IconButton(
-      tooltip: 'Partager',
-      onPressed: () =>
-          runEpisodeAction(context, ref, entry, EpisodeMenuAction.share),
-      icon: const ShareIcon(size: 24),
+      tooltip: 'Actions',
+      onPressed: () => showEpisodeActionsSheet(
+        context,
+        ref,
+        entry,
+        fromPlayer: true,
+        onSpeed: () => _chooseSpeed(context, ref),
+        onSleep: () => _chooseSleep(context, ref),
+      ),
+      icon: const MoreVertIcon(),
     );
   }
-}
-
-class _PlayerActions extends ConsumerWidget {
-  const _PlayerActions({required this.episodeId});
-
-  final int episodeId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final entry = ref.watch(episodeProvider(episodeId)).value;
-    if (entry == null) return const SizedBox.shrink();
-    final website = _podcastWebsite(entry.podcast.link);
-    final carMode = ref.watch(playerProvider.select((state) => state.carMode));
-    // Mode voiture : téléphone uniquement (même seuil que la grille podcasts).
-    final showCarMode = MediaQuery.sizeOf(context).shortestSide < 600;
-    return PopupMenuButton<_PlayerMenuAction>(
-      onSelected: (action) => _onSelected(context, ref, entry, action),
-      itemBuilder: (context) => [
-        if (showCarMode)
-          PopupMenuItem(
-            value: _PlayerMenuAction.toggleCarMode,
-            child: Row(
-              children: [
-                Icon(
-                  carMode
-                      ? Icons.directions_car
-                      : Icons.directions_car_outlined,
-                ),
-                const SizedBox(width: 12),
-                Text(carMode ? 'Quitter le mode voiture' : 'Mode voiture'),
-              ],
-            ),
-          ),
-        const PopupMenuItem(
-          value: _PlayerMenuAction.openPodcast,
-          child: Row(
-            children: [
-              PodcastsIcon(),
-              SizedBox(width: 12),
-              Text('Ouvrir le podcast'),
-            ],
-          ),
-        ),
-        if (website != null)
-          const PopupMenuItem(
-            value: _PlayerMenuAction.openWebsite,
-            child: Row(
-              children: [
-                LinkIcon(),
-                SizedBox(width: 12),
-                Text('Ouvrir le site web'),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  Future<void> _onSelected(
-    BuildContext context,
-    WidgetRef ref,
-    EpisodeEntry entry,
-    _PlayerMenuAction action,
-  ) async {
-    switch (action) {
-      case _PlayerMenuAction.toggleCarMode:
-        final enabled = !ref.read(playerProvider).carMode;
-        ref.read(playerProvider.notifier).setCarMode(enabled);
-      case _PlayerMenuAction.openPodcast:
-        ref.read(playerSheetProvider.notifier).collapse();
-        if (context.mounted) {
-          context.push(AppRoutes.podcast(entry.podcast.id));
-        }
-      case _PlayerMenuAction.openWebsite:
-        final website = _podcastWebsite(entry.podcast.link);
-        if (website == null) return;
-        final opened = await launchUrl(
-          website,
-          mode: LaunchMode.externalApplication,
-        );
-        if (!opened && context.mounted) {
-          showMessage(context, 'Impossible d’ouvrir le site web');
-        }
-    }
-  }
-}
-
-enum _PlayerMenuAction { toggleCarMode, openPodcast, openWebsite }
-
-Uri? _podcastWebsite(String? link) {
-  final raw = link?.trim();
-  if (raw == null || raw.isEmpty) return null;
-  final withScheme = raw.contains('://') ? raw : 'https://$raw';
-  final uri = Uri.tryParse(withScheme);
-  if (uri == null) return null;
-  if (uri.scheme != 'http' && uri.scheme != 'https') return null;
-  if (uri.host.isEmpty) return null;
-  return uri;
 }

@@ -95,6 +95,7 @@ class PlayerPage extends ConsumerWidget {
     super.key,
     this.onCollapse,
     this.embedded = false,
+    this.expanded = false,
     this.onHeaderDragStart,
     this.onHeaderDragUpdate,
     this.onHeaderDragEnd,
@@ -106,6 +107,9 @@ class PlayerPage extends ConsumerWidget {
 
   /// Affiché dans le sheet : fond transparent géré par le parent.
   final bool embedded;
+
+  /// Le lecteur couvre l’écran : le retour système le réduit au lieu de quitter.
+  final bool expanded;
 
   final GestureDragStartCallback? onHeaderDragStart;
   final GestureDragUpdateCallback? onHeaderDragUpdate;
@@ -163,21 +167,21 @@ class PlayerPage extends ConsumerWidget {
                 icon: const Icon(Icons.directions_car),
               ),
             ]
-          : [
-              _ShareAction(episodeId: episodeId),
-              _PlayerActions(episodeId: episodeId),
-            ],
+          : [_PlayerEpisodeActions(episodeId: episodeId)],
     );
 
     final showPlaylist =
         ref.watch(_playerPanelProvider) == _PlayerPanel.playlist && !carMode;
+    final blockBack = showPlaylist || (embedded && expanded);
     return _CoverBackdrop(
       tone: tone,
       fallback: fallback,
       child: PopScope(
-        canPop: !showPlaylist,
+        canPop: !blockBack,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) closePlayerPlaylistIfOpen(ref);
+          if (didPop) return;
+          if (closePlayerPlaylistIfOpen(ref)) return;
+          onCollapse?.call();
         },
         child: Stack(
           fit: StackFit.expand,
@@ -194,46 +198,49 @@ class PlayerPage extends ConsumerWidget {
                   child: appBar,
                 ),
               ),
-              body: LayoutBuilder(
-                builder: (context, constraints) {
-                  // Pendant l’expansion, la hauteur est trop faible pour la barre transport.
-                  final showTransport = constraints.maxHeight >= 200;
-                  return Column(
-                    children: [
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 720),
-                            child: _PlayerStage(episodeId: episodeId),
-                          ),
-                        ),
-                      ),
-                      if (showTransport)
-                        SafeArea(
-                          top: false,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 720,
-                                ),
-                                child: const _PlayerTransport(),
-                              ),
+              body: _PageCollapseDrag(
+                onDragStart: onHeaderDragStart,
+                onDragUpdate: onHeaderDragUpdate,
+                onDragEnd: onHeaderDragEnd,
+                onDragCancel: onHeaderDragCancel,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Pendant l’expansion, la hauteur est trop faible pour la barre transport.
+                    final showTransport = constraints.maxHeight >= 200;
+                    return Column(
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 720),
+                              child: _PlayerStage(episodeId: episodeId),
                             ),
                           ),
                         ),
-                    ],
-                  );
-                },
+                        if (showTransport)
+                          SafeArea(
+                            top: false,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 720,
+                                  ),
+                                  child: const _PlayerTransport(),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
-            if (showPlaylist)
-              Positioned.fill(
-                child: _PlaylistOverlay(background: tone?.background),
-              ),
+            if (!carMode) _QueueSheet(background: tone?.background),
           ],
         ),
       ),
@@ -241,31 +248,296 @@ class PlayerPage extends ConsumerWidget {
   }
 }
 
-class _PlaylistOverlay extends StatelessWidget {
-  const _PlaylistOverlay({required this.background});
+/// La file monte et redescend comme le grand lecteur.
+class _QueueSheet extends ConsumerStatefulWidget {
+  const _QueueSheet({required this.background});
 
   final Color? background;
+
+  @override
+  ConsumerState<_QueueSheet> createState() => _QueueSheetState();
+}
+
+class _QueueSheetState extends ConsumerState<_QueueSheet>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  var _dragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 360),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (ref.read(_playerPanelProvider) == _PlayerPanel.playlist) {
+        _animateTo(1);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _animateTo(double target) {
+    _controller.animateTo(
+      target,
+      duration: const Duration(milliseconds: 360),
+      curve: target > _controller.value
+          ? Curves.easeOutCubic
+          : Curves.easeInCubic,
+    );
+  }
+
+  void _onDragStart(DragStartDetails details) {
+    setState(() => _dragging = true);
+  }
+
+  void _onDragUpdate(DragUpdateDetails details, double extent) {
+    if (extent <= 0) return;
+    if (!_dragging) setState(() => _dragging = true);
+    final delta = -details.primaryDelta! / extent;
+    _controller.value = (_controller.value + delta).clamp(0.0, 1.0);
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    final target = velocity < -600
+        ? 1.0
+        : velocity > 600
+        ? 0.0
+        : (_controller.value >= 0.3 ? 1.0 : 0.0);
+    _finishDrag(target);
+  }
+
+  void _onDragCancel() {
+    if (!_dragging) return;
+    _finishDrag(_controller.value >= 0.3 ? 1.0 : 0.0);
+  }
+
+  void _finishDrag(double target) {
+    setState(() => _dragging = false);
+    final open = ref.read(_playerPanelProvider) == _PlayerPanel.playlist;
+    final notifier = ref.read(_playerPanelProvider.notifier);
+    if (target >= 1) {
+      if (open) {
+        _animateTo(1);
+      } else {
+        notifier.toggle();
+      }
+    } else if (open) {
+      notifier.close();
+    } else {
+      _animateTo(0);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(_playerPanelProvider, (previous, next) {
+      if (_dragging) return;
+      _animateTo(next == _PlayerPanel.playlist ? 1 : 0);
+    });
+
+    return Positioned.fill(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final extent = constraints.maxHeight;
+          return AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              final t = _controller.value;
+              if (t == 0) {
+                return const IgnorePointer(child: SizedBox.expand());
+              }
+              return Align(
+                alignment: Alignment.bottomCenter,
+                child: IgnorePointer(
+                  ignoring: t < 0.5 && !_dragging,
+                  child: SizedBox(
+                    height: extent * t,
+                    width: double.infinity,
+                    child: Material(
+                      color: Colors.transparent,
+                      clipBehavior: Clip.antiAlias,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(18 * (1 - t)),
+                        ),
+                      ),
+                      child: _PlaylistOverlay(
+                        background: widget.background,
+                        onDragStart: _onDragStart,
+                        onDragUpdate: (details) =>
+                            _onDragUpdate(details, extent),
+                        onDragEnd: _onDragEnd,
+                        onDragCancel: _onDragCancel,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PlaylistOverlay extends StatelessWidget {
+  const _PlaylistOverlay({
+    required this.background,
+    required this.onDragStart,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+    required this.onDragCancel,
+  });
+
+  final Color? background;
+  final GestureDragStartCallback onDragStart;
+  final GestureDragUpdateCallback onDragUpdate;
+  final GestureDragEndCallback onDragEnd;
+  final GestureDragCancelCallback onDragCancel;
 
   @override
   Widget build(BuildContext context) {
     final gradient = background == null
         ? coverPlayerGradient(const Color(0xFF121212))
         : coverPlayerGradient(background!);
-    return DecoratedBox(
-      decoration: BoxDecoration(gradient: gradient),
-      child: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 720),
-            child: SizedBox(
-              width: double.infinity,
-              height: double.infinity,
-              child: _PlayerQueue(),
-            ),
+    return _PageCollapseDrag(
+      onDragStart: onDragStart,
+      onDragUpdate: onDragUpdate,
+      onDragEnd: onDragEnd,
+      onDragCancel: onDragCancel,
+      child: DecoratedBox(
+        decoration: BoxDecoration(gradient: gradient),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final maxContent = width >= 840
+                  ? math.min(width - 64, 1120.0)
+                  : width;
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxContent),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: double.infinity,
+                    child: _PlayerQueue(
+                      onDragStart: onDragStart,
+                      onDragUpdate: onDragUpdate,
+                      onDragEnd: onDragEnd,
+                      onDragCancel: onDragCancel,
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Appui long, puis glisser : même réduction que depuis la barre du haut.
+class _PageCollapseDrag extends StatefulWidget {
+  const _PageCollapseDrag({
+    required this.child,
+    this.onDragStart,
+    this.onDragUpdate,
+    this.onDragEnd,
+    this.onDragCancel,
+  });
+
+  final Widget child;
+  final GestureDragStartCallback? onDragStart;
+  final GestureDragUpdateCallback? onDragUpdate;
+  final GestureDragEndCallback? onDragEnd;
+  final GestureDragCancelCallback? onDragCancel;
+
+  @override
+  State<_PageCollapseDrag> createState() => _PageCollapseDragState();
+}
+
+class _PageCollapseDragState extends State<_PageCollapseDrag> {
+  Offset? _last;
+  var _claimed = false;
+  var _collapsing = false;
+
+  void _reset() {
+    _last = null;
+    _claimed = false;
+    _collapsing = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.onDragUpdate == null) return widget.child;
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPressStart: (details) {
+        Feedback.forLongPress(context);
+        _last = details.globalPosition;
+        _claimed = false;
+        _collapsing = false;
+      },
+      onLongPressMoveUpdate: (details) {
+        if (!_claimed) {
+          final delta = details.offsetFromOrigin;
+          if (delta.distance < kTouchSlop) return;
+          _claimed = true;
+          // Vers le bas : réduire. Ailleurs : laisser réordonner la file.
+          if (delta.dy <= delta.dx.abs()) {
+            _startQueueReorder();
+            return;
+          }
+          _collapsing = true;
+          widget.onDragStart?.call(
+            DragStartDetails(
+              globalPosition: details.globalPosition,
+              localPosition: details.localPosition,
+            ),
+          );
+        }
+        if (!_collapsing) return;
+        final last = _last ?? details.globalPosition;
+        final dy = details.globalPosition.dy - last.dy;
+        _last = details.globalPosition;
+        widget.onDragUpdate?.call(
+          DragUpdateDetails(
+            globalPosition: details.globalPosition,
+            localPosition: details.localPosition,
+            delta: Offset(0, dy),
+            primaryDelta: dy,
+          ),
+        );
+      },
+      onLongPressEnd: (details) {
+        final collapsing = _collapsing;
+        _reset();
+        if (!collapsing) return;
+        widget.onDragEnd?.call(
+          DragEndDetails(
+            velocity: details.velocity,
+            primaryVelocity: details.velocity.pixelsPerSecond.dy,
+          ),
+        );
+      },
+      onLongPressCancel: () {
+        final collapsing = _collapsing;
+        _reset();
+        if (collapsing) widget.onDragCancel?.call();
+      },
+      child: widget.child,
     );
   }
 }

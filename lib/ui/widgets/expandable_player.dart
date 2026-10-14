@@ -1,8 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/cover_tone.dart';
-import '../../core/format.dart';
+import '../../data/providers.dart';
 import '../../player/player_controller.dart';
 import '../../player/player_sheet_controller.dart';
 import '../../settings/settings_controller.dart';
@@ -10,8 +11,8 @@ import '../player_page.dart';
 import 'brand.dart';
 import 'cover.dart';
 
-/// Hauteur de la barre mini (hors inset bas géré par le positionnement).
-const miniPlayerHeight = 64.0;
+/// Hauteur de la pilule mini (hors inset bas géré par le positionnement).
+const miniPlayerHeight = 56.0;
 
 /// Lecteur type « expandable mini player » : mini ↔ plein écran avec drag.
 class ExpandablePlayer extends ConsumerStatefulWidget {
@@ -141,7 +142,7 @@ class _ExpandablePlayerState extends ConsumerState<ExpandablePlayer>
           final span = size.height - bottom;
           final height = (miniPlayerHeight + (span - miniPlayerHeight) * t)
               .clamp(miniPlayerHeight, span);
-          final margin = 12 * (1 - t);
+          final margin = 16 * (1 - t);
 
           return Padding(
             padding: EdgeInsets.only(
@@ -170,16 +171,16 @@ class _ExpandablePlayerState extends ConsumerState<ExpandablePlayer>
                     // `_dragging` empêche IgnorePointer de couper le geste à mi-course.
                     child: Material(
                       elevation: 0,
-                      color:
-                          tone?.background ??
-                          Color.lerp(
-                            scheme.surfaceContainerHigh,
-                            scheme.surface,
-                            t,
-                          ),
+                      color: Color.lerp(
+                        scheme.surfaceContainer,
+                        tone?.background ?? scheme.surface,
+                        t,
+                      ),
                       shadowColor: Colors.transparent,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18 * (1 - t)),
+                        borderRadius: BorderRadius.circular(
+                          miniPlayerHeight / 2 * (1 - t),
+                        ),
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: Stack(
@@ -194,6 +195,7 @@ class _ExpandablePlayerState extends ConsumerState<ExpandablePlayer>
                                 ),
                                 child: PlayerPage(
                                   embedded: true,
+                                  expanded: t > 0.05,
                                   onCollapse: () => ref
                                       .read(playerSheetProvider.notifier)
                                       .collapse(),
@@ -222,15 +224,10 @@ class _ExpandablePlayerState extends ConsumerState<ExpandablePlayer>
                                       _onDragUpdate(details, extent),
                                   onVerticalDragEnd: _onDragEnd,
                                   onVerticalDragCancel: _onDragCancel,
-                                  child: Theme(
-                                    data: tone == null
-                                        ? Theme.of(context)
-                                        : miniPlayerTheme(tone.background),
-                                    child: _MiniPlayerBar(
-                                      onOpen: () => ref
-                                          .read(playerSheetProvider.notifier)
-                                          .expand(),
-                                    ),
+                                  child: _MiniPlayerBar(
+                                    onOpen: () => ref
+                                        .read(playerSheetProvider.notifier)
+                                        .expand(),
                                   ),
                                 ),
                               ),
@@ -255,8 +252,6 @@ class _MiniPlayerBar extends ConsumerWidget {
 
   final VoidCallback onOpen;
 
-  static const _btnConstraints = BoxConstraints(minWidth: 36, minHeight: 48);
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final title = ref.watch(playerProvider.select((s) => s.title));
@@ -268,88 +263,146 @@ class _MiniPlayerBar extends ConsumerWidget {
     final playing = ref.watch(playerProvider.select((s) => s.playing));
     final position = ref.watch(playerProvider.select((s) => s.position));
     final duration = ref.watch(playerProvider.select((s) => s.duration));
-    final speed = ref.watch(playerProvider.select((s) => s.speed));
     final error = ref.watch(playerProvider.select((s) => s.error));
+    final episodeId = ref.watch(playerProvider.select((s) => s.episodeId));
+    final favorite = episodeId == null
+        ? false
+        : (ref.watch(episodeProvider(episodeId)).value?.episode.favorite ??
+              false);
+    final buttons = ref.watch(
+      settingsProvider.select((s) => s.miniPlayerButtons),
+    );
     final skipBack = ref.watch(
       settingsProvider.select((s) => s.skipBackSeconds),
     );
     final skipForward = ref.watch(
       settingsProvider.select((s) => s.skipForwardSeconds),
     );
-    final miniButtons = ref.watch(
-      settingsProvider.select((s) => s.miniPlayerButtons),
-    );
-    final hasNext = miniButtons.nextEpisode
+    final hasNext = buttons.isOn('nextEpisode')
         ? (ref.watch(hasNextInQueueProvider).value ?? false)
         : false;
-    final timeRespectsSpeed = ref.watch(
-      settingsProvider.select((s) => s.timeRespectsSpeed),
-    );
     final scheme = Theme.of(context).colorScheme;
-    final onCard = scheme.onSurface;
-    final onCardMuted = scheme.onSurfaceVariant;
+    final theme = Theme.of(context);
     final player = ref.read(playerProvider.notifier);
     final total = duration.inMilliseconds;
     final progress = total == 0
         ? 0.0
         : (position.inMilliseconds / total).clamp(0.0, 1.0);
-    final displayPosition = durationAtSpeed(
-      position,
-      timeRespectsSpeed ? speed : 1.0,
-    );
+    final neutral = scheme.surfaceContainerHighest;
+    final controls = [
+      for (final id in buttons.visible)
+        switch (id) {
+          'favorite' => _RoundControl(
+            tooltip: favorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
+            background: neutral,
+            onPressed: episodeId == null
+                ? null
+                : () => ref
+                      .read(databaseProvider)
+                      .setFavorite(episodeId, favorite: !favorite),
+            icon: Icon(
+              favorite ? Icons.favorite : Icons.favorite_border,
+              size: 26,
+              color: favorite ? favoriteHeartColor : scheme.onSurface,
+            ),
+          ),
+          'skipBack' => _RoundControl(
+            tooltip: 'Reculer de $skipBack s',
+            background: neutral,
+            onPressed: () => player.skipBy(-skipBack),
+            icon: SkipIcon.back(size: 22),
+          ),
+          'skipForward' => _RoundControl(
+            tooltip: 'Avancer de $skipForward s',
+            background: neutral,
+            onPressed: () => player.skipBy(skipForward),
+            icon: SkipIcon.forward(size: 22),
+          ),
+          'nextEpisode' => _RoundControl(
+            tooltip: hasNext
+                ? 'Épisode suivant'
+                : 'Pas d’épisode suivant dans la file d’attente',
+            background: neutral,
+            onPressed: hasNext ? player.playNextInQueue : null,
+            icon: Opacity(
+              opacity: hasNext ? 1 : 0.38,
+              child: SkipIcon.next(size: 22),
+            ),
+          ),
+          'close' => _RoundControl(
+            tooltip: 'Fermer le lecteur',
+            background: neutral,
+            onPressed: player.dismiss,
+            icon: Icon(Icons.close, size: 22, color: scheme.onSurface),
+          ),
+          _ => _RoundControl(
+            tooltip: playing ? 'Pause (Espace)' : 'Lecture (Espace)',
+            background: scheme.primary,
+            onPressed: player.toggle,
+            icon: Icon(
+              playing ? Icons.pause : Icons.play_arrow,
+              size: 28,
+              color: scheme.onPrimary,
+            ),
+          ),
+        },
+    ];
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const titleMin = 88.0;
+          final buttonsWidth =
+              (controls.length * 40 + (controls.length - 1) * 8).toDouble();
+          final room = constraints.maxWidth - 40 - 10 - 8 - titleMin;
+          final buttonMax = math.max(40.0, math.min(buttonsWidth, room));
+          return Row(
             children: [
+              SizedBox(
+                width: 40,
+                height: 40,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Positioned.fill(
+                      child: _WavyProgressRing(
+                        progress: progress,
+                        playing: playing,
+                      ),
+                    ),
+                    PodcastCover(
+                      url: imageUrl,
+                      localPath: imagePath,
+                      size: 26,
+                      radius: 13,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Tooltip(
                   message: 'Ouvrir la lecture',
                   child: InkWell(
                     onTap: onOpen,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 6, 0, 6),
-                          child: AspectRatio(
-                            aspectRatio: 1,
-                            child: PodcastCover(
-                              url: imageUrl,
-                              localPath: imagePath,
-                              size: null,
-                              radius: 8,
-                            ),
-                          ),
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall,
                         ),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: onCard,
-                                  ),
-                                ),
-                                Text(
-                                  error ??
-                                      '$podcastTitle · ${formatClock(displayPosition)}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(color: onCardMuted),
-                                ),
-                              ],
-                            ),
+                        Text(
+                          error ?? podcastTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontSize: 10,
+                            color: scheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -357,57 +410,195 @@ class _MiniPlayerBar extends ConsumerWidget {
                   ),
                 ),
               ),
-              if (miniButtons.skipBack)
-                IconButton(
-                  tooltip: 'Reculer de $skipBack s',
-                  visualDensity: VisualDensity.compact,
-                  constraints: _btnConstraints,
-                  onPressed: () => player.skipBy(-skipBack),
-                  icon: SkipIcon.back(size: 22),
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: buttonMax),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < controls.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 8),
+                        controls[i],
+                      ],
+                    ],
+                  ),
                 ),
-              IconButton(
-                tooltip: playing ? 'Pause (Espace)' : 'Lecture (Espace)',
-                visualDensity: VisualDensity.compact,
-                constraints: _btnConstraints,
-                onPressed: player.toggle,
-                icon: PlayPauseIcon(playing: playing, size: 26, color: onCard),
               ),
-              if (miniButtons.skipForward)
-                IconButton(
-                  tooltip: 'Avancer de $skipForward s',
-                  visualDensity: VisualDensity.compact,
-                  constraints: _btnConstraints,
-                  onPressed: () => player.skipBy(skipForward),
-                  icon: SkipIcon.forward(size: 22),
-                ),
-              if (miniButtons.nextEpisode)
-                IconButton(
-                  tooltip: hasNext
-                      ? 'Épisode suivant'
-                      : 'Pas d’épisode suivant dans la playlist',
-                  visualDensity: VisualDensity.compact,
-                  constraints: _btnConstraints,
-                  onPressed: hasNext ? player.playNextInQueue : null,
-                  icon: SkipIcon.next(size: 22),
-                ),
-              if (miniButtons.close)
-                IconButton(
-                  tooltip: 'Fermer le lecteur',
-                  visualDensity: VisualDensity.compact,
-                  constraints: _btnConstraints,
-                  onPressed: player.dismiss,
-                  icon: Icon(Icons.close, size: 22, color: onCardMuted),
-                ),
             ],
-          ),
-        ),
-        LinearProgressIndicator(
-          value: progress,
-          minHeight: 2,
-          color: onCard,
-          backgroundColor: onCard.withValues(alpha: 0.24),
-        ),
-      ],
+          );
+        },
+      ),
     );
+  }
+}
+
+class _RoundControl extends StatelessWidget {
+  const _RoundControl({
+    required this.tooltip,
+    required this.background,
+    required this.onPressed,
+    required this.icon,
+  });
+
+  final String tooltip;
+  final Color background;
+  final VoidCallback? onPressed;
+  final Widget icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: background,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          customBorder: const CircleBorder(),
+          child: SizedBox(width: 40, height: 40, child: Center(child: icon)),
+        ),
+      ),
+    );
+  }
+}
+
+/// Anneau de progression autour de la pochette : plat en pause, ondulé en lecture.
+class _WavyProgressRing extends StatefulWidget {
+  const _WavyProgressRing({required this.progress, required this.playing});
+
+  final double progress;
+  final bool playing;
+
+  @override
+  State<_WavyProgressRing> createState() => _WavyProgressRingState();
+}
+
+class _WavyProgressRingState extends State<_WavyProgressRing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _wave;
+
+  @override
+  void initState() {
+    super.initState();
+    _wave = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    if (widget.playing) _wave.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WavyProgressRing oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.playing && !_wave.isAnimating) {
+      _wave.repeat();
+    } else if (!widget.playing && _wave.isAnimating) {
+      _wave.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _wave.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final wavy = widget.playing && widget.progress > 0;
+    return AnimatedBuilder(
+      animation: _wave,
+      builder: (context, _) {
+        return CustomPaint(
+          painter: _WavyRingPainter(
+            progress: widget.progress,
+            phase: _wave.value * math.pi * 2,
+            amplitude: wavy ? 2.2 : 0,
+            color: scheme.primary,
+            trackColor: scheme.surfaceContainerHighest,
+          ),
+          child: const SizedBox.expand(),
+        );
+      },
+    );
+  }
+}
+
+class _WavyRingPainter extends CustomPainter {
+  const _WavyRingPainter({
+    required this.progress,
+    required this.phase,
+    required this.amplitude,
+    required this.color,
+    required this.trackColor,
+  });
+
+  final double progress;
+  final double phase;
+  final double amplitude;
+  final Color color;
+  final Color trackColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const stroke = 3.0;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.shortestSide - stroke) / 2;
+    final track = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = trackColor;
+    canvas.drawCircle(center, radius, track);
+    if (progress <= 0) return;
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    final sweep = math.pi * 2 * progress;
+    const start = -math.pi / 2;
+    if (amplitude <= 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        start,
+        sweep,
+        false,
+        paint,
+      );
+      return;
+    }
+
+    final path = Path();
+    final steps = math.max(24, (progress * 80).round());
+    for (var i = 0; i <= steps; i++) {
+      final angle = start + sweep * (i / steps);
+      final wave = math.sin(angle * 8 + phase) * amplitude;
+      final point = Offset(
+        center.dx + (radius + wave) * math.cos(angle),
+        center.dy + (radius + wave) * math.sin(angle),
+      );
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _WavyRingPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.phase != phase ||
+        oldDelegate.amplitude != amplitude ||
+        oldDelegate.color != color ||
+        oldDelegate.trackColor != trackColor;
   }
 }

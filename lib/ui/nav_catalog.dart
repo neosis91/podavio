@@ -71,6 +71,12 @@ final navPages = <NavPage>[
     _material(Icons.favorite),
   ),
   NavPage(
+    AppRoutes.playlists,
+    'Playlists',
+    _material(Icons.playlist_play_outlined),
+    _material(Icons.playlist_play),
+  ),
+  NavPage(
     AppRoutes.downloads,
     'Téléchargements',
     _material(Icons.download_outlined),
