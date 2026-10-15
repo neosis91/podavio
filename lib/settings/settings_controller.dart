@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme.dart';
+import '../data/discover_languages.dart';
 import '../data/providers.dart';
+import '../l10n/interface_locale.dart';
 import '../ui/nav_catalog.dart';
 
 /// Compteur affiché sur les jaquettes de la page Abonnements.
@@ -119,8 +122,8 @@ enum PodcastSort {
 
 /// Boutons latéraux hors de l’application (notification, casque, Android Auto).
 enum OutsideAppControl {
-  skip('skip', 'Saut temporel'),
-  episode('episode', 'Épisode précédent et suivant');
+  skip('skip', 'Time skip'),
+  episode('episode', 'Previous and next episode');
 
   const OutsideAppControl(this.id, this.label);
 
@@ -137,7 +140,7 @@ enum OutsideAppControl {
 
 /// Densité des listes d’épisodes (compose avec le palier de largeur).
 enum EpisodeListDensity {
-  comfortable('comfortable', 'Confortable'),
+  comfortable('comfortable', 'Comfortable'),
   compact('compact', 'Compact');
 
   const EpisodeListDensity(this.id, this.label);
@@ -347,6 +350,9 @@ class AppSettings {
     required this.dequeueDeletedDownloads,
     required this.downloadDirectory,
     required this.refreshIntervalMinutes,
+    required this.discoverLanguages,
+    required this.discoverLanguagesPicked,
+    required this.interfaceLanguage,
   });
 
   final ThemeMode themeMode;
@@ -391,6 +397,15 @@ class AppSettings {
   /// Délai mini entre deux actualisations globales (0 = pas de limite).
   final int refreshIntervalMinutes;
 
+  /// Langues d’Explorer. `*` = toutes.
+  final List<String> discoverLanguages;
+
+  /// Dernière sélection précise, conservée quand « Toutes » est actif.
+  final List<String> discoverLanguagesPicked;
+
+  /// Code de langue de l’interface, ou `null` pour suivre le système.
+  final String? interfaceLanguage;
+
   AppSettings copyWith({
     ThemeMode? themeMode,
     AppAccent? accent,
@@ -420,6 +435,10 @@ class AppSettings {
     String? downloadDirectory,
     bool clearDownloadDirectory = false,
     int? refreshIntervalMinutes,
+    List<String>? discoverLanguages,
+    List<String>? discoverLanguagesPicked,
+    String? interfaceLanguage,
+    bool clearInterfaceLanguage = false,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -453,6 +472,12 @@ class AppSettings {
           : (downloadDirectory ?? this.downloadDirectory),
       refreshIntervalMinutes:
           refreshIntervalMinutes ?? this.refreshIntervalMinutes,
+      discoverLanguages: discoverLanguages ?? this.discoverLanguages,
+      discoverLanguagesPicked:
+          discoverLanguagesPicked ?? this.discoverLanguagesPicked,
+      interfaceLanguage: clearInterfaceLanguage
+          ? null
+          : (interfaceLanguage ?? this.interfaceLanguage),
     );
   }
 }
@@ -507,7 +532,26 @@ class SettingsNotifier extends Notifier<AppSettings> {
       refreshIntervalMinutes: _refreshIntervalMinutes(
         preferences.getInt('refreshIntervalMinutes'),
       ),
+      discoverLanguages: _discoverLanguages(preferences),
+      discoverLanguagesPicked: _discoverLanguagesPicked(preferences),
+      interfaceLanguage: normalizeInterfaceLanguage(
+        preferences.getString('interfaceLanguage'),
+      ),
     );
+  }
+
+  static List<String> _discoverLanguages(SharedPreferences preferences) {
+    return normalizeDiscoverLanguages(
+      preferences.getStringList('discoverLanguages'),
+    );
+  }
+
+  static List<String> _discoverLanguagesPicked(SharedPreferences preferences) {
+    final stored = preferences.getStringList('discoverLanguagesPicked');
+    if (stored != null) return normalizeDiscoverLanguagesPicked(stored);
+    final languages = _discoverLanguages(preferences);
+    if (discoverLanguagesAreAll(languages)) return discoverLanguagesDefault;
+    return languages;
   }
 
   static int _columns(int? stored) {
@@ -524,6 +568,18 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static double _volume(double? stored) {
     if (stored == null) return 1;
     return stored.clamp(0.0, 1.0);
+  }
+
+  Future<void> setInterfaceLanguage(String? code) async {
+    final normalized = normalizeInterfaceLanguage(code);
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (normalized == null) {
+      state = state.copyWith(clearInterfaceLanguage: true);
+      await preferences.remove('interfaceLanguage');
+      return;
+    }
+    state = state.copyWith(interfaceLanguage: normalized);
+    await preferences.setString('interfaceLanguage', normalized);
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
@@ -699,6 +755,38 @@ class SettingsNotifier extends Notifier<AppSettings> {
     } else {
       await preferences.setStringList('podcastFilters', ids);
     }
+  }
+
+  Future<void> setDiscoverLanguages(List<String> languages) async {
+    final normalized = normalizeDiscoverLanguages(languages);
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (discoverLanguagesAreAll(normalized)) {
+      state = state.copyWith(discoverLanguages: normalized);
+      await preferences.setStringList('discoverLanguages', normalized);
+      return;
+    }
+    state = state.copyWith(
+      discoverLanguages: normalized,
+      discoverLanguagesPicked: normalized,
+    );
+    await preferences.setStringList('discoverLanguages', normalized);
+    await preferences.setStringList('discoverLanguagesPicked', normalized);
+  }
+
+  /// Active ou coupe « Toutes les langues » sans oublier la sélection précise.
+  Future<void> setDiscoverAllLanguages(bool all) async {
+    final preferences = ref.read(sharedPreferencesProvider);
+    final picked = state.discoverLanguagesPicked;
+    if (all) {
+      state = state.copyWith(discoverLanguages: const [discoverLanguagesAll]);
+      await preferences.setStringList('discoverLanguages', const [
+        discoverLanguagesAll,
+      ]);
+      await preferences.setStringList('discoverLanguagesPicked', picked);
+      return;
+    }
+    state = state.copyWith(discoverLanguages: picked);
+    await preferences.setStringList('discoverLanguages', picked);
   }
 
   Future<void> setNavOrder(List<String> order) async {

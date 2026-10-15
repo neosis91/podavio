@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/app_database.dart';
+import '../l10n/l10n.dart';
 import '../data/providers.dart';
 import '../player/playback_source.dart';
 import 'playlist_membership.dart';
@@ -19,7 +20,7 @@ class PlaylistsPage extends ConsumerWidget {
     final playlists = ref.watch(playlistsProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Playlists'),
+        title: Text(context.tr('Playlists')),
         actions: [
           IconButton(
             tooltip: 'Nouvelle playlist',
@@ -66,7 +67,7 @@ class PlaylistPage extends ConsumerWidget {
         .firstOrNull;
     if (playlist == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Playlist')),
+        appBar: AppBar(title: Text(context.tr('Playlist'))),
         body: playlists.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => EmptyState(

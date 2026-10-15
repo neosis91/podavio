@@ -31,13 +31,13 @@ class NavPage {
 final navPages = <NavPage>[
   NavPage(
     AppRoutes.home,
-    'Accueil',
+    'Home',
     _material(Icons.home_outlined),
     _material(Icons.home),
   ),
   NavPage(
     AppRoutes.episodes,
-    'Épisodes',
+    'Episodes',
     _material(Icons.podcasts_outlined),
     _material(Icons.podcasts),
   ),
@@ -51,7 +51,7 @@ final navPages = <NavPage>[
   ),
   NavPage(
     AppRoutes.podcasts,
-    'Abonnements',
+    'Subscriptions',
     ({required Color color, double size = 24}) => IconTheme(
       data: IconThemeData(color: color, size: size),
       child: SubscriptionsIcon(size: size),
@@ -59,14 +59,14 @@ final navPages = <NavPage>[
   ),
   NavPage(
     AppRoutes.discover,
-    'Explorer',
+    'Explore',
     _material(Icons.explore_outlined),
     _material(Icons.explore),
   ),
-  NavPage(AppRoutes.history, 'Lectures récentes', _material(Icons.history)),
+  NavPage(AppRoutes.history, 'Recent plays', _material(Icons.history)),
   NavPage(
     AppRoutes.favorites,
-    'Favoris',
+    'Favorites',
     _material(Icons.favorite_outline),
     _material(Icons.favorite),
   ),
@@ -78,19 +78,19 @@ final navPages = <NavPage>[
   ),
   NavPage(
     AppRoutes.downloads,
-    'Téléchargements',
+    'Downloads',
     _material(Icons.download_outlined),
     _material(Icons.download),
   ),
   NavPage(
     AppRoutes.stats,
-    'Statistiques',
+    'Statistics',
     _material(Icons.insights_outlined),
     _material(Icons.insights),
   ),
   NavPage(
     AppRoutes.preferences,
-    'Préférences',
+    'Settings',
     _material(Icons.tune_outlined),
     _material(Icons.tune),
   ),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'discover_hit.dart';
+import 'discover_languages.dart';
 import 'feed_service.dart';
 
 /// Recherche / suggestions fyyd (https://fyyd.de) — API publique sans clé.
@@ -20,7 +21,11 @@ class FyydSearch {
     129, // History
   ];
 
-  Future<List<DiscoverHit>> search(String query, {int count = 20}) async {
+  Future<List<DiscoverHit>> search(
+    String query, {
+    int count = 20,
+    List<String> languages = const [discoverLanguagesAll],
+  }) async {
     final q = query.trim();
     if (q.isEmpty) return const [];
 
@@ -40,20 +45,29 @@ class FyydSearch {
     if (json is! Map<String, dynamic>) return const [];
     final data = json['data'];
     if (data is! List) return const [];
-    return _hitsFromList(data);
+    return _hitsFromList(data, languages);
   }
 
-  /// Suggestions via quelques catégories (jaquettes incluses, FR d’abord).
+  /// Suggestions via quelques catégories. Seules les langues choisies restent.
   ///
   /// [page] est l’index fyyd (0 = première page) pour enchaîner les lots.
-  Future<List<DiscoverHit>> suggestions({int count = 24, int page = 0}) async {
+  Future<List<DiscoverHit>> suggestions({
+    int count = 24,
+    int page = 0,
+    List<String> languages = const [discoverLanguagesAll],
+  }) async {
     final perCategory = (count / _suggestionCategories.length).ceil().clamp(
       4,
       12,
     );
     final batches = await Future.wait([
       for (final id in _suggestionCategories)
-        _categoryPodcasts(id, count: perCategory, page: page),
+        _categoryPodcasts(
+          id,
+          count: perCategory,
+          page: page,
+          languages: languages,
+        ),
     ]);
 
     final queues = [for (final batch in batches) List<DiscoverHit>.from(batch)];
@@ -80,6 +94,7 @@ class FyydSearch {
     int categoryId, {
     required int count,
     int page = 0,
+    List<String> languages = const [discoverLanguagesAll],
   }) async {
     final uri = Uri.https('api.fyyd.de', '/0.2/category', {
       'category_id': '$categoryId',
@@ -98,28 +113,18 @@ class FyydSearch {
     final podcasts = data['podcasts'];
     if (podcasts is! List) return const [];
 
-    final fr = <DiscoverHit>[];
-    final rest = <DiscoverHit>[];
-    for (final raw in podcasts) {
-      if (raw is! Map) continue;
-      final map = Map<String, dynamic>.from(raw);
-      final hit = _hitFromMap(map);
-      if (hit == null) continue;
-      final lang = (map['language'] as String?)?.toLowerCase() ?? '';
-      if (lang.startsWith('fr')) {
-        fr.add(hit);
-      } else {
-        rest.add(hit);
-      }
-    }
-    return [...fr, ...rest];
+    return _hitsFromList(podcasts, languages);
   }
 
-  List<DiscoverHit> _hitsFromList(List<dynamic> data) {
+  List<DiscoverHit> _hitsFromList(List<dynamic> data, List<String> languages) {
     final hits = <DiscoverHit>[];
     for (final raw in data) {
       if (raw is! Map) continue;
-      final hit = _hitFromMap(Map<String, dynamic>.from(raw));
+      final map = Map<String, dynamic>.from(raw);
+      if (!discoverLanguageMatches(map['language'] as String?, languages)) {
+        continue;
+      }
+      final hit = _hitFromMap(map);
       if (hit != null) hits.add(hit);
     }
     return hits;

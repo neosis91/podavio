@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/cover_tone.dart';
+import '../l10n/l10n.dart';
 import '../data/app_database.dart';
 import '../data/feed_service.dart';
 import '../data/providers.dart';
@@ -86,7 +87,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         ),
       if (favorites.isNotEmpty)
         _InlineSection(
-          title: 'Favoris',
+          title: context.tr('Favorites'),
           height: _episodeRowHeight,
           itemCount: favorites.length,
           onMore: () => context.push(AppRoutes.favorites),
@@ -97,7 +98,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         ),
       if (played.isNotEmpty)
         _InlineSection(
-          title: 'Lectures récentes',
+          title: context.tr('Recent plays'),
           height: _episodeRowHeight,
           itemCount: played.length,
           onMore: () => context.push(AppRoutes.history),
@@ -178,12 +179,14 @@ class _HomePageState extends ConsumerState<HomePage> {
             Padding(
               padding: EdgeInsets.only(top: headerTop),
               child: EmptyState(
-                title: 'Rien à écouter pour le moment',
-                message: 'Ajoutez un abonnement pour remplir l’accueil.',
+                title: context.tr('Nothing to play right now'),
+                message: context.tr(
+                  'Add a subscription to fill the home screen.',
+                ),
                 action: FilledButton.icon(
                   onPressed: () => context.go(AppRoutes.discover),
                   icon: const Icon(Icons.explore),
-                  label: const Text('Explorer'),
+                  label: Text(context.tr('Explore')),
                 ),
               ),
             )
@@ -317,7 +320,7 @@ class _ShelfHeader extends StatelessWidget {
                 visualDensity: VisualDensity.compact,
                 textStyle: theme.textTheme.bodySmall,
               ),
-              child: const Text('Plus'),
+              child: Text(context.tr('More')),
             ),
           ?action,
         ],

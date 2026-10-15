@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/discover_hit.dart';
+import '../data/online_status.dart';
+import '../l10n/l10n.dart';
 import '../data/discover_providers.dart';
 import '../data/feed_service.dart';
 import 'discover/discover_hit_actions.dart';
@@ -22,6 +24,27 @@ export '../data/discover_providers.dart';
 
 const _quickSuggestions = 16;
 const _tabletBreakpoint = 600.0;
+const _coverGap = 8.0;
+const _minCover = 76.0;
+
+/// Colonnes pour que chaque jaquette reste lisible, quelle que soit la largeur.
+int _coverColumns(double gridWidth) {
+  if (!gridWidth.isFinite || gridWidth <= 0) return 4;
+  final columns = ((gridWidth + _coverGap) / (_minCover + _coverGap)).floor();
+  if (columns < 2) return 2;
+  if (columns > 12) return 12;
+  return columns;
+}
+
+/// Nombre de suggestions et de colonnes pour que chaque ligne soit pleine.
+({int columns, int count}) _suggestionGrid(int available, double gridWidth) {
+  final desired = _coverColumns(gridWidth);
+  final capped = available < _quickSuggestions ? available : _quickSuggestions;
+  if (capped <= 0) return (columns: desired, count: 0);
+  if (capped < desired) return (columns: capped, count: capped);
+  final count = capped - (capped % desired);
+  return (columns: desired, count: count);
+}
 
 class DiscoverPage extends ConsumerStatefulWidget {
   const DiscoverPage({super.key});
@@ -41,7 +64,7 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
   @override
   Future<void> runDiscoverSearch(String query) async {
     final trimmed = query.trim();
-    if (trimmed.isEmpty) return;
+    if (trimmed.isEmpty || ref.read(onlineStatusProvider) == false) return;
     setState(() {
       searching = true;
       this.query = trimmed;
@@ -54,8 +77,10 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
   @override
   Widget build(BuildContext context) {
     final search = ref.watch(discoverSearchProvider);
+    final offline = ref.watch(onlineStatusProvider) == false;
     final showingResults =
-        search.isLoading || (search.hasValue && search.value != null);
+        !offline &&
+        (search.isLoading || (search.hasValue && search.value != null));
 
     return Scaffold(
       appBar: AppBar(
@@ -75,7 +100,7 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
                   onSearchSubmitted(value);
                 },
               )
-            : const Text('Explorer'),
+            : Text(context.tr('Explore')),
         leading: searching
             ? IconButton(
                 tooltip: 'Fermer la recherche',
@@ -94,12 +119,14 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
           else
             IconButton(
               tooltip: 'Rechercher',
-              onPressed: openSearch,
+              onPressed: offline ? null : openSearch,
               icon: const Icon(Icons.search),
             ),
         ],
       ),
-      body: showingResults
+      body: offline
+          ? const _OfflineExplore()
+          : showingResults
           ? _SearchResultsBody(
               search: search,
               query: query.trim(),
@@ -195,6 +222,18 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
   }
 }
 
+class _OfflineExplore extends StatelessWidget {
+  const _OfflineExplore();
+
+  @override
+  Widget build(BuildContext context) {
+    return EmptyState(
+      title: context.tr('No internet connection'),
+      message: context.tr('Explore needs an internet connection.'),
+    );
+  }
+}
+
 /// Toutes les suggestions (ouverte via « Découvrir plus »).
 class DiscoverMorePage extends ConsumerStatefulWidget {
   const DiscoverMorePage({super.key});
@@ -240,7 +279,7 @@ class _DiscoverMorePageState extends ConsumerState<DiscoverMorePage>
   @override
   Future<void> runDiscoverSearch(String query) async {
     final trimmed = query.trim();
-    if (trimmed.isEmpty) return;
+    if (trimmed.isEmpty || ref.read(onlineStatusProvider) == false) return;
     setState(() {
       searching = true;
       this.query = trimmed;
@@ -252,8 +291,10 @@ class _DiscoverMorePageState extends ConsumerState<DiscoverMorePage>
   Widget build(BuildContext context) {
     final search = ref.watch(discoverSearchProvider);
     final charts = ref.watch(discoverChartsProvider);
+    final offline = ref.watch(onlineStatusProvider) == false;
     final showingResults =
-        search.isLoading || (search.hasValue && search.value != null);
+        !offline &&
+        (search.isLoading || (search.hasValue && search.value != null));
     final width = MediaQuery.sizeOf(context).width;
     final columns = width >= _tabletBreakpoint ? 6 : 4;
 
@@ -294,12 +335,14 @@ class _DiscoverMorePageState extends ConsumerState<DiscoverMorePage>
           else
             IconButton(
               tooltip: 'Rechercher',
-              onPressed: openSearch,
+              onPressed: offline ? null : openSearch,
               icon: const Icon(Icons.search),
             ),
         ],
       ),
-      body: showingResults
+      body: offline
+          ? const _OfflineExplore()
+          : showingResults
           ? _SearchResultsBody(
               search: search,
               query: query.trim(),
@@ -407,57 +450,72 @@ class _DiscoverHomeBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final charts = ref.watch(discoverChartsProvider);
     final theme = Theme.of(context);
-    final width = MediaQuery.sizeOf(context).width;
-    final columns = width >= _tabletBreakpoint ? 6 : 4;
 
     return ListView(
       padding: underChrome(context, const EdgeInsets.only(bottom: 24)),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: charts.when(
-            loading: () => _ChartsPlaceholderGrid(columns: columns),
-            error: (error, _) => _ChartsError(
-              message: errorText(error),
-              onRetry: () => ref.read(discoverChartsProvider.notifier).reload(),
-            ),
-            data: (charts) {
-              final items = charts.hits;
-              if (items.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text('Aucune suggestion pour le moment.'),
-                );
-              }
-              final visible = items.take(_quickSuggestions).toList();
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _CoverGrid(
-                    items: visible,
-                    columns: columns,
-                    opening: opening,
-                    onOpen: onOpen,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final grid = _suggestionGrid(
+                charts.asData?.value.hits.length ?? _quickSuggestions,
+                constraints.maxWidth,
+              );
+              return charts.when(
+                loading: () => _ChartsPlaceholderGrid(
+                  columns: grid.columns,
+                  count: grid.count,
+                ),
+                error: (error, _) => _ChartsError(
+                  message: errorText(error),
+                  onRetry: () =>
+                      ref.read(discoverChartsProvider.notifier).reload(),
+                ),
+                data: (charts) {
+                  final items = charts.hits;
+                  if (items.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text('Aucune suggestion pour le moment.'),
+                    );
+                  }
+                  final layout = _suggestionGrid(
+                    items.length,
+                    constraints.maxWidth,
+                  );
+                  final visible = items.take(layout.count).toList();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: Text(
-                          'Suggestions · Apple, Podcast Index, fyyd',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
+                      _CoverGrid(
+                        items: visible,
+                        columns: layout.columns,
+                        opening: opening,
+                        onOpen: onOpen,
                       ),
-                      if (items.length > _quickSuggestions || charts.hasMore)
-                        TextButton(
-                          onPressed: () => context.push(AppRoutes.discoverMore),
-                          child: const Text('Découvrir plus »'),
-                        ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Suggestions · Apple, Podcast Index, fyyd',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          if (visible.length < items.length || charts.hasMore)
+                            TextButton(
+                              onPressed: () =>
+                                  context.push(AppRoutes.discoverMore),
+                              child: const Text('Découvrir plus »'),
+                            ),
+                        ],
+                      ),
                     ],
-                  ),
-                ],
+                  );
+                },
               );
             },
           ),
@@ -599,9 +657,10 @@ class _DiscoverCover extends StatelessWidget {
 }
 
 class _ChartsPlaceholderGrid extends StatelessWidget {
-  const _ChartsPlaceholderGrid({required this.columns});
+  const _ChartsPlaceholderGrid({required this.columns, required this.count});
 
   final int columns;
+  final int count;
 
   @override
   Widget build(BuildContext context) {
@@ -610,7 +669,7 @@ class _ChartsPlaceholderGrid extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
-      itemCount: _quickSuggestions,
+      itemCount: count,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
         crossAxisSpacing: 8,

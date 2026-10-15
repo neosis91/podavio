@@ -160,19 +160,23 @@ class _PlayerTransport extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             IconButton(
-              tooltip: 'Épisode précédent',
+              tooltip: context.tr('Previous episode'),
               iconSize: sideIconSize,
               onPressed: player.playPreviousInQueue,
               icon: SkipIcon.previous(size: sideIconSize),
             ),
             IconButton(
-              tooltip: 'Reculer de ${settings.skipBackSeconds} s (J)',
+              tooltip: context.tr('Rewind {seconds} s (J)', {
+                'seconds': '${settings.skipBackSeconds}',
+              }),
               onPressed: () => player.skipBy(-settings.skipBackSeconds),
               icon: SkipIcon.back(size: skipIconSize),
             ),
             if (!carMode)
               IconButton.filled(
-                tooltip: playing ? 'Pause (Espace)' : 'Lecture (Espace)',
+                tooltip: context.tr(
+                  playing ? 'Pause (Space)' : 'Play (Space)',
+                ),
                 iconSize: playIconSize,
                 style: IconButton.styleFrom(
                   backgroundColor: scheme.onSurface,
@@ -190,14 +194,18 @@ class _PlayerTransport extends ConsumerWidget {
                 ),
               ),
             IconButton(
-              tooltip: 'Avancer de ${settings.skipForwardSeconds} s (L)',
+              tooltip: context.tr('Forward {seconds} s (L)', {
+                'seconds': '${settings.skipForwardSeconds}',
+              }),
               onPressed: () => player.skipBy(settings.skipForwardSeconds),
               icon: SkipIcon.forward(size: skipIconSize),
             ),
             IconButton(
-              tooltip: hasNext
-                  ? 'Épisode suivant'
-                  : 'Pas d’épisode suivant dans la file d’attente',
+              tooltip: context.tr(
+                hasNext
+                    ? 'Next episode'
+                    : 'No next episode in the queue',
+              ),
               iconSize: sideIconSize,
               onPressed: hasNext ? player.playNextInQueue : null,
               icon: SkipIcon.next(size: sideIconSize),
@@ -209,7 +217,7 @@ class _PlayerTransport extends ConsumerWidget {
           Row(
             children: [
               IconButton(
-                tooltip: 'Notes',
+                tooltip: context.tr('Notes'),
                 onPressed: episodeId == null
                     ? null
                     : () => showNotesSheet(
@@ -219,7 +227,7 @@ class _PlayerTransport extends ConsumerWidget {
                 icon: const InfoIcon(),
               ),
               IconButton(
-                tooltip: castName ?? 'Sortie audio',
+                tooltip: castName ?? context.tr('Audio output'),
                 color: castName == null ? null : const Color(0xFF4FC3F7),
                 onPressed: () => showAudioOutputSheet(context, ref),
                 icon: const Icon(Icons.headphones),
@@ -227,7 +235,7 @@ class _PlayerTransport extends ConsumerWidget {
               const Spacer(),
               if (hasChapters)
                 IconButton(
-                  tooltip: 'Chapitres',
+                  tooltip: context.tr('Chapters'),
                   onPressed: episodeId == null
                       ? null
                       : () => showChaptersSheet(
@@ -351,8 +359,10 @@ class _QueueAction extends ConsumerWidget {
     final label = count > 99 ? '99+' : '$count';
     return IconButton(
       tooltip: open
-          ? 'Revenir à l’épisode'
-          : (count == 0 ? 'File d’attente' : 'File d’attente ($count)'),
+          ? context.tr('Back to the episode')
+          : (count == 0
+                ? context.tr('Queue')
+                : context.tr('Queue ({count})', {'count': '$count'})),
       isSelected: open,
       style: IconButton.styleFrom(
         backgroundColor: open ? scheme.secondaryContainer : null,
@@ -383,7 +393,9 @@ class _FavoriteAction extends ConsumerWidget {
     if (entry == null) return const SizedBox.shrink();
     final favorite = entry.episode.favorite;
     return IconButton(
-      tooltip: favorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
+      tooltip: context.tr(
+        favorite ? 'Remove from favorites' : 'Add to favorites',
+      ),
       onPressed: () =>
           runEpisodeAction(context, ref, entry, EpisodeMenuAction.favorite),
       icon: Icon(
@@ -404,7 +416,7 @@ class _PlayerEpisodeActions extends ConsumerWidget {
     final entry = ref.watch(episodeProvider(episodeId)).value;
     if (entry == null) return const SizedBox.shrink();
     return IconButton(
-      tooltip: 'Actions',
+      tooltip: context.tr('Actions'),
       onPressed: () => showEpisodeActionsSheet(
         context,
         ref,

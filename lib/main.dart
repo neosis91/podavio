@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
+import 'l10n/interface_locale.dart';
 import 'data/providers.dart';
 import 'player/playback_handler.dart';
 
@@ -19,7 +20,9 @@ Future<void> main() async {
   JustAudioMediaKit.title = 'Podavio';
   JustAudioMediaKit.ensureInitialized();
   await _startMediaSession();
-  await initializeDateFormatting('fr');
+  for (final code in supportedInterfaceLanguageCodes) {
+    await initializeDateFormatting(code);
+  }
   final preferences = await SharedPreferences.getInstance();
   runApp(
     ProviderScope(

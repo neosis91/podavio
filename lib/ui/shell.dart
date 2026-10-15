@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/feed_refresh_controller.dart';
+import '../data/online_status.dart';
+import '../data/opml_import_controller.dart';
 import '../data/providers.dart';
+import '../l10n/l10n.dart';
 import '../player/player_controller.dart';
 import '../player/player_sheet_controller.dart';
 import 'nav_catalog.dart';
@@ -10,26 +14,27 @@ import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/expandable_player.dart';
 import 'widgets/feed_refresh_banner.dart';
+import 'widgets/offline_banner.dart';
 import 'widgets/opml_import_banner.dart';
 import 'widgets/update_prompt.dart';
 
 /// Capsule Accueil / Abonnements / Bibliothèque, loupe à part pour Explorer.
 final shellTabs = <NavPage>[
-  NavPage(AppRoutes.home, 'Accueil', _material(Icons.home)),
+  NavPage(AppRoutes.home, 'Home', _material(Icons.home)),
   NavPage(
     AppRoutes.podcasts,
-    'Abonnements',
+    'Subscriptions',
     ({required Color color, double size = 24}) => IconTheme(
       data: IconThemeData(color: color, size: size),
       child: SubscriptionsIcon(size: size),
     ),
   ),
-  NavPage(AppRoutes.library, 'Bibliothèque', _material(Icons.library_music)),
+  NavPage(AppRoutes.library, 'Library', _material(Icons.library_music)),
 ];
 
 final _searchTab = NavPage(
   AppRoutes.discover,
-  'Explorer',
+  'Explore',
   _material(Icons.search),
 );
 
@@ -92,11 +97,7 @@ class AppShell extends ConsumerWidget {
       return Stack(
         clipBehavior: Clip.none,
         children: [
-          Scaffold(
-            extendBody: true,
-            body: page,
-            bottomNavigationBar: navigation,
-          ),
+          Scaffold(body: page, bottomNavigationBar: navigation),
           ExpandablePlayer(
             bottomInset: padding.bottom + _expandedBody + _playerGap,
           ),
@@ -106,20 +107,22 @@ class AppShell extends ConsumerWidget {
     }
 
     final scheme = Theme.of(context).colorScheme;
-    final content = Builder(
-      builder: (context) {
-        final metrics = MediaQuery.of(context);
-        final player = hasEpisode ? miniPlayerHeight + _playerGap : 0.0;
-        return MediaQuery(
-          data: metrics.copyWith(
-            padding: metrics.padding.copyWith(
-              bottom: metrics.padding.bottom + player,
+    final clearance = hasEpisode
+        ? _contentClearanceAboveMiniPlayer(
+            bottomInset: desktop ? 12 : padding.bottom + 12,
+            contentInset: desktop ? _desktopInset : 0,
+          )
+        : 0.0;
+    final content = clearance == 0
+        ? page
+        : MediaQuery.removePadding(
+            context: context,
+            removeBottom: true,
+            child: Padding(
+              padding: EdgeInsets.only(bottom: clearance),
+              child: page,
             ),
-          ),
-          child: page,
-        );
-      },
-    );
+          );
 
     return Scaffold(
       backgroundColor: desktop ? _desktopWindow(context) : null,
@@ -171,26 +174,29 @@ Color _desktopWindow(BuildContext context) {
       : Colors.white;
 }
 
-class _UnderChrome extends StatelessWidget {
+class _UnderChrome extends ConsumerWidget {
   const _UnderChrome({required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.paddingOf(context).bottom;
-    return Stack(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final offline = ref.watch(onlineStatusProvider) == false;
+    final refreshing = ref.watch(feedRefreshProvider).isVisible;
+    final importing = ref.watch(opmlImportProvider).isVisible;
+    final page = offline || refreshing || importing
+        ? MediaQuery.removePadding(
+            context: context,
+            removeTop: true,
+            child: child,
+          )
+        : child;
+    return Column(
       children: [
-        Positioned.fill(child: child),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: bottom,
-          child: const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [OpmlImportBanner(), FeedRefreshBanner()],
-          ),
-        ),
+        if (offline) const OfflineBanner(),
+        const FeedRefreshBanner(),
+        const OpmlImportBanner(),
+        Expanded(child: page),
       ],
     );
   }
@@ -206,6 +212,15 @@ const _capsuleInset = 6.0;
 const _searchGap = 12.0;
 const _playerGap = 8.0;
 const _desktopInset = 8.0;
+
+/// Espace entre le bas du contenu et le haut du mini-lecteur.
+double _contentClearanceAboveMiniPlayer({
+  required double bottomInset,
+  required double contentInset,
+}) {
+  final raw = bottomInset + miniPlayerHeight - contentInset;
+  return raw < 0 ? 0 : raw;
+}
 
 int _selectedTab(String path) {
   if (_owns(path, _searchTab.path)) return -1;
@@ -309,7 +324,7 @@ class _AppRail extends StatelessWidget {
           NavigationRailDestination(
             icon: _RailIcon(page: page),
             selectedIcon: _RailIcon(page: page),
-            label: Text(page.label),
+            label: Text(context.tr(page.label)),
           ),
       ],
     );
@@ -499,7 +514,7 @@ class _SearchButton extends StatelessWidget {
         child: SizedBox.square(
           dimension: _indicatorSize,
           child: Tooltip(
-            message: _searchTab.label,
+            message: context.tr(_searchTab.label),
             child: Center(
               child: _searchTab.buildIcon(color: color, selected: selected),
             ),
@@ -532,7 +547,7 @@ class _NavButton extends StatelessWidget {
         children: [
           page.buildIcon(color: foreground, selected: selected),
           Text(
-            page.label,
+            context.tr(page.label),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,

@@ -51,6 +51,38 @@ remove_site_worktree() {
   fi
 }
 
+site_project() {
+  url="$(git -C "${site}" remote get-url origin)"
+  url="${url%.git}"
+  case "${url}" in
+    git@gitlab.com:*) url="${url#git@gitlab.com:}" ;;
+    https://gitlab.com/*) url="${url#https://gitlab.com/}" ;;
+    http://gitlab.com/*) url="${url#http://gitlab.com/}" ;;
+  esac
+  printf '%s' "${url}"
+}
+
+ensure_site_pipeline() {
+  project="$(site_project)"
+  encoded="$(printf '%s' "${project}" | sed 's#/#%2F#g')"
+  site_sha="$(git -C "${site}" rev-parse origin/main)"
+  echo "Vérification du pipeline de déploiement…"
+  n=0
+  while [ "${n}" -lt 8 ]; do
+    found="$(glab api "projects/${encoded}/pipelines?sha=${site_sha}&per_page=1" 2>/dev/null || true)"
+    case "${found}" in
+      *'"id"'*)
+        echo "Pipeline de déploiement lancé."
+        return 0
+        ;;
+    esac
+    n=$((n + 1))
+    sleep 2
+  done
+  echo "Le push n'a pas lancé la CI. Démarrage du pipeline."
+  glab ci run -R "${project}" -b main
+}
+
 if [ -x "${HOME}/development/flutter/bin/flutter" ]; then
   PATH="${HOME}/development/flutter/bin:${PATH}"
 fi
@@ -284,25 +316,24 @@ publish_site() {
   git -C "${site_work}" add latest.json changelog.json journal/index.html "releases/${VERSION}"
   if git -C "${site_work}" diff --cached --quiet; then
     echo "Le site contient déjà les fichiers ${VERSION}."
-    remove_site_worktree
-    trap - EXIT
-    return 0
-  fi
-
-  git -C "${site_work}" commit -m "$(cat <<EOF
+  else
+    git -C "${site_work}" commit -m "$(cat <<EOF
 Publier Podavio ${VERSION} sur podavio.com.
 
 EOF
 )"
-  git -C "${site_work}" push origin HEAD:main
+    git -C "${site_work}" push origin HEAD:main
+    if [ "$(git -C "${site}" branch --show-current)" = "main" ] \
+      && [ -z "$(git -C "${site}" status --porcelain)" ] \
+      && git -C "${site}" merge-base --is-ancestor HEAD origin/main; then
+      git -C "${site}" merge --ff-only origin/main
+    fi
+    echo "Site poussé."
+  fi
   remove_site_worktree
   trap - EXIT
-  if [ "$(git -C "${site}" branch --show-current)" = "main" ] \
-    && [ -z "$(git -C "${site}" status --porcelain)" ] \
-    && git -C "${site}" merge-base --is-ancestor HEAD origin/main; then
-    git -C "${site}" merge --ff-only origin/main
-  fi
-  echo "Site poussé. La CI copie les fichiers sur le serveur."
+  ensure_site_pipeline
+  echo "La CI copie les fichiers sur le serveur."
 }
 
 publish_site

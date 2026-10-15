@@ -30,16 +30,22 @@ class _UpdatePromptState extends ConsumerState<UpdatePrompt> {
   }
 
   Future<void> _open(AppRelease release) async {
-    final download = await showDialog<bool>(
-      context: context,
-      useRootNavigator: true,
-      barrierDismissible: false,
-      builder: (context) => _UpdateDialog(release: release),
-    );
-    if (download != true || !mounted) return;
-    final uri = Uri.parse(downloadPageUrl);
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!mounted) return;
+    await promptAppUpdate(context, release);
   }
+}
+
+/// Propose le téléchargement d’une publication plus récente.
+Future<void> promptAppUpdate(BuildContext context, AppRelease release) async {
+  final download = await showDialog<bool>(
+    context: context,
+    useRootNavigator: true,
+    barrierDismissible: false,
+    builder: (context) => _UpdateDialog(release: release),
+  );
+  if (download != true) return;
+  final uri = Uri.parse(downloadPageUrl);
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
 }
 
 class _UpdateDialog extends StatelessWidget {

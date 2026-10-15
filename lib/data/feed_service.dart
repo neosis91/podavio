@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -9,6 +10,7 @@ import 'http_auth.dart';
 import 'apple_feed.dart';
 import 'chapters_parser.dart';
 import 'discover_hit.dart';
+import 'discover_languages.dart';
 import 'fyyd_search.dart';
 import 'models.dart';
 import 'podcast_index_search.dart';
@@ -50,11 +52,11 @@ class FeedService {
   FeedService(this._database);
 
   final AppDatabase _database;
-  final remote.Search _search = remote.Search();
   final PodcastIndexSearch _podcastIndex = PodcastIndexSearch();
   final FyydSearch _fyyd = FyydSearch();
   final _chapterInflight = <int, Future<void>>{};
   final _chapterFailedAt = <int, DateTime>{};
+  final _channelLanguages = <String, String?>{};
   static const _chapterRetryBackoff = Duration(minutes: 5);
 
   Future<SubscribeResult> subscribe(
@@ -177,16 +179,28 @@ class FeedService {
     return RefreshReport(total: total, failures: List.unmodifiable(failures));
   }
 
-  Future<remote.SearchResult> search(String query) {
-    return _search.search(query, country: remote.Country.france, limit: 30);
+  Future<remote.SearchResult> search(
+    String query, {
+    List<String> languages = const [discoverLanguagesAll],
+  }) {
+    final stores = appleSearchStores(languages);
+    final country = stores.isEmpty ? remote.Country.none : stores.first;
+    return remote.Search().search(query, country: country, limit: 30);
   }
 
-  Future<remote.SearchResult> charts() {
-    return _search.charts(country: remote.Country.france, limit: 24);
+  Future<remote.SearchResult> charts({
+    List<String> languages = const [discoverLanguagesAll],
+  }) {
+    final stores = appleChartStores(languages);
+    final country = stores.isEmpty ? remote.Country.unitedStates : stores.first;
+    return remote.Search().charts(country: country, limit: 24);
   }
 
-  /// Suggestions combinées (Apple charts FR + Podcast Index trending + fyyd).
-  Future<List<DiscoverHit>> discoverCharts({int limit = 24}) async {
+  /// Suggestions combinées (Apple, Podcast Index, fyyd).
+  Future<List<DiscoverHit>> discoverCharts({
+    int limit = 24,
+    List<String> languages = const [discoverLanguagesAll],
+  }) async {
     Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
       try {
         return await future;
@@ -196,9 +210,9 @@ class FeedService {
     }
 
     final results = await Future.wait([
-      safe(_appleChartHits()),
-      safe(_podcastIndex.trending(lang: 'fr', max: limit)),
-      safe(_fyyd.suggestions(count: limit)),
+      safe(_appleChartHits(languages: languages)),
+      safe(_podcastIndex.trending(languages: languages, max: limit)),
+      safe(_fyyd.suggestions(count: limit, languages: languages)),
     ]);
 
     final merged = _mergeHits(results, const [1.0, 1.0, 0.8]);
@@ -215,6 +229,7 @@ class FeedService {
   Future<List<DiscoverHit>> discoverChartsPage({
     required int page,
     int pageSize = 16,
+    List<String> languages = const [discoverLanguagesAll],
   }) async {
     Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
       try {
@@ -227,11 +242,18 @@ class FeedService {
     final results = await Future.wait([
       safe(
         page == 0
-            ? _appleChartHits(limit: 24)
+            ? _appleChartHits(languages: languages)
             : Future.value(const <DiscoverHit>[]),
       ),
-      safe(_podcastIndex.trending(lang: 'fr', max: (page + 1) * pageSize)),
-      safe(_fyyd.suggestions(count: pageSize, page: page)),
+      safe(
+        _podcastIndex.trending(
+          languages: languages,
+          max: (page + 1) * pageSize,
+        ),
+      ),
+      safe(
+        _fyyd.suggestions(count: pageSize, page: page, languages: languages),
+      ),
     ]);
 
     final merged = _mergeHits(results, const [1.0, 1.0, 0.8]);
@@ -240,50 +262,44 @@ class FeedService {
     return [...withArt, ...without];
   }
 
-  Future<List<DiscoverHit>> _appleChartHits({int limit = 24}) async {
-    final result = await _search.charts(
-      country: remote.Country.france,
-      limit: limit,
-    );
-    if (!result.successful) {
-      throw Exception(
-        result.lastError.isEmpty ? 'La recherche a échoué.' : result.lastError,
+  Future<List<DiscoverHit>> _appleChartHits({
+    List<String> languages = const [discoverLanguagesAll],
+    int limit = 24,
+  }) {
+    return _appleFromStores(appleChartStores(languages), (country) async {
+      final result = await remote.Search().charts(
+        country: country,
+        limit: limit,
       );
-    }
-    return [
-      for (final item in result.items)
-        DiscoverHit(
-          title: item.trackName ?? item.collectionName ?? 'Podcast',
-          author: item.artistName ?? '',
-          imageUrl: item.bestArtworkUrl,
-          feedUrl: item.feedUrl?.trim() ?? '',
-          source: DiscoverSource.apple,
-          appleId: item.collectionId ?? item.trackId,
-        ),
-    ];
+      return _appleHits(result, languages);
+    });
   }
 
   /// Recherche multi-annuaires (Apple, Podcast Index, fyyd).
   Future<List<DiscoverHit>> discoverSearch(
     String query, {
     DiscoverSearchScope scope = DiscoverSearchScope.combined,
+    List<String> languages = const [discoverLanguagesAll],
   }) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return const [];
 
     switch (scope) {
       case DiscoverSearchScope.apple:
-        return _searchAppleHits(trimmed);
+        return _searchAppleHits(trimmed, languages);
       case DiscoverSearchScope.podcastIndex:
-        return _podcastIndex.search(trimmed);
+        return _podcastIndex.search(trimmed, languages: languages);
       case DiscoverSearchScope.fyyd:
-        return _fyyd.search(trimmed);
+        return _fyyd.search(trimmed, languages: languages);
       case DiscoverSearchScope.combined:
-        return _searchCombined(trimmed);
+        return _searchCombined(trimmed, languages);
     }
   }
 
-  Future<List<DiscoverHit>> _searchCombined(String query) async {
+  Future<List<DiscoverHit>> _searchCombined(
+    String query,
+    List<String> languages,
+  ) async {
     Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
       try {
         return await future;
@@ -293,9 +309,9 @@ class FeedService {
     }
 
     final results = await Future.wait([
-      safe(_searchAppleHits(query)),
-      safe(_podcastIndex.search(query)),
-      safe(_fyyd.search(query)),
+      safe(_searchAppleHits(query, languages)),
+      safe(_podcastIndex.search(query, languages: languages)),
+      safe(_fyyd.search(query, languages: languages)),
     ]);
 
     return _mergeHits(results, const [1.0, 1.0, 0.8]);
@@ -326,18 +342,51 @@ class FeedService {
     return [for (final e in sorted) byKey[e.key]!];
   }
 
-  Future<List<DiscoverHit>> _searchAppleHits(String query) async {
-    final result = await _search.search(
-      query,
-      country: remote.Country.france,
-      limit: 30,
-    );
+  Future<List<DiscoverHit>> _searchAppleHits(
+    String query,
+    List<String> languages,
+  ) {
+    return _appleFromStores(appleSearchStores(languages), (country) async {
+      final result = await remote.Search().search(
+        query,
+        country: country,
+        limit: 30,
+      );
+      return _appleHits(result, languages);
+    });
+  }
+
+  Future<List<DiscoverHit>> _appleFromStores(
+    List<remote.Country> stores,
+    Future<List<DiscoverHit>> Function(remote.Country country) fetch,
+  ) async {
+    if (stores.isEmpty) return const [];
+    final results = await Future.wait([
+      for (final store in stores)
+        () async {
+          try {
+            return await fetch(store);
+          } catch (_) {
+            return null;
+          }
+        }(),
+    ]);
+    if (results.every((list) => list == null)) {
+      throw Exception('La recherche a échoué.');
+    }
+    return _mergeHits(results, [for (final _ in stores) 1.0]);
+  }
+
+  Future<List<DiscoverHit>> _appleHits(
+    remote.SearchResult result,
+    List<String> languages,
+  ) async {
     if (!result.successful) {
       throw Exception(
         result.lastError.isEmpty ? 'La recherche a échoué.' : result.lastError,
       );
     }
-    return [
+    final hits = [
       for (final item in result.items)
         DiscoverHit(
           title: item.trackName ?? item.collectionName ?? 'Podcast',
@@ -348,6 +397,86 @@ class FeedService {
           appleId: item.collectionId ?? item.trackId,
         ),
     ];
+    if (discoverLanguagesAreAll(languages) || hits.isEmpty) return hits;
+
+    // La boutique est un pays, pas une langue : tagesschau est dans le store FR.
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+    try {
+      final checked = await Future.wait([
+        for (final hit in hits) _appleHitIfLanguage(client, hit, languages),
+      ]);
+      return [for (final hit in checked) ?hit];
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<DiscoverHit?> _appleHitIfLanguage(
+    HttpClient client,
+    DiscoverHit hit,
+    List<String> languages,
+  ) async {
+    final url = hit.feedUrl.trim();
+    if (url.isEmpty) return hit;
+    final read = await _channelLanguage(client, url);
+    if (!read.reached) return hit;
+    if (!discoverLanguageMatches(read.language, languages)) return null;
+    return hit;
+  }
+
+  Future<({bool reached, String? language})> _channelLanguage(
+    HttpClient client,
+    String url,
+  ) async {
+    if (_channelLanguages.containsKey(url)) {
+      return (reached: true, language: _channelLanguages[url]);
+    }
+    final read = await _fetchChannelLanguage(client, url);
+    if (read.reached) _channelLanguages[url] = read.language;
+    return read;
+  }
+
+  /// Lit le début du flux jusqu’à la langue du channel. Un échec réseau
+  /// laisse le résultat visible ; une langue absente l’écarte.
+  Future<({bool reached, String? language})> _fetchChannelLanguage(
+    HttpClient client,
+    String url,
+  ) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) return (reached: false, language: null);
+    try {
+      final request = await client
+          .getUrl(uri)
+          .timeout(const Duration(seconds: 6));
+      request.followRedirects = true;
+      request.headers.set(HttpHeaders.userAgentHeader, podavioUserAgent);
+      final response = await request.close().timeout(
+        const Duration(seconds: 8),
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        await response.drain<void>();
+        return (reached: false, language: null);
+      }
+      final buffer = StringBuffer();
+      var bytes = 0;
+      const maxBytes = 64 * 1024;
+      await for (final chunk in response.timeout(const Duration(seconds: 8))) {
+        bytes += chunk.length;
+        buffer.write(utf8.decode(chunk, allowMalformed: true));
+        final text = buffer.toString();
+        final language = rssChannelLanguage(text);
+        if (language != null) return (reached: true, language: language);
+        if (text.toLowerCase().contains('<item')) {
+          return (reached: true, language: null);
+        }
+        if (bytes >= maxBytes) return (reached: false, language: null);
+      }
+      final text = buffer.toString();
+      if (text.trim().isEmpty) return (reached: false, language: null);
+      return (reached: true, language: rssChannelLanguage(text));
+    } catch (_) {
+      return (reached: false, language: null);
+    }
   }
 
   /// Resolves the public RSS address when iTunes search omitted it.

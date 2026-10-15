@@ -24,9 +24,13 @@ String formatDate(DateTime? date) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(local.year, local.month, local.day);
-  if (day == today) return "Aujourd'hui";
-  if (day == today.subtract(const Duration(days: 1))) return 'Hier';
-  return DateFormat.yMMMd('fr').format(local);
+  if (day == today) {
+    return _phrase('today');
+  }
+  if (day == today.subtract(const Duration(days: 1))) {
+    return _phrase('yesterday');
+  }
+  return DateFormat.yMMMd().format(local);
 }
 
 /// Date de sortie courte pour les listes (tuiles d’épisode).
@@ -36,12 +40,16 @@ String formatListDate(DateTime? date) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(local.year, local.month, local.day);
-  if (day == today) return 'Auj.';
-  if (day == today.subtract(const Duration(days: 1))) return 'Hier';
-  if (local.year == now.year) {
-    return DateFormat('d MMM', 'fr').format(local);
+  if (day == today) {
+    return _phrase('todayShort');
   }
-  return DateFormat('d/MM/yy', 'fr').format(local);
+  if (day == today.subtract(const Duration(days: 1))) {
+    return _phrase('yesterday');
+  }
+  if (local.year == now.year) {
+    return DateFormat('d MMM').format(local);
+  }
+  return DateFormat('d/MM/yy').format(local);
 }
 
 /// Date de sortie : sans année si c’est l’année en cours.
@@ -49,9 +57,9 @@ String formatReleaseDate(DateTime? date) {
   if (date == null) return '';
   final local = date.toLocal();
   if (local.year == DateTime.now().year) {
-    return DateFormat.MMMd('fr').format(local);
+    return DateFormat.MMMd().format(local);
   }
-  return DateFormat.yMMMd('fr').format(local);
+  return DateFormat.yMMMd().format(local);
 }
 
 String formatListeningTime(int seconds) {
@@ -78,35 +86,330 @@ String formatBytes(int bytes) {
 }
 
 String formatReleaseCadence(Duration? interval) {
-  if (interval == null) return 'Indéterminé';
+  if (interval == null) return _phrase('unknown');
   final days = interval.inHours / 24;
-  if (days < 1.2) return 'Quotidien';
-  if (days < 2.5) return 'Tous les 2 jours';
-  if (days < 5) return 'Tous les ${days.round()} jours';
-  if (days < 9) return 'Hebdomadaire';
-  if (days < 18) return 'Toutes les 2 semaines';
-  if (days < 40) return 'Mensuel';
-  if (days < 80) return 'Tous les 2 mois';
-  return 'Tous les ${days.round()} jours';
+  if (days < 1.2) return _phrase('daily');
+  if (days < 2.5) return _phrase('every2days');
+  if (days < 5) return _phrase('everyNDays', {'n': '${days.round()}'});
+  if (days < 9) return _phrase('weekly');
+  if (days < 18) return _phrase('biweekly');
+  if (days < 40) return _phrase('monthly');
+  if (days < 80) return _phrase('bimonthly');
+  return _phrase('everyNDays', {'n': '${days.round()}'});
 }
 
 String formatMonthShort(int month) {
-  return DateFormat.MMM('fr').format(DateTime(2000, month));
+  return DateFormat.MMM().format(DateTime(2000, month));
 }
 
 String formatRelativeFuture(DateTime? date) {
-  if (date == null) return 'Indéterminée';
+  if (date == null) return _phrase('unknownDate');
   final local = date.toLocal();
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(local.year, local.month, local.day);
   final diff = day.difference(today).inDays;
-  if (diff < 0) return 'En retard (prévu ${formatDate(local)})';
-  if (diff == 0) return "Aujourd'hui";
-  if (diff == 1) return 'Demain';
-  if (diff < 14) return 'Dans $diff jours';
+  if (diff < 0) {
+    return _phrase('late', {'date': formatDate(local)});
+  }
+  if (diff == 0) return _phrase('today');
+  if (diff == 1) return _phrase('tomorrow');
+  if (diff < 14) return _phrase('inDays', {'n': '$diff'});
   return formatDate(local);
 }
+
+String _languageCode() {
+  final current = Intl.getCurrentLocale();
+  final code = current.split(RegExp('[_-]')).first.toLowerCase();
+  if (code.isEmpty) return 'fr';
+  return code;
+}
+
+String _phrase(String id, [Map<String, String>? params]) {
+  final table = _phrases[_languageCode()] ?? _phrases['en']!;
+  var text = table[id] ?? _phrases['fr']![id] ?? id;
+  if (params != null) {
+    for (final entry in params.entries) {
+      text = text.replaceAll('{${entry.key}}', entry.value);
+    }
+  }
+  return text;
+}
+
+const _phrases = <String, Map<String, String>>{
+  'fr': {
+    'today': "Aujourd'hui",
+    'todayShort': 'Auj.',
+    'yesterday': 'Hier',
+    'tomorrow': 'Demain',
+    'inDays': 'Dans {n} jours',
+    'late': 'En retard (prévu {date})',
+    'unknown': 'Indéterminé',
+    'unknownDate': 'Indéterminée',
+    'daily': 'Quotidien',
+    'every2days': 'Tous les 2 jours',
+    'everyNDays': 'Tous les {n} jours',
+    'weekly': 'Hebdomadaire',
+    'biweekly': 'Toutes les 2 semaines',
+    'monthly': 'Mensuel',
+    'bimonthly': 'Tous les 2 mois',
+  },
+  'en': {
+    'today': 'Today',
+    'todayShort': 'Today',
+    'yesterday': 'Yesterday',
+    'tomorrow': 'Tomorrow',
+    'inDays': 'In {n} days',
+    'late': 'Late (due {date})',
+    'unknown': 'Unknown',
+    'unknownDate': 'Unknown',
+    'daily': 'Daily',
+    'every2days': 'Every 2 days',
+    'everyNDays': 'Every {n} days',
+    'weekly': 'Weekly',
+    'biweekly': 'Every 2 weeks',
+    'monthly': 'Monthly',
+    'bimonthly': 'Every 2 months',
+  },
+  'de': {
+    'today': 'Heute',
+    'todayShort': 'Heute',
+    'yesterday': 'Gestern',
+    'tomorrow': 'Morgen',
+    'inDays': 'In {n} Tagen',
+    'late': 'Verspätet (geplant {date})',
+    'unknown': 'Unbekannt',
+    'unknownDate': 'Unbekannt',
+    'daily': 'Täglich',
+    'every2days': 'Alle 2 Tage',
+    'everyNDays': 'Alle {n} Tage',
+    'weekly': 'Wöchentlich',
+    'biweekly': 'Alle 2 Wochen',
+    'monthly': 'Monatlich',
+    'bimonthly': 'Alle 2 Monate',
+  },
+  'es': {
+    'today': 'Hoy',
+    'todayShort': 'Hoy',
+    'yesterday': 'Ayer',
+    'tomorrow': 'Mañana',
+    'inDays': 'En {n} días',
+    'late': 'Con retraso (previsto {date})',
+    'unknown': 'Desconocido',
+    'unknownDate': 'Desconocida',
+    'daily': 'Diario',
+    'every2days': 'Cada 2 días',
+    'everyNDays': 'Cada {n} días',
+    'weekly': 'Semanal',
+    'biweekly': 'Cada 2 semanas',
+    'monthly': 'Mensual',
+    'bimonthly': 'Cada 2 meses',
+  },
+  'it': {
+    'today': 'Oggi',
+    'todayShort': 'Oggi',
+    'yesterday': 'Ieri',
+    'tomorrow': 'Domani',
+    'inDays': 'Tra {n} giorni',
+    'late': 'In ritardo (previsto {date})',
+    'unknown': 'Sconosciuto',
+    'unknownDate': 'Sconosciuta',
+    'daily': 'Quotidiano',
+    'every2days': 'Ogni 2 giorni',
+    'everyNDays': 'Ogni {n} giorni',
+    'weekly': 'Settimanale',
+    'biweekly': 'Ogni 2 settimane',
+    'monthly': 'Mensile',
+    'bimonthly': 'Ogni 2 mesi',
+  },
+  'pt': {
+    'today': 'Hoje',
+    'todayShort': 'Hoje',
+    'yesterday': 'Ontem',
+    'tomorrow': 'Amanhã',
+    'inDays': 'Em {n} dias',
+    'late': 'Atrasado (previsto {date})',
+    'unknown': 'Desconhecido',
+    'unknownDate': 'Desconhecida',
+    'daily': 'Diário',
+    'every2days': 'A cada 2 dias',
+    'everyNDays': 'A cada {n} dias',
+    'weekly': 'Semanal',
+    'biweekly': 'A cada 2 semanas',
+    'monthly': 'Mensal',
+    'bimonthly': 'A cada 2 meses',
+  },
+  'nl': {
+    'today': 'Vandaag',
+    'todayShort': 'Vandaag',
+    'yesterday': 'Gisteren',
+    'tomorrow': 'Morgen',
+    'inDays': 'Over {n} dagen',
+    'late': 'Te laat (gepland {date})',
+    'unknown': 'Onbekend',
+    'unknownDate': 'Onbekend',
+    'daily': 'Dagelijks',
+    'every2days': 'Om de 2 dagen',
+    'everyNDays': 'Om de {n} dagen',
+    'weekly': 'Wekelijks',
+    'biweekly': 'Om de 2 weken',
+    'monthly': 'Maandelijks',
+    'bimonthly': 'Om de 2 maanden',
+  },
+  'zh': {
+    'today': '今天',
+    'todayShort': '今天',
+    'yesterday': '昨天',
+    'tomorrow': '明天',
+    'inDays': '{n} 天后',
+    'late': '已逾期（预计 {date}）',
+    'unknown': '未知',
+    'unknownDate': '未知',
+    'daily': '每天',
+    'every2days': '每 2 天',
+    'everyNDays': '每 {n} 天',
+    'weekly': '每周',
+    'biweekly': '每 2 周',
+    'monthly': '每月',
+    'bimonthly': '每 2 个月',
+  },
+  'hi': {
+    'today': 'आज',
+    'todayShort': 'आज',
+    'yesterday': 'बीता कल',
+    'tomorrow': 'आने वाला कल',
+    'inDays': '{n} दिनों में',
+    'late': 'विलंबित (निर्धारित {date})',
+    'unknown': 'अज्ञात',
+    'unknownDate': 'अज्ञात',
+    'daily': 'रोज़ाना',
+    'every2days': 'हर 2 दिन',
+    'everyNDays': 'हर {n} दिन',
+    'weekly': 'साप्ताहिक',
+    'biweekly': 'हर 2 सप्ताह',
+    'monthly': 'मासिक',
+    'bimonthly': 'हर 2 महीने',
+  },
+  'id': {
+    'today': 'Hari ini',
+    'todayShort': 'Hari ini',
+    'yesterday': 'Kemarin',
+    'tomorrow': 'Besok',
+    'inDays': 'Dalam {n} hari',
+    'late': 'Terlambat (jadwal {date})',
+    'unknown': 'Tidak diketahui',
+    'unknownDate': 'Tidak diketahui',
+    'daily': 'Harian',
+    'every2days': 'Setiap 2 hari',
+    'everyNDays': 'Setiap {n} hari',
+    'weekly': 'Mingguan',
+    'biweekly': 'Setiap 2 minggu',
+    'monthly': 'Bulanan',
+    'bimonthly': 'Setiap 2 bulan',
+  },
+  'ja': {
+    'today': '今日',
+    'todayShort': '今日',
+    'yesterday': '昨日',
+    'tomorrow': '明日',
+    'inDays': '{n}日後',
+    'late': '遅延（予定 {date}）',
+    'unknown': '不明',
+    'unknownDate': '不明',
+    'daily': '毎日',
+    'every2days': '2日ごと',
+    'everyNDays': '{n}日ごと',
+    'weekly': '毎週',
+    'biweekly': '2週間ごと',
+    'monthly': '毎月',
+    'bimonthly': '2か月ごと',
+  },
+  'ko': {
+    'today': '오늘',
+    'todayShort': '오늘',
+    'yesterday': '어제',
+    'tomorrow': '내일',
+    'inDays': '{n}일 후',
+    'late': '지연 (예정 {date})',
+    'unknown': '알 수 없음',
+    'unknownDate': '알 수 없음',
+    'daily': '매일',
+    'every2days': '2일마다',
+    'everyNDays': '{n}일마다',
+    'weekly': '매주',
+    'biweekly': '2주마다',
+    'monthly': '매월',
+    'bimonthly': '2개월마다',
+  },
+  'ru': {
+    'today': 'Сегодня',
+    'todayShort': 'Сегодня',
+    'yesterday': 'Вчера',
+    'tomorrow': 'Завтра',
+    'inDays': 'Через {n} дн.',
+    'late': 'С опозданием (план {date})',
+    'unknown': 'Неизвестно',
+    'unknownDate': 'Неизвестна',
+    'daily': 'Ежедневно',
+    'every2days': 'Каждые 2 дня',
+    'everyNDays': 'Каждые {n} дн.',
+    'weekly': 'Еженедельно',
+    'biweekly': 'Каждые 2 недели',
+    'monthly': 'Ежемесячно',
+    'bimonthly': 'Каждые 2 месяца',
+  },
+  'tr': {
+    'today': 'Bugün',
+    'todayShort': 'Bugün',
+    'yesterday': 'Dün',
+    'tomorrow': 'Yarın',
+    'inDays': '{n} gün içinde',
+    'late': 'Gecikmiş (plan {date})',
+    'unknown': 'Belirsiz',
+    'unknownDate': 'Belirsiz',
+    'daily': 'Günlük',
+    'every2days': '2 günde bir',
+    'everyNDays': '{n} günde bir',
+    'weekly': 'Haftalık',
+    'biweekly': '2 haftada bir',
+    'monthly': 'Aylık',
+    'bimonthly': '2 ayda bir',
+  },
+  'ar': {
+    'today': 'اليوم',
+    'todayShort': 'اليوم',
+    'yesterday': 'أمس',
+    'tomorrow': 'غدًا',
+    'inDays': 'خلال {n} أيام',
+    'late': 'متأخر (الموعد {date})',
+    'unknown': 'غير محدد',
+    'unknownDate': 'غير محددة',
+    'daily': 'يومي',
+    'every2days': 'كل يومين',
+    'everyNDays': 'كل {n} أيام',
+    'weekly': 'أسبوعي',
+    'biweekly': 'كل أسبوعين',
+    'monthly': 'شهري',
+    'bimonthly': 'كل شهرين',
+  },
+  'pl': {
+    'today': 'Dzisiaj',
+    'todayShort': 'Dzis.',
+    'yesterday': 'Wczoraj',
+    'tomorrow': 'Jutro',
+    'inDays': 'Za {n} dni',
+    'late': 'Opóźnione (plan {date})',
+    'unknown': 'Nieokreślony',
+    'unknownDate': 'Nieokreślona',
+    'daily': 'Codziennie',
+    'every2days': 'Co 2 dni',
+    'everyNDays': 'Co {n} dni',
+    'weekly': 'Co tydzień',
+    'biweekly': 'Co 2 tygodnie',
+    'monthly': 'Co miesiąc',
+    'bimonthly': 'Co 2 miesiące',
+  },
+};
 
 String audioExtension(String? mimeType, String url) {
   final mime = mimeType?.toLowerCase() ?? '';
@@ -249,8 +552,7 @@ Iterable<ShowNotesSpan> _spansWithBareUrls(String text) sync* {
   var cursor = 0;
   for (final match in pattern.allMatches(text)) {
     var end = match.end;
-    while (end > match.start &&
-        '.,;:!?)]}>»"\''.contains(text[end - 1])) {
+    while (end > match.start && '.,;:!?)]}>»"\''.contains(text[end - 1])) {
       end--;
     }
     final raw = text.substring(match.start, end);
