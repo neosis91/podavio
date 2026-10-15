@@ -1,9 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:podavio/core/format.dart';
 
 void main() {
   setUpAll(() async {
+    Intl.defaultLocale = 'fr';
     await initializeDateFormatting('fr');
   });
 
@@ -60,7 +62,6 @@ void main() {
     expect(spans.single.text, 'x');
     expect(spans.single.url, isNull);
   });
-
 
   test('audioExtension prefers the mime type', () {
     expect(audioExtension('audio/mpeg', 'https://cdn.example/a'), '.mp3');
@@ -126,10 +127,7 @@ void main() {
     final now = DateTime.now();
     expect(formatRelativeFuture(null), 'Indéterminée');
     expect(formatRelativeFuture(now), "Aujourd'hui");
-    expect(
-      formatRelativeFuture(now.add(const Duration(days: 1))),
-      'Demain',
-    );
+    expect(formatRelativeFuture(now.add(const Duration(days: 1))), 'Demain');
     expect(
       formatRelativeFuture(now.add(const Duration(days: 5))),
       'Dans 5 jours',

@@ -6,22 +6,22 @@ const podavioGreen = Color(0xFF2E895D);
 
 enum AppAccent {
   podavio('podavio', 'Podavio', podavioGreen),
-  blue('blue', 'Bleu', podavioBlue),
-  green('green', 'Vert', Color(0xFF2E7D32)),
-  purple('purple', 'Violet', Color(0xFF6A1B9A)),
-  red('red', 'Rouge', Color(0xFFC62828)),
+  blue('blue', 'Blue', podavioBlue),
+  green('green', 'Green', Color(0xFF2E7D32)),
+  purple('purple', 'Purple', Color(0xFF6A1B9A)),
+  red('red', 'Red', Color(0xFFC62828)),
   orange('orange', 'Orange', Color(0xFFEF6C00)),
-  teal('teal', 'Turquoise', Color(0xFF00838F)),
-  pink('pink', 'Rose', Color(0xFFC2185B)),
-  sky('sky', 'Bleu ciel', Color(0xFF0288D1)),
+  teal('teal', 'Teal', Color(0xFF00838F)),
+  pink('pink', 'Pink', Color(0xFFC2185B)),
+  sky('sky', 'Sky blue', Color(0xFF0288D1)),
   indigo('indigo', 'Indigo', Color(0xFF3949AB)),
   cyan('cyan', 'Cyan', Color(0xFF00ACC1)),
-  amber('amber', 'Ambre', Color(0xFFFF8F00)),
-  yellow('yellow', 'Jaune', Color(0xFFF9A825)),
+  amber('amber', 'Amber', Color(0xFFFF8F00)),
+  yellow('yellow', 'Yellow', Color(0xFFF9A825)),
   lime('lime', 'Lime', Color(0xFF7CB342)),
-  brown('brown', 'Brun', Color(0xFF6D4C41)),
-  slate('slate', 'Ardoise', Color(0xFF546E7A)),
-  wine('wine', 'Bordeaux', Color(0xFF880E4F));
+  brown('brown', 'Brown', Color(0xFF6D4C41)),
+  slate('slate', 'Slate', Color(0xFF546E7A)),
+  wine('wine', 'Wine', Color(0xFF880E4F));
 
   const AppAccent(this.id, this.label, this.seed);
 

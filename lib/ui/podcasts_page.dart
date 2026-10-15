@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/platform.dart';
+import '../l10n/l10n.dart';
 import '../core/search.dart';
 import '../data/app_database.dart';
 import '../data/feed_refresh_controller.dart';
@@ -106,7 +107,7 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                 textInputAction: TextInputAction.search,
                 onChanged: (value) => setState(() => _query = value),
               )
-            : const Text('Abonnements'),
+            : Text(context.tr('Subscriptions')),
         leading: _searching
             ? IconButton(
                 tooltip: 'Fermer la recherche',
@@ -233,7 +234,7 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                     action: FilledButton.icon(
                       onPressed: () => context.go(AppRoutes.discover),
                       icon: const Icon(Icons.explore),
-                      label: const Text('Explorer'),
+                      label: Text(context.tr('Explore')),
                     ),
                   );
                 }

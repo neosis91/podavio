@@ -7,11 +7,13 @@ class AppRoutes {
   static const podcasts = '/podcasts';
   static const discover = '/discover';
   static const discoverMore = '/discover/more';
+  static const discoverLanguages = '/discover-languages';
   static const preferences = '/preferences';
   static const favorites = '/favorites';
   static const history = '/history';
   static const downloads = '/downloads';
   static const appearance = '/appearance';
+  static const interfaceLanguage = '/appearance/language';
   static const playback = '/playback';
   static const downloadSettings = '/download-settings';
   static const about = '/about';

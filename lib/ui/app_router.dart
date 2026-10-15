@@ -10,10 +10,12 @@ import '../player/android_auto_bridge.dart';
 import '../player/player_controller.dart';
 import '../player/player_sheet_controller.dart';
 import '../settings/settings_controller.dart';
+import 'discover_languages_page.dart';
 import 'discover_page.dart';
 import 'episode_page.dart';
 import 'episodes_page.dart';
 import 'history_page.dart';
+import 'interface_language_page.dart';
 import 'home_page.dart';
 import 'library_hub_page.dart';
 import 'library_pages.dart';
@@ -128,8 +130,18 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const DownloadsPage(),
           ),
           GoRoute(
+            path: AppRoutes.discoverLanguages,
+            builder: (context, state) => const DiscoverLanguagesPage(),
+          ),
+          GoRoute(
             path: AppRoutes.appearance,
             builder: (context, state) => const AppearancePage(),
+            routes: [
+              GoRoute(
+                path: 'language',
+                builder: (context, state) => const InterfaceLanguagePage(),
+              ),
+            ],
           ),
           GoRoute(
             path: AppRoutes.playback,

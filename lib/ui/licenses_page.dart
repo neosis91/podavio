@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../l10n/l10n.dart';
+
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/build_info.dart';
@@ -22,7 +25,7 @@ class _LicensesPageState extends State<LicensesPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Licences')),
+      appBar: AppBar(title: Text(context.tr('Licenses'))),
       body: FutureBuilder<List<_PackageLicense>>(
         future: _licenses,
         builder: (context, snapshot) {

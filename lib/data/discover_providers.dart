@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../settings/settings_controller.dart';
 import 'discover_hit.dart';
+import 'online_status.dart';
 import 'feed_service.dart';
 import 'providers.dart';
 
@@ -44,7 +48,21 @@ class DiscoverChartsNotifier extends AsyncNotifier<DiscoverCharts> {
   final _seen = <String>{};
 
   @override
-  Future<DiscoverCharts> build() => _loadFirst();
+  Future<DiscoverCharts> build() {
+    ref.watch(
+      settingsProvider.select(
+        (settings) => settings.discoverLanguages.join('\u0001'),
+      ),
+    );
+    ref.listen(onlineStatusProvider, (previous, next) {
+      if (previous == false && next == true) unawaited(reload());
+    });
+    _generation++;
+    if (ref.read(onlineStatusProvider) == false) {
+      return Future.value(const DiscoverCharts(hasMore: false));
+    }
+    return _loadFirst();
+  }
 
   Future<void> reload() async {
     _generation++;
@@ -54,6 +72,7 @@ class DiscoverChartsNotifier extends AsyncNotifier<DiscoverCharts> {
   }
 
   Future<void> loadMore() async {
+    if (ref.read(onlineStatusProvider) == false) return;
     final current = state.asData?.value;
     if (current == null || !current.hasMore || _loadingMore) return;
     final gen = _generation;
@@ -98,18 +117,20 @@ class DiscoverChartsNotifier extends AsyncNotifier<DiscoverCharts> {
       }
       hits.addAll(fresh);
     }
-    return DiscoverCharts(
-      hits: hits,
-      hasMore: hasMore && _page < _maxPages,
-    );
+    return DiscoverCharts(hits: hits, hasMore: hasMore && _page < _maxPages);
   }
 
   Future<List<DiscoverHit>> _fetchFresh() async {
     final gen = _generation;
     final page = _page;
+    final languages = ref.read(settingsProvider).discoverLanguages;
     final merged = await ref
         .read(feedServiceProvider)
-        .discoverChartsPage(page: page, pageSize: pageSize);
+        .discoverChartsPage(
+          page: page,
+          pageSize: pageSize,
+          languages: languages,
+        );
     if (gen != _generation) return const [];
     _page = page + 1;
     final fresh = <DiscoverHit>[];
@@ -149,9 +170,16 @@ class DiscoverSearchNotifier extends AsyncNotifier<List<DiscoverHit>?> {
       state = const AsyncData(null);
       return;
     }
+    if (ref.read(onlineStatusProvider) == false) {
+      state = const AsyncData(null);
+      return;
+    }
     state = const AsyncLoading();
+    final languages = ref.read(settingsProvider).discoverLanguages;
     final next = await AsyncValue.guard(
-      () => ref.read(feedServiceProvider).discoverSearch(trimmed, scope: scope),
+      () => ref
+          .read(feedServiceProvider)
+          .discoverSearch(trimmed, scope: scope, languages: languages),
     );
     if (gen != _generation) return;
     state = next;

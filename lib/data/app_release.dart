@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../core/build_info.dart';
 import '../core/release_version.dart';
+import 'providers.dart';
 
 const latestReleaseUrl = 'https://podavio.com/latest.json';
 const downloadPageUrl = 'https://podavio.com/telecharger/';
@@ -38,13 +39,38 @@ class AppRelease {
   }
 }
 
-/// Publication plus récente sur podavio.com, ou rien.
-///
-/// Les lancements locaux n’ont pas `PODAVIO_VERSION` : on ne les prévient pas,
-/// sinon `0.1.0` serait toujours en retard sur le site.
-final appUpdateProvider = FutureProvider<AppRelease?>((ref) async {
-  final current = BuildInfo.version;
-  if (current.isEmpty) return null;
+/// Résultat d’une lecture de podavio.com.
+sealed class AppUpdateLookup {
+  const AppUpdateLookup();
+}
+
+/// Une publication plus récente existe.
+class AppUpdateNewer extends AppUpdateLookup {
+  const AppUpdateNewer(this.release);
+
+  final AppRelease release;
+}
+
+/// La version installée est celle du site, ou plus récente.
+class AppUpdateCurrent extends AppUpdateLookup {
+  const AppUpdateCurrent();
+}
+
+/// Le serveur a répondu, mais cette installation n’a pas de version publiée.
+class AppUpdateUnversioned extends AppUpdateLookup {
+  const AppUpdateUnversioned(this.published);
+
+  final AppRelease published;
+}
+
+/// Le site n’a pas répondu.
+class AppUpdateFailed extends AppUpdateLookup {
+  const AppUpdateFailed();
+}
+
+/// Interroge podavio.com. Une installation sans `PODAVIO_VERSION` n’est pas
+/// comparée : `0.1.0` serait toujours en retard sur le site.
+Future<AppUpdateLookup> lookupAppUpdate() async {
   final client = http.Client();
   try {
     final response = await client
@@ -53,15 +79,62 @@ final appUpdateProvider = FutureProvider<AppRelease?>((ref) async {
           headers: const {'User-Agent': 'Podavio'},
         )
         .timeout(const Duration(seconds: 12));
-    if (response.statusCode != 200) return null;
+    if (response.statusCode != 200) return const AppUpdateFailed();
     final latest = AppRelease.tryParse(response.body);
-    if (latest == null || !isNewerRelease(current, latest.version)) {
-      return null;
-    }
-    return latest;
+    if (latest == null) return const AppUpdateFailed();
+    final current = BuildInfo.version;
+    if (current.isEmpty) return AppUpdateUnversioned(latest);
+    if (isNewerRelease(current, latest.version)) return AppUpdateNewer(latest);
+    return const AppUpdateCurrent();
   } catch (_) {
-    return null;
+    return const AppUpdateFailed();
   } finally {
     client.close();
   }
+}
+
+bool appUpdateWasChecked(AppUpdateLookup lookup) {
+  return lookup is AppUpdateNewer ||
+      lookup is AppUpdateCurrent ||
+      lookup is AppUpdateUnversioned;
+}
+
+/// Publication plus récente sur podavio.com, ou rien.
+///
+/// Les lancements locaux n’ont pas `PODAVIO_VERSION` : on ne les prévient pas,
+/// sinon `0.1.0` serait toujours en retard sur le site. L’heure est quand même
+/// retenue quand le site a répondu.
+final appUpdateProvider = FutureProvider<AppRelease?>((ref) async {
+  final lookup = await lookupAppUpdate();
+  if (appUpdateWasChecked(lookup)) {
+    await ref.read(appUpdateCheckedAtProvider.notifier).mark(DateTime.now());
+  }
+  return switch (lookup) {
+    AppUpdateNewer(:final release) => release,
+    _ => null,
+  };
 });
+
+const appUpdateCheckedAtKey = 'appUpdateCheckedAt';
+
+/// Moment de la dernière vérification aboutie.
+final appUpdateCheckedAtProvider =
+    NotifierProvider<AppUpdateCheckedAt, DateTime?>(AppUpdateCheckedAt.new);
+
+class AppUpdateCheckedAt extends Notifier<DateTime?> {
+  @override
+  DateTime? build() {
+    final ms = ref
+        .watch(sharedPreferencesProvider)
+        .getInt(appUpdateCheckedAtKey);
+    if (ms == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  Future<void> mark(DateTime when) async {
+    state = when;
+    await ref
+        .read(sharedPreferencesProvider)
+        .setInt(appUpdateCheckedAtKey, when.millisecondsSinceEpoch);
+  }
+}

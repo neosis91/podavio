@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/providers.dart';
+import '../l10n/l10n.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/episode_list.dart';
 
@@ -11,7 +12,7 @@ class FavoritesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return _LibraryPage(
-      title: 'Favoris',
+      title: 'Favorites',
       query: const EpisodeQuery(favoritesOnly: true),
       emptyTitle: 'Aucun favori',
       emptyMessage: 'Marquez un épisode pour le retrouver ici.',
@@ -25,7 +26,7 @@ class DownloadsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return _LibraryPage(
-      title: 'Téléchargements',
+      title: 'Downloads',
       query: const EpisodeQuery(downloadsOnly: true),
       emptyTitle: 'Aucun téléchargement',
       emptyMessage: 'Téléchargez un épisode pour l’écouter sans connexion.',
@@ -49,7 +50,7 @@ class _LibraryPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: Text(context.tr(title))),
       body: EpisodeListBody(
         query: query,
         queueStyle: true,

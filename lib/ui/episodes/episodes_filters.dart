@@ -17,25 +17,25 @@ class _ActiveEpisodeFiltersBar extends StatelessWidget {
     final chips = <Widget>[
       if (filters.unreadOnly)
         InputChip(
-          label: const Text('Non lus'),
+          label: Text(context.tr('Unplayed')),
           onPressed: onEdit,
           onDeleted: () => onChanged(filters.copyWith(unreadOnly: false)),
         ),
       if (filters.downloadsOnly)
         InputChip(
-          label: const Text('Téléchargés'),
+          label: Text(context.tr('Downloaded')),
           onPressed: onEdit,
           onDeleted: () => onChanged(filters.copyWith(downloadsOnly: false)),
         ),
       if (filters.inProgressOnly)
         InputChip(
-          label: const Text('En cours'),
+          label: Text(context.tr('In progress')),
           onPressed: onEdit,
           onDeleted: () => onChanged(filters.copyWith(inProgressOnly: false)),
         ),
       ActionChip(
         avatar: Icon(Icons.clear_all, size: 18, color: scheme.primary),
-        label: const Text('Tout effacer'),
+        label: Text(context.tr('Clear all')),
         onPressed: () => onChanged(EpisodeFilters.empty),
       ),
     ];
@@ -67,14 +67,14 @@ Future<void> _showEpisodeFilterDialog(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Filtrer'),
+            title: Text(context.tr('Filter')),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Non lus'),
+                    title: Text(context.tr('Unplayed')),
                     value: draft.unreadOnly,
                     onChanged: (value) {
                       setState(() {
@@ -85,7 +85,7 @@ Future<void> _showEpisodeFilterDialog(
                   ),
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Téléchargés'),
+                    title: Text(context.tr('Downloaded')),
                     value: draft.downloadsOnly,
                     onChanged: (value) {
                       setState(() {
@@ -96,8 +96,8 @@ Future<void> _showEpisodeFilterDialog(
                   ),
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('En cours'),
-                    subtitle: const Text('Commencés et non terminés'),
+                    title: Text(context.tr('In progress')),
+                    subtitle: Text(context.tr('Started and not finished')),
                     value: draft.inProgressOnly,
                     onChanged: (value) {
                       setState(() {
@@ -112,15 +112,15 @@ Future<void> _showEpisodeFilterDialog(
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, EpisodeFilters.empty),
-                child: const Text('Effacer'),
+                child: Text(context.tr('Clear')),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Annuler'),
+                child: Text(context.tr('Cancel')),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, draft),
-                child: const Text('Appliquer'),
+                child: Text(context.tr('Apply')),
               ),
             ],
           );

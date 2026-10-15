@@ -4,6 +4,17 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.10.15
+
+- Dans Interface, Langue ouvre une page. Chaque langue affiche son code. « Système » est placé sous la langue du téléphone, avec le même code. Si cette langue n’est pas proposée, « Système » n’apparaît pas. Sans choix enregistré, l’application suit la langue du téléphone quand elle est disponible, sinon l’anglais.
+- L’interface peut passer en allemand, espagnol, italien, portugais, néerlandais, chinois, hindi, indonésien, japonais, coréen, russe, turc, arabe et polonais. L’arabe se lit de droite à gauche. Les dates suivent la langue choisie.
+- Dans Préférences, Explorer choisit les langues des podcasts. Sans choix enregistré, Explorer part de toutes les langues. « Toutes les langues » interroge les catalogues sans filtre. La liste couvre les langues courantes et les variantes par pays, dont l’arabe. Apple ouvre la boutique du pays quand elle existe.
+- Le mini lecteur ne recouvre plus le bas des pages. Le dernier élément d’une liste reste lisible.
+- Sans internet, un bandeau l’indique. L’accueil, la bibliothèque et les épisodes déjà là restent ouverts. Explorer attend la connexion, et l’actualisation des abonnements aussi.
+- Lors d’une publication, si l’envoi vers podavio.com ne lance pas le déploiement, celui-ci est démarré.
+- Dans Explorer, Langues regroupe les variantes par pays sous chaque langue. Les langues choisies restent en pastilles. « Toutes les langues » se coupe en retrouvant le choix précédent. Apple prévient quand plus de 8 boutiques seraient nécessaires.
+- Dans À propos, on vérifie la mise à jour de l’application. Le moment de la dernière vérification s’affiche sous cette ligne.
+
 ## 2026.10.14
 
 - La bibliothèque a une carte Playlists. On peut en créer, les renommer et les supprimer. « Playlist », marquée Par défaut, reprend la file d’attente.

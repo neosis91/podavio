@@ -2,9 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import 'core/theme.dart';
 import 'core/wallpaper_colors.dart';
+import 'l10n/interface_locale.dart';
+import 'l10n/l10n.dart';
 import 'settings/settings_controller.dart';
 import 'ui/app_router.dart';
 import 'ui/widgets/player_keyboard_shortcuts.dart';
@@ -22,6 +25,11 @@ class PodavioApp extends ConsumerWidget {
         defaultTargetPlatform != TargetPlatform.iOS && settings.wallpaperColors
         ? wallpaper
         : null;
+    final locale = resolveInterfaceLocale(
+      stored: settings.interfaceLanguage,
+      system: View.of(context).platformDispatcher.locale,
+    );
+    Intl.defaultLocale = locale.languageCode;
     return MaterialApp.router(
       title: 'Podavio',
       theme: fromWallpaper == null
@@ -32,15 +40,23 @@ class PodavioApp extends ConsumerWidget {
           : themeFromScheme(fromWallpaper.dark, pureBlack: settings.pureBlack),
       themeMode: settings.themeMode,
       routerConfig: router,
-      locale: const Locale('fr'),
-      supportedLocales: const [Locale('fr')],
+      locale: locale,
+      supportedLocales: [
+        for (final language in supportedInterfaceLanguages)
+          Locale(language.code),
+      ],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      builder: (context, child) => PlayerKeyboardShortcuts(
-        child: PlaybackLifecycle(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => InterfaceLocale(
+        locale: locale,
+        child: PlayerKeyboardShortcuts(
+          child: PlaybackLifecycle(
+            child: StartupSplash(child: child ?? const SizedBox.shrink()),
+          ),
+        ),
       ),
     );
   }

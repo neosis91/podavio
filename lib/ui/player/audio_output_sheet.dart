@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/l10n.dart';
 import '../../player/player_controller.dart';
 
 /// Cherche les Chromecast du réseau avec l’API Bonsoir actuelle.
@@ -157,15 +158,15 @@ class _AudioOutputSheetState extends ConsumerState<_AudioOutputSheet> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Sortie audio',
+                      context.tr('Audio output'),
                       style: theme.textTheme.labelMedium,
                     ),
                   ),
                 ),
                 _OutputRow(
                   icon: localIcon,
-                  name: 'Paramètres par défaut du système',
-                  status: castName == null ? 'Jouer ici' : null,
+                  name: context.tr('System default'),
+                  status: castName == null ? context.tr('Play here') : null,
                   selected: castName == null,
                   onTap: () async {
                     Navigator.pop(context);
@@ -209,8 +210,8 @@ class _AudioOutputSheetState extends ConsumerState<_AudioOutputSheet> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         _error == null
-                            ? 'Aucun récepteur Cast'
-                            : 'Recherche Cast impossible',
+                            ? context.tr('No Cast receiver')
+                            : context.tr('Cast search unavailable'),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -222,7 +223,9 @@ class _AudioOutputSheetState extends ConsumerState<_AudioOutputSheet> {
                     _OutputRow(
                       icon: Icons.cast_connected,
                       name: device.name,
-                      status: device.name == castName ? 'Jouer ici' : null,
+                      status: device.name == castName
+                          ? context.tr('Play here')
+                          : null,
                       selected: device.name == castName,
                       onTap: device.name == castName
                           ? null

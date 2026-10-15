@@ -28,13 +28,12 @@ class _FeedRefreshBannerState extends ConsumerState<FeedRefreshBanner> {
         ? 'Abonnements actualisés'
         : '${refresh.refreshed} actualisés, ${refresh.failed} en échec';
 
-    return Material(
-      color: hasErrors && !refresh.isRunning
-          ? scheme.errorContainer
-          : scheme.secondaryContainer,
-      child: SafeArea(
-        top: false,
-        bottom: false,
+    return SafeArea(
+      bottom: false,
+      child: Material(
+        color: hasErrors && !refresh.isRunning
+            ? scheme.errorContainer
+            : scheme.secondaryContainer,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
