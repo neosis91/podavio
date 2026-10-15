@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
+import '../../l10n/l10n.dart';
 import '../../data/app_database.dart';
 import '../../data/download_controller.dart';
 import '../../data/feed_service.dart';
@@ -1070,7 +1071,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
           color: episode.favorite ? favoriteHeartColor : null,
         ),
         iconPadding: 10,
-        label: episode.favorite ? 'Aimé' : "J'aime",
+        label: context.tr(episode.favorite ? 'Liked' : 'Like'),
         onTap: () => ref
             .read(databaseProvider)
             .setFavorite(episode.id, favorite: !episode.favorite),
@@ -1084,11 +1085,13 @@ class _EpisodeActionsSheet extends ConsumerWidget {
               : Icons.download_for_offline_outlined,
           color: episode.downloadPath != null ? const Color(0xFF00A0CB) : null,
         ),
-        label: downloading
-            ? 'Téléchargement'
-            : episode.downloadPath != null
-            ? 'Téléchargé'
-            : 'Télécharger',
+        label: context.tr(
+          downloading
+              ? 'Downloading'
+              : episode.downloadPath != null
+              ? 'Saved'
+              : 'Download',
+        ),
         detail: progress == null ? null : '${(progress * 100).round()} %',
         onTap: downloading
             ? null
@@ -1102,7 +1105,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
       if (playingId != episode.id)
         _SheetAction(
           icon: const Icon(Icons.play_circle),
-          label: 'Lire ensuite',
+          label: context.tr('Play next'),
           onTap: () async {
             await ref
                 .read(databaseProvider)
@@ -1112,7 +1115,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
         ),
       _SheetAction(
         icon: const PlaylistAddIcon(),
-        label: 'Playlists',
+        label: context.tr('Playlists'),
         onTap: () => onPlaylists(entry),
       ),
       _SheetAction(
@@ -1122,7 +1125,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
       ),
       _SheetAction(
         icon: const ShareIcon(),
-        label: 'Partager',
+        label: context.tr('Share'),
         onTap: () async {
           final full = await ref.read(databaseProvider).getEpisode(episode.id);
           if (!context.mounted) return;
@@ -1132,32 +1135,32 @@ class _EpisodeActionsSheet extends ConsumerWidget {
       if (onMoveUp != null)
         _SheetAction(
           icon: const MoveUpIcon(),
-          label: 'Monter',
+          label: context.tr('Move up'),
           onTap: onMoveUp,
         ),
       if (onMoveDown != null)
         _SheetAction(
           icon: const MoveDownIcon(),
-          label: 'Descendre',
+          label: context.tr('Move down'),
           onTap: onMoveDown,
         ),
       if (onRemove != null)
         _SheetAction(
           icon: const DeleteIcon(),
-          label: 'Supprimer',
+          label: context.tr('Delete'),
           onTap: onRemove,
         ),
       if (onSpeed != null && speed != null)
         _SheetAction(
           icon: const Icon(Icons.speed),
-          label: 'Vitesse',
+          label: context.tr('Speed'),
           detail: _playbackSpeedLabel(speed),
           onTap: onSpeed,
         ),
       if (onSleep != null)
         _SheetAction(
           icon: const TimerIcon(),
-          label: 'Minuteur',
+          label: context.tr('Sleep timer'),
           detail: sleepDetail,
           onTap: onSleep,
         ),
@@ -1166,7 +1169,9 @@ class _EpisodeActionsSheet extends ConsumerWidget {
           icon: Icon(
             carMode ? Icons.directions_car : Icons.directions_car_outlined,
           ),
-          label: carMode ? 'Quitter le mode voiture' : 'Mode voiture',
+          label: context.tr(
+            carMode ? 'Exit car mode' : 'Car mode',
+          ),
           onTap: () {
             ref.read(playerProvider.notifier).setCarMode(!carMode);
             Navigator.pop(context);
@@ -1175,7 +1180,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
       if (website != null)
         _SheetAction(
           icon: const LinkIcon(),
-          label: 'Ouvrir le site web',
+          label: context.tr('Open website'),
           onTap: () async {
             final messenger = ScaffoldMessenger.of(context);
             Navigator.pop(context);

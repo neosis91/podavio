@@ -219,26 +219,30 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
 
   List<Widget> _episodeListSlivers(EpisodeWindow window) {
     return [
-      SliverList.separated(
-        itemCount: window.entries.length + (window.hasMore ? 1 : 0),
-        separatorBuilder: (_, _) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          if (index >= window.entries.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: CircularProgressIndicator()),
+      SliverPadding(
+        padding: const EdgeInsets.only(top: 4, bottom: 24),
+        sliver: SliverList.builder(
+          addAutomaticKeepAlives: false,
+          itemCount: window.entries.length + (window.hasMore ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index >= window.entries.length) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            final entry = window.entries[index];
+            return EpisodeTile(
+              key: ValueKey(entry.episode.id),
+              entry: entry,
+              showPodcast: false,
+              queueStyle: true,
+              playbackSource: PlaybackSource(
+                EpisodeQuery(podcastId: widget.podcastId, paginated: false),
+              ),
             );
-          }
-          final entry = window.entries[index];
-          return EpisodeTile(
-            key: ValueKey(entry.episode.id),
-            entry: entry,
-            showPodcast: false,
-            playbackSource: PlaybackSource(
-              EpisodeQuery(podcastId: widget.podcastId, paginated: false),
-            ),
-          );
-        },
+          },
+        ),
       ),
     ];
   }

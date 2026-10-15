@@ -28,13 +28,12 @@ class _OpmlImportBannerState extends ConsumerState<OpmlImportBanner> {
         ? '${import.imported} abonnements importés'
         : '${import.imported} importés, ${import.failed} en échec';
 
-    return Material(
-      color: hasErrors && !import.isRunning
-          ? scheme.errorContainer
-          : scheme.secondaryContainer,
-      child: SafeArea(
-        top: false,
-        bottom: false,
+    return SafeArea(
+      bottom: false,
+      child: Material(
+        color: hasErrors && !import.isRunning
+            ? scheme.errorContainer
+            : scheme.secondaryContainer,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

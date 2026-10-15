@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/format.dart';
+import '../l10n/l10n.dart';
 import '../data/models.dart';
 import '../data/providers.dart';
 import 'router.dart';
@@ -20,7 +21,7 @@ class StatsPage extends ConsumerWidget {
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Statistiques'),
+          title: Text(context.tr('Statistics')),
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Abonnements'),
@@ -375,7 +376,6 @@ class _YearsTabState extends State<_YearsTab> {
   }
 }
 
-
 class _DownloadsTab extends StatelessWidget {
   const _DownloadsTab({required this.stats});
 
@@ -386,7 +386,8 @@ class _DownloadsTab extends StatelessWidget {
     if (stats.downloads.isEmpty) {
       return const EmptyState(
         title: 'Aucun téléchargement',
-        message: 'Les épisodes hors ligne apparaîtront ici avec l’espace utilisé.',
+        message:
+            'Les épisodes hors ligne apparaîtront ici avec l’espace utilisé.',
       );
     }
 

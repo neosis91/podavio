@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/l10n.dart';
+
 typedef ChoiceOption<T> = ({T value, String label});
 
 /// Liste de choix unique. `null` si l’utilisateur ferme la fenêtre.
@@ -13,7 +15,7 @@ Future<T?> showChoiceDialog<T>(
     context: context,
     builder: (context) {
       return AlertDialog(
-        title: Text(title),
+        title: Text(context.tr(title)),
         contentPadding: const EdgeInsets.only(bottom: 12),
         content: SingleChildScrollView(
           child: Column(
@@ -24,7 +26,7 @@ Future<T?> showChoiceDialog<T>(
                   onPressed: () => Navigator.pop(context, option.value),
                   child: Row(
                     children: [
-                      Expanded(child: Text(option.label)),
+                      Expanded(child: Text(context.tr(option.label))),
                       if (option.value == selected)
                         const Icon(Icons.check, size: 20),
                     ],

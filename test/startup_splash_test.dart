@@ -3,11 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:podavio/ui/widgets/startup_splash.dart';
 
 void main() {
-  testWidgets('l’onde du démarrage s’efface ensuite', (tester) async {
+  testWidgets('le logo du démarrage s’efface ensuite', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: StartupSplash(child: Text('accueil')),
-      ),
+      const MaterialApp(home: StartupSplash(child: Text('accueil'))),
     );
 
     expect(find.byKey(const Key('startup-splash')), findsOneWidget);

@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/providers.dart';
+import '../l10n/l10n.dart';
 import '../data/feed_refresh_controller.dart';
+import '../data/online_status.dart';
 import '../settings/settings_controller.dart';
 import 'router.dart';
 import 'widgets/empty_state.dart';
@@ -87,7 +89,7 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
                 textInputAction: TextInputAction.search,
                 onChanged: _onSearchChanged,
               )
-            : const Text('Épisodes'),
+            : Text(context.tr('Episodes')),
         leading: _searching
             ? IconButton(
                 tooltip: 'Fermer la recherche',
@@ -135,9 +137,12 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
                     }
                 }
               },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'filter', child: Text('Filtrer')),
+              itemBuilder: (context) => [
                 PopupMenuItem(
+                  value: 'filter',
+                  child: Text(context.tr('Filter')),
+                ),
+                const PopupMenuItem(
                   value: 'played',
                   child: Text('Tout marquer comme lu'),
                 ),
@@ -174,7 +179,7 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
                     ? 'Aucun résultat'
                     : showFilterEmpty
                     ? 'Aucun épisode'
-                    : 'Aucun épisode à écouter',
+                    : context.tr('No episodes to play'),
                 message: hasSearch && showFilterEmpty
                     ? 'Essayez un autre mot, ou modifiez les filtres.'
                     : hasSearch
@@ -203,7 +208,7 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
                       )
                     : FilledButton(
                         onPressed: () => context.go(AppRoutes.discover),
-                        child: const Text('Explorer'),
+                        child: Text(context.tr('Explore')),
                       ),
               ),
             ),
@@ -215,6 +220,10 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
 }
 
 Future<void> refreshSubscriptions(BuildContext context, WidgetRef ref) async {
+  if (ref.read(onlineStatusProvider) == false) {
+    showMessage(context, context.tr('No internet connection'));
+    return;
+  }
   final outcome = await ref.read(feedRefreshProvider.notifier).start();
   if (!context.mounted) return;
   switch (outcome.result) {

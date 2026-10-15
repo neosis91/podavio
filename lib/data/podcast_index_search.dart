@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import 'discover_hit.dart';
+import 'discover_languages.dart';
 import 'feed_service.dart';
 
 /// Recherche / tendances Podcast Index (https://podcastindex.org).
@@ -25,28 +26,34 @@ class PodcastIndexSearch {
     defaultValue: 'XAaAhk4^2YBsTE33vdbwbZNj82ZRLABDDqFdKe7x',
   );
 
-  Future<List<DiscoverHit>> search(String query, {int max = 30}) {
-    return _feeds(
-      '/api/1.0/search/byterm',
-      {'q': query.trim(), 'max': '$max'},
-    );
+  Future<List<DiscoverHit>> search(
+    String query, {
+    int max = 30,
+    List<String> languages = const [discoverLanguagesAll],
+  }) {
+    return _feeds('/api/1.0/search/byterm', {
+      'q': query.trim(),
+      'max': '$max',
+    }, languages: languages);
   }
 
-  /// Tendances Podcast Index (filtre langue optionnel, ex. `fr`).
-  Future<List<DiscoverHit>> trending({String lang = 'fr', int max = 24}) {
-    return _feeds(
-      '/api/1.0/podcasts/trending',
-      {
-        'max': '$max',
-        if (lang.isNotEmpty) 'lang': lang,
-      },
-    );
+  /// Tendances Podcast Index. [languages] vide ou `*` : pas de filtre `lang`.
+  Future<List<DiscoverHit>> trending({
+    List<String> languages = const [discoverLanguagesAll],
+    int max = 24,
+  }) {
+    final codes = podcastIndexLanguageQuery(languages);
+    return _feeds('/api/1.0/podcasts/trending', {
+      'max': '$max',
+      if (codes.isNotEmpty) 'lang': codes.join(','),
+    }, languages: languages);
   }
 
   Future<List<DiscoverHit>> _feeds(
     String path,
-    Map<String, String> query,
-  ) async {
+    Map<String, String> query, {
+    List<String> languages = const [discoverLanguagesAll],
+  }) async {
     if (query.containsKey('q') && (query['q'] ?? '').trim().isEmpty) {
       return const [];
     }
@@ -54,7 +61,9 @@ class PodcastIndexSearch {
     final uri = Uri.https('api.podcastindex.org', path, query);
     final now = (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000)
         .toString();
-    final auth = sha1.convert(utf8.encode('$_apiKey$_apiSecret$now')).toString();
+    final auth = sha1
+        .convert(utf8.encode('$_apiKey$_apiSecret$now'))
+        .toString();
 
     final response = await _client
         .get(
@@ -69,9 +78,7 @@ class PodcastIndexSearch {
         .timeout(const Duration(seconds: 25));
 
     if (response.statusCode != 200) {
-      throw Exception(
-        'Podcast Index a répondu ${response.statusCode}.',
-      );
+      throw Exception('Podcast Index a répondu ${response.statusCode}.');
     }
 
     final json = jsonDecode(response.body);
@@ -85,6 +92,9 @@ class PodcastIndexSearch {
       final map = Map<String, dynamic>.from(raw);
       final feedUrl = (map['url'] as String?)?.trim() ?? '';
       if (feedUrl.isEmpty) continue;
+      if (!discoverLanguageMatches(map['language'] as String?, languages)) {
+        continue;
+      }
       final title = (map['title'] as String?)?.trim();
       hits.add(
         DiscoverHit(

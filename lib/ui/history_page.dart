@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/app_database.dart';
+import '../l10n/l10n.dart';
 import '../data/feed_service.dart';
 import '../data/providers.dart';
 import '../player/playback_source.dart';
@@ -77,7 +78,7 @@ class _HistoryBar extends StatelessWidget {
                   icon: const Icon(Icons.arrow_back),
                 ),
                 middle: Text(
-                  'Lectures récentes',
+                  context.tr('Recent plays'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleLarge,

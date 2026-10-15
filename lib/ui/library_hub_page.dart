@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/providers.dart';
+import '../l10n/l10n.dart';
 import 'history_page.dart';
 import 'nav_catalog.dart';
 import 'router.dart';
@@ -79,7 +80,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         : entries.length + (window!.hasMore ? 1 : 0);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bibliothèque'),
+        title: Text(context.tr('Library')),
         actions: const [PreferencesButton()],
       ),
       body: NotificationListener<ScrollNotification>(
@@ -227,7 +228,7 @@ class _LibraryTile extends StatelessWidget {
             ),
             Expanded(
               child: Text(
-                page.label,
+                context.tr(page.label),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleSmall

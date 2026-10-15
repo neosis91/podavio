@@ -4,14 +4,18 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:saf_util/saf_util.dart';
 
 import '../core/theme.dart';
 import '../core/wallpaper_colors.dart';
+import '../l10n/interface_locale.dart';
+import '../l10n/l10n.dart';
 import '../data/download_controller.dart';
 import '../data/download_service.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
+import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/choice_dialog.dart';
 import 'widgets/messages.dart';
@@ -25,19 +29,41 @@ class AppearancePage extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
     final wallpaperOption = defaultTargetPlatform != TargetPlatform.iOS;
+    final interfaceLocale = resolveInterfaceLocale(
+      stored: settings.interfaceLanguage,
+      system: View.of(context).platformDispatcher.locale,
+    );
     return Scaffold(
-      appBar: AppBar(title: const Text('Interface utilisateur')),
+      appBar: AppBar(title: Text(context.tr('Interface'))),
       body: ListView(
         padding: const EdgeInsets.only(bottom: 32),
         children: [
-          const ListTile(title: Text('Apparence')),
+          ListTile(
+            title: Text(context.tr('Language')),
+            subtitle: Text(
+              _interfaceLanguageSubtitle(context, settings, interfaceLocale),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.interfaceLanguage),
+          ),
+          const Divider(),
+          ListTile(title: Text(context.tr('Appearance'))),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SegmentedButton<ThemeMode>(
-              segments: const [
-                ButtonSegment(value: ThemeMode.system, label: Text('Système')),
-                ButtonSegment(value: ThemeMode.light, label: Text('Clair')),
-                ButtonSegment(value: ThemeMode.dark, label: Text('Sombre')),
+              segments: [
+                ButtonSegment(
+                  value: ThemeMode.system,
+                  label: Text(context.tr('System')),
+                ),
+                ButtonSegment(
+                  value: ThemeMode.light,
+                  label: Text(context.tr('Light')),
+                ),
+                ButtonSegment(
+                  value: ThemeMode.dark,
+                  label: Text(context.tr('Dark')),
+                ),
               ],
               selected: {settings.themeMode},
               onSelectionChanged: (selection) =>
@@ -45,21 +71,21 @@ class AppearancePage extends ConsumerWidget {
             ),
           ),
           SwitchListTile(
-            title: const Text('Noir pur'),
-            subtitle: const Text('Fond noir en mode sombre'),
+            title: Text(context.tr('Pure black')),
+            subtitle: Text(context.tr('Black background in dark mode')),
             value: settings.pureBlack,
             onChanged: notifier.setPureBlack,
           ),
           if (wallpaperOption)
             SwitchListTile(
-              title: const Text('Fond d’écran'),
-              subtitle: Text(_wallpaperSubtitle(ref)),
+              title: Text(context.tr('Wallpaper')),
+              subtitle: Text(_wallpaperSubtitle(context, ref)),
               value: settings.wallpaperColors,
               onChanged: notifier.setWallpaperColors,
             ),
           if (!wallpaperOption || !settings.wallpaperColors) ...[
             const SizedBox(height: 8),
-            const ListTile(title: Text('Couleur')),
+            ListTile(title: Text(context.tr('Color'))),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Wrap(
@@ -82,6 +108,18 @@ class AppearancePage extends ConsumerWidget {
   }
 }
 
+String _interfaceLanguageSubtitle(
+  BuildContext context,
+  AppSettings settings,
+  Locale interfaceLocale,
+) {
+  final stored = settings.interfaceLanguage;
+  if (stored == null) {
+    return '${context.tr('System')} · ${interfaceLanguageEndonym(interfaceLocale.languageCode)}';
+  }
+  return interfaceLanguageEndonym(stored);
+}
+
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.label);
 
@@ -100,19 +138,19 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-String _wallpaperSubtitle(WidgetRef ref) {
+String _wallpaperSubtitle(BuildContext context, WidgetRef ref) {
   final palette = ref.watch(wallpaperPaletteProvider);
   final enabled = ref.watch(
     settingsProvider.select((settings) => settings.wallpaperColors),
   );
   if (!enabled) {
-    return 'Adapter les couleurs à celles du fond d’écran';
+    return context.tr('Match colors to the wallpaper');
   }
-  if (palette.isLoading) return 'Lecture du fond d’écran…';
+  if (palette.isLoading) return context.tr('Reading the wallpaper…');
   if (palette.hasError || palette.asData?.value == null) {
-    return 'Le fond d’écran n’a pas pu être lu';
+    return context.tr('The wallpaper could not be read');
   }
-  return 'Les couleurs suivent le fond d’écran';
+  return context.tr('Colors follow the wallpaper');
 }
 
 class DownloadSettingsPage extends ConsumerWidget {
@@ -124,7 +162,7 @@ class DownloadSettingsPage extends ConsumerWidget {
     final directory = settings.downloadDirectory;
     final fallback = ref.watch(defaultDownloadDirectoryProvider).value;
     return Scaffold(
-      appBar: AppBar(title: const Text('Gestion des téléchargements')),
+      appBar: AppBar(title: Text(context.tr('Download manager'))),
       body: ListView(
         children: [
           const _SectionTitle('Dossiers'),
@@ -353,18 +391,22 @@ class PlaybackPage extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
     return Scaffold(
-      appBar: AppBar(title: const Text('Lecture')),
+      appBar: AppBar(title: Text(context.tr('Playback'))),
       body: ListView(
         padding: const EdgeInsets.only(bottom: 32),
         children: [
-          const _SectionTitle('Commandes'),
+          _SectionTitle(context.tr('Controls')),
           ListTile(
-            title: const Text('Retour rapide'),
-            subtitle: Text('${settings.skipBackSeconds} secondes'),
+            title: Text(context.tr('Rewind')),
+            subtitle: Text(
+              context.tr('{seconds} seconds', {
+                'seconds': '${settings.skipBackSeconds}',
+              }),
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _pickIntSetting(
               context,
-              title: 'Retour rapide',
+              title: 'Rewind',
               selected: settings.skipBackSeconds,
               values: const [5, 10, 15, 30],
               label: (seconds) => '$seconds s',
@@ -372,12 +414,16 @@ class PlaybackPage extends ConsumerWidget {
             ),
           ),
           ListTile(
-            title: const Text('Avance rapide'),
-            subtitle: Text('${settings.skipForwardSeconds} secondes'),
+            title: Text(context.tr('Fast forward')),
+            subtitle: Text(
+              context.tr('{seconds} seconds', {
+                'seconds': '${settings.skipForwardSeconds}',
+              }),
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _pickIntSetting(
               context,
-              title: 'Avance rapide',
+              title: 'Fast forward',
               selected: settings.skipForwardSeconds,
               values: const [10, 15, 30, 45, 60],
               label: (seconds) => '$seconds s',
@@ -385,101 +431,112 @@ class PlaybackPage extends ConsumerWidget {
             ),
           ),
           ListTile(
-            title: const Text('Hors de l’application'),
-            subtitle: Text(_outsideAppSubtitle(settings)),
+            title: Text(context.tr('Outside the app')),
+            subtitle: Text(_outsideAppSubtitle(context, settings)),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _pickOutsideApp(context, ref),
           ),
-          const _SectionTitle('Lecteur'),
+          _SectionTitle(context.tr('Player')),
           SwitchListTile(
-            title: const Text('Temps restant'),
-            subtitle: const Text(
-              'Affiche le temps restant à droite de la barre de lecture',
+            title: Text(context.tr('Time remaining')),
+            subtitle: Text(
+              context.tr(
+                'Shows the remaining time on the right of the progress bar',
+              ),
             ),
             value: settings.showRemainingTime,
             onChanged: notifier.setShowRemainingTime,
           ),
           SwitchListTile(
-            title: const Text('Temps selon la vitesse'),
-            subtitle: const Text(
-              'Ajuste la position et la durée affichées selon la vitesse de lecture',
+            title: Text(context.tr('Time follows speed')),
+            subtitle: Text(
+              context.tr(
+                'Adjusts the displayed position and duration to the playback speed',
+              ),
             ),
             value: settings.timeRespectsSpeed,
             onChanged: notifier.setTimeRespectsSpeed,
           ),
           SwitchListTile(
-            title: const Text('Écran allumé'),
-            subtitle: const Text(
-              'Empêche la mise en veille pendant la lecture',
-            ),
+            title: Text(context.tr('Keep screen on')),
+            subtitle: Text(context.tr('Prevents sleep during playback')),
             value: settings.keepScreenOn,
             onChanged: notifier.setKeepScreenOn,
           ),
           ListTile(
             leading: const Icon(Icons.keyboard_alt_outlined),
-            title: const Text('Aide du lecteur'),
+            title: Text(context.tr('Player help')),
             subtitle: const Text(
               'Gestes couverture, Espace, J, L, volume… — aussi via ?',
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => showPlayerKeyboardHelp(context),
           ),
-          const _SectionTitle('Mini player'),
+          _SectionTitle(context.tr('Mini player')),
           ListTile(
             leading: const Icon(Icons.tune),
-            title: const Text('Gestion des boutons'),
+            title: Text(context.tr('Button layout')),
             subtitle: Text(settings.miniPlayerButtons.summary),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _showMiniPlayerButtonsSheet(context, ref),
           ),
-          const _SectionTitle('Épisodes'),
+          _SectionTitle(context.tr('Episodes')),
           SwitchListTile(
-            title: const Text('Jaquette du podcast'),
-            subtitle: const Text(
-              'Affiche la couverture du podcast plutôt que celle de l’épisode',
+            title: Text(context.tr('Podcast artwork')),
+            subtitle: Text(
+              context.tr(
+                'Shows the podcast cover instead of the episode cover',
+              ),
             ),
             value: settings.preferPodcastCover,
             onChanged: notifier.setPreferPodcastCover,
           ),
-          const ListTile(
-            title: Text('Densité des listes'),
-            subtitle: Text('Espace entre les lignes des listes d’épisodes'),
+          ListTile(
+            title: Text(context.tr('List density')),
+            subtitle: Text(context.tr('Spacing between episode rows')),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SegmentedButton<EpisodeListDensity>(
               segments: [
                 for (final density in EpisodeListDensity.values)
-                  ButtonSegment(value: density, label: Text(density.label)),
+                  ButtonSegment(
+                    value: density,
+                    label: Text(context.tr(density.label)),
+                  ),
               ],
               selected: {settings.episodeListDensity},
               onSelectionChanged: (selection) =>
                   notifier.setEpisodeListDensity(selection.first),
             ),
           ),
-          const _SectionTitle('Actualisation'),
+          _SectionTitle(context.tr('Refresh')),
           ListTile(
-            title: const Text('Intervalle d’actualisation'),
+            title: Text(context.tr('Refresh interval')),
             subtitle: Text(
               settings.refreshIntervalMinutes == 0
-                  ? 'Pas de limite entre deux actualisations'
-                  : 'Minimum ${settings.refreshIntervalMinutes} min entre deux actualisations',
+                  ? context.tr('No limit between refreshes')
+                  : context.tr('At least {minutes} min between refreshes', {
+                      'minutes': '${settings.refreshIntervalMinutes}',
+                    }),
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _pickIntSetting(
               context,
-              title: 'Intervalle d’actualisation',
+              title: 'Refresh interval',
               selected: settings.refreshIntervalMinutes,
               values: const [0, 1, 5, 15, 30, 60],
               label: _refreshIntervalLabel,
               onChanged: notifier.setRefreshIntervalMinutes,
             ),
           ),
-          const _SectionTitle('Téléchargements'),
+          _SectionTitle(context.tr('Downloads')),
           SwitchListTile(
-            title: const Text('Ajouter à la playlist'),
-            subtitle: const Text(
-              'Place l’épisode dans la playlist dès la fin du téléchargement',
+            title: Text(context.tr('Add to playlist')),
+            subtitle: Text(
+              context.tr(
+                'Adds the episode to the playlist when the download finishes',
+              ),
             ),
             value: settings.enqueueDownloads,
             onChanged: notifier.setEnqueueDownloads,
@@ -513,12 +570,13 @@ Future<void> _pickIntSetting(
   if (choice != null) onChanged(choice);
 }
 
-String _outsideAppSubtitle(AppSettings settings) {
+String _outsideAppSubtitle(BuildContext context, AppSettings settings) {
   return switch (settings.outsideApp) {
-    OutsideAppControl.skip =>
-      '${settings.skipBackSeconds} s en arrière, '
-          '${settings.skipForwardSeconds} s en avant',
-    OutsideAppControl.episode => OutsideAppControl.episode.label,
+    OutsideAppControl.skip => context.tr('{back} s back, {forward} s forward', {
+      'back': '${settings.skipBackSeconds}',
+      'forward': '${settings.skipForwardSeconds}',
+    }),
+    OutsideAppControl.episode => context.tr(OutsideAppControl.episode.label),
   };
 }
 
@@ -526,7 +584,7 @@ Future<void> _pickOutsideApp(BuildContext context, WidgetRef ref) async {
   final settings = ref.read(settingsProvider);
   final choice = await showChoiceDialog<OutsideAppControl>(
     context,
-    title: 'Hors de l’application',
+    title: 'Outside the app',
     selected: settings.outsideApp,
     options: [
       for (final mode in OutsideAppControl.values)
@@ -540,7 +598,7 @@ Future<void> _pickOutsideApp(BuildContext context, WidgetRef ref) async {
 
 String _refreshIntervalLabel(int minutes) {
   return switch (minutes) {
-    0 => 'Aucune',
+    0 => 'None',
     60 => '1 h',
     _ => '$minutes min',
   };
@@ -580,7 +638,7 @@ class _MiniPlayerButtonsSheet extends ConsumerWidget {
           header: Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
             child: Text(
-              'Boutons du mini player',
+              context.tr('Mini player buttons'),
               style: theme.textTheme.titleMedium,
             ),
           ),
@@ -638,7 +696,7 @@ class _MiniPlayerButtonRow extends StatelessWidget {
       child: Row(
         children: [
           Tooltip(
-            message: 'Déplacer',
+            message: context.tr('Move'),
             child: ReorderableDragStartListener(
               index: index,
               child: const SizedBox(
@@ -654,10 +712,10 @@ class _MiniPlayerButtonRow extends StatelessWidget {
               onChanged: onChanged == null
                   ? null
                   : (value) => onChanged!(value ?? false),
-              title: Text(_miniPlayerButtonTitle(id)),
+              title: Text(context.tr(_miniPlayerButtonTitle(id))),
               subtitle: switch (id) {
-                'play' => const Text('Toujours affiché'),
-                'nextEpisode' => const Text('Dans la file d’attente'),
+                'play' => Text(context.tr('Always shown')),
+                'nextEpisode' => Text(context.tr('In the queue')),
                 _ => null,
               },
               secondary: _miniPlayerButtonIcon(id),
@@ -672,12 +730,12 @@ class _MiniPlayerButtonRow extends StatelessWidget {
 
 String _miniPlayerButtonTitle(String id) {
   return switch (id) {
-    'play' => 'Lecture / pause',
-    'favorite' => 'Favoris',
-    'skipBack' => 'Retour rapide',
-    'skipForward' => 'Avance rapide',
-    'nextEpisode' => 'Épisode suivant',
-    'close' => 'Fermer le lecteur',
+    'play' => 'Play / pause',
+    'favorite' => 'Favorites',
+    'skipBack' => 'Rewind',
+    'skipForward' => 'Fast forward',
+    'nextEpisode' => 'Next episode',
+    'close' => 'Close the player',
     _ => id,
   };
 }
@@ -735,7 +793,7 @@ class _AccentChoice extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              accent.label,
+              context.tr(accent.label),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelMedium,
