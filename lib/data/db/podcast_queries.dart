@@ -8,16 +8,17 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
       latestEpisode,
       Constant(DateTime.fromMillisecondsSinceEpoch(0, isUtc: true)),
     ]);
-    final query = select(podcasts).join([
-      leftOuterJoin(episodes, episodes.podcastId.equalsExp(podcasts.id)),
-    ])
-      ..where(podcasts.subscribed.equals(true))
-      ..addColumns([latestEpisode])
-      ..groupBy([podcasts.id])
-      ..orderBy([
-        OrderingTerm(expression: latestOrEpoch, mode: OrderingMode.desc),
-        OrderingTerm.asc(podcasts.title),
-      ]);
+    final query =
+        select(podcasts).join([
+            leftOuterJoin(episodes, episodes.podcastId.equalsExp(podcasts.id)),
+          ])
+          ..where(podcasts.subscribed.equals(true))
+          ..addColumns([latestEpisode])
+          ..groupBy([podcasts.id])
+          ..orderBy([
+            OrderingTerm(expression: latestOrEpoch, mode: OrderingMode.desc),
+            OrderingTerm.asc(podcasts.title),
+          ]);
     return query.map((row) => row.readTable(podcasts)).watch();
   }
 
@@ -49,6 +50,26 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
   Future<void> setPodcastAutoDownload(int id, {required bool autoDownload}) {
     return (update(podcasts)..where((table) => table.id.equals(id))).write(
       PodcastsCompanion(autoDownload: Value(autoDownload)),
+    );
+  }
+
+  /// Inclut chaque abonnement dans le téléchargement automatique.
+  /// Un aperçu non suivi n’est pas modifié.
+  Future<void> enableAutoDownloadForSubscriptions() {
+    return (update(podcasts)..where((table) => table.subscribed.equals(true)))
+        .write(const PodcastsCompanion(autoDownload: Value(true)));
+  }
+
+  /// Inclut chaque abonnement dans les alertes de nouveaux épisodes.
+  /// Un aperçu non suivi n’est pas modifié.
+  Future<void> enableEpisodeNotificationForSubscriptions() {
+    return (update(podcasts)..where((table) => table.subscribed.equals(true)))
+        .write(const PodcastsCompanion(episodeNotification: Value(true)));
+  }
+
+  Future<void> setPodcastEpisodeNotification(int id, {required bool enabled}) {
+    return (update(podcasts)..where((table) => table.id.equals(id))).write(
+      PodcastsCompanion(episodeNotification: Value(enabled)),
     );
   }
 
@@ -124,6 +145,12 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     )..where((table) => table.id.equals(id))).watchSingleOrNull();
   }
 
+  Future<List<Podcast>> listSubscribed() {
+    return (select(
+      podcasts,
+    )..where((table) => table.subscribed.equals(true))).get();
+  }
+
   Future<Podcast?> getPodcast(int id) {
     return (select(
       podcasts,
@@ -136,13 +163,18 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     )..where((table) => table.feedUrl.equals(feedUrl))).getSingleOrNull();
   }
 
-  Future<int> saveFeed(
+  /// Enregistre le flux et renvoie les épisodes vraiment nouveaux.
+  ///
+  /// Un guid inconnu n’est signalé que si le podcast était déjà un abonnement :
+  /// le premier ajout ne doit pas traiter l’archive comme des nouveautés.
+  Future<SavedFeed> saveFeed(
     FeedDraft draft, {
     bool? subscribed,
     bool? keepUpdated,
   }) {
     return transaction(() async {
       final existing = await findByFeedUrl(draft.feedUrl);
+      final alreadyFollowed = existing?.subscribed ?? false;
       final int podcastId;
       if (existing == null) {
         podcastId = await into(podcasts).insert(
@@ -161,7 +193,8 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
         );
       } else {
         podcastId = existing.id;
-        final imageChanged = (existing.imageUrl ?? '') != (draft.imageUrl ?? '');
+        final imageChanged =
+            (existing.imageUrl ?? '') != (draft.imageUrl ?? '');
         await (update(
           podcasts,
         )..where((table) => table.id.equals(podcastId))).write(
@@ -199,31 +232,36 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
                 ])
                 ..where(episodes.podcastId.equals(podcastId)))
               .get();
-      final knownByGuid = <String, ({
-        int id,
-        String title,
-        String description,
-        String audioUrl,
-        String? mimeType,
-        int? durationSeconds,
-        DateTime? publishedAt,
-        String? imageUrl,
-        String? chaptersUrl,
-      })>{
-        for (final row in known)
-          row.read(episodes.guid)!: (
-            id: row.read(episodes.id)!,
-            title: row.read(episodes.title)!,
-            description: row.read(episodes.description) ?? '',
-            audioUrl: row.read(episodes.audioUrl)!,
-            mimeType: row.read(episodes.mimeType),
-            durationSeconds: row.read(episodes.durationSeconds),
-            publishedAt: row.read(episodes.publishedAt),
-            imageUrl: row.read(episodes.imageUrl),
-            chaptersUrl: row.read(episodes.chaptersUrl),
-          ),
-      };
+      final knownByGuid =
+          <
+            String,
+            ({
+              int id,
+              String title,
+              String description,
+              String audioUrl,
+              String? mimeType,
+              int? durationSeconds,
+              DateTime? publishedAt,
+              String? imageUrl,
+              String? chaptersUrl,
+            })
+          >{
+            for (final row in known)
+              row.read(episodes.guid)!: (
+                id: row.read(episodes.id)!,
+                title: row.read(episodes.title)!,
+                description: row.read(episodes.description) ?? '',
+                audioUrl: row.read(episodes.audioUrl)!,
+                mimeType: row.read(episodes.mimeType),
+                durationSeconds: row.read(episodes.durationSeconds),
+                publishedAt: row.read(episodes.publishedAt),
+                imageUrl: row.read(episodes.imageUrl),
+                chaptersUrl: row.read(episodes.chaptersUrl),
+              ),
+          };
       final fresh = <EpisodesCompanion>[];
+      final freshGuids = <String>[];
       final changed = <({int id, EpisodeDraft episode, bool imageChanged})>[];
       final chapterUrlChangedIds = <int>[];
       final seen = <String>{};
@@ -231,6 +269,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
         if (!seen.add(episode.guid)) continue;
         final existing = knownByGuid[episode.guid];
         if (existing == null) {
+          freshGuids.add(episode.guid);
           fresh.add(
             EpisodesCompanion.insert(
               podcastId: podcastId,
@@ -318,9 +357,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
         for (final episode in draft.episodes)
           if (episode.chapters.isNotEmpty &&
               (knownByGuid[episode.guid] == null ||
-                  chapterUrlChangedIds.contains(
-                    knownByGuid[episode.guid]!.id,
-                  )))
+                  chapterUrlChangedIds.contains(knownByGuid[episode.guid]!.id)))
             episode.guid,
       };
       if (inlineTargets.isNotEmpty) {
@@ -330,7 +367,8 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
                   ..where(episodes.podcastId.equals(podcastId)))
                 .get();
         final idByGuid = {
-          for (final row in ids) row.read(episodes.guid)!: row.read(episodes.id)!,
+          for (final row in ids)
+            row.read(episodes.guid)!: row.read(episodes.id)!,
         };
         for (final episode in draft.episodes) {
           if (!inlineTargets.contains(episode.guid)) continue;
@@ -349,8 +387,34 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
           ]);
         }
       }
-      return podcastId;
+
+      final newEpisodeIds = alreadyFollowed && freshGuids.isNotEmpty
+          ? await _episodeIdsForGuids(podcastId, freshGuids)
+          : const <int>[];
+      return SavedFeed(podcastId: podcastId, newEpisodeIds: newEpisodeIds);
     });
+  }
+
+  /// Identifiants des [guids], dans l’ordre donné.
+  Future<List<int>> _episodeIdsForGuids(
+    int podcastId,
+    List<String> guids,
+  ) async {
+    final rows =
+        await (selectOnly(episodes)
+              ..addColumns([episodes.id, episodes.guid])
+              ..where(
+                episodes.podcastId.equals(podcastId) &
+                    episodes.guid.isIn(guids),
+              ))
+            .get();
+    final idByGuid = {
+      for (final row in rows) row.read(episodes.guid)!: row.read(episodes.id)!,
+    };
+    return [
+      for (final guid in guids)
+        if (idByGuid[guid] != null) idByGuid[guid]!,
+    ];
   }
 
   static bool _samePublishedAt(DateTime? a, DateTime? b) {
@@ -366,6 +430,9 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     final stored = await (select(
       episodes,
     )..where((table) => table.podcastId.equals(id))).get();
+    if (podcast != null && podcast.subscribed) {
+      SyncHooks.reportUnsubscribed(podcast.feedUrl);
+    }
     final paths = <String>[
       if (podcast?.imagePath != null) podcast!.imagePath!,
       for (final episode in stored) ...[
@@ -384,9 +451,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     );
   }
 
-  Future<void> setPodcastImagePaths(
-    List<({int id, String path})> updates,
-  ) {
+  Future<void> setPodcastImagePaths(List<({int id, String path})> updates) {
     if (updates.isEmpty) return Future.value();
     return batch((statement) {
       for (final item in updates) {
@@ -400,10 +465,9 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
   }
 
   Future<List<Podcast>> podcastsMissingCovers() {
-    return (select(
-      podcasts,
-    )..where((table) => table.imageUrl.isNotNull() & table.imagePath.isNull()))
+    return (select(podcasts)..where(
+          (table) => table.imageUrl.isNotNull() & table.imagePath.isNull(),
+        ))
         .get();
   }
-
 }

@@ -6,6 +6,7 @@ import '../settings/settings_controller.dart';
 import 'app_database.dart';
 import 'download_notifications.dart';
 import 'download_service.dart';
+import 'online_status.dart';
 import 'providers.dart';
 
 final downloadProgressProvider =
@@ -23,8 +24,15 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
     _clear(episodeId);
   }
 
-  Future<void> download(Episode episode) async {
+  Future<void> download(Episode episode, {bool automatic = false}) async {
     if (state.containsKey(episode.id) || episode.downloadPath != null) return;
+    if (automatic &&
+        mobileDataBlocksDownload(
+          allowMobileData: ref.read(settingsProvider).allowMobileData,
+          mobileDataActive: await ref.read(mobileDataProbeProvider)(),
+        )) {
+      return;
+    }
     state = {...state, episode.id: 0};
     final notifications = ref.read(downloadNotificationsProvider);
     final podcast = await ref
@@ -36,7 +44,7 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
       podcast: podcast?.title,
     );
     var lastPercent = -1;
-    unawaited(notifications.showProgress(notice));
+    _showDownloadProgress(notifications, notice);
     try {
       await ref
           .read(downloadServiceProvider)
@@ -50,19 +58,22 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
               final percent = (clamped * 100).round();
               if (percent == lastPercent) return;
               lastPercent = percent;
-              unawaited(
-                notifications.showProgress(
-                  DownloadNotice(
-                    episodeId: notice.episodeId,
-                    title: notice.title,
-                    podcast: notice.podcast,
-                    progress: clamped,
-                  ),
+              _showDownloadProgress(
+                notifications,
+                DownloadNotice(
+                  episodeId: notice.episodeId,
+                  title: notice.title,
+                  podcast: notice.podcast,
+                  progress: clamped,
                 ),
               );
             },
           );
-      await notifications.showFinished(notice);
+      if (ref.read(settingsProvider).notifyDownloadActivity) {
+        await notifications.showFinished(notice);
+      } else {
+        await notifications.dismiss(episode.id);
+      }
       if (ref.read(settingsProvider).enqueueDownloads) {
         await ref.read(databaseProvider).addToQueue(episode.id);
       }
@@ -71,11 +82,23 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
       _clear(episode.id);
       rethrow;
     } catch (error) {
-      await notifications.showFailed(notice, downloadErrorText(error));
+      if (ref.read(settingsProvider).notifyDownloadErrors) {
+        await notifications.showFailed(notice, downloadErrorText(error));
+      } else {
+        await notifications.dismiss(episode.id);
+      }
       _clear(episode.id);
       rethrow;
     }
     _clear(episode.id);
+  }
+
+  void _showDownloadProgress(
+    DownloadNotifications notifications,
+    DownloadNotice notice,
+  ) {
+    if (!ref.read(settingsProvider).notifyDownloadActivity) return;
+    unawaited(notifications.showProgress(notice));
   }
 
   Future<void> deleteDownload(Episode episode) async {

@@ -1,7 +1,12 @@
-part of '../podcasts_page.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class _ActiveFiltersBar extends StatelessWidget {
-  const _ActiveFiltersBar({
+import '../../data/app_database.dart';
+import '../../settings/settings_controller.dart';
+
+class ActiveFiltersBar extends StatelessWidget {
+  const ActiveFiltersBar({
+    super.key,
     required this.filters,
     required this.onEdit,
     required this.onChanged,
@@ -19,36 +24,31 @@ class _ActiveFiltersBar extends StatelessWidget {
         InputChip(
           label: const Text('Compteur > 0'),
           onPressed: onEdit,
-          onDeleted: () =>
-              onChanged(filters.copyWith(counterAboveZero: false)),
+          onDeleted: () => onChanged(filters.copyWith(counterAboveZero: false)),
         ),
       if (filters.autoDownload == true)
         InputChip(
           label: const Text('Téléchargements auto'),
           onPressed: onEdit,
-          onDeleted: () =>
-              onChanged(filters.copyWith(clearAutoDownload: true)),
+          onDeleted: () => onChanged(filters.copyWith(clearAutoDownload: true)),
         ),
       if (filters.autoDownload == false)
         InputChip(
           label: const Text('Sans téléchargements auto'),
           onPressed: onEdit,
-          onDeleted: () =>
-              onChanged(filters.copyWith(clearAutoDownload: true)),
+          onDeleted: () => onChanged(filters.copyWith(clearAutoDownload: true)),
         ),
       if (filters.keepUpdated == true)
         InputChip(
           label: const Text('Maintenu à jour'),
           onPressed: onEdit,
-          onDeleted: () =>
-              onChanged(filters.copyWith(clearKeepUpdated: true)),
+          onDeleted: () => onChanged(filters.copyWith(clearKeepUpdated: true)),
         ),
       if (filters.keepUpdated == false)
         InputChip(
           label: const Text('Non maintenu à jour'),
           onPressed: onEdit,
-          onDeleted: () =>
-              onChanged(filters.copyWith(clearKeepUpdated: true)),
+          onDeleted: () => onChanged(filters.copyWith(clearKeepUpdated: true)),
         ),
       ActionChip(
         avatar: Icon(Icons.clear_all, size: 18, color: scheme.primary),
@@ -73,7 +73,7 @@ class _ActiveFiltersBar extends StatelessWidget {
   }
 }
 
-List<Podcast> _filterPodcasts(
+List<Podcast> filterPodcasts(
   List<Podcast> items, {
   required PodcastFilters filters,
   required Map<int, int> counterCounts,
@@ -95,7 +95,7 @@ List<Podcast> _filterPodcasts(
   }).toList();
 }
 
-List<Podcast> _sortPodcasts(
+List<Podcast> sortPodcasts(
   List<Podcast> items, {
   required PodcastSort sort,
   required Map<int, int> counterCounts,
@@ -129,7 +129,10 @@ List<Podcast> _sortPodcasts(
   return sorted;
 }
 
-Future<void> _showCounterDialog(BuildContext context, WidgetRef ref) async {
+Future<void> showPodcastCounterDialog(
+  BuildContext context,
+  WidgetRef ref,
+) async {
   final selected = ref.read(settingsProvider).podcastCounter;
   final choice = await showDialog<PodcastCounter>(
     context: context,
@@ -153,7 +156,10 @@ Future<void> _showCounterDialog(BuildContext context, WidgetRef ref) async {
   await ref.read(settingsProvider.notifier).setPodcastCounter(choice);
 }
 
-Future<void> _showFilterDialog(BuildContext context, WidgetRef ref) async {
+Future<void> showPodcastFilterDialog(
+  BuildContext context,
+  WidgetRef ref,
+) async {
   var draft = ref.read(settingsProvider).podcastFilters;
   final applied = await showDialog<PodcastFilters>(
     context: context,
@@ -253,7 +259,7 @@ Future<void> _showFilterDialog(BuildContext context, WidgetRef ref) async {
   await ref.read(settingsProvider.notifier).setPodcastFilters(applied);
 }
 
-Future<void> _showSortDialog(BuildContext context, WidgetRef ref) async {
+Future<void> showPodcastSortDialog(BuildContext context, WidgetRef ref) async {
   final selected = ref.read(settingsProvider).podcastSort;
   final choice = await showDialog<PodcastSort>(
     context: context,
@@ -276,4 +282,3 @@ Future<void> _showSortDialog(BuildContext context, WidgetRef ref) async {
   if (choice == null) return;
   await ref.read(settingsProvider.notifier).setPodcastSort(choice);
 }
-

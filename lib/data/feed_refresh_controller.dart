@@ -4,6 +4,7 @@ import '../settings/settings_controller.dart';
 import 'app_database.dart';
 import 'models.dart';
 import 'providers.dart';
+import 'status_notifications.dart';
 
 enum FeedRefreshPhase { idle, running, completed }
 
@@ -130,6 +131,7 @@ class FeedRefreshNotifier extends Notifier<FeedRefreshState> {
     final report = await ref
         .read(feedServiceProvider)
         .refreshAll(
+          notifyNewEpisodes: ref.read(settingsProvider).notifyNewEpisodes,
           onProgress: (done, total, failures) {
             if (!state.isRunning) return;
             final now = DateTime.now();
@@ -153,6 +155,12 @@ class FeedRefreshNotifier extends Notifier<FeedRefreshState> {
       done: report.total,
       total: report.total,
       failures: _mapFailures(report.failures, titles),
+    );
+    if (!ref.mounted || report.arrivals.isEmpty) return;
+    await announceNewEpisodes(
+      ref.read(statusNotificationsProvider),
+      ref.read(settingsProvider),
+      report.arrivals,
     );
   }
 

@@ -109,10 +109,14 @@ class _Harness {
     required Future<void> Function(void Function(double progress)? onProgress)
     onDownload,
   }) async {
-    SharedPreferences.setMockInitialValues({'enqueueDownloads': false});
+    SharedPreferences.setMockInitialValues({
+      'enqueueDownloads': false,
+      'notifyDownloadActivity': true,
+      'notifyDownloadErrors': true,
+    });
     final preferences = await SharedPreferences.getInstance();
     final database = AppDatabase(NativeDatabase.memory());
-    final podcastId = await database.saveFeed(
+    final podcastId = (await database.saveFeed(
       const FeedDraft(
         feedUrl: 'https://example.com/feed.xml',
         title: 'Essai',
@@ -127,7 +131,7 @@ class _Harness {
           ),
         ],
       ),
-    );
+    )).podcastId;
     final episode = (await database.watchEpisodes(podcastId: podcastId).first)
         .single
         .episode;

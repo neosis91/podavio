@@ -15,7 +15,7 @@ void main() {
     final from = Directory('${root.path}/from')..createSync();
     final to = Directory('${root.path}/to')..createSync();
 
-    final podcastId = await database.saveFeed(
+    final podcastId = (await database.saveFeed(
       const FeedDraft(
         feedUrl: 'https://example.com/feed.xml',
         title: 'Essai',
@@ -36,7 +36,7 @@ void main() {
           ),
         ],
       ),
-    );
+    )).podcastId;
     final episodes = await database.watchEpisodes(podcastId: podcastId).first;
     final present = episodes.first.episode;
     final missing = episodes.last.episode;

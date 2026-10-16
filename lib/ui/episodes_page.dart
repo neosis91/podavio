@@ -14,7 +14,7 @@ import 'widgets/empty_state.dart';
 import 'widgets/episode_list.dart';
 import 'widgets/messages.dart';
 
-part 'episodes/episodes_filters.dart';
+import 'episodes/episodes_filters.dart';
 
 class EpisodesPage extends ConsumerStatefulWidget {
   const EpisodesPage({super.key});
@@ -129,7 +129,7 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
               onSelected: (value) async {
                 switch (value) {
                   case 'filter':
-                    await _showEpisodeFilterDialog(context, ref);
+                    await showEpisodeFilterDialog(context, ref);
                   case 'played':
                     await ref.read(databaseProvider).markAllPlayed();
                     if (context.mounted) {
@@ -155,9 +155,9 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (hasFilters)
-            _ActiveEpisodeFiltersBar(
+            ActiveEpisodeFiltersBar(
               filters: filters,
-              onEdit: () => _showEpisodeFilterDialog(context, ref),
+              onEdit: () => showEpisodeFilterDialog(context, ref),
               onChanged: (next) =>
                   ref.read(settingsProvider.notifier).setEpisodeFilters(next),
             ),

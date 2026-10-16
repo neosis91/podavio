@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import '../core/search.dart';
+import '../sync/sync_hooks.dart';
 import 'models.dart';
 
 part 'app_database.g.dart';
@@ -25,6 +26,10 @@ class Podcasts extends Table {
   BoolColumn get preferred => boolean().withDefault(const Constant(false))();
   BoolColumn get autoDownload => boolean().withDefault(const Constant(false))();
   BoolColumn get keepUpdated => boolean().withDefault(const Constant(true))();
+
+  /// Prévient quand un épisode paraît. Coupé au départ, comme AntennaPod.
+  BoolColumn get episodeNotification =>
+      boolean().withDefault(const Constant(false))();
 
   /// false = aperçu (Explorer) : épisodes utilisables, hors bibliothèque.
   BoolColumn get subscribed => boolean().withDefault(const Constant(true))();
@@ -184,7 +189,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -242,6 +247,9 @@ class AppDatabase extends _$AppDatabase
       if (from < 13) {
         await migrator.createTable(playlists);
         await migrator.createTable(playlistEpisodes);
+      }
+      if (from < 14) {
+        await migrator.addColumn(podcasts, podcasts.episodeNotification);
       }
     },
     beforeOpen: (details) async {

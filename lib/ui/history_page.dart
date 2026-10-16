@@ -199,14 +199,11 @@ class HistoryEpisodeRow extends ConsumerWidget {
           children: [
             Expanded(
               child: InkWell(
+                // La file a un ordre stable. Lectures récentes se retrie
+                // dès qu’un épisode démarre, donc « suivant » y rebondissait.
                 onTap: () => ref
                     .read(playerProvider.notifier)
-                    .playOrPauseEntry(
-                      entry,
-                      source: const PlaybackSource(
-                        EpisodeQuery(historyOnly: true, paginated: false),
-                      ),
-                    ),
+                    .playOrPauseEntry(entry, source: PlaybackSource.queue),
                 child: Row(
                   children: [
                     const SizedBox(width: 8),

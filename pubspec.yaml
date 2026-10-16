@@ -70,6 +70,7 @@ dependencies:
   url_launcher: ^6.3.2
   wakelock_plus: ^1.8.1
   flutter_local_notifications: ^23.0.0-dev.3
+  connectivity_plus: ^7.3.2
 
 dev_dependencies:
   flutter_test:

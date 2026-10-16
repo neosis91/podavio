@@ -162,6 +162,20 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _episodeNotificationMeta =
+      const VerificationMeta('episodeNotification');
+  @override
+  late final GeneratedColumn<bool> episodeNotification = GeneratedColumn<bool>(
+    'episode_notification',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("episode_notification" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _subscribedMeta = const VerificationMeta(
     'subscribed',
   );
@@ -249,6 +263,7 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     preferred,
     autoDownload,
     keepUpdated,
+    episodeNotification,
     subscribed,
     playbackSpeed,
     skipIntroSeconds,
@@ -364,6 +379,15 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         ),
       );
     }
+    if (data.containsKey('episode_notification')) {
+      context.handle(
+        _episodeNotificationMeta,
+        episodeNotification.isAcceptableOrUnknown(
+          data['episode_notification']!,
+          _episodeNotificationMeta,
+        ),
+      );
+    }
     if (data.containsKey('subscribed')) {
       context.handle(
         _subscribedMeta,
@@ -476,6 +500,10 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         DriftSqlType.bool,
         data['${effectivePrefix}keep_updated'],
       )!,
+      episodeNotification: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}episode_notification'],
+      )!,
       subscribed: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}subscribed'],
@@ -524,6 +552,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
   final bool autoDownload;
   final bool keepUpdated;
 
+  /// Prévient quand un épisode paraît. Coupé au départ, comme AntennaPod.
+  final bool episodeNotification;
+
   /// false = aperçu (Explorer) : épisodes utilisables, hors bibliothèque.
   final bool subscribed;
 
@@ -555,6 +586,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     required this.preferred,
     required this.autoDownload,
     required this.keepUpdated,
+    required this.episodeNotification,
     required this.subscribed,
     this.playbackSpeed,
     required this.skipIntroSeconds,
@@ -586,6 +618,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     map['preferred'] = Variable<bool>(preferred);
     map['auto_download'] = Variable<bool>(autoDownload);
     map['keep_updated'] = Variable<bool>(keepUpdated);
+    map['episode_notification'] = Variable<bool>(episodeNotification);
     map['subscribed'] = Variable<bool>(subscribed);
     if (!nullToAbsent || playbackSpeed != null) {
       map['playback_speed'] = Variable<double>(playbackSpeed);
@@ -622,6 +655,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       preferred: Value(preferred),
       autoDownload: Value(autoDownload),
       keepUpdated: Value(keepUpdated),
+      episodeNotification: Value(episodeNotification),
       subscribed: Value(subscribed),
       playbackSpeed: playbackSpeed == null && nullToAbsent
           ? const Value.absent()
@@ -656,6 +690,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       preferred: serializer.fromJson<bool>(json['preferred']),
       autoDownload: serializer.fromJson<bool>(json['autoDownload']),
       keepUpdated: serializer.fromJson<bool>(json['keepUpdated']),
+      episodeNotification: serializer.fromJson<bool>(
+        json['episodeNotification'],
+      ),
       subscribed: serializer.fromJson<bool>(json['subscribed']),
       playbackSpeed: serializer.fromJson<double?>(json['playbackSpeed']),
       skipIntroSeconds: serializer.fromJson<int>(json['skipIntroSeconds']),
@@ -681,6 +718,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       'preferred': serializer.toJson<bool>(preferred),
       'autoDownload': serializer.toJson<bool>(autoDownload),
       'keepUpdated': serializer.toJson<bool>(keepUpdated),
+      'episodeNotification': serializer.toJson<bool>(episodeNotification),
       'subscribed': serializer.toJson<bool>(subscribed),
       'playbackSpeed': serializer.toJson<double?>(playbackSpeed),
       'skipIntroSeconds': serializer.toJson<int>(skipIntroSeconds),
@@ -704,6 +742,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     bool? preferred,
     bool? autoDownload,
     bool? keepUpdated,
+    bool? episodeNotification,
     bool? subscribed,
     Value<double?> playbackSpeed = const Value.absent(),
     int? skipIntroSeconds,
@@ -724,6 +763,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     preferred: preferred ?? this.preferred,
     autoDownload: autoDownload ?? this.autoDownload,
     keepUpdated: keepUpdated ?? this.keepUpdated,
+    episodeNotification: episodeNotification ?? this.episodeNotification,
     subscribed: subscribed ?? this.subscribed,
     playbackSpeed: playbackSpeed.present
         ? playbackSpeed.value
@@ -758,6 +798,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       keepUpdated: data.keepUpdated.present
           ? data.keepUpdated.value
           : this.keepUpdated,
+      episodeNotification: data.episodeNotification.present
+          ? data.episodeNotification.value
+          : this.episodeNotification,
       subscribed: data.subscribed.present
           ? data.subscribed.value
           : this.subscribed,
@@ -795,6 +838,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           ..write('preferred: $preferred, ')
           ..write('autoDownload: $autoDownload, ')
           ..write('keepUpdated: $keepUpdated, ')
+          ..write('episodeNotification: $episodeNotification, ')
           ..write('subscribed: $subscribed, ')
           ..write('playbackSpeed: $playbackSpeed, ')
           ..write('skipIntroSeconds: $skipIntroSeconds, ')
@@ -820,6 +864,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     preferred,
     autoDownload,
     keepUpdated,
+    episodeNotification,
     subscribed,
     playbackSpeed,
     skipIntroSeconds,
@@ -844,6 +889,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           other.preferred == this.preferred &&
           other.autoDownload == this.autoDownload &&
           other.keepUpdated == this.keepUpdated &&
+          other.episodeNotification == this.episodeNotification &&
           other.subscribed == this.subscribed &&
           other.playbackSpeed == this.playbackSpeed &&
           other.skipIntroSeconds == this.skipIntroSeconds &&
@@ -866,6 +912,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
   final Value<bool> preferred;
   final Value<bool> autoDownload;
   final Value<bool> keepUpdated;
+  final Value<bool> episodeNotification;
   final Value<bool> subscribed;
   final Value<double?> playbackSpeed;
   final Value<int> skipIntroSeconds;
@@ -886,6 +933,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.preferred = const Value.absent(),
     this.autoDownload = const Value.absent(),
     this.keepUpdated = const Value.absent(),
+    this.episodeNotification = const Value.absent(),
     this.subscribed = const Value.absent(),
     this.playbackSpeed = const Value.absent(),
     this.skipIntroSeconds = const Value.absent(),
@@ -907,6 +955,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.preferred = const Value.absent(),
     this.autoDownload = const Value.absent(),
     this.keepUpdated = const Value.absent(),
+    this.episodeNotification = const Value.absent(),
     this.subscribed = const Value.absent(),
     this.playbackSpeed = const Value.absent(),
     this.skipIntroSeconds = const Value.absent(),
@@ -930,6 +979,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Expression<bool>? preferred,
     Expression<bool>? autoDownload,
     Expression<bool>? keepUpdated,
+    Expression<bool>? episodeNotification,
     Expression<bool>? subscribed,
     Expression<double>? playbackSpeed,
     Expression<int>? skipIntroSeconds,
@@ -951,6 +1001,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       if (preferred != null) 'preferred': preferred,
       if (autoDownload != null) 'auto_download': autoDownload,
       if (keepUpdated != null) 'keep_updated': keepUpdated,
+      if (episodeNotification != null)
+        'episode_notification': episodeNotification,
       if (subscribed != null) 'subscribed': subscribed,
       if (playbackSpeed != null) 'playback_speed': playbackSpeed,
       if (skipIntroSeconds != null) 'skip_intro_seconds': skipIntroSeconds,
@@ -974,6 +1026,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Value<bool>? preferred,
     Value<bool>? autoDownload,
     Value<bool>? keepUpdated,
+    Value<bool>? episodeNotification,
     Value<bool>? subscribed,
     Value<double?>? playbackSpeed,
     Value<int>? skipIntroSeconds,
@@ -995,6 +1048,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       preferred: preferred ?? this.preferred,
       autoDownload: autoDownload ?? this.autoDownload,
       keepUpdated: keepUpdated ?? this.keepUpdated,
+      episodeNotification: episodeNotification ?? this.episodeNotification,
       subscribed: subscribed ?? this.subscribed,
       playbackSpeed: playbackSpeed ?? this.playbackSpeed,
       skipIntroSeconds: skipIntroSeconds ?? this.skipIntroSeconds,
@@ -1046,6 +1100,9 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     if (keepUpdated.present) {
       map['keep_updated'] = Variable<bool>(keepUpdated.value);
     }
+    if (episodeNotification.present) {
+      map['episode_notification'] = Variable<bool>(episodeNotification.value);
+    }
     if (subscribed.present) {
       map['subscribed'] = Variable<bool>(subscribed.value);
     }
@@ -1083,6 +1140,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
           ..write('preferred: $preferred, ')
           ..write('autoDownload: $autoDownload, ')
           ..write('keepUpdated: $keepUpdated, ')
+          ..write('episodeNotification: $episodeNotification, ')
           ..write('subscribed: $subscribed, ')
           ..write('playbackSpeed: $playbackSpeed, ')
           ..write('skipIntroSeconds: $skipIntroSeconds, ')
@@ -3569,6 +3627,7 @@ typedef $$PodcastsTableCreateCompanionBuilder = PodcastsCompanion Function({
   Value<bool> preferred,
   Value<bool> autoDownload,
   Value<bool> keepUpdated,
+  Value<bool> episodeNotification,
   Value<bool> subscribed,
   Value<double?> playbackSpeed,
   Value<int> skipIntroSeconds,
@@ -3590,6 +3649,7 @@ typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<bool> preferred,
   Value<bool> autoDownload,
   Value<bool> keepUpdated,
+  Value<bool> episodeNotification,
   Value<bool> subscribed,
   Value<double?> playbackSpeed,
   Value<int> skipIntroSeconds,
@@ -3693,6 +3753,11 @@ class $$PodcastsTableFilterComposer
 
   ColumnFilters<bool> get keepUpdated => $composableBuilder(
     column: $table.keepUpdated,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get episodeNotification => $composableBuilder(
+    column: $table.episodeNotification,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3826,6 +3891,11 @@ class $$PodcastsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get episodeNotification => $composableBuilder(
+    column: $table.episodeNotification,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get subscribed => $composableBuilder(
     column: $table.subscribed,
     builder: (column) => ColumnOrderings(column),
@@ -3912,6 +3982,11 @@ class $$PodcastsTableAnnotationComposer
 
   GeneratedColumn<bool> get keepUpdated => $composableBuilder(
     column: $table.keepUpdated,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get episodeNotification => $composableBuilder(
+    column: $table.episodeNotification,
     builder: (column) => column,
   );
 
@@ -4012,6 +4087,7 @@ class $$PodcastsTableTableManager
                 Value<bool> preferred = const Value.absent(),
                 Value<bool> autoDownload = const Value.absent(),
                 Value<bool> keepUpdated = const Value.absent(),
+                Value<bool> episodeNotification = const Value.absent(),
                 Value<bool> subscribed = const Value.absent(),
                 Value<double?> playbackSpeed = const Value.absent(),
                 Value<int> skipIntroSeconds = const Value.absent(),
@@ -4032,6 +4108,7 @@ class $$PodcastsTableTableManager
                 preferred: preferred,
                 autoDownload: autoDownload,
                 keepUpdated: keepUpdated,
+                episodeNotification: episodeNotification,
                 subscribed: subscribed,
                 playbackSpeed: playbackSpeed,
                 skipIntroSeconds: skipIntroSeconds,
@@ -4054,6 +4131,7 @@ class $$PodcastsTableTableManager
                 Value<bool> preferred = const Value.absent(),
                 Value<bool> autoDownload = const Value.absent(),
                 Value<bool> keepUpdated = const Value.absent(),
+                Value<bool> episodeNotification = const Value.absent(),
                 Value<bool> subscribed = const Value.absent(),
                 Value<double?> playbackSpeed = const Value.absent(),
                 Value<int> skipIntroSeconds = const Value.absent(),
@@ -4074,6 +4152,7 @@ class $$PodcastsTableTableManager
                 preferred: preferred,
                 autoDownload: autoDownload,
                 keepUpdated: keepUpdated,
+                episodeNotification: episodeNotification,
                 subscribed: subscribed,
                 playbackSpeed: playbackSpeed,
                 skipIntroSeconds: skipIntroSeconds,

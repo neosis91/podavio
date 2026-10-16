@@ -30,6 +30,7 @@ import 'router.dart';
 import 'settings_page.dart';
 import 'shell.dart';
 import 'stats_page.dart';
+import 'sync_page.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -152,12 +153,20 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const DownloadSettingsPage(),
           ),
           GoRoute(
+            path: AppRoutes.notifications,
+            builder: (context, state) => const NotificationSettingsPage(),
+          ),
+          GoRoute(
             path: AppRoutes.about,
             builder: (context, state) => const AboutPage(),
           ),
           GoRoute(
             path: AppRoutes.licenses,
             builder: (context, state) => const LicensesPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.sync,
+            builder: (context, state) => const SyncPage(),
           ),
           GoRoute(
             path: AppRoutes.backupRestore,

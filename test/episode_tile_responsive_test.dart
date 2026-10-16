@@ -32,52 +32,49 @@ void main() {
   for (final density in EpisodeListDensity.values) {
     for (final textScale in [1.0, 1.3]) {
       for (final c in cases) {
-        testWidgets(
-          'tile ${c.name} ${density.id} textScale=$textScale '
-          'lays out without overflow',
-          (tester) async {
-            final harness = await _pumpTile(
-              tester,
-              width: c.width,
-              density: density,
-              textScale: textScale,
-              entry: _entry(
-                title:
-                    'Un titre assez long pour forcer deux lignes '
-                    'sur les largeurs étroites et moyennes',
-                positionMs: 90 * 1000,
-                durationSeconds: 30 * 60,
-                favorite: true,
-                queueIndex: 1,
-              ),
-            );
+        testWidgets('tile ${c.name} ${density.id} textScale=$textScale '
+            'lays out without overflow', (tester) async {
+          final harness = await _pumpTile(
+            tester,
+            width: c.width,
+            density: density,
+            textScale: textScale,
+            entry: _entry(
+              title:
+                  'Un titre assez long pour forcer deux lignes '
+                  'sur les largeurs étroites et moyennes',
+              positionMs: 90 * 1000,
+              durationSeconds: 30 * 60,
+              favorite: true,
+              queueIndex: 1,
+            ),
+          );
 
-            expect(tester.takeException(), isNull);
-            expect(find.textContaining('Un titre assez long'), findsOneWidget);
-            expect(find.byType(LinearProgressIndicator), findsOneWidget);
-            expect(find.byIcon(Icons.favorite), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          expect(find.textContaining('Un titre assez long'), findsOneWidget);
+          expect(find.byType(LinearProgressIndicator), findsOneWidget);
+          expect(find.byIcon(Icons.favorite), findsOneWidget);
 
-            final metrics = EpisodeTileMetrics.resolve(
-              width: c.width,
-              textTheme: Typography.material2021().black,
-              textScaler: TextScaler.linear(textScale),
-              density: density,
-              played: false,
-              onSurface: const Color(0xFF000000),
-              muted: const Color(0xFF666666),
-            );
-            expect(metrics.tier, c.tier);
-            expect(
-              metrics.coverSize,
-              inInclusiveRange(
-                _coverMin(c.tier, density),
-                _coverMax(c.tier, density),
-              ),
-            );
+          final metrics = EpisodeTileMetrics.resolve(
+            width: c.width,
+            textTheme: Typography.material2021().black,
+            textScaler: TextScaler.linear(textScale),
+            density: density,
+            played: false,
+            onSurface: const Color(0xFF000000),
+            muted: const Color(0xFF666666),
+          );
+          expect(metrics.tier, c.tier);
+          expect(
+            metrics.coverSize,
+            inInclusiveRange(
+              _coverMin(c.tier, density),
+              _coverMax(c.tier, density),
+            ),
+          );
 
-            await harness.close(tester);
-          },
-        );
+          await harness.close(tester);
+        });
       }
     }
   }
@@ -251,6 +248,7 @@ EpisodeEntry _entry({
       preferred: false,
       autoDownload: false,
       keepUpdated: true,
+      episodeNotification: false,
       subscribed: true,
       skipIntroSeconds: 0,
       skipOutroSeconds: 0,
@@ -300,9 +298,7 @@ Future<_Harness> _pumpTile(
   int? playingEpisodeId,
   Map<int, double> downloadProgress = const {},
 }) async {
-  SharedPreferences.setMockInitialValues({
-    'episodeListDensity': density.id,
-  });
+  SharedPreferences.setMockInitialValues({'episodeListDensity': density.id});
   final preferences = await SharedPreferences.getInstance();
   final database = AppDatabase(NativeDatabase.memory());
 

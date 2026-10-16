@@ -9,6 +9,7 @@ class AppRoutes {
   static const discoverMore = '/discover/more';
   static const discoverLanguages = '/discover-languages';
   static const preferences = '/preferences';
+  static const sync = '/preferences/sync';
   static const favorites = '/favorites';
   static const history = '/history';
   static const downloads = '/downloads';
@@ -16,6 +17,7 @@ class AppRoutes {
   static const interfaceLanguage = '/appearance/language';
   static const playback = '/playback';
   static const downloadSettings = '/download-settings';
+  static const notifications = '/notifications';
   static const about = '/about';
   static const licenses = '/licenses';
   static const backupRestore = '/backup-restore';

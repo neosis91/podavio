@@ -5,23 +5,18 @@ import 'package:go_router/go_router.dart';
 import '../core/platform.dart';
 import '../l10n/l10n.dart';
 import '../core/search.dart';
-import '../data/app_database.dart';
 import '../data/feed_refresh_controller.dart';
-import '../data/feed_service.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import 'episodes_page.dart';
+import 'podcasts/podcasts_filters.dart';
+import 'podcasts/podcasts_providers.dart';
+import 'podcasts/podcasts_tiles.dart';
 import 'router.dart';
-import 'widgets/cover.dart';
-import 'widgets/list_metrics.dart';
 import 'widgets/empty_state.dart';
-import 'widgets/highlighted_text.dart';
+import 'widgets/list_metrics.dart';
 
 export 'podcasts/podcast_feed_actions.dart';
-
-part 'podcasts/podcasts_providers.dart';
-part 'podcasts/podcasts_filters.dart';
-part 'podcasts/podcasts_tiles.dart';
 
 class PodcastsPage extends ConsumerStatefulWidget {
   const PodcastsPage({super.key});
@@ -175,11 +170,11 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                   case 'refresh':
                     refreshSubscriptions(context, ref);
                   case 'counter':
-                    _showCounterDialog(context, ref);
+                    showPodcastCounterDialog(context, ref);
                   case 'filter':
-                    _showFilterDialog(context, ref);
+                    showPodcastFilterDialog(context, ref);
                   case 'sort':
-                    _showSortDialog(context, ref);
+                    showPodcastSortDialog(context, ref);
                   case 'showNames':
                     ref
                         .read(settingsProvider.notifier)
@@ -213,9 +208,9 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (!filters.isEmpty)
-            _ActiveFiltersBar(
+            ActiveFiltersBar(
               filters: filters,
-              onEdit: () => _showFilterDialog(context, ref),
+              onEdit: () => showPodcastFilterDialog(context, ref),
               onChanged: (next) =>
                   ref.read(settingsProvider.notifier).setPodcastFilters(next),
             ),
@@ -244,7 +239,7 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                     ? items
                     : items.where((p) => searchMatch(p.title, needle)).toList();
 
-                final filtered = _filterPodcasts(
+                final filtered = filterPodcasts(
                   searched,
                   filters: filters,
                   counterCounts: filters.counterAboveZero
@@ -282,7 +277,7 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                   );
                 }
 
-                final visible = _sortPodcasts(
+                final visible = sortPodcasts(
                   filtered,
                   sort: sort,
                   counterCounts: counterCounts,
@@ -299,7 +294,7 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                         separatorBuilder: (_, _) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final podcast = visible[index];
-                          return _PodcastListTile(
+                          return PodcastListTile(
                             key: ValueKey(podcast.id),
                             podcast: podcast,
                             showName: showNames || needle.isNotEmpty,
@@ -310,7 +305,7 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                           );
                         },
                       )
-                    : _PodcastGrid(
+                    : PodcastGrid(
                         items: visible,
                         columns: columns,
                         showNames: showNames || needle.isNotEmpty,
