@@ -6,6 +6,7 @@ import '../data/feed_refresh_controller.dart';
 import '../data/online_status.dart';
 import '../data/opml_import_controller.dart';
 import '../data/providers.dart';
+import '../sync/sync_controller.dart';
 import '../l10n/l10n.dart';
 import '../player/player_controller.dart';
 import '../player/player_sheet_controller.dart';
@@ -68,6 +69,7 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(coverPrefetchProvider);
+    ref.watch(syncStatusProvider);
     final path = GoRouterState.of(context).uri.path;
     final wide = MediaQuery.sizeOf(context).width >= 600;
     final desktop = wide && _desktopPlatform(Theme.of(context).platform);

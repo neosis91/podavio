@@ -1,4 +1,23 @@
-part of '../player_page.dart';
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/format.dart';
+import '../../data/app_database.dart';
+import '../../data/feed_service.dart';
+import '../../data/providers.dart';
+import '../../player/playback_source.dart';
+import '../../player/player_controller.dart';
+import '../../settings/settings_controller.dart';
+import '../widgets/brand.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/episode_tile.dart';
+import '../widgets/playing_cover.dart';
+import '../widgets/show_notes.dart';
+import 'player_chapter.dart';
+import 'player_panel.dart';
 
 Future<void> showChaptersSheet({
   required BuildContext context,
@@ -13,8 +32,9 @@ Future<void> showChaptersSheet({
   );
 }
 
-class _PlayerQueue extends ConsumerStatefulWidget {
-  const _PlayerQueue({
+class PlayerQueue extends ConsumerStatefulWidget {
+  const PlayerQueue({
+    super.key,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
@@ -27,10 +47,10 @@ class _PlayerQueue extends ConsumerStatefulWidget {
   final GestureDragCancelCallback onDragCancel;
 
   @override
-  ConsumerState<_PlayerQueue> createState() => _PlayerQueueState();
+  ConsumerState<PlayerQueue> createState() => _PlayerQueueState();
 }
 
-class _PlayerQueueState extends ConsumerState<_PlayerQueue> {
+class _PlayerQueueState extends ConsumerState<PlayerQueue> {
   List<int>? _orderIds;
   PlaybackSource? _orderSource;
 
@@ -169,7 +189,7 @@ class _PlayerQueueState extends ConsumerState<_PlayerQueue> {
     final collapseBar = AppBar(
       leading: IconButton(
         tooltip: 'Réduire',
-        onPressed: () => ref.read(_playerPanelProvider.notifier).close(),
+        onPressed: () => ref.read(playerPanelProvider.notifier).close(),
         icon: const SkipIcon.collapse(),
       ),
     );
@@ -339,7 +359,14 @@ class _QueueReorderHold extends StatelessWidget {
   }
 }
 
-void _startQueueReorder() {
+String formatPlaybackSpeed(double speed) {
+  final text = speed == speed.roundToDouble()
+      ? speed.toInt().toString()
+      : speed.toString();
+  return '$text×';
+}
+
+void startQueueReorder() {
   if (_queueHolds.length != 1) return;
   final hold = _queueHolds.values.single;
   if (!hold.context.mounted) return;
@@ -606,7 +633,7 @@ class _NotesSheet extends ConsumerWidget {
   }
 }
 
-Future<void> _chooseSpeed(BuildContext context, WidgetRef ref) {
+Future<void> choosePlaybackSpeed(BuildContext context, WidgetRef ref) {
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
@@ -662,7 +689,7 @@ class _SpeedSheet extends ConsumerWidget {
                     min: 0.5,
                     max: 3.0,
                     divisions: 25,
-                    label: _formatSpeed(sliderValue),
+                    label: formatPlaybackSpeed(sliderValue),
                     onChanged: (value) {
                       unawaited(
                         ref.read(playerProvider.notifier).setSpeed(value),
@@ -673,7 +700,7 @@ class _SpeedSheet extends ConsumerWidget {
                 SizedBox(
                   width: 48,
                   child: Text(
-                    _formatSpeed(sliderValue),
+                    formatPlaybackSpeed(sliderValue),
                     textAlign: TextAlign.end,
                     style: theme.textTheme.labelLarge,
                   ),
@@ -687,7 +714,7 @@ class _SpeedSheet extends ConsumerWidget {
               children: [
                 for (final preset in _presets)
                   ChoiceChip(
-                    label: Text(_formatSpeed(preset)),
+                    label: Text(formatPlaybackSpeed(preset)),
                     selected: (speed - preset).abs() < 0.05,
                     onSelected: (_) {
                       unawaited(
@@ -718,7 +745,7 @@ class _SpeedSheet extends ConsumerWidget {
   }
 }
 
-Future<void> _chooseSleep(BuildContext context, WidgetRef ref) async {
+Future<void> chooseSleepTimer(BuildContext context, WidgetRef ref) async {
   final choice = await showModalBottomSheet<_SleepChoice>(
     context: context,
     showDragHandle: true,

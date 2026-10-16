@@ -22,19 +22,18 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byIcon(Icons.search), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
-    expect(find.text('Albanais'), findsOneWidget);
+    expect(find.text('Toutes les langues'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.search));
+    await tester.tap(find.byType(Switch));
     await tester.pump();
 
+    expect(find.byIcon(Icons.search), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'alban');
     await tester.pump();
 
     expect(find.text('Albanais'), findsOneWidget);
     expect(find.text('Allemand'), findsNothing);
-    expect(find.text('Toutes les langues'), findsNothing);
 
     final marks = <TextSpan>[];
     void collect(InlineSpan span) {
@@ -51,7 +50,7 @@ void main() {
     }
     expect(marks.map((span) => span.text), ['Alban']);
 
-    await tester.tap(find.byTooltip('Fermer la recherche'));
+    await tester.enterText(find.byType(TextField), '');
     await tester.pump();
     expect(find.text('Allemand'), findsOneWidget);
     expect(find.byIcon(Icons.search), findsOneWidget);

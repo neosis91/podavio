@@ -53,6 +53,7 @@ void main() {
       preferred: false,
       autoDownload: false,
       keepUpdated: true,
+      episodeNotification: false,
       subscribed: true,
       skipIntroSeconds: 0,
       skipOutroSeconds: 0,

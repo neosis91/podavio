@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_database.dart';
 import 'cover_service.dart';
 import 'download_notifications.dart';
+import 'status_notifications.dart';
 import 'download_service.dart';
 import 'feed_service.dart';
 import 'models.dart';
@@ -31,6 +32,10 @@ final downloadServiceProvider = Provider<DownloadService>((ref) {
 
 final downloadNotificationsProvider = Provider<DownloadNotifications>((ref) {
   return SystemDownloadNotifications();
+});
+
+final statusNotificationsProvider = Provider<StatusNotifications>((ref) {
+  return SystemStatusNotifications();
 });
 
 final coverServiceProvider = Provider<CoverService>((ref) {

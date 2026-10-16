@@ -1,4 +1,7 @@
-part of '../podcasts_page.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../data/providers.dart';
+import '../../settings/settings_controller.dart';
 
 /// Compteurs jaquettes / tri Compteur / filtre « supérieur à zéro ».
 /// Si Compteur = aucun : map vide sauf besoin tri/filtre → non lus.
@@ -40,8 +43,7 @@ final podcastPlayedCountsProvider = StreamProvider<Map<int, int>>((ref) {
   if (sort != PodcastSort.played) {
     return Stream.value(const <int, int>{});
   }
-  return ref.watch(databaseProvider).watchEpisodeCountsByPodcast(
-    playedOnly: true,
-  );
+  return ref
+      .watch(databaseProvider)
+      .watchEpisodeCountsByPodcast(playedOnly: true);
 });
-

@@ -8,6 +8,7 @@ import 'package:saf_stream/saf_stream.dart';
 import 'package:saf_util/saf_util.dart';
 
 import '../core/format.dart';
+import '../sync/sync_hooks.dart';
 import 'app_database.dart';
 import 'feed_service.dart';
 import 'http_auth.dart';
@@ -148,6 +149,17 @@ class DownloadService {
       }
       if (_cancelled.contains(episode.id)) throw const DownloadCancelled();
       await _database.setDownloadPath(episode.id, contentUri ?? file!.path);
+      if (podcast != null) {
+        SyncHooks.reportEpisode(
+          SyncEpisodeReport(
+            episodeId: episode.id,
+            feedUrl: podcast.feedUrl,
+            audioUrl: episode.audioUrl,
+            guid: episode.guid,
+            action: 'download',
+          ),
+        );
+      }
       file = null;
       contentUri = null;
     } catch (error) {
@@ -207,6 +219,18 @@ class DownloadService {
     final path = episode.downloadPath;
     if (path != null) await deleteStored(path);
     await _database.setDownloadPath(episode.id, null);
+    final podcast = await _database.getPodcast(episode.podcastId);
+    if (podcast != null) {
+      SyncHooks.reportEpisode(
+        SyncEpisodeReport(
+          episodeId: episode.id,
+          feedUrl: podcast.feedUrl,
+          audioUrl: episode.audioUrl,
+          guid: episode.guid,
+          action: 'delete',
+        ),
+      );
+    }
   }
 
   Future<void> deleteFiles(Iterable<String> paths) async {

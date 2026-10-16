@@ -16,6 +16,7 @@ import '../data/feed_refresh_controller.dart';
 import '../data/opml.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
+import '../sync/sync_controller.dart';
 import 'episodes_page.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
@@ -149,6 +150,7 @@ class PreferencesPage extends ConsumerWidget {
     final languages = ref.watch(
       settingsProvider.select((settings) => settings.discoverLanguages),
     );
+    final sync = ref.watch(syncStatusProvider);
     return Scaffold(
       appBar: AppBar(title: Text(context.tr('Settings'))),
       body: ListView(
@@ -182,6 +184,21 @@ class PreferencesPage extends ConsumerWidget {
             leading: const Icon(Icons.speed),
             title: Text(context.tr('Playback')),
             onTap: () => context.push(AppRoutes.playback),
+          ),
+          ListTile(
+            leading: const Icon(Icons.sync),
+            title: Text(context.tr('Synchronization')),
+            subtitle: Text(
+              sync.connected
+                  ? context.tr(sync.provider?.titleKey ?? 'Synchronization')
+                  : context.tr('Synchronization is off'),
+            ),
+            onTap: () => context.push(AppRoutes.sync),
+          ),
+          ListTile(
+            leading: const Icon(Icons.notifications_outlined),
+            title: Text(context.tr('Notifications')),
+            onTap: () => context.push(AppRoutes.notifications),
           ),
           ListTile(
             leading: const Icon(Icons.download_outlined),

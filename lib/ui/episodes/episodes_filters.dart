@@ -1,7 +1,12 @@
-part of '../episodes_page.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class _ActiveEpisodeFiltersBar extends StatelessWidget {
-  const _ActiveEpisodeFiltersBar({
+import '../../l10n/l10n.dart';
+import '../../settings/settings_controller.dart';
+
+class ActiveEpisodeFiltersBar extends StatelessWidget {
+  const ActiveEpisodeFiltersBar({
+    super.key,
     required this.filters,
     required this.onEdit,
     required this.onChanged,
@@ -56,7 +61,7 @@ class _ActiveEpisodeFiltersBar extends StatelessWidget {
   }
 }
 
-Future<void> _showEpisodeFilterDialog(
+Future<void> showEpisodeFilterDialog(
   BuildContext context,
   WidgetRef ref,
 ) async {

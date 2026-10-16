@@ -53,6 +53,18 @@ class SubscribeResult {
   final bool created;
 }
 
+/// Résultat de l’enregistrement d’un flux.
+class SavedFeed {
+  const SavedFeed({required this.podcastId, required this.newEpisodeIds});
+
+  final int podcastId;
+
+  /// Épisodes dont le guid vient d’apparaître sur un abonnement déjà suivi.
+  ///
+  /// Vide au premier ajout, pour un aperçu, ou quand aucun guid n’est nouveau.
+  final List<int> newEpisodeIds;
+}
+
 class SubscribeFailure {
   const SubscribeFailure({required this.feedUrl, required this.message});
 
@@ -61,12 +73,46 @@ class SubscribeFailure {
 }
 
 class RefreshReport {
-  const RefreshReport({required this.total, this.failures = const []});
+  const RefreshReport({
+    required this.total,
+    this.failures = const [],
+    this.arrivals = const [],
+  });
 
   final int total;
   final List<SubscribeFailure> failures;
 
+  /// Podcasts qui viennent de publier, et dont la notification est activée.
+  final List<NewEpisodeArrival> arrivals;
+
   int get failed => failures.length;
+}
+
+/// Nouveaux épisodes d’un abonnement déjà suivi, prêts à être annoncés.
+class NewEpisodeArrival {
+  const NewEpisodeArrival({
+    required this.podcastId,
+    required this.title,
+    required this.count,
+  });
+
+  final int podcastId;
+  final String title;
+  final int count;
+}
+
+/// Un abonnement déjà suivi, maintenu à jour, et que l’utilisateur a demandé
+/// à suivre dans Notifications, sans l’avoir coupé sur le podcast.
+bool shouldNotifyNewEpisodes({
+  required bool notifyNewEpisodes,
+  required bool keepUpdated,
+  required bool episodeNotification,
+  required int newCount,
+}) {
+  return notifyNewEpisodes &&
+      keepUpdated &&
+      episodeNotification &&
+      newCount > 0;
 }
 
 class PodcastStats {
@@ -201,4 +247,3 @@ class LibraryStats {
   final int podcastCount;
   final int episodeCount;
 }
-

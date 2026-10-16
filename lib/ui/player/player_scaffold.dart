@@ -1,31 +1,19 @@
-part of '../player_page.dart';
+import 'dart:math' as math;
 
-enum _PlayerPanel { cover, playlist }
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class _PlayerPanelNotifier extends Notifier<_PlayerPanel> {
-  @override
-  _PlayerPanel build() => _PlayerPanel.cover;
-
-  void toggle() {
-    state = state == _PlayerPanel.cover
-        ? _PlayerPanel.playlist
-        : _PlayerPanel.cover;
-  }
-
-  void close() => state = _PlayerPanel.cover;
-}
-
-/// Ferme la playlist du grand lecteur. Renvoie vrai si elle était ouverte.
-bool closePlayerPlaylistIfOpen(WidgetRef ref) {
-  if (ref.read(_playerPanelProvider) != _PlayerPanel.playlist) return false;
-  ref.read(_playerPanelProvider.notifier).close();
-  return true;
-}
-
-final _playerPanelProvider =
-    NotifierProvider<_PlayerPanelNotifier, _PlayerPanel>(
-      _PlayerPanelNotifier.new,
-    );
+import '../../core/cover_tone.dart';
+import '../../data/feed_service.dart';
+import '../../data/providers.dart';
+import '../../player/player_controller.dart';
+import '../widgets/brand.dart';
+import '../widgets/empty_state.dart';
+import 'player_controls.dart';
+import 'player_now_playing.dart';
+import 'player_panel.dart';
+import 'player_sheets.dart';
 
 class _CoverToneKey {
   const _CoverToneKey(this.path, this.url, this.username, this.password);
@@ -167,11 +155,11 @@ class PlayerPage extends ConsumerWidget {
                 icon: const Icon(Icons.directions_car),
               ),
             ]
-          : [_PlayerEpisodeActions(episodeId: episodeId)],
+          : [PlayerEpisodeActions(episodeId: episodeId)],
     );
 
     final showPlaylist =
-        ref.watch(_playerPanelProvider) == _PlayerPanel.playlist && !carMode;
+        ref.watch(playerPanelProvider) == PlayerPanel.playlist && !carMode;
     final blockBack = showPlaylist || (embedded && expanded);
     return _CoverBackdrop(
       tone: tone,
@@ -229,7 +217,7 @@ class PlayerPage extends ConsumerWidget {
                                   constraints: const BoxConstraints(
                                     maxWidth: 720,
                                   ),
-                                  child: const _PlayerTransport(),
+                                  child: const PlayerTransport(),
                                 ),
                               ),
                             ),
@@ -272,7 +260,7 @@ class _QueueSheetState extends ConsumerState<_QueueSheet>
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (ref.read(_playerPanelProvider) == _PlayerPanel.playlist) {
+      if (ref.read(playerPanelProvider) == PlayerPanel.playlist) {
         _animateTo(1);
       }
     });
@@ -322,8 +310,8 @@ class _QueueSheetState extends ConsumerState<_QueueSheet>
 
   void _finishDrag(double target) {
     setState(() => _dragging = false);
-    final open = ref.read(_playerPanelProvider) == _PlayerPanel.playlist;
-    final notifier = ref.read(_playerPanelProvider.notifier);
+    final open = ref.read(playerPanelProvider) == PlayerPanel.playlist;
+    final notifier = ref.read(playerPanelProvider.notifier);
     if (target >= 1) {
       if (open) {
         _animateTo(1);
@@ -339,9 +327,9 @@ class _QueueSheetState extends ConsumerState<_QueueSheet>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(_playerPanelProvider, (previous, next) {
+    ref.listen(playerPanelProvider, (previous, next) {
       if (_dragging) return;
-      _animateTo(next == _PlayerPanel.playlist ? 1 : 0);
+      _animateTo(next == PlayerPanel.playlist ? 1 : 0);
     });
 
     return Positioned.fill(
@@ -370,13 +358,20 @@ class _QueueSheetState extends ConsumerState<_QueueSheet>
                           top: Radius.circular(18 * (1 - t)),
                         ),
                       ),
-                      child: _PlaylistOverlay(
-                        background: widget.background,
-                        onDragStart: _onDragStart,
-                        onDragUpdate: (details) =>
-                            _onDragUpdate(details, extent),
-                        onDragEnd: _onDragEnd,
-                        onDragCancel: _onDragCancel,
+                      // La file est mise en page à pleine hauteur, puis coupée.
+                      // Sinon la colonne déborde tant que le panneau est encore bas.
+                      child: OverflowBox(
+                        alignment: Alignment.topCenter,
+                        minHeight: extent,
+                        maxHeight: extent,
+                        child: _PlaylistOverlay(
+                          background: widget.background,
+                          onDragStart: _onDragStart,
+                          onDragUpdate: (details) =>
+                              _onDragUpdate(details, extent),
+                          onDragEnd: _onDragEnd,
+                          onDragCancel: _onDragCancel,
+                        ),
                       ),
                     ),
                   ),
@@ -431,7 +426,7 @@ class _PlaylistOverlay extends StatelessWidget {
                   child: SizedBox(
                     width: double.infinity,
                     height: double.infinity,
-                    child: _PlayerQueue(
+                    child: PlayerQueue(
                       onDragStart: onDragStart,
                       onDragUpdate: onDragUpdate,
                       onDragEnd: onDragEnd,
@@ -497,7 +492,7 @@ class _PageCollapseDragState extends State<_PageCollapseDrag> {
           _claimed = true;
           // Vers le bas : réduire. Ailleurs : laisser réordonner la file.
           if (delta.dy <= delta.dx.abs()) {
-            _startQueueReorder();
+            startQueueReorder();
             return;
           }
           _collapsing = true;
@@ -587,36 +582,6 @@ class _CoverBackdropState extends State<_CoverBackdrop> {
   }
 }
 
-/// Zone de drag pour réduire le lecteur (swipe bas depuis le header).
-class PlayerCollapseHeader extends StatelessWidget {
-  const PlayerCollapseHeader({
-    super.key,
-    required this.child,
-    this.onVerticalDragStart,
-    this.onVerticalDragUpdate,
-    this.onVerticalDragEnd,
-    this.onVerticalDragCancel,
-  });
-
-  final Widget child;
-  final GestureDragStartCallback? onVerticalDragStart;
-  final GestureDragUpdateCallback? onVerticalDragUpdate;
-  final GestureDragEndCallback? onVerticalDragEnd;
-  final GestureDragCancelCallback? onVerticalDragCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onVerticalDragStart: onVerticalDragStart,
-      onVerticalDragUpdate: onVerticalDragUpdate,
-      onVerticalDragEnd: onVerticalDragEnd,
-      onVerticalDragCancel: onVerticalDragCancel,
-      child: child,
-    );
-  }
-}
-
 class _PlayerStage extends ConsumerWidget {
   const _PlayerStage({required this.episodeId});
 
@@ -627,7 +592,7 @@ class _PlayerStage extends ConsumerWidget {
     final carMode = ref.watch(playerProvider.select((state) => state.carMode));
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
-      child: _PlayerNowPlaying(episodeId: episodeId, carMode: carMode),
+      child: PlayerNowPlaying(episodeId: episodeId, carMode: carMode),
     );
   }
 }

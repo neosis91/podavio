@@ -15,6 +15,7 @@ import '../data/download_controller.dart';
 import '../data/download_service.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
+import '../sync/sync_controller.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/choice_dialog.dart';
@@ -185,6 +186,35 @@ class DownloadSettingsPage extends ConsumerWidget {
             ),
           const _SectionTitle('Automatisation'),
           SwitchListTile(
+            title: Text(context.tr('Automatic download')),
+            subtitle: Text(
+              context.tr(
+                'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.',
+              ),
+            ),
+            value: settings.automaticDownload,
+            onChanged: (enabled) =>
+                _setAutomaticDownload(context, ref, enabled),
+          ),
+          SwitchListTile(
+            title: Text(context.tr('Mobile data')),
+            subtitle: Text(
+              context.tr(
+                'Automatic downloads wait for Wi-Fi. Starting one on mobile data asks first.',
+              ),
+            ),
+            value: settings.allowMobileData,
+            onChanged: ref.read(settingsProvider.notifier).setAllowMobileData,
+          ),
+          ListTile(
+            title: Text(context.tr('Episode cache')),
+            subtitle: Text(
+              context.tr(episodeCacheSizeLabel(settings.episodeCacheSize)),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _pickEpisodeCacheSize(context, ref),
+          ),
+          SwitchListTile(
             title: const Text('Retirer de la playlist'),
             subtitle: const Text(
               'Enlève l’épisode de la playlist quand son téléchargement est supprimé',
@@ -193,6 +223,28 @@ class DownloadSettingsPage extends ConsumerWidget {
             onChanged: ref
                 .read(settingsProvider.notifier)
                 .setDequeueDeletedDownloads,
+          ),
+          _SectionTitle(context.tr('Automatic deletion')),
+          SwitchListTile(
+            title: Text(context.tr('Delete after playback')),
+            subtitle: Text(
+              context.tr(
+                'Deletes the file when playback finishes. Favorites are kept.',
+              ),
+            ),
+            value: settings.deleteAfterPlayback,
+            onChanged: ref
+                .read(settingsProvider.notifier)
+                .setDeleteAfterPlayback,
+          ),
+          ListTile(
+            title: Text(context.tr('Free up space')),
+            subtitle: Text(
+              '${context.tr(settings.episodeCacheCleanup.label)}\n'
+              '${context.tr('Only when the cache is full, before an automatic download. Favorites are kept.')}',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _pickEpisodeCacheCleanup(context, ref),
           ),
           const _SectionTitle('Actions'),
           ListTile(
@@ -206,6 +258,76 @@ class DownloadSettingsPage extends ConsumerWidget {
       ),
     );
   }
+}
+
+Future<void> _setNotifyNewEpisodes(
+  BuildContext context,
+  WidgetRef ref,
+  bool enabled,
+) async {
+  if (enabled) {
+    try {
+      await ref
+          .read(databaseProvider)
+          .enableEpisodeNotificationForSubscriptions();
+    } catch (error) {
+      if (context.mounted) showMessage(context, errorText(error));
+      return;
+    }
+  }
+  await ref.read(settingsProvider.notifier).setNotifyNewEpisodes(enabled);
+}
+
+Future<void> _setAutomaticDownload(
+  BuildContext context,
+  WidgetRef ref,
+  bool enabled,
+) async {
+  if (enabled) {
+    try {
+      await ref.read(databaseProvider).enableAutoDownloadForSubscriptions();
+    } catch (error) {
+      if (context.mounted) showMessage(context, errorText(error));
+      return;
+    }
+  }
+  await ref.read(settingsProvider.notifier).setAutomaticDownload(enabled);
+}
+
+Future<void> _pickEpisodeCacheSize(BuildContext context, WidgetRef ref) async {
+  final selected = ref.read(settingsProvider).episodeCacheSize ?? 0;
+  final choice = await showChoiceDialog<int>(
+    context,
+    title: 'Episode cache',
+    selected: selected,
+    options: [
+      (value: 0, label: episodeCacheSizeLabel(null)),
+      for (final size in episodeCacheSizes)
+        (value: size, label: episodeCacheSizeLabel(size)),
+    ],
+  );
+  if (choice == null) return;
+  await ref
+      .read(settingsProvider.notifier)
+      .setEpisodeCacheSize(choice == 0 ? null : choice);
+}
+
+Future<void> _pickEpisodeCacheCleanup(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final selected = ref.read(settingsProvider).episodeCacheCleanup;
+  final choice = await showChoiceDialog<EpisodeCacheCleanup>(
+    context,
+    title: 'Free up space',
+    selected: selected,
+    options: [
+      for (final policy in EpisodeCacheCleanup.values)
+        (value: policy, label: policy.label),
+    ],
+  );
+  if (choice == null) return;
+  await ref.read(settingsProvider.notifier).setEpisodeCacheCleanup(choice);
 }
 
 Future<void> _confirmDeleteAllDownloads(
@@ -381,6 +503,70 @@ String _relocationMessage(DownloadRelocation result) {
   return result.moved == 0
       ? 'Dossier des téléchargements modifié'
       : 'Fichiers déplacés';
+}
+
+class NotificationSettingsPage extends ConsumerWidget {
+  const NotificationSettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final notifier = ref.read(settingsProvider.notifier);
+    final syncConnected = ref.watch(
+      syncStatusProvider.select((status) => status.connected),
+    );
+    return Scaffold(
+      appBar: AppBar(title: Text(context.tr('Notifications'))),
+      body: ListView(
+        children: [
+          _SectionTitle(context.tr('Downloads')),
+          SwitchListTile(
+            title: Text(context.tr('Download progress')),
+            subtitle: Text(
+              context.tr(
+                'Shows a notification while an episode downloads, and when it finishes.',
+              ),
+            ),
+            value: settings.notifyDownloadActivity,
+            onChanged: notifier.setNotifyDownloadActivity,
+          ),
+          SwitchListTile(
+            title: Text(context.tr('Download errors')),
+            subtitle: Text(
+              context.tr('Shows a notification when a download fails.'),
+            ),
+            value: settings.notifyDownloadErrors,
+            onChanged: notifier.setNotifyDownloadErrors,
+          ),
+          _SectionTitle(context.tr('Synchronization')),
+          SwitchListTile(
+            title: Text(context.tr('Synchronization errors')),
+            subtitle: Text(
+              context.tr(
+                syncConnected
+                    ? 'Shows a notification when synchronization fails.'
+                    : 'Connect a synchronization service to enable this.',
+              ),
+            ),
+            value: settings.notifySyncErrors,
+            onChanged: syncConnected ? notifier.setNotifySyncErrors : null,
+          ),
+          _SectionTitle(context.tr('New episodes')),
+          SwitchListTile(
+            title: Text(context.tr('Notify about new episodes')),
+            subtitle: Text(
+              context.tr(
+                'Notifies when a subscription publishes. Each podcast can be turned off in its settings. Turning this off keeps those choices.',
+              ),
+            ),
+            value: settings.notifyNewEpisodes,
+            onChanged: (enabled) =>
+                _setNotifyNewEpisodes(context, ref, enabled),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class PlaybackPage extends ConsumerWidget {

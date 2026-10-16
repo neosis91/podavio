@@ -1,4 +1,12 @@
-part of '../podcasts_page.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../data/app_database.dart';
+import '../../data/feed_service.dart';
+import '../router.dart';
+import '../widgets/cover.dart';
+import '../widgets/highlighted_text.dart';
+import '../widgets/list_metrics.dart';
 
 const _gridPadding = 16.0;
 const _gridSpacing = 16.0;
@@ -45,8 +53,9 @@ class _HighlightedTitle extends StatelessWidget {
   }
 }
 
-class _PodcastGrid extends StatelessWidget {
-  const _PodcastGrid({
+class PodcastGrid extends StatelessWidget {
+  const PodcastGrid({
+    super.key,
     required this.items,
     required this.columns,
     required this.showNames,
@@ -179,8 +188,8 @@ class _PodcastGridTile extends StatelessWidget {
   }
 }
 
-class _PodcastListTile extends StatelessWidget {
-  const _PodcastListTile({
+class PodcastListTile extends StatelessWidget {
+  const PodcastListTile({
     super.key,
     required this.podcast,
     required this.showName,

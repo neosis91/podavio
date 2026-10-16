@@ -23,10 +23,11 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Podavio cherche les appareils Cast sur le réseau local.</string>
+	<string>Podavio cherche les appareils sur le réseau local, pour le Cast et pour écouter ensemble.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_googlecast._tcp</string>
+		<string>_podavio-listen._tcp</string>
 	</array>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
