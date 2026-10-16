@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../settings/settings_controller.dart';
+import 'catalog_categories.dart';
 import 'discover_hit.dart';
 import 'online_status.dart';
 import 'feed_service.dart';
@@ -191,4 +192,96 @@ class DiscoverSearchNotifier extends AsyncNotifier<List<DiscoverHit>?> {
     _scope = DiscoverSearchScope.combined;
     state = const AsyncData(null);
   }
+}
+
+const _monthlyCategoryRanksKey = 'homeCategoryRanks';
+const _monthlyCategoryRanksAtKey = 'homeCategoryRanksAt';
+
+/// Classement des catégories les plus présentes dans les tops du mois.
+final monthlyCategoryRanksProvider = FutureProvider<List<String>>((ref) async {
+  final preferences = ref.watch(sharedPreferencesProvider);
+  final languages = ref.watch(
+    settingsProvider.select((settings) => settings.discoverLanguages),
+  );
+  final now = DateTime.now();
+  final cached = readMonthlyCategoryRanks(
+    stored: preferences.getString(_monthlyCategoryRanksKey),
+    storedAtMillis: preferences.getInt(_monthlyCategoryRanksAtKey),
+    languages: languages,
+    now: now,
+  );
+  if (cached != null) return cached;
+  if (ref.watch(onlineStatusProvider) == false) return const [];
+  try {
+    final ranks = await ref
+        .read(feedServiceProvider)
+        .mostPlayedCategoryIds(languages);
+    await preferences.setString(
+      _monthlyCategoryRanksKey,
+      writeMonthlyCategoryRanks(languages: languages, ranks: ranks, now: now),
+    );
+    await preferences.setInt(
+      _monthlyCategoryRanksAtKey,
+      now.millisecondsSinceEpoch,
+    );
+    return ranks;
+  } catch (_) {
+    return const [];
+  }
+});
+
+/// Pastilles de l’accueil. Un choix dans Interface gagne. Sinon, le mois.
+final displayedHomeCategoriesProvider = Provider<HomeCategories>((ref) {
+  final chosen = ref.watch(
+    settingsProvider.select((settings) => settings.homeCategoriesChosen),
+  );
+  final stored = ref.watch(
+    settingsProvider.select((settings) => settings.homeCategories),
+  );
+  if (chosen) return stored;
+  final ranks = ref.watch(monthlyCategoryRanksProvider).asData?.value;
+  if (ranks == null || ranks.isEmpty) return stored;
+  return HomeCategories.fromPlayRanks(ranks);
+});
+
+/// Podcasts d’une catégorie d’accueil, par catalogue, hors abonnements.
+final homeCategoryHitsProvider = FutureProvider.autoDispose
+    .family<List<HomeCategoryShelf>, String>((ref, id) async {
+      if (!HomeCategories.known.contains(id)) return const [];
+      if (ref.watch(onlineStatusProvider) == false) return const [];
+      final languages = ref.watch(
+        settingsProvider.select((settings) => settings.discoverLanguages),
+      );
+      final subscribed = await ref.watch(podcastsProvider.future);
+      final urls = {
+        for (final podcast in subscribed) normalizeFeedUrl(podcast.feedUrl),
+      };
+      final shelves = await ref
+          .read(feedServiceProvider)
+          .categoryShelves(id, languages: languages);
+      final seen = <String>{};
+      final out = <HomeCategoryShelf>[];
+      for (final shelf in shelves) {
+        final hits = <DiscoverHit>[];
+        for (final hit in shelf.hits) {
+          final feed = normalizeFeedUrl(hit.feedUrl);
+          if (feed.isNotEmpty && urls.contains(feed)) continue;
+          if (!seen.add(hit.dedupeKey)) continue;
+          hits.add(hit);
+          if (hits.length >= 12) break;
+        }
+        if (hits.isNotEmpty) {
+          out.add(HomeCategoryShelf(source: shelf.source, hits: hits));
+        }
+      }
+      return out;
+    });
+
+/// Adresse de flux comparable, sans slash final.
+String normalizeFeedUrl(String url) {
+  var value = url.trim().toLowerCase();
+  while (value.endsWith('/')) {
+    value = value.substring(0, value.length - 1);
+  }
+  return value;
 }

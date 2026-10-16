@@ -7,11 +7,18 @@ import 'package:go_router/go_router.dart';
 import '../core/cover_tone.dart';
 import '../l10n/l10n.dart';
 import '../data/app_database.dart';
+import '../data/catalog_categories.dart';
+import '../data/discover_hit.dart';
+import '../data/discover_providers.dart';
 import '../data/feed_service.dart';
+import '../data/online_status.dart';
 import '../data/providers.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
+import '../together/together_controller.dart';
 import 'library_hub_page.dart';
+import 'player/together_sheet.dart';
+import 'podcasts/podcast_feed_actions.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/cover.dart';
@@ -40,6 +47,14 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   /// Vrai dès que la liste quitte le haut : le fond passe du transparent au flou.
   var _scrolled = false;
+
+  /// `null` = la pastille Tout, l’accueil habituel.
+  String? _category;
+
+  void _selectCategory(String? id) {
+    setState(() => _category = id);
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
 
   @override
   void initState() {
@@ -72,93 +87,26 @@ class _HomePageState extends ConsumerState<HomePage> {
     final waiting = podcasts.isLoading && podcasts.value == null;
 
     final headerTop = MediaQuery.paddingOf(context).top + _headerToolbar;
-    final shelves = <Widget>[
-      if (inProgress.isNotEmpty) _ContinueShelf(entries: inProgress),
-      if (fresh.isNotEmpty)
-        _InlineSection(
-          title: 'Les nouveautés',
-          height: _episodeRowHeight,
-          itemCount: fresh.length,
-          onMore: () => context.push(AppRoutes.episodes),
-          itemBuilder: (context, index) => _EpisodeCard(
-            key: ValueKey(fresh[index].episode.id),
-            entry: fresh[index],
-          ),
-        ),
-      if (favorites.isNotEmpty)
-        _InlineSection(
-          title: context.tr('Favorites'),
-          height: _episodeRowHeight,
-          itemCount: favorites.length,
-          onMore: () => context.push(AppRoutes.favorites),
-          itemBuilder: (context, index) => _EpisodeCard(
-            key: ValueKey(favorites[index].episode.id),
-            entry: favorites[index],
-          ),
-        ),
-      if (played.isNotEmpty)
-        _InlineSection(
-          title: context.tr('Recent plays'),
-          height: _episodeRowHeight,
-          itemCount: played.length,
-          onMore: () => context.push(AppRoutes.history),
-          itemBuilder: (context, index) => _EpisodeCard(
-            key: ValueKey(played[index].episode.id),
-            entry: played[index],
-          ),
-        ),
-      if (random.isNotEmpty)
-        _InlineSection(
-          title: 'Aléatoire',
-          height: _episodeRowHeight,
-          itemCount: random.length,
-          action: IconButton(
-            tooltip: 'Autres épisodes',
-            onPressed: () =>
-                ref.read(randomEpisodesProvider.notifier).reshuffle(),
-            icon: const Icon(Icons.shuffle),
-          ),
-          itemBuilder: (context, index) => _EpisodeCard(
-            key: ValueKey(random[index].episode.id),
-            entry: random[index],
-          ),
-        ),
-      if (subscriptions.isNotEmpty)
-        _InlineSection(
-          title: 'Abonnements préférés',
-          height: _podcastRowHeight,
-          itemCount: subscriptions.length,
-          onMore: () => context.go(AppRoutes.podcasts),
-          itemBuilder: (context, index) => _PodcastCard(
-            key: ValueKey(subscriptions[index].id),
-            podcast: subscriptions[index],
-          ),
-        ),
-      if (downloads.isNotEmpty)
-        _InlineSection(
-          title: 'Derniers téléchargements',
-          height: _episodeRowHeight,
-          itemCount: downloads.length,
-          onMore: () => context.push(AppRoutes.downloads),
-          itemBuilder: (context, index) => _EpisodeCard(
-            key: ValueKey(downloads[index].episode.id),
-            entry: downloads[index],
-          ),
+    final categories = ref.watch(displayedHomeCategoriesProvider);
+    final category = categories.isOn(_category ?? '') ? _category : null;
+    final shelfOrder = ref.watch(
+      settingsProvider.select((settings) => settings.homeShelves),
+    );
+    final shelves = <_HomeShelf>[
+      for (final id in shelfOrder.visible)
+        ?_homeShelf(
+          context,
+          ref,
+          id: id,
+          inProgress: inProgress,
+          fresh: fresh,
+          favorites: favorites,
+          played: played,
+          random: random,
+          subscriptions: subscriptions,
+          downloads: downloads,
         ),
     ];
-    final washEntry = inProgress.isNotEmpty
-        ? inProgress.first
-        : fresh.isNotEmpty
-        ? fresh.first
-        : favorites.isNotEmpty
-        ? favorites.first
-        : played.isNotEmpty
-        ? played.first
-        : random.isNotEmpty
-        ? random.first
-        : downloads.isNotEmpty
-        ? downloads.first
-        : null;
     final filled =
         subscriptions.isNotEmpty ||
         inProgress.isNotEmpty ||
@@ -170,7 +118,13 @@ class _HomePageState extends ConsumerState<HomePage> {
     return Scaffold(
       body: Stack(
         children: [
-          if (waiting)
+          if (category != null)
+            _CategoryHome(
+              scroll: _scroll,
+              headerTop: headerTop,
+              categoryId: category,
+            )
+          else if (waiting)
             Padding(
               padding: EdgeInsets.only(top: headerTop),
               child: const Center(child: CircularProgressIndicator()),
@@ -190,6 +144,19 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
               ),
             )
+          else if (shelves.isEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: headerTop),
+              child: EmptyState(
+                title: context.tr('Every shelf is hidden'),
+                message: context.tr('Show them again in Interface.'),
+                action: FilledButton.icon(
+                  onPressed: () => context.push(AppRoutes.appearance),
+                  icon: const Icon(Icons.tune),
+                  label: Text(context.tr('Interface')),
+                ),
+              ),
+            )
           else
             ListView(
               controller: _scroll,
@@ -199,21 +166,24 @@ class _HomePageState extends ConsumerState<HomePage> {
                   if (i == 0)
                     _ShelfWash(
                       topGap: headerTop,
-                      entry: washEntry,
-                      podcast: washEntry == null && subscriptions.isNotEmpty
-                          ? subscriptions.first
-                          : null,
-                      child: shelves[i],
+                      entry: shelves[i].entry,
+                      podcast: shelves[i].podcast,
+                      child: shelves[i].shelf,
                     )
                   else
-                    shelves[i],
+                    shelves[i].shelf,
               ],
             ),
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: _HomeHeaderOverlay(scrolled: _scrolled),
+            child: _HomeHeaderOverlay(
+              scrolled: _scrolled,
+              categories: categories,
+              selected: category,
+              onSelected: _selectCategory,
+            ),
           ),
         ],
       ),
@@ -222,12 +192,137 @@ class _HomePageState extends ConsumerState<HomePage> {
 }
 
 /// Hauteur de la barre (hors encoche), identique à l’ancien toolbar.
-const _headerToolbar = 72.0;
+const _headerBrand = 72.0;
+
+/// Rangée de pastilles, sous le logo, comme l’en-tête de SimpMusic.
+const _headerChips = 48.0;
+
+const _headerToolbar = _headerBrand + _headerChips;
+
+class _HomeShelf {
+  const _HomeShelf({required this.shelf, this.entry, this.podcast});
+
+  final Widget shelf;
+  final EpisodeEntry? entry;
+  final Podcast? podcast;
+}
+
+_HomeShelf? _homeShelf(
+  BuildContext context,
+  WidgetRef ref, {
+  required String id,
+  required List<EpisodeEntry> inProgress,
+  required List<EpisodeEntry> fresh,
+  required List<EpisodeEntry> favorites,
+  required List<EpisodeEntry> played,
+  required List<EpisodeEntry> random,
+  required List<Podcast> subscriptions,
+  required List<EpisodeEntry> downloads,
+}) {
+  return switch (id) {
+    'continue' when inProgress.isNotEmpty => _HomeShelf(
+      shelf: _ContinueShelf(entries: inProgress),
+      entry: inProgress.first,
+    ),
+    'fresh' when fresh.isNotEmpty => _HomeShelf(
+      shelf: _InlineSection(
+        title: context.tr("What's new"),
+        height: _episodeRowHeight,
+        itemCount: fresh.length,
+        onMore: () => context.push(AppRoutes.episodes),
+        itemBuilder: (context, index) => _EpisodeCard(
+          key: ValueKey(fresh[index].episode.id),
+          entry: fresh[index],
+        ),
+      ),
+      entry: fresh.first,
+    ),
+    'favorites' when favorites.isNotEmpty => _HomeShelf(
+      shelf: _InlineSection(
+        title: context.tr('Favorites'),
+        height: _episodeRowHeight,
+        itemCount: favorites.length,
+        onMore: () => context.push(AppRoutes.favorites),
+        itemBuilder: (context, index) => _EpisodeCard(
+          key: ValueKey(favorites[index].episode.id),
+          entry: favorites[index],
+        ),
+      ),
+      entry: favorites.first,
+    ),
+    'recent' when played.isNotEmpty => _HomeShelf(
+      shelf: _InlineSection(
+        title: context.tr('Recent plays'),
+        height: _episodeRowHeight,
+        itemCount: played.length,
+        onMore: () => context.push(AppRoutes.history),
+        itemBuilder: (context, index) => _EpisodeCard(
+          key: ValueKey(played[index].episode.id),
+          entry: played[index],
+        ),
+      ),
+      entry: played.first,
+    ),
+    'random' when random.isNotEmpty => _HomeShelf(
+      shelf: _InlineSection(
+        title: context.tr('Random'),
+        height: _episodeRowHeight,
+        itemCount: random.length,
+        action: IconButton(
+          tooltip: 'Autres épisodes',
+          onPressed: () =>
+              ref.read(randomEpisodesProvider.notifier).reshuffle(),
+          icon: const Icon(Icons.shuffle),
+        ),
+        itemBuilder: (context, index) => _EpisodeCard(
+          key: ValueKey(random[index].episode.id),
+          entry: random[index],
+        ),
+      ),
+      entry: random.first,
+    ),
+    'preferred' when subscriptions.isNotEmpty => _HomeShelf(
+      shelf: _InlineSection(
+        title: context.tr('Preferred subscriptions'),
+        height: _podcastRowHeight,
+        itemCount: subscriptions.length,
+        onMore: () => context.go(AppRoutes.podcasts),
+        itemBuilder: (context, index) => _PodcastCard(
+          key: ValueKey(subscriptions[index].id),
+          podcast: subscriptions[index],
+        ),
+      ),
+      podcast: subscriptions.first,
+    ),
+    'downloads' when downloads.isNotEmpty => _HomeShelf(
+      shelf: _InlineSection(
+        title: context.tr('Recent downloads'),
+        height: _episodeRowHeight,
+        itemCount: downloads.length,
+        onMore: () => context.push(AppRoutes.downloads),
+        itemBuilder: (context, index) => _EpisodeCard(
+          key: ValueKey(downloads[index].episode.id),
+          entry: downloads[index],
+        ),
+      ),
+      entry: downloads.first,
+    ),
+    _ => null,
+  };
+}
 
 class _HomeHeaderOverlay extends StatelessWidget {
-  const _HomeHeaderOverlay({required this.scrolled});
+  const _HomeHeaderOverlay({
+    required this.scrolled,
+    required this.categories,
+    required this.selected,
+    required this.onSelected,
+  });
 
   final bool scrolled;
+  final HomeCategories categories;
+  final String? selected;
+  final ValueChanged<String?> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -256,8 +351,26 @@ class _HomeHeaderOverlay extends StatelessWidget {
                   ),
                 ),
               Padding(
-                padding: EdgeInsets.only(top: top, left: 16, right: 4),
-                child: child,
+                padding: EdgeInsets.only(top: top),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: _headerBrand,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 16, right: 4),
+                        child: child,
+                      ),
+                    ),
+                    SizedBox(
+                      height: _headerChips,
+                      child: _HomeChips(
+                        categories: categories,
+                        selected: selected,
+                        onSelected: onSelected,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           );
@@ -276,10 +389,262 @@ class _HomeHeaderOverlay extends StatelessWidget {
               ),
             ),
             const HistoryButton(),
+            const _TogetherButton(),
             const PreferencesButton(),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _HomeChips extends StatelessWidget {
+  const _HomeChips({
+    required this.categories,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final HomeCategories categories;
+  final String? selected;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final ids = categories.visible;
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      itemCount: ids.length + 1,
+      separatorBuilder: (_, _) => const SizedBox(width: 4),
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return _HomeFilterChip(
+            label: context.tr('All'),
+            selected: selected == null,
+            onTap: () => onSelected(null),
+          );
+        }
+        final id = ids[index - 1];
+        return _HomeFilterChip(
+          label: context.tr(homeCategoryTitle(id)),
+          selected: selected == id,
+          onTap: () => onSelected(id),
+        );
+      },
+    );
+  }
+}
+
+/// Pastille de l’accueil : plein `primary` si elle est choisie, sinon seulement
+/// un contour, comme les chips de SimpMusic. Pas de coche.
+class _HomeFilterChip extends StatelessWidget {
+  const _HomeFilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      elevation: 0,
+      pressElevation: 0,
+      shape: const StadiumBorder(),
+      side: BorderSide(
+        color: selected ? Colors.transparent : scheme.outlineVariant,
+      ),
+      color: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return scheme.primary;
+        return Colors.transparent;
+      }),
+      labelStyle: TextStyle(
+        color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+      ),
+      onSelected: (_) => onTap(),
+    );
+  }
+}
+
+class _CategoryHome extends ConsumerWidget {
+  const _CategoryHome({
+    required this.scroll,
+    required this.headerTop,
+    required this.categoryId,
+  });
+
+  final ScrollController scroll;
+  final double headerTop;
+  final String categoryId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final offline = ref.watch(onlineStatusProvider) == false;
+    final hits = ref.watch(homeCategoryHitsProvider(categoryId));
+    final title = context.tr(homeCategoryTitle(categoryId));
+    return ListView(
+      controller: scroll,
+      padding: underChrome(context, const EdgeInsets.only(bottom: 24)),
+      children: [
+        SizedBox(height: headerTop),
+        _ShelfHeader(title: title),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Text(
+            context.tr('Podcasts to discover'),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        if (offline)
+          EmptyState(
+            title: context.tr('No internet connection'),
+            message: context.tr('Explore needs an internet connection.'),
+          )
+        else if (hits.isLoading)
+          const Padding(
+            padding: EdgeInsets.only(top: 48),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (hits.hasError)
+          EmptyState(
+            title: title,
+            message: context.tr('The search failed.'),
+            action: FilledButton(
+              onPressed: () =>
+                  ref.invalidate(homeCategoryHitsProvider(categoryId)),
+              child: Text(context.tr('Retry')),
+            ),
+          )
+        else if ((hits.value ?? const []).isEmpty)
+          EmptyState(
+            title: context.tr('Nothing new in this category'),
+            message: context.tr('You already follow the podcasts found here.'),
+          )
+        else
+          for (final shelf in hits.value ?? const <HomeCategoryShelf>[]) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Text(
+                shelf.source.label,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            _CategoryGrid(hits: shelf.hits),
+          ],
+      ],
+    );
+  }
+}
+
+const _categoryTileWidth = 148.0;
+const _categoryTileHeight = 210.0;
+
+class _CategoryGrid extends StatelessWidget {
+  const _CategoryGrid({required this.hits});
+
+  final List<DiscoverHit> hits;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = hits.length > 3 ? 2 : 1;
+    return SizedBox(
+      height: rows * _categoryTileHeight + (rows - 1) * 12,
+      child: GridView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: rows,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          mainAxisExtent: _categoryTileWidth,
+        ),
+        itemCount: hits.length,
+        itemBuilder: (context, index) => _CategoryCard(hit: hits[index]),
+      ),
+    );
+  }
+}
+
+class _CategoryCard extends ConsumerWidget {
+  const _CategoryCard({required this.hit});
+
+  final DiscoverHit hit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _open(context, ref),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          PodcastCover(url: hit.imageUrl, size: _categoryTileWidth, radius: 10),
+          const SizedBox(height: 8),
+          Text(
+            hit.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(height: 1.25),
+          ),
+          if (hit.author.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              hit.author,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _open(BuildContext context, WidgetRef ref) async {
+    var url = hit.feedUrl.trim();
+    if (url.isEmpty && hit.appleId != null) {
+      try {
+        url = await ref
+            .read(feedServiceProvider)
+            .feedUrlForAppleShow(hit.appleId!);
+      } catch (_) {
+        url = '';
+      }
+    }
+    if (!context.mounted || url.isEmpty) return;
+    await openPodcastFromFeedUrl(context, ref, url);
+  }
+}
+
+class _TogetherButton extends ConsumerWidget {
+  const _TogetherButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final live = ref.watch(
+      togetherProvider.select((state) => state.role != TogetherRole.idle),
+    );
+    return IconButton(
+      tooltip: context.tr('Listen together'),
+      color: live ? Theme.of(context).colorScheme.primary : null,
+      onPressed: () => showTogetherSheet(context),
+      icon: Icon(live ? Icons.groups : Icons.groups_outlined),
     );
   }
 }
@@ -378,7 +743,7 @@ class _ContinueShelf extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _ShelfHeader(title: 'Continuer d’écouter'),
+        _ShelfHeader(title: context.tr('Continue listening')),
         SizedBox(
           height: rows * _quickRowHeight,
           child: LayoutBuilder(
@@ -530,6 +895,14 @@ class _ShelfWashState extends ConsumerState<_ShelfWash> {
   }
 
   Future<void> _load() async {
+    final tintFromCover = ref.read(
+      settingsProvider.select((settings) => settings.tintFromCover),
+    );
+    if (!tintFromCover) {
+      _loaded = null;
+      _color = null;
+      return;
+    }
     final prefer = ref.read(
       settingsProvider.select((s) => s.preferPodcastCover),
     );
@@ -570,8 +943,17 @@ class _ShelfWashState extends ConsumerState<_ShelfWash> {
 
   @override
   Widget build(BuildContext context) {
+    final tintFromCover = ref.watch(
+      settingsProvider.select((settings) => settings.tintFromCover),
+    );
+    ref.listen<bool>(
+      settingsProvider.select((settings) => settings.tintFromCover),
+      (previous, next) {
+        if (previous != next) _load();
+      },
+    );
     final surface = Theme.of(context).colorScheme.surface;
-    final tint = _color;
+    final tint = tintFromCover ? _color : null;
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: tint == null
