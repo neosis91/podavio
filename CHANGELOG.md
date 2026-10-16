@@ -14,6 +14,11 @@ La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 - Lors d’une publication, si l’envoi vers podavio.com ne lance pas le déploiement, celui-ci est démarré.
 - Dans Explorer, Langues regroupe les variantes par pays sous chaque langue. Les langues choisies restent en pastilles. « Toutes les langues » se coupe en retrouvant le choix précédent. Apple prévient quand plus de 8 boutiques seraient nécessaires.
 - Dans À propos, on vérifie la mise à jour de l’application. Le moment de la dernière vérification s’affiche sous cette ligne.
+- Dans Préférences, Synchronisation relie Podavio à gPodder ou à gPodder Sync (Nextcloud). Les abonnements et la progression d’écoute se partagent avec les autres appareils. D’autres fournisseurs peuvent s’ajouter.
+- Dans Gestion des téléchargements, le téléchargement automatique est éteint. L’activer inclut tous les abonnements ; chacun peut ensuite être exclu, et le couper conserve ces choix. Le cache d’épisodes part d’illimité. On peut supprimer le fichier à la fin de la lecture, et choisir quand libérer de la place si le cache est plein. Les favoris restent.
+- Dans Gestion des téléchargements, les données mobiles sont coupées. Le téléchargement automatique attend le Wi-Fi. Un téléchargement lancé à la main demande confirmation avant d’utiliser les données mobiles. L’activer autorise les deux.
+- Dans le lecteur, Écoutons ensemble ouvre une session sur le même Wi-Fi. Le code se partage à côté. Les autres rejoignent : lecture, pause, position et vitesse restent alignées. En quittant, chacun retrouve sa vitesse.
+- Dans Préférences, Notifications reste silencieux. L’utilisateur active la progression d’un téléchargement, les erreurs de téléchargement, les erreurs de synchronisation, ou les nouveaux épisodes. « Prévenir des nouveaux épisodes » inclut tous les abonnements ; chacun peut ensuite être coupé, et le couper conserve ces choix.
 
 ## 2026.10.14
 

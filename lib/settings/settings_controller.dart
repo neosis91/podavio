@@ -4,9 +4,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme.dart';
 import '../data/discover_languages.dart';
+import '../data/download_policy.dart';
 import '../data/providers.dart';
 import '../l10n/interface_locale.dart';
 import '../ui/nav_catalog.dart';
+
+export '../data/download_policy.dart' show EpisodeCacheCleanup;
 
 /// Compteur affiché sur les jaquettes de la page Abonnements.
 enum PodcastCounter {
@@ -321,6 +324,21 @@ String _miniButtonName(String id) {
   };
 }
 
+/// Tailles proposées pour le cache d’épisodes. Une valeur absente est illimitée.
+const episodeCacheSizes = <int>[5, 10, 20, 50, 100, 200, 500, 1000];
+
+/// `null`, zéro ou une taille inconnue → illimité.
+int? episodeCacheSizeFromStored(int? stored) {
+  if (stored == null || !episodeCacheSizes.contains(stored)) return null;
+  return stored;
+}
+
+/// Clé anglaise de la taille affichée. `null` = illimité.
+String episodeCacheSizeLabel(int? size) {
+  if (size == null) return 'Unlimited';
+  return '$size episodes';
+}
+
 class AppSettings {
   const AppSettings({
     required this.themeMode,
@@ -348,6 +366,15 @@ class AppSettings {
     required this.navOrder,
     required this.enqueueDownloads,
     required this.dequeueDeletedDownloads,
+    required this.automaticDownload,
+    required this.allowMobileData,
+    required this.notifyDownloadActivity,
+    required this.notifyDownloadErrors,
+    required this.notifySyncErrors,
+    required this.notifyNewEpisodes,
+    required this.episodeCacheSize,
+    required this.deleteAfterPlayback,
+    required this.episodeCacheCleanup,
     required this.downloadDirectory,
     required this.refreshIntervalMinutes,
     required this.discoverLanguages,
@@ -392,6 +419,39 @@ class AppSettings {
   final List<String> navOrder;
   final bool enqueueDownloads;
   final bool dequeueDeletedDownloads;
+
+  /// Téléchargement automatique. Éteint, le mécanisme s’arrête sans effacer
+  /// le choix de chaque abonnement.
+  final bool automaticDownload;
+
+  /// Autorise les téléchargements automatiques sur les données mobiles.
+  /// Sinon ils attendent le Wi-Fi. Un téléchargement lancé à la main demande
+  /// confirmation. Départ : coupé.
+  final bool allowMobileData;
+
+  /// Notification pendant un téléchargement, et à la fin. Départ : coupé.
+  final bool notifyDownloadActivity;
+
+  /// Notification quand un téléchargement échoue. Départ : coupé.
+  final bool notifyDownloadErrors;
+
+  /// Notification quand la synchronisation échoue. Départ : coupé.
+  final bool notifySyncErrors;
+
+  /// Notification quand un abonnement publie. Départ : coupé.
+  /// L’activer inclut tous les abonnements ; chacun peut ensuite être coupé.
+  final bool notifyNewEpisodes;
+
+  /// Nombre maximal de fichiers locaux. `null` = illimité.
+  final int? episodeCacheSize;
+
+  /// Supprime le fichier quand la lecture se termine. Les favoris restent.
+  /// Marquer un épisode lu à la main ne le supprime pas.
+  final bool deleteAfterPlayback;
+
+  /// Quand libérer de la place avant un téléchargement automatique.
+  final EpisodeCacheCleanup episodeCacheCleanup;
+
   final String? downloadDirectory;
 
   /// Délai mini entre deux actualisations globales (0 = pas de limite).
@@ -432,6 +492,16 @@ class AppSettings {
     List<String>? navOrder,
     bool? enqueueDownloads,
     bool? dequeueDeletedDownloads,
+    bool? automaticDownload,
+    bool? allowMobileData,
+    bool? notifyDownloadActivity,
+    bool? notifyDownloadErrors,
+    bool? notifySyncErrors,
+    bool? notifyNewEpisodes,
+    int? episodeCacheSize,
+    bool clearEpisodeCacheSize = false,
+    bool? deleteAfterPlayback,
+    EpisodeCacheCleanup? episodeCacheCleanup,
     String? downloadDirectory,
     bool clearDownloadDirectory = false,
     int? refreshIntervalMinutes,
@@ -467,6 +537,18 @@ class AppSettings {
       enqueueDownloads: enqueueDownloads ?? this.enqueueDownloads,
       dequeueDeletedDownloads:
           dequeueDeletedDownloads ?? this.dequeueDeletedDownloads,
+      automaticDownload: automaticDownload ?? this.automaticDownload,
+      allowMobileData: allowMobileData ?? this.allowMobileData,
+      notifyDownloadActivity:
+          notifyDownloadActivity ?? this.notifyDownloadActivity,
+      notifyDownloadErrors: notifyDownloadErrors ?? this.notifyDownloadErrors,
+      notifySyncErrors: notifySyncErrors ?? this.notifySyncErrors,
+      notifyNewEpisodes: notifyNewEpisodes ?? this.notifyNewEpisodes,
+      episodeCacheSize: clearEpisodeCacheSize
+          ? null
+          : (episodeCacheSize ?? this.episodeCacheSize),
+      deleteAfterPlayback: deleteAfterPlayback ?? this.deleteAfterPlayback,
+      episodeCacheCleanup: episodeCacheCleanup ?? this.episodeCacheCleanup,
       downloadDirectory: clearDownloadDirectory
           ? null
           : (downloadDirectory ?? this.downloadDirectory),
@@ -528,6 +610,21 @@ class SettingsNotifier extends Notifier<AppSettings> {
       enqueueDownloads: preferences.getBool('enqueueDownloads') ?? true,
       dequeueDeletedDownloads:
           preferences.getBool('dequeueDeletedDownloads') ?? true,
+      automaticDownload: preferences.getBool('automaticDownload') ?? false,
+      allowMobileData: preferences.getBool('allowMobileData') ?? false,
+      notifyDownloadActivity:
+          preferences.getBool('notifyDownloadActivity') ?? false,
+      notifyDownloadErrors:
+          preferences.getBool('notifyDownloadErrors') ?? false,
+      notifySyncErrors: preferences.getBool('notifySyncErrors') ?? false,
+      notifyNewEpisodes: preferences.getBool('notifyNewEpisodes') ?? false,
+      episodeCacheSize: episodeCacheSizeFromStored(
+        preferences.getInt('episodeCacheSize'),
+      ),
+      deleteAfterPlayback: preferences.getBool('deleteAfterPlayback') ?? false,
+      episodeCacheCleanup: EpisodeCacheCleanup.byId(
+        preferences.getString('episodeCacheCleanup'),
+      ),
       downloadDirectory: preferences.getString('downloadDirectory'),
       refreshIntervalMinutes: _refreshIntervalMinutes(
         preferences.getInt('refreshIntervalMinutes'),
@@ -697,6 +794,74 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await ref
         .read(sharedPreferencesProvider)
         .setBool('dequeueDeletedDownloads', enabled);
+  }
+
+  Future<void> setAutomaticDownload(bool enabled) async {
+    state = state.copyWith(automaticDownload: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('automaticDownload', enabled);
+  }
+
+  Future<void> setAllowMobileData(bool enabled) async {
+    state = state.copyWith(allowMobileData: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('allowMobileData', enabled);
+  }
+
+  Future<void> setNotifyDownloadActivity(bool enabled) async {
+    state = state.copyWith(notifyDownloadActivity: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('notifyDownloadActivity', enabled);
+  }
+
+  Future<void> setNotifyDownloadErrors(bool enabled) async {
+    state = state.copyWith(notifyDownloadErrors: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('notifyDownloadErrors', enabled);
+  }
+
+  Future<void> setNotifySyncErrors(bool enabled) async {
+    state = state.copyWith(notifySyncErrors: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('notifySyncErrors', enabled);
+  }
+
+  Future<void> setNotifyNewEpisodes(bool enabled) async {
+    state = state.copyWith(notifyNewEpisodes: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('notifyNewEpisodes', enabled);
+  }
+
+  Future<void> setEpisodeCacheSize(int? size) async {
+    final normalized = episodeCacheSizeFromStored(size);
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (normalized == null) {
+      state = state.copyWith(clearEpisodeCacheSize: true);
+      await preferences.remove('episodeCacheSize');
+      return;
+    }
+    state = state.copyWith(episodeCacheSize: normalized);
+    await preferences.setInt('episodeCacheSize', normalized);
+  }
+
+  Future<void> setDeleteAfterPlayback(bool enabled) async {
+    state = state.copyWith(deleteAfterPlayback: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('deleteAfterPlayback', enabled);
+  }
+
+  Future<void> setEpisodeCacheCleanup(EpisodeCacheCleanup cleanup) async {
+    state = state.copyWith(episodeCacheCleanup: cleanup);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setString('episodeCacheCleanup', cleanup.id);
   }
 
   Future<void> setEnqueueDownloads(bool enabled) async {

@@ -1,7 +1,25 @@
-part of '../player_page.dart';
+import 'dart:math' as math;
 
-class _PlayerTransport extends ConsumerWidget {
-  const _PlayerTransport();
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/format.dart';
+import '../../data/app_database.dart';
+import '../../data/providers.dart';
+import '../../l10n/l10n.dart';
+import '../../player/player_controller.dart';
+import '../../settings/settings_controller.dart';
+import '../../together/together_controller.dart';
+import '../widgets/brand.dart';
+import '../widgets/episode_tile.dart';
+import 'audio_output_sheet.dart';
+import 'player_chapter.dart';
+import 'player_panel.dart';
+import 'player_sheets.dart';
+import 'together_sheet.dart';
+
+class PlayerTransport extends ConsumerWidget {
+  const PlayerTransport({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -174,9 +192,7 @@ class _PlayerTransport extends ConsumerWidget {
             ),
             if (!carMode)
               IconButton.filled(
-                tooltip: context.tr(
-                  playing ? 'Pause (Space)' : 'Play (Space)',
-                ),
+                tooltip: context.tr(playing ? 'Pause (Space)' : 'Play (Space)'),
                 iconSize: playIconSize,
                 style: IconButton.styleFrom(
                   backgroundColor: scheme.onSurface,
@@ -202,9 +218,7 @@ class _PlayerTransport extends ConsumerWidget {
             ),
             IconButton(
               tooltip: context.tr(
-                hasNext
-                    ? 'Next episode'
-                    : 'No next episode in the queue',
+                hasNext ? 'Next episode' : 'No next episode in the queue',
               ),
               iconSize: sideIconSize,
               onPressed: hasNext ? player.playNextInQueue : null,
@@ -225,6 +239,18 @@ class _PlayerTransport extends ConsumerWidget {
                         episodeId: episodeId,
                       ),
                 icon: const InfoIcon(),
+              ),
+              IconButton(
+                tooltip: context.tr('Listen together'),
+                color: ref.watch(togetherProvider).role == TogetherRole.idle
+                    ? null
+                    : scheme.primary,
+                onPressed: () => showTogetherSheet(context),
+                icon: Icon(
+                  ref.watch(togetherProvider).role == TogetherRole.idle
+                      ? Icons.groups_outlined
+                      : Icons.groups,
+                ),
               ),
               IconButton(
                 tooltip: castName ?? context.tr('Audio output'),
@@ -341,20 +367,13 @@ class _StreamQualityLabel extends StatelessWidget {
   }
 }
 
-String _formatSpeed(double speed) {
-  final text = speed == speed.roundToDouble()
-      ? speed.toInt().toString()
-      : speed.toString();
-  return '$text×';
-}
-
 class _QueueAction extends ConsumerWidget {
   const _QueueAction();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final count = ref.watch(queueCountProvider).value ?? 0;
-    final open = ref.watch(_playerPanelProvider) == _PlayerPanel.playlist;
+    final open = ref.watch(playerPanelProvider) == PlayerPanel.playlist;
     final scheme = Theme.of(context).colorScheme;
     final label = count > 99 ? '99+' : '$count';
     return IconButton(
@@ -367,7 +386,7 @@ class _QueueAction extends ConsumerWidget {
       style: IconButton.styleFrom(
         backgroundColor: open ? scheme.secondaryContainer : null,
       ),
-      onPressed: () => ref.read(_playerPanelProvider.notifier).toggle(),
+      onPressed: () => ref.read(playerPanelProvider.notifier).toggle(),
       icon: Badge(
         isLabelVisible: count > 0,
         backgroundColor: scheme.primary,
@@ -382,8 +401,8 @@ class _QueueAction extends ConsumerWidget {
   }
 }
 
-class _FavoriteAction extends ConsumerWidget {
-  const _FavoriteAction({required this.episodeId});
+class PlayerFavoriteAction extends ConsumerWidget {
+  const PlayerFavoriteAction({super.key, required this.episodeId});
 
   final int episodeId;
 
@@ -406,8 +425,8 @@ class _FavoriteAction extends ConsumerWidget {
   }
 }
 
-class _PlayerEpisodeActions extends ConsumerWidget {
-  const _PlayerEpisodeActions({required this.episodeId});
+class PlayerEpisodeActions extends ConsumerWidget {
+  const PlayerEpisodeActions({super.key, required this.episodeId});
 
   final int episodeId;
 
@@ -422,8 +441,8 @@ class _PlayerEpisodeActions extends ConsumerWidget {
         ref,
         entry,
         fromPlayer: true,
-        onSpeed: () => _chooseSpeed(context, ref),
-        onSleep: () => _chooseSleep(context, ref),
+        onSpeed: () => choosePlaybackSpeed(context, ref),
+        onSleep: () => chooseSleepTimer(context, ref),
       ),
       icon: const MoreVertIcon(),
     );

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -88,5 +89,63 @@ Future<bool> _headOk(String url) async {
     return false;
   } finally {
     client.close(force: true);
+  }
+}
+
+/// Vrai si le réseau actif est mobile (ou satellite), sans Wi-Fi ni Ethernet.
+///
+/// Un VPN qui accompagne le Wi-Fi ne compte pas. Si le type est inconnu,
+/// on ne bloque pas : un ordinateur ne doit pas attendre un Wi-Fi.
+bool connectionUsesMobileData({
+  required bool wifi,
+  required bool ethernet,
+  required bool mobile,
+}) {
+  if (wifi || ethernet) return false;
+  return mobile;
+}
+
+/// Vrai quand un téléchargement non confirmé doit attendre le Wi-Fi.
+bool mobileDataBlocksDownload({
+  required bool allowMobileData,
+  required bool mobileDataActive,
+}) {
+  return !allowMobileData && mobileDataActive;
+}
+
+/// Lecture du type de réseau. Remplaçable dans les tests.
+final mobileDataProbeProvider = Provider<Future<bool> Function()>((ref) {
+  return currentConnectionUsesMobileData;
+});
+
+Future<bool> currentConnectionUsesMobileData() async {
+  try {
+    final results = await Connectivity().checkConnectivity();
+    var wifi = false;
+    var ethernet = false;
+    var mobile = false;
+    for (final result in results) {
+      switch (result) {
+        case ConnectivityResult.wifi:
+          wifi = true;
+        case ConnectivityResult.ethernet:
+          ethernet = true;
+        case ConnectivityResult.mobile:
+        case ConnectivityResult.satellite:
+          mobile = true;
+        case ConnectivityResult.bluetooth:
+        case ConnectivityResult.vpn:
+        case ConnectivityResult.other:
+        case ConnectivityResult.none:
+          break;
+      }
+    }
+    return connectionUsesMobileData(
+      wifi: wifi,
+      ethernet: ethernet,
+      mobile: mobile,
+    );
+  } catch (_) {
+    return false;
   }
 }

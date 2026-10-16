@@ -25,7 +25,7 @@ void main() {
       ],
     );
 
-    final podcastId = await database.saveFeed(draft);
+    final podcastId = (await database.saveFeed(draft)).podcastId;
     final created = await database.watchEpisodes(podcastId: podcastId).first;
     final episodeId = created.single.episode.id;
     await database.setFavorite(episodeId, favorite: true);
@@ -65,7 +65,7 @@ void main() {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
 
-    final podcastId = await database.saveFeed(
+    final podcastId = (await database.saveFeed(
       FeedDraft(
         feedUrl: 'https://example.com/feed.xml',
         title: 'Essai',
@@ -102,7 +102,7 @@ void main() {
           ),
         ],
       ),
-    );
+    )).podcastId;
 
     final page = await database
         .watchEpisodeWindow(podcastId: podcastId, limit: 2)
@@ -193,7 +193,7 @@ void main() {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
 
-    final alpha = await database.saveFeed(
+    final alpha = (await database.saveFeed(
       FeedDraft(
         feedUrl: 'https://example.com/alpha.xml',
         title: 'Alpha',
@@ -216,7 +216,7 @@ void main() {
           ),
         ],
       ),
-    );
+    )).podcastId;
     await database.saveFeed(
       const FeedDraft(
         feedUrl: 'https://example.com/zeta.xml',
@@ -256,7 +256,7 @@ void main() {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
 
-    final podcastId = await database.saveFeed(
+    final podcastId = (await database.saveFeed(
       FeedDraft(
         feedUrl: 'https://example.com/stats.xml',
         title: 'Stats',
@@ -289,7 +289,7 @@ void main() {
           ),
         ],
       ),
-    );
+    )).podcastId;
 
     final episodes = await database.watchEpisodes(podcastId: podcastId).first;
     final byTitle = {
@@ -333,7 +333,7 @@ void main() {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
 
-    final podcastId = await database.saveFeed(
+    final podcastId = (await database.saveFeed(
       const FeedDraft(
         feedUrl: 'https://example.com/feed.xml',
         title: 'Essai',
@@ -366,7 +366,7 @@ void main() {
           ),
         ],
       ),
-    );
+    )).podcastId;
 
     final episodes = await database.watchEpisodes(podcastId: podcastId).first;
     final byTitle = {
@@ -413,7 +413,7 @@ void main() {
     await database.deletePlaylist(initial.single.id);
     expect(await database.watchPlaylists().first, hasLength(1));
 
-    final podcastId = await database.saveFeed(
+    final podcastId = (await database.saveFeed(
       const FeedDraft(
         feedUrl: 'https://example.com/feed.xml',
         title: 'Essai',
@@ -434,7 +434,7 @@ void main() {
           ),
         ],
       ),
-    );
+    )).podcastId;
     final episodes = await database.watchEpisodes(podcastId: podcastId).first;
     final byTitle = {
       for (final entry in episodes) entry.episode.title: entry.episode.id,
@@ -472,4 +472,198 @@ void main() {
     final remaining = await database.watchPlaylists().first;
     expect(remaining.map((playlist) => playlist.id), [initial.single.id]);
   });
+
+  test(
+    'saveFeed reports new episodes only for an existing subscription',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+
+      final created = await database.saveFeed(
+        _feed('https://example.com/show.xml', const [
+          EpisodeDraft(
+            guid: 'ep-1',
+            title: 'Archive',
+            description: '',
+            audioUrl: 'https://example.com/1.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'ep-1',
+            title: 'Doublon',
+            description: '',
+            audioUrl: 'https://example.com/1b.mp3',
+          ),
+        ]),
+      );
+      expect(created.newEpisodeIds, isEmpty);
+      final archived = await database
+          .watchEpisodes(podcastId: created.podcastId)
+          .first;
+      expect(archived, hasLength(1));
+
+      final refreshed = await database.saveFeed(
+        _feed('https://example.com/show.xml', [
+          const EpisodeDraft(
+            guid: 'ep-1',
+            title: 'Archive revue',
+            description: 'Notes',
+            audioUrl: 'https://example.com/1.mp3',
+          ),
+          const EpisodeDraft(
+            guid: 'ep-2',
+            title: 'Nouveau',
+            description: '',
+            audioUrl: 'https://example.com/2.mp3',
+          ),
+          const EpisodeDraft(
+            guid: 'ep-3',
+            title: 'Suivant',
+            description: '',
+            audioUrl: 'https://example.com/3.mp3',
+          ),
+          const EpisodeDraft(
+            guid: 'ep-3',
+            title: 'Suivant encore',
+            description: '',
+            audioUrl: 'https://example.com/3b.mp3',
+          ),
+        ]),
+      );
+      final byGuid = {
+        for (final entry
+            in await database.watchEpisodes(podcastId: created.podcastId).first)
+          entry.episode.guid: entry.episode,
+      };
+      expect(refreshed.podcastId, created.podcastId);
+      expect(refreshed.newEpisodeIds, [byGuid['ep-2']!.id, byGuid['ep-3']!.id]);
+      expect(byGuid['ep-1']!.title, 'Archive revue');
+      expect(byGuid, hasLength(3));
+
+      final unchanged = await database.saveFeed(
+        _feed('https://example.com/show.xml', const [
+          EpisodeDraft(
+            guid: 'ep-1',
+            title: 'Archive revue',
+            description: 'Notes',
+            audioUrl: 'https://example.com/1.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'ep-2',
+            title: 'Nouveau',
+            description: '',
+            audioUrl: 'https://example.com/2.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'ep-3',
+            title: 'Suivant',
+            description: '',
+            audioUrl: 'https://example.com/3.mp3',
+          ),
+        ]),
+      );
+      expect(unchanged.newEpisodeIds, isEmpty);
+
+      final preview = await database.saveFeed(
+        _feed('https://example.com/preview.xml', const [
+          EpisodeDraft(
+            guid: 'p-1',
+            title: 'Aperçu',
+            description: '',
+            audioUrl: 'https://example.com/p1.mp3',
+          ),
+        ]),
+        subscribed: false,
+      );
+      expect(preview.newEpisodeIds, isEmpty);
+
+      final previewRefresh = await database.saveFeed(
+        _feed('https://example.com/preview.xml', const [
+          EpisodeDraft(
+            guid: 'p-1',
+            title: 'Aperçu',
+            description: '',
+            audioUrl: 'https://example.com/p1.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'p-2',
+            title: 'Toujours un aperçu',
+            description: '',
+            audioUrl: 'https://example.com/p2.mp3',
+          ),
+        ]),
+      );
+      expect(previewRefresh.newEpisodeIds, isEmpty);
+
+      final firstSubscribe = await database.saveFeed(
+        _feed('https://example.com/preview.xml', const [
+          EpisodeDraft(
+            guid: 'p-1',
+            title: 'Aperçu',
+            description: '',
+            audioUrl: 'https://example.com/p1.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'p-2',
+            title: 'Toujours un aperçu',
+            description: '',
+            audioUrl: 'https://example.com/p2.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'p-3',
+            title: 'Arrivé avec l’abonnement',
+            description: '',
+            audioUrl: 'https://example.com/p3.mp3',
+          ),
+        ]),
+        subscribed: true,
+      );
+      expect(firstSubscribe.newEpisodeIds, isEmpty);
+
+      final afterSubscribe = await database.saveFeed(
+        _feed('https://example.com/preview.xml', const [
+          EpisodeDraft(
+            guid: 'p-1',
+            title: 'Aperçu',
+            description: '',
+            audioUrl: 'https://example.com/p1.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'p-2',
+            title: 'Toujours un aperçu',
+            description: '',
+            audioUrl: 'https://example.com/p2.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'p-3',
+            title: 'Arrivé avec l’abonnement',
+            description: '',
+            audioUrl: 'https://example.com/p3.mp3',
+          ),
+          EpisodeDraft(
+            guid: 'p-4',
+            title: 'Après l’abonnement',
+            description: '',
+            audioUrl: 'https://example.com/p4.mp3',
+          ),
+        ]),
+      );
+      final subscribedEpisodes = await database
+          .watchEpisodes(podcastId: preview.podcastId)
+          .first;
+      final arrived = subscribedEpisodes.singleWhere(
+        (entry) => entry.episode.guid == 'p-4',
+      );
+      expect(afterSubscribe.newEpisodeIds, [arrived.episode.id]);
+    },
+  );
+}
+
+FeedDraft _feed(String url, List<EpisodeDraft> episodes) {
+  return FeedDraft(
+    feedUrl: url,
+    title: 'Essai',
+    author: 'Auteur',
+    description: 'Description',
+    episodes: episodes,
+  );
 }

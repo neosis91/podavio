@@ -14,6 +14,7 @@ import 'discover_languages.dart';
 import 'fyyd_search.dart';
 import 'models.dart';
 import 'podcast_index_search.dart';
+import '../sync/sync_hooks.dart';
 import 'spotify_feed.dart';
 
 const podavioUserAgent = 'Podavio/0.1 (podcast player)';
@@ -63,21 +64,25 @@ class FeedService {
     String rawUrl, {
     String? username,
     String? password,
+    bool notifyNewEpisodes = false,
   }) async {
     final url = await _resolveFeedUrl(rawUrl);
     final existing = await _database.findByFeedUrl(url);
     final wasSubscribed = existing?.subscribed ?? false;
-    final id = await _refreshUrl(
+    final saved = await _refreshUrl(
       url,
       subscribed: true,
       keepUpdated: true,
       username: username,
       password: password,
     );
-    return SubscribeResult(
-      podcastId: id,
-      created: existing == null || !wasSubscribed,
-    );
+    final id = saved.podcastId;
+    final created = existing == null || !wasSubscribed;
+    if (created && notifyNewEpisodes) {
+      await _database.setPodcastEpisodeNotification(id, enabled: true);
+    }
+    if (created) SyncHooks.reportSubscribed(url);
+    return SubscribeResult(podcastId: id, created: created);
   }
 
   /// Charge le flux en aperçu (épisodes utilisables) sans l’ajouter à la bibliothèque.
@@ -90,15 +95,19 @@ class FeedService {
     final existing = await _database.findByFeedUrl(url);
     if (existing != null) {
       // Rafraîchir les épisodes sans changer le statut d’abonnement.
-      return _refreshUrl(url, username: username, password: password);
+      return (await _refreshUrl(
+        url,
+        username: username,
+        password: password,
+      )).podcastId;
     }
-    return _refreshUrl(
+    return (await _refreshUrl(
       url,
       subscribed: false,
       keepUpdated: false,
       username: username,
       password: password,
-    );
+    )).podcastId;
   }
 
   /// Abonne plusieurs flux en parallèle (réseau), avec une limite de concurrence.
@@ -137,10 +146,11 @@ class FeedService {
     return RefreshReport(total: total, failures: List.unmodifiable(failures));
   }
 
-  Future<int> refresh(String feedUrl) => _refreshUrl(feedUrl);
+  Future<SavedFeed> refresh(String feedUrl) => _refreshUrl(feedUrl);
 
   Future<RefreshReport> refreshAll({
     int concurrency = 4,
+    bool notifyNewEpisodes = false,
     void Function(int done, int total, List<SubscribeFailure> failures)?
     onProgress,
   }) async {
@@ -153,6 +163,7 @@ class FeedService {
     var next = 0;
     var done = 0;
     final failures = <SubscribeFailure>[];
+    final arrivals = <NewEpisodeArrival>[];
 
     Future<void> worker() async {
       while (true) {
@@ -161,7 +172,21 @@ class FeedService {
         next = index + 1;
         final podcast = podcasts[index];
         try {
-          await _refreshUrl(podcast.feedUrl);
+          final saved = await _refreshUrl(podcast.feedUrl);
+          if (shouldNotifyNewEpisodes(
+            notifyNewEpisodes: notifyNewEpisodes,
+            keepUpdated: podcast.keepUpdated,
+            episodeNotification: podcast.episodeNotification,
+            newCount: saved.newEpisodeIds.length,
+          )) {
+            arrivals.add(
+              NewEpisodeArrival(
+                podcastId: podcast.id,
+                title: podcast.title,
+                count: saved.newEpisodeIds.length,
+              ),
+            );
+          }
         } catch (error) {
           failures.add(
             SubscribeFailure(
@@ -176,7 +201,11 @@ class FeedService {
     }
 
     await Future.wait(List.generate(workers, (_) => worker()));
-    return RefreshReport(total: total, failures: List.unmodifiable(failures));
+    return RefreshReport(
+      total: total,
+      failures: List.unmodifiable(failures),
+      arrivals: List.unmodifiable(arrivals),
+    );
   }
 
   Future<remote.SearchResult> search(
@@ -501,7 +530,7 @@ class FeedService {
     return feed;
   }
 
-  Future<int> _refreshUrl(
+  Future<SavedFeed> _refreshUrl(
     String url, {
     bool? subscribed,
     bool? keepUpdated,
@@ -520,15 +549,19 @@ class FeedService {
       username: user,
       password: pass,
     );
-    final id = await _database.saveFeed(
+    final saved = await _database.saveFeed(
       _draftFrom(url, podcast, pscByKey: pscByKey),
       subscribed: subscribed,
       keepUpdated: keepUpdated,
     );
     if (explicit) {
-      await _database.setPodcastCredentials(id, username: user, password: pass);
+      await _database.setPodcastCredentials(
+        saved.podcastId,
+        username: user,
+        password: pass,
+      );
     }
-    return id;
+    return saved;
   }
 
   Future<remote.Podcast> _loadRemoteFeed(

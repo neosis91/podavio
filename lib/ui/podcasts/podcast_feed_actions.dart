@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/feed_service.dart';
 import '../../data/providers.dart';
+import '../../settings/settings_controller.dart';
 import '../router.dart';
 import '../widgets/messages.dart' show showMessage;
 
@@ -73,7 +74,9 @@ Future<({String username, String password})?> askFeedCredentials(
                   const SizedBox(height: 8),
                   Text(
                     errorText,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ],
               ],
@@ -81,10 +84,8 @@ Future<({String username, String password})?> askFeedCredentials(
             actions: [
               if (canClear)
                 TextButton(
-                  onPressed: () => Navigator.pop(
-                    context,
-                    (username: '', password: ''),
-                  ),
+                  onPressed: () =>
+                      Navigator.pop(context, (username: '', password: '')),
                   child: const Text('Effacer'),
                 ),
               TextButton(
@@ -141,7 +142,12 @@ Future<void> subscribeToFeed(
     try {
       final result = await ref
           .read(feedServiceProvider)
-          .subscribe(url, username: username, password: password);
+          .subscribe(
+            url,
+            username: username,
+            password: password,
+            notifyNewEpisodes: ref.read(settingsProvider).notifyNewEpisodes,
+          );
       busy.close();
       if (!context.mounted) return;
       if (result.created) {
@@ -267,4 +273,3 @@ class _BusyDialog {
     Navigator.of(context, rootNavigator: true).pop();
   }
 }
-

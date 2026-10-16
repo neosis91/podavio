@@ -1,7 +1,26 @@
-part of '../player_page.dart';
+import 'dart:async';
+import 'dart:math' as math;
 
-class _PlayerNowPlaying extends ConsumerWidget {
-  const _PlayerNowPlaying({required this.episodeId, this.carMode = false});
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/format.dart';
+import '../../data/app_database.dart';
+import '../../data/feed_service.dart';
+import '../../data/providers.dart';
+import '../../player/player_controller.dart';
+import '../../settings/settings_controller.dart';
+import '../widgets/brand.dart';
+import '../widgets/cover.dart';
+import 'player_chapter.dart';
+import 'player_controls.dart';
+
+class PlayerNowPlaying extends ConsumerWidget {
+  const PlayerNowPlaying({
+    super.key,
+    required this.episodeId,
+    this.carMode = false,
+  });
 
   final int episodeId;
   final bool carMode;
@@ -153,7 +172,7 @@ class _PlayerNowPlaying extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (!carMode) _FavoriteAction(episodeId: episodeId),
+              if (!carMode) PlayerFavoriteAction(episodeId: episodeId),
             ],
           ),
           if (error != null) ...[

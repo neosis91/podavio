@@ -98,6 +98,45 @@ mixin _EpisodeQueries on _$AppDatabase {
     return _episodeQuery(episodeId: id).getSingleOrNull();
   }
 
+  Future<List<EpisodeEntry>> subscribedPlayedEpisodes() {
+    return _episodeWindow(playedOnly: true).get();
+  }
+
+  /// Épisode visé par une action gPodder (guid, sinon URL du média).
+  Future<Episode?> episodeForSync({
+    required String feedUrl,
+    required String audioUrl,
+    String guid = '',
+  }) async {
+    final podcast = await (select(
+      podcasts,
+    )..where((table) => table.feedUrl.equals(feedUrl))).getSingleOrNull();
+    if (podcast != null && guid.isNotEmpty) {
+      final byGuid =
+          await (select(episodes)..where(
+                (table) =>
+                    table.podcastId.equals(podcast.id) &
+                    table.guid.equals(guid),
+              ))
+              .getSingleOrNull();
+      if (byGuid != null) return byGuid;
+    }
+    if (podcast != null) {
+      final byAudio =
+          await (select(episodes)..where(
+                (table) =>
+                    table.podcastId.equals(podcast.id) &
+                    table.audioUrl.equals(audioUrl),
+              ))
+              .getSingleOrNull();
+      if (byAudio != null) return byAudio;
+    }
+    return (select(episodes)
+          ..where((table) => table.audioUrl.equals(audioUrl))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
   Future<EpisodeEntry?> nextInQueue({int? afterEpisodeId}) async {
     final items = await _episodeQuery(queuedOnly: true).get();
     if (items.isEmpty) return null;
@@ -217,6 +256,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool freshOnly = false,
     bool recentDownloads = false,
     bool unplayedOnly = false,
+    bool playedOnly = false,
     bool randomOrder = false,
     int? podcastId,
     int? playlistId,
@@ -255,6 +295,7 @@ mixin _EpisodeQueries on _$AppDatabase {
         podcasts.preferred,
         podcasts.autoDownload,
         podcasts.keepUpdated,
+        podcasts.episodeNotification,
         podcasts.subscribed,
         podcasts.playbackSpeed,
         podcasts.skipIntroSeconds,
@@ -292,6 +333,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     }
     if (recentDownloads) query.where(episodes.downloadPath.isNotNull());
     if (unplayedOnly) query.where(episodes.played.equals(false));
+    if (playedOnly) query.where(episodes.played.equals(true));
     if (podcastId != null) {
       query.where(episodes.podcastId.equals(podcastId));
     } else if (!downloadsOnly &&
@@ -361,6 +403,7 @@ mixin _EpisodeQueries on _$AppDatabase {
           preferred: row.read(podcasts.preferred)!,
           autoDownload: row.read(podcasts.autoDownload)!,
           keepUpdated: row.read(podcasts.keepUpdated)!,
+          episodeNotification: row.read(podcasts.episodeNotification)!,
           subscribed: row.read(podcasts.subscribed)!,
           playbackSpeed: row.read(podcasts.playbackSpeed),
           skipIntroSeconds: row.read(podcasts.skipIntroSeconds)!,
@@ -412,6 +455,7 @@ mixin _EpisodeQueries on _$AppDatabase {
 
   Future<void> setPlayed(int id, {required bool played}) {
     return transaction(() async {
+      final current = await getEpisode(id);
       await (update(episodes)..where((table) => table.id.equals(id))).write(
         EpisodesCompanion(
           played: Value(played),
@@ -421,6 +465,21 @@ mixin _EpisodeQueries on _$AppDatabase {
       if (played) {
         await upsertPlaybackPosition(id, 0);
       }
+      if (current == null) return;
+      final total = current.episode.durationSeconds ?? 0;
+      final seconds = total > 0 ? total : 1;
+      SyncHooks.reportEpisode(
+        SyncEpisodeReport(
+          episodeId: id,
+          feedUrl: current.podcast.feedUrl,
+          audioUrl: current.episode.audioUrl,
+          guid: current.episode.guid,
+          action: played ? 'play' : 'new',
+          positionSeconds: played ? seconds : 0,
+          startedSeconds: played ? seconds : 0,
+          totalSeconds: played ? seconds : 0,
+        ),
+      );
     });
   }
 

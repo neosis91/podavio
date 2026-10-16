@@ -8,10 +8,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../data/app_database.dart';
+import '../data/download_controller.dart';
+import '../data/download_policy.dart';
 import '../data/feed_service.dart';
 import '../data/http_auth.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
+import '../sync/sync_hooks.dart';
 import 'cast_playback.dart';
 import 'playback_handler.dart';
 import 'stream_quality.dart';
@@ -217,9 +220,13 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     return _ui;
   }
 
-  Future<void> playEntry(EpisodeEntry entry, {PlaybackSource? source}) {
+  Future<void> playEntry(
+    EpisodeEntry entry, {
+    PlaybackSource? source,
+    bool autoplay = true,
+  }) {
     if (source != null) _emit(_ui.copyWith(playbackSource: source));
-    return _play(entry.episode, entry.podcast);
+    return _play(entry.episode, entry.podcast, autoplay: autoplay);
   }
 
   /// Lance l’épisode, ou bascule lecture / pause s’il est déjà chargé.
@@ -457,6 +464,13 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
   }
 
+  /// Vitesse pour la session en cours, sans l’enregistrer sur le podcast.
+  Future<void> setSessionSpeed(double speed) async {
+    final value = _normalizeSpeed(speed);
+    await _player.setSpeed(value);
+    _emit(_ui.copyWith(speed: value));
+  }
+
   Future<void> setSpeed(double speed) async {
     final value = _normalizeSpeed(speed);
     await _player.setSpeed(value);
@@ -574,6 +588,21 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
           _ui.position.inMilliseconds,
           touchLastPlayed: touchLastPlayed ?? _hasPlayedInSession,
         );
+    final entry = await ref.read(databaseProvider).getEpisode(id);
+    if (entry == null || _disposed || !ref.mounted) return;
+    final total = entry.episode.durationSeconds ?? _ui.duration.inSeconds;
+    SyncHooks.reportEpisode(
+      SyncEpisodeReport(
+        episodeId: id,
+        feedUrl: entry.podcast.feedUrl,
+        audioUrl: entry.episode.audioUrl,
+        guid: entry.episode.guid,
+        action: 'play',
+        positionSeconds: _ui.position.inSeconds,
+        startedSeconds: 0,
+        totalSeconds: total < 0 ? 0 : total,
+      ),
+    );
   }
 
   Future<void> _refreshCoverArt(bool preferPodcastCover) async {
@@ -972,14 +1001,80 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
           clearSleep: sleepAtEnd,
         ),
       );
-      if (sleepAtEnd) return;
-      final next = source.isQueue
-          ? await db.nextInQueue(afterEpisodeId: id)
-          : following;
-      if (next == null || _disposed) return;
-      await _play(next.episode, next.podcast);
+      var movedOn = false;
+      if (!sleepAtEnd && !_disposed) {
+        final next = source.isQueue
+            ? await db.nextInQueue(afterEpisodeId: id)
+            : following;
+        if (next != null && !_disposed) {
+          await _play(next.episode, next.podcast);
+          movedOn = _ui.episodeId != id;
+        }
+      }
+      // Ici seulement : marquer lu à la main ne passe pas par cette méthode.
+      await _deleteDownloadAfterPlayback(id, releasePlayer: !movedOn);
     } finally {
       _advancing = false;
+    }
+  }
+
+  /// Efface le fichier de l’épisode terminé si le réglage est actif.
+  /// Un favori est conservé. [releasePlayer] : on reste sur cet épisode,
+  /// donc le lecteur doit lâcher le fichier avant de l’effacer.
+  Future<void> _deleteDownloadAfterPlayback(
+    int episodeId, {
+    required bool releasePlayer,
+  }) async {
+    if (_disposed || !ref.mounted) return;
+    final entry = await ref.read(databaseProvider).getEpisode(episodeId);
+    if (entry == null || _disposed || !ref.mounted) return;
+    final episode = entry.episode;
+    if (!shouldDeleteAfterPlayback(
+      enabled: ref.read(settingsProvider).deleteAfterPlayback,
+      favorite: episode.favorite,
+      downloadPath: episode.downloadPath,
+    )) {
+      return;
+    }
+    if (releasePlayer && _ui.episodeId == episodeId) {
+      await _loadRemoteSource(episode, entry.podcast);
+    }
+    if (_disposed || !ref.mounted) return;
+    try {
+      await ref.read(downloadProgressProvider.notifier).deleteDownload(episode);
+    } catch (error, stack) {
+      debugPrint('Suppression après lecture: $error\n$stack');
+    }
+  }
+
+  /// Pointe le lecteur local vers le flux, pour lâcher le fichier
+  /// et permettre de relancer l’épisode une fois le fichier effacé.
+  Future<void> _loadRemoteSource(Episode episode, Podcast podcast) async {
+    final url = episode.audioUrl.trim();
+    final uri = Uri.tryParse(url);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return;
+    }
+    if (_disposed || !ref.mounted || _ui.episodeId != episode.id) return;
+    try {
+      if (_player.playing) await _player.pause();
+    } catch (error, stack) {
+      debugPrint('Pause avant suppression: $error\n$stack');
+    }
+    if (_disposed || !ref.mounted || _ui.episodeId != episode.id) return;
+    try {
+      await _player.setAudioSource(
+        AudioSource.uri(
+          uri,
+          headers: podcastRequestHeaders(
+            userAgent: podavioUserAgent,
+            username: podcast.authUsername,
+            password: podcast.authPassword,
+          ),
+        ),
+      );
+    } catch (error, stack) {
+      debugPrint('Flux après suppression: $error\n$stack');
     }
   }
 
