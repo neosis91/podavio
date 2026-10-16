@@ -90,6 +90,21 @@ class FyydSearch {
     return out;
   }
 
+  /// Podcasts d’une catégorie fyyd (`/0.2/category`).
+  Future<List<DiscoverHit>> category(
+    int categoryId, {
+    int count = 18,
+    int page = 0,
+    List<String> languages = const [discoverLanguagesAll],
+  }) {
+    return _categoryPodcasts(
+      categoryId,
+      count: count,
+      page: page,
+      languages: languages,
+    );
+  }
+
   Future<List<DiscoverHit>> _categoryPodcasts(
     int categoryId, {
     required int count,
