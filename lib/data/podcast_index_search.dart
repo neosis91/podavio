@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
+import 'catalog_categories.dart';
 import 'discover_hit.dart';
 import 'discover_languages.dart';
 import 'feed_service.dart';
@@ -38,14 +39,48 @@ class PodcastIndexSearch {
   }
 
   /// Tendances Podcast Index. [languages] vide ou `*` : pas de filtre `lang`.
+  /// Catégories des tendances des [sinceDays] derniers jours, une par podcast.
+  Future<List<String>> trendingCategoryIds({
+    List<String> languages = const [discoverLanguagesAll],
+    int max = 100,
+    int sinceDays = 30,
+  }) async {
+    final codes = podcastIndexLanguageQuery(languages);
+    final feeds = await _feedList('/api/1.0/podcasts/trending', {
+      'max': '$max',
+      'since': '${-sinceDays * 24 * 3600}',
+      if (codes.isNotEmpty) 'lang': codes.join(','),
+    });
+    final ids = <String>[];
+    for (final map in feeds) {
+      if (!discoverLanguageMatches(map['language'] as String?, languages)) {
+        continue;
+      }
+      final seen = <String>{};
+      final categories = map['categories'];
+      if (categories is Map) {
+        for (final value in categories.values) {
+          if (value is! String) continue;
+          final id = catalogIdFromGenreName(value);
+          if (id != null) seen.add(id);
+        }
+      }
+      ids.addAll(seen);
+    }
+    return ids;
+  }
+
   Future<List<DiscoverHit>> trending({
     List<String> languages = const [discoverLanguagesAll],
     int max = 24,
+    String category = '',
   }) {
     final codes = podcastIndexLanguageQuery(languages);
+    final cat = category.trim();
     return _feeds('/api/1.0/podcasts/trending', {
       'max': '$max',
       if (codes.isNotEmpty) 'lang': codes.join(','),
+      if (cat.isNotEmpty) 'cat': cat,
     }, languages: languages);
   }
 
@@ -54,6 +89,38 @@ class PodcastIndexSearch {
     Map<String, String> query, {
     List<String> languages = const [discoverLanguagesAll],
   }) async {
+    if (query.containsKey('q') && (query['q'] ?? '').trim().isEmpty) {
+      return const [];
+    }
+
+    final feeds = await _feedList(path, query);
+    final hits = <DiscoverHit>[];
+    for (final map in feeds) {
+      final feedUrl = (map['url'] as String?)?.trim() ?? '';
+      if (feedUrl.isEmpty) continue;
+      if (!discoverLanguageMatches(map['language'] as String?, languages)) {
+        continue;
+      }
+      final title = (map['title'] as String?)?.trim();
+      hits.add(
+        DiscoverHit(
+          title: (title == null || title.isEmpty) ? 'Podcast' : title,
+          author: (map['author'] as String?)?.trim() ?? '',
+          imageUrl: _blankToNull(
+            (map['image'] as String?) ?? (map['artwork'] as String?),
+          ),
+          feedUrl: feedUrl,
+          source: DiscoverSource.podcastIndex,
+        ),
+      );
+    }
+    return hits;
+  }
+
+  Future<List<Map<String, dynamic>>> _feedList(
+    String path,
+    Map<String, String> query,
+  ) async {
     if (query.containsKey('q') && (query['q'] ?? '').trim().isEmpty) {
       return const [];
     }
@@ -86,29 +153,10 @@ class PodcastIndexSearch {
     final feeds = json['feeds'];
     if (feeds is! List) return const [];
 
-    final hits = <DiscoverHit>[];
-    for (final raw in feeds) {
-      if (raw is! Map) continue;
-      final map = Map<String, dynamic>.from(raw);
-      final feedUrl = (map['url'] as String?)?.trim() ?? '';
-      if (feedUrl.isEmpty) continue;
-      if (!discoverLanguageMatches(map['language'] as String?, languages)) {
-        continue;
-      }
-      final title = (map['title'] as String?)?.trim();
-      hits.add(
-        DiscoverHit(
-          title: (title == null || title.isEmpty) ? 'Podcast' : title,
-          author: (map['author'] as String?)?.trim() ?? '',
-          imageUrl: _blankToNull(
-            (map['image'] as String?) ?? (map['artwork'] as String?),
-          ),
-          feedUrl: feedUrl,
-          source: DiscoverSource.podcastIndex,
-        ),
-      );
-    }
-    return hits;
+    return [
+      for (final raw in feeds)
+        if (raw is Map) Map<String, dynamic>.from(raw),
+    ];
   }
 
   static String? _blankToNull(String? value) {

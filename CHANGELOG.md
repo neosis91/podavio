@@ -4,6 +4,17 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.10.16
+
+- Dans Préférences, Synchronisation relie Podavio à gPodder ou à gPodder Sync (Nextcloud). Les abonnements et la progression d’écoute se partagent avec les autres appareils. D’autres fournisseurs peuvent s’ajouter.
+- Dans Gestion des téléchargements, le téléchargement automatique est éteint. L’activer inclut tous les abonnements ; chacun peut ensuite être exclu, et le couper conserve ces choix. Le cache d’épisodes part d’illimité. On peut supprimer le fichier à la fin de la lecture, et choisir quand libérer de la place si le cache est plein. Les favoris restent.
+- Dans Gestion des téléchargements, les données mobiles sont coupées. Le téléchargement automatique attend le Wi-Fi. Un téléchargement lancé à la main demande confirmation avant d’utiliser les données mobiles. L’activer autorise les deux.
+- Sur l’accueil, entre Lectures récentes et Préférences, Écoutons ensemble ouvre une session sur le même Wi-Fi. Le même bouton reste dans le lecteur. Le code se partage à côté. Les autres rejoignent sans ouvrir le grand lecteur : lecture, pause, position et vitesse restent alignées. En quittant, chacun retrouve sa vitesse.
+- Dans Préférences, Notifications reste silencieux. L’utilisateur active la progression d’un téléchargement, les erreurs de téléchargement, les erreurs de synchronisation, ou les nouveaux épisodes. « Prévenir des nouveaux épisodes » inclut tous les abonnements ; chacun peut ensuite être coupé, et le couper conserve ces choix.
+- Dans Lectures récentes, lancer un épisode enchaîne ensuite la file d’attente, dans son ordre. Si l’épisode n’y est pas, le suivant est le premier de la file.
+- Dans Interface, la teinte de la pochette est activée. Le lecteur et le haut de l’accueil suivent la pochette. La couper les laisse sur la couleur du thème. Les étagères de l’accueil se masquent et se réordonnent. Si elles sont toutes masquées alors qu’il y a quelque chose à montrer, l’accueil propose d’ouvrir Interface.
+- Sur l’accueil, des pastilles s’affichent sous le titre. « Tout » montre l’accueil. Les autres proposent des podcasts d’un genre des catalogues, auxquels on n’est pas abonné : une rangée Apple Podcasts, une Podcast Index, une fyyd. Sans choix enregistré, ce sont les huit genres les plus présents dans les classements du mois, et Histoire reste affichée. Dans Interface, Catégories permet de les afficher, de les masquer et de les réordonner. Ce choix remplace ensuite le classement.
+
 ## 2026.10.15
 
 - Dans Interface, Langue ouvre une page. Chaque langue affiche son code. « Système » est placé sous la langue du téléphone, avec le même code. Si cette langue n’est pas proposée, « Système » n’apparaît pas. Sans choix enregistré, l’application suit la langue du téléphone quand elle est disponible, sinon l’anglais.
@@ -14,11 +25,6 @@ La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 - Lors d’une publication, si l’envoi vers podavio.com ne lance pas le déploiement, celui-ci est démarré.
 - Dans Explorer, Langues regroupe les variantes par pays sous chaque langue. Les langues choisies restent en pastilles. « Toutes les langues » se coupe en retrouvant le choix précédent. Apple prévient quand plus de 8 boutiques seraient nécessaires.
 - Dans À propos, on vérifie la mise à jour de l’application. Le moment de la dernière vérification s’affiche sous cette ligne.
-- Dans Préférences, Synchronisation relie Podavio à gPodder ou à gPodder Sync (Nextcloud). Les abonnements et la progression d’écoute se partagent avec les autres appareils. D’autres fournisseurs peuvent s’ajouter.
-- Dans Gestion des téléchargements, le téléchargement automatique est éteint. L’activer inclut tous les abonnements ; chacun peut ensuite être exclu, et le couper conserve ces choix. Le cache d’épisodes part d’illimité. On peut supprimer le fichier à la fin de la lecture, et choisir quand libérer de la place si le cache est plein. Les favoris restent.
-- Dans Gestion des téléchargements, les données mobiles sont coupées. Le téléchargement automatique attend le Wi-Fi. Un téléchargement lancé à la main demande confirmation avant d’utiliser les données mobiles. L’activer autorise les deux.
-- Dans le lecteur, Écoutons ensemble ouvre une session sur le même Wi-Fi. Le code se partage à côté. Les autres rejoignent : lecture, pause, position et vitesse restent alignées. En quittant, chacun retrouve sa vitesse.
-- Dans Préférences, Notifications reste silencieux. L’utilisateur active la progression d’un téléchargement, les erreurs de téléchargement, les erreurs de synchronisation, ou les nouveaux épisodes. « Prévenir des nouveaux épisodes » inclut tous les abonnements ; chacun peut ensuite être coupé, et le couper conserve ces choix.
 
 ## 2026.10.14
 

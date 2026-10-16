@@ -185,6 +185,8 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
         ? entries
         : entries.sublist(currentIndex + 1);
     final emptyQueue = !window.isLoading && entries.isEmpty;
+    final canAddToQueue =
+        source.isQueue && !currentInQueue && !window.isLoading;
 
     final collapseBar = AppBar(
       leading: IconButton(
@@ -203,101 +205,106 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
           onVerticalDragCancel: widget.onDragCancel,
           child: collapseBar,
         ),
-        if (current != null)
-          _QueueNowPlaying(
-            entry: current,
-            canAdd: source.isQueue && !currentInQueue && !window.isLoading,
-          ),
         Expanded(
-          child: window.isLoading && entries.isEmpty
-              ? const Center(child: CircularProgressIndicator())
-              : CustomScrollView(
-                  slivers: [
-                    if (previous.isNotEmpty) ...[
-                      SliverToBoxAdapter(
-                        child: _QueueSectionTitle('Précédents'),
-                      ),
-                      SliverList.builder(
-                        itemCount: previous.length,
-                        itemBuilder: (context, index) {
-                          final entry = previous[index];
-                          return _QueueRow(
-                            key: ValueKey('prev-${entry.episode.id}'),
-                            entry: entry,
-                            index: index,
-                            reorderable: false,
-                            onMore: editable
-                                ? () => _showActions(
-                                    entry: entry,
-                                    position: index,
-                                    count: entries.length,
-                                    entries: entries,
-                                  )
-                                : null,
-                          );
-                        },
-                      ),
-                    ],
-                    SliverToBoxAdapter(child: _QueueSectionTitle('À suivre')),
-                    if (emptyQueue || upcoming.isEmpty)
-                      SliverToBoxAdapter(
-                        child: EmptyState(
-                          title: emptyQueue
-                              ? (source.isQueue
-                                    ? 'La file d’attente est vide'
-                                    : 'Cette liste est vide')
-                              : 'Rien à suivre',
-                          message: emptyQueue
-                              ? (source.isQueue
-                                    ? 'Ajoutez des épisodes pour les écouter les uns à la suite des autres.'
-                                    : 'Les épisodes de cette liste apparaîtront ici.')
-                              : 'Les épisodes suivants apparaîtront ici.',
-                        ),
-                      )
-                    else if (editable)
-                      SliverReorderableList(
-                        itemCount: upcoming.length,
-                        proxyDecorator: _queueDragProxy,
-                        onReorder: (oldIndex, newIndex) {
-                          if (newIndex > oldIndex) newIndex -= 1;
-                          final next = [...upcoming];
-                          final moved = next.removeAt(oldIndex);
-                          next.insert(newIndex, moved);
-                          final head = entries.sublist(0, currentIndex + 1);
-                          _commit([...head, ...next]);
-                        },
-                        itemBuilder: (context, index) {
-                          final entry = upcoming[index];
-                          final position = currentIndex + 1 + index;
-                          return _QueueRow(
-                            key: ValueKey(entry.episode.id),
-                            entry: entry,
-                            index: index,
-                            onMore: () => _showActions(
+          child: CustomScrollView(
+            slivers: [
+              if (previous.isNotEmpty) ...[
+                SliverToBoxAdapter(child: _QueueSectionTitle('Précédents')),
+                SliverList.builder(
+                  itemCount: previous.length,
+                  itemBuilder: (context, index) {
+                    final entry = previous[index];
+                    return _QueueRow(
+                      key: ValueKey('prev-${entry.episode.id}'),
+                      entry: entry,
+                      index: index,
+                      reorderable: false,
+                      onMore: editable
+                          ? () => _showActions(
                               entry: entry,
-                              position: position,
+                              position: index,
                               count: entries.length,
                               entries: entries,
-                            ),
-                          );
-                        },
-                      )
-                    else
-                      SliverList.builder(
-                        itemCount: upcoming.length,
-                        itemBuilder: (context, index) {
-                          final entry = upcoming[index];
-                          return _QueueRow(
-                            key: ValueKey(entry.episode.id),
-                            entry: entry,
-                            index: index,
-                            reorderable: false,
-                          );
-                        },
-                      ),
-                    const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
-                  ],
+                            )
+                          : null,
+                    );
+                  },
                 ),
+              ],
+              if (current != null)
+                SliverToBoxAdapter(
+                  child: _QueueNowPlaying(
+                    entry: current,
+                    canAdd: canAddToQueue,
+                  ),
+                ),
+              if (window.isLoading && entries.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else ...[
+                SliverToBoxAdapter(child: _QueueSectionTitle('À suivre')),
+                if (emptyQueue || upcoming.isEmpty)
+                  SliverToBoxAdapter(
+                    child: EmptyState(
+                      title: emptyQueue
+                          ? (source.isQueue
+                                ? 'La file d’attente est vide'
+                                : 'Cette liste est vide')
+                          : 'Rien à suivre',
+                      message: emptyQueue
+                          ? (source.isQueue
+                                ? 'Ajoutez des épisodes pour les écouter les uns à la suite des autres.'
+                                : 'Les épisodes de cette liste apparaîtront ici.')
+                          : 'Les épisodes suivants apparaîtront ici.',
+                    ),
+                  )
+                else if (editable)
+                  SliverReorderableList(
+                    itemCount: upcoming.length,
+                    proxyDecorator: _queueDragProxy,
+                    onReorder: (oldIndex, newIndex) {
+                      if (newIndex > oldIndex) newIndex -= 1;
+                      final next = [...upcoming];
+                      final moved = next.removeAt(oldIndex);
+                      next.insert(newIndex, moved);
+                      final head = entries.sublist(0, currentIndex + 1);
+                      _commit([...head, ...next]);
+                    },
+                    itemBuilder: (context, index) {
+                      final entry = upcoming[index];
+                      final position = currentIndex + 1 + index;
+                      return _QueueRow(
+                        key: ValueKey(entry.episode.id),
+                        entry: entry,
+                        index: index,
+                        onMore: () => _showActions(
+                          entry: entry,
+                          position: position,
+                          count: entries.length,
+                          entries: entries,
+                        ),
+                      );
+                    },
+                  )
+                else
+                  SliverList.builder(
+                    itemCount: upcoming.length,
+                    itemBuilder: (context, index) {
+                      final entry = upcoming[index];
+                      return _QueueRow(
+                        key: ValueKey(entry.episode.id),
+                        entry: entry,
+                        index: index,
+                        reorderable: false,
+                      );
+                    },
+                  ),
+                const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+              ],
+            ],
+          ),
         ),
       ],
     );

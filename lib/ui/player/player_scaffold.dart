@@ -8,6 +8,7 @@ import '../../core/cover_tone.dart';
 import '../../data/feed_service.dart';
 import '../../data/providers.dart';
 import '../../player/player_controller.dart';
+import '../../settings/settings_controller.dart';
 import '../widgets/brand.dart';
 import '../widgets/empty_state.dart';
 import 'player_controls.dart';
@@ -135,7 +136,10 @@ class PlayerPage extends ConsumerWidget {
     }
 
     final carMode = ref.watch(playerProvider.select((state) => state.carMode));
-    final tone = watchPlayerCoverTone(ref);
+    final tintFromCover = ref.watch(
+      settingsProvider.select((settings) => settings.tintFromCover),
+    );
+    final tone = tintFromCover ? watchPlayerCoverTone(ref) : null;
     final fallback = embedded
         ? Colors.transparent
         : Theme.of(context).colorScheme.surface;
@@ -228,7 +232,8 @@ class PlayerPage extends ConsumerWidget {
                 ),
               ),
             ),
-            if (!carMode) _QueueSheet(background: tone?.background),
+            if (!carMode)
+              _QueueSheet(background: tone?.background, themed: !tintFromCover),
           ],
         ),
       ),
@@ -238,9 +243,12 @@ class PlayerPage extends ConsumerWidget {
 
 /// La file monte et redescend comme le grand lecteur.
 class _QueueSheet extends ConsumerStatefulWidget {
-  const _QueueSheet({required this.background});
+  const _QueueSheet({required this.background, required this.themed});
 
   final Color? background;
+
+  /// Vrai quand la teinte de la pochette est coupée : le fond reste le thème.
+  final bool themed;
 
   @override
   ConsumerState<_QueueSheet> createState() => _QueueSheetState();
@@ -366,6 +374,7 @@ class _QueueSheetState extends ConsumerState<_QueueSheet>
                         maxHeight: extent,
                         child: _PlaylistOverlay(
                           background: widget.background,
+                          themed: widget.themed,
                           onDragStart: _onDragStart,
                           onDragUpdate: (details) =>
                               _onDragUpdate(details, extent),
@@ -388,6 +397,7 @@ class _QueueSheetState extends ConsumerState<_QueueSheet>
 class _PlaylistOverlay extends StatelessWidget {
   const _PlaylistOverlay({
     required this.background,
+    required this.themed,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
@@ -395,6 +405,7 @@ class _PlaylistOverlay extends StatelessWidget {
   });
 
   final Color? background;
+  final bool themed;
   final GestureDragStartCallback onDragStart;
   final GestureDragUpdateCallback onDragUpdate;
   final GestureDragEndCallback onDragEnd;
@@ -402,7 +413,10 @@ class _PlaylistOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gradient = background == null
+    final surface = Theme.of(context).colorScheme.surface;
+    final gradient = themed
+        ? LinearGradient(colors: [surface, surface])
+        : background == null
         ? coverPlayerGradient(const Color(0xFF121212))
         : coverPlayerGradient(background!);
     return _PageCollapseDrag(

@@ -9,6 +9,7 @@ import 'app_database.dart';
 import 'http_auth.dart';
 import 'apple_feed.dart';
 import 'chapters_parser.dart';
+import 'catalog_categories.dart';
 import 'discover_hit.dart';
 import 'discover_languages.dart';
 import 'fyyd_search.dart';
@@ -294,14 +295,109 @@ class FeedService {
   Future<List<DiscoverHit>> _appleChartHits({
     List<String> languages = const [discoverLanguagesAll],
     int limit = 24,
+    String genre = '',
   }) {
     return _appleFromStores(appleChartStores(languages), (country) async {
       final result = await remote.Search().charts(
         country: country,
         limit: limit,
+        genre: genre,
       );
       return _appleHits(result, languages);
     });
+  }
+
+  /// Genres les plus présents dans les classements du mois : tops Apple et
+  /// tendances Podcast Index des 30 derniers jours.
+  Future<List<String>> mostPlayedCategoryIds(List<String> languages) async {
+    final batches = await Future.wait([
+      _appleChartCategoryIds(languages),
+      () async {
+        try {
+          return await _podcastIndex.trendingCategoryIds(languages: languages);
+        } catch (_) {
+          return const <String>[];
+        }
+      }(),
+    ]);
+    final ids = [for (final batch in batches) ...batch];
+    if (ids.isEmpty) {
+      throw Exception('La recherche a échoué.');
+    }
+    return rankPlayedCategories(ids);
+  }
+
+  Future<List<String>> _appleChartCategoryIds(List<String> languages) async {
+    final batches = await Future.wait([
+      for (final store in appleChartStores(languages))
+        _appleStoreCategoryIds(store),
+    ]);
+    return [for (final batch in batches) ...batch];
+  }
+
+  Future<List<String>> _appleStoreCategoryIds(remote.Country store) async {
+    if (store.code.isEmpty) return const [];
+    try {
+      final response = await http
+          .get(
+            Uri.parse(
+              'https://itunes.apple.com/${store.code}/rss/toppodcasts/limit=100/json',
+            ),
+            headers: const {'User-Agent': podavioUserAgent},
+          )
+          .timeout(const Duration(seconds: 25));
+      if (response.statusCode != 200) return const [];
+      return catalogIdsFromAppleChart(jsonDecode(response.body));
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Trois rangées pour une catégorie : classements Apple, tendances
+  /// Podcast Index, liste fyyd. Une source en échec est absente. Toutes en
+  /// échec, la future échoue.
+  Future<List<HomeCategoryShelf>> categoryShelves(
+    String id, {
+    List<String> languages = const [discoverLanguagesAll],
+  }) async {
+    final category = catalogCategoryById(id);
+    if (category == null) return const [];
+
+    Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
+      try {
+        return await future;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final results = await Future.wait([
+      safe(
+        _appleChartHits(languages: languages, limit: 18, genre: category.genre),
+      ),
+      safe(
+        _podcastIndex.trending(
+          languages: languages,
+          max: 18,
+          category: category.genre,
+        ),
+      ),
+      safe(_fyyd.category(category.fyydId, count: 18, languages: languages)),
+    ]);
+    if (results.every((list) => list == null)) {
+      throw Exception('La recherche a échoué.');
+    }
+
+    const sources = [
+      DiscoverSource.apple,
+      DiscoverSource.podcastIndex,
+      DiscoverSource.fyyd,
+    ];
+    return [
+      for (var i = 0; i < results.length; i++)
+        if (results[i] != null && results[i]!.isNotEmpty)
+          HomeCategoryShelf(source: sources[i], hits: results[i]!),
+    ];
   }
 
   /// Recherche multi-annuaires (Apple, Podcast Index, fyyd).

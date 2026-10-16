@@ -122,7 +122,10 @@ class _ExpandablePlayerState extends ConsumerState<ExpandablePlayer>
 
     final size = MediaQuery.sizeOf(context);
     final scheme = Theme.of(context).colorScheme;
-    final tone = watchPlayerCoverTone(ref);
+    final tintFromCover = ref.watch(
+      settingsProvider.select((settings) => settings.tintFromCover),
+    );
+    final tone = tintFromCover ? watchPlayerCoverTone(ref) : null;
     // Course du haut de la carte, du mini-lecteur jusqu’au haut de l’écran.
     final extent = (size.height - widget.bottomInset - miniPlayerHeight).clamp(
       1.0,

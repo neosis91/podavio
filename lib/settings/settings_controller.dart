@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme.dart';
+import '../data/catalog_categories.dart';
 import '../data/discover_languages.dart';
 import '../data/download_policy.dart';
 import '../data/providers.dart';
@@ -324,6 +325,222 @@ String _miniButtonName(String id) {
   };
 }
 
+/// Étagères de l’accueil, dans l’ordre d’affichage.
+/// Un identifiant précédé de `-` est masqué.
+class HomeShelves {
+  const HomeShelves({this.order = known, this.enabled = _defaultEnabled});
+
+  static const known = [
+    'continue',
+    'fresh',
+    'favorites',
+    'recent',
+    'random',
+    'preferred',
+    'downloads',
+  ];
+
+  static const _defaultEnabled = {
+    'continue',
+    'fresh',
+    'favorites',
+    'recent',
+    'random',
+    'preferred',
+    'downloads',
+  };
+
+  static const defaults = HomeShelves();
+
+  /// Toutes les étagères, affichées ou non, dans l’ordre choisi.
+  final List<String> order;
+
+  /// Étagères affichées.
+  final Set<String> enabled;
+
+  bool isOn(String id) => enabled.contains(id);
+
+  /// Étagères réellement dessinées, dans l’ordre.
+  List<String> get visible => [
+    for (final id in order)
+      if (known.contains(id) && isOn(id)) id,
+  ];
+
+  List<String> toIds() => [
+    for (final id in order)
+      if (known.contains(id)) isOn(id) ? id : '-$id',
+  ];
+
+  /// `null` (jamais configuré) → défauts ([defaults]).
+  /// Un identifiant inconnu est ignoré. Un identifiant absent est ajouté
+  /// à la fin, visible.
+  static HomeShelves fromIds(List<String>? ids) {
+    if (ids == null) return defaults;
+    final order = <String>[];
+    final enabled = <String>{};
+    for (final raw in ids) {
+      final off = raw.startsWith('-');
+      final id = off ? raw.substring(1) : raw;
+      if (!known.contains(id) || order.contains(id)) continue;
+      order.add(id);
+      if (!off) enabled.add(id);
+    }
+    for (final id in known) {
+      if (!order.contains(id)) {
+        order.add(id);
+        enabled.add(id);
+      }
+    }
+    return HomeShelves(order: order, enabled: enabled);
+  }
+
+  HomeShelves copyWith({List<String>? order, Set<String>? enabled}) {
+    return HomeShelves(
+      order: order ?? this.order,
+      enabled: enabled ?? this.enabled,
+    );
+  }
+}
+
+/// Clé anglaise du titre d’une étagère de l’accueil.
+String homeShelfTitle(String id) {
+  return switch (id) {
+    'continue' => 'Continue listening',
+    'fresh' => "What's new",
+    'favorites' => 'Favorites',
+    'recent' => 'Recent plays',
+    'random' => 'Random',
+    'preferred' => 'Preferred subscriptions',
+    'downloads' => 'Recent downloads',
+    _ => id,
+  };
+}
+
+/// Pastilles de catégories sur l’accueil, dans l’ordre d’affichage.
+/// Un identifiant précédé de `-` est masqué. La pastille « Tout » n’en fait
+/// pas partie : elle reste toujours là.
+class HomeCategories {
+  const HomeCategories({this.order = known, this.enabled = _defaultEnabled});
+
+  static const known = [
+    'comedy',
+    'news',
+    'society',
+    'trueCrime',
+    'education',
+    'technology',
+    'business',
+    'health',
+    'history',
+    'science',
+    'sports',
+    'music',
+    'tvFilm',
+    'arts',
+    'kids',
+    'leisure',
+    'religion',
+    'fiction',
+    'government',
+  ];
+
+  /// Celles que la plupart des gens gardent au départ.
+  static const _defaultEnabled = {
+    'comedy',
+    'news',
+    'society',
+    'trueCrime',
+    'education',
+    'technology',
+    'business',
+    'health',
+    'history',
+  };
+
+  static const defaults = HomeCategories();
+
+  final List<String> order;
+  final Set<String> enabled;
+
+  bool isOn(String id) => enabled.contains(id);
+
+  List<String> get visible => [
+    for (final id in order)
+      if (known.contains(id) && isOn(id)) id,
+  ];
+
+  List<String> toIds() => [
+    for (final id in order)
+      if (known.contains(id)) isOn(id) ? id : '-$id',
+  ];
+
+  /// `null` (jamais configuré) → défauts ([defaults]).
+  /// Une liste sans aucun genre connu (anciennes pastilles d’humeur) aussi.
+  /// Un identifiant inconnu est ignoré. Un identifiant absent est ajouté
+  /// à la fin, visible.
+  static HomeCategories fromIds(List<String>? ids) {
+    if (ids == null || !_containsKnown(ids)) return defaults;
+    final order = <String>[];
+    final enabled = <String>{};
+    for (final raw in ids) {
+      final off = raw.startsWith('-');
+      final id = off ? raw.substring(1) : raw;
+      if (!known.contains(id) || order.contains(id)) continue;
+      order.add(id);
+      if (!off) enabled.add(id);
+    }
+    for (final id in known) {
+      if (!order.contains(id)) {
+        order.add(id);
+        enabled.add(id);
+      }
+    }
+    return HomeCategories(order: order, enabled: enabled);
+  }
+
+  static bool _containsKnown(List<String> ids) {
+    for (final raw in ids) {
+      final id = raw.startsWith('-') ? raw.substring(1) : raw;
+      if (known.contains(id)) return true;
+    }
+    return false;
+  }
+
+  /// Vrai quand l’utilisateur a enregistré un choix de catégories.
+  static bool recognizes(List<String>? ids) {
+    if (ids == null) return false;
+    return _containsKnown(ids);
+  }
+
+  /// Les [monthlyHomeCategoryCount] genres les plus cités, plus Histoire
+  /// si le mois ne l’a pas déjà placée dedans. Le reste est présent, masqué.
+  static HomeCategories fromPlayRanks(List<String> ranked) {
+    final picked = <String>[];
+    for (final id in ranked) {
+      if (!known.contains(id) || picked.contains(id)) continue;
+      picked.add(id);
+      if (picked.length >= monthlyHomeCategoryCount) break;
+    }
+    if (!picked.contains(pinnedHomeCategoryId) &&
+        known.contains(pinnedHomeCategoryId)) {
+      picked.add(pinnedHomeCategoryId);
+    }
+    final order = [
+      ...picked,
+      for (final id in known)
+        if (!picked.contains(id)) id,
+    ];
+    return HomeCategories(order: order, enabled: picked.toSet());
+  }
+
+  HomeCategories copyWith({List<String>? order, Set<String>? enabled}) {
+    return HomeCategories(
+      order: order ?? this.order,
+      enabled: enabled ?? this.enabled,
+    );
+  }
+}
+
 /// Tailles proposées pour le cache d’épisodes. Une valeur absente est illimitée.
 const episodeCacheSizes = <int>[5, 10, 20, 50, 100, 200, 500, 1000];
 
@@ -345,6 +562,10 @@ class AppSettings {
     required this.accent,
     required this.pureBlack,
     required this.wallpaperColors,
+    required this.tintFromCover,
+    required this.homeShelves,
+    required this.homeCategories,
+    required this.homeCategoriesChosen,
     required this.speed,
     required this.volume,
     required this.skipBackSeconds,
@@ -386,6 +607,19 @@ class AppSettings {
   final AppAccent accent;
   final bool pureBlack;
   final bool wallpaperColors;
+
+  /// Le lecteur et le haut de l’accueil prennent la couleur de la pochette.
+  final bool tintFromCover;
+
+  /// Ordre et masquage des étagères de l’accueil.
+  final HomeShelves homeShelves;
+
+  /// Pastilles de catégories de l’accueil.
+  final HomeCategories homeCategories;
+
+  /// Vrai après un choix dans Interface. Sinon l’accueil suit le mois.
+  final bool homeCategoriesChosen;
+
   final double speed;
   final double volume;
   final int skipBackSeconds;
@@ -471,6 +705,10 @@ class AppSettings {
     AppAccent? accent,
     bool? pureBlack,
     bool? wallpaperColors,
+    bool? tintFromCover,
+    HomeShelves? homeShelves,
+    HomeCategories? homeCategories,
+    bool? homeCategoriesChosen,
     double? speed,
     double? volume,
     int? skipBackSeconds,
@@ -515,6 +753,10 @@ class AppSettings {
       accent: accent ?? this.accent,
       pureBlack: pureBlack ?? this.pureBlack,
       wallpaperColors: wallpaperColors ?? this.wallpaperColors,
+      tintFromCover: tintFromCover ?? this.tintFromCover,
+      homeShelves: homeShelves ?? this.homeShelves,
+      homeCategories: homeCategories ?? this.homeCategories,
+      homeCategoriesChosen: homeCategoriesChosen ?? this.homeCategoriesChosen,
       speed: speed ?? this.speed,
       volume: volume ?? this.volume,
       skipBackSeconds: skipBackSeconds ?? this.skipBackSeconds,
@@ -578,6 +820,16 @@ class SettingsNotifier extends Notifier<AppSettings> {
       accent: AppAccent.byId(preferences.getString('accent')),
       pureBlack: preferences.getBool('pureBlack') ?? false,
       wallpaperColors: preferences.getBool('wallpaperColors') ?? false,
+      tintFromCover: preferences.getBool('tintFromCover') ?? true,
+      homeShelves: HomeShelves.fromIds(
+        preferences.getStringList('homeShelves'),
+      ),
+      homeCategories: HomeCategories.fromIds(
+        preferences.getStringList('homeCategories'),
+      ),
+      homeCategoriesChosen: HomeCategories.recognizes(
+        preferences.getStringList('homeCategories'),
+      ),
       speed: preferences.getDouble('speed') ?? 1,
       volume: _volume(preferences.getDouble('volume')),
       skipBackSeconds: preferences.getInt('skipBack') ?? 10,
@@ -699,6 +951,28 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await ref
         .read(sharedPreferencesProvider)
         .setBool('wallpaperColors', enabled);
+  }
+
+  Future<void> setTintFromCover(bool enabled) async {
+    state = state.copyWith(tintFromCover: enabled);
+    await ref.read(sharedPreferencesProvider).setBool('tintFromCover', enabled);
+  }
+
+  Future<void> setHomeShelves(HomeShelves shelves) async {
+    state = state.copyWith(homeShelves: shelves);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setStringList('homeShelves', shelves.toIds());
+  }
+
+  Future<void> setHomeCategories(HomeCategories categories) async {
+    state = state.copyWith(
+      homeCategories: categories,
+      homeCategoriesChosen: true,
+    );
+    await ref
+        .read(sharedPreferencesProvider)
+        .setStringList('homeCategories', categories.toIds());
   }
 
   Future<void> setSpeed(double speed) async {
