@@ -4,6 +4,10 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.10.18
+
+- Sur Android, l’application s’ouvre de nouveau après le logo de démarrage.
+
 ## 2026.10.17
 
 - Sur l’accueil, la salutation suit la langue de l’interface : Bonjour, Bon après-midi, Bonsoir ou Bonne nuit. « Lectures récentes » aussi.
