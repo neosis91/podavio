@@ -57,6 +57,9 @@ dependencies:
   xml: ^6.6.1
   http: ^1.6.0
   shared_preferences: ^2.5.5
+  # 2.5.0 passe par JNI. R8 renomme Continuation et la release Android
+  # meurt avant le premier écran. À retirer quand le plugin corrige ça.
+  shared_preferences_android: ">=2.4.28 <2.5.0"
   just_audio_media_kit: ^2.1.0
   media_kit_libs_linux: ^1.2.1
   media_kit_libs_windows_audio: ^1.0.9
