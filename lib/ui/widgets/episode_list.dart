@@ -7,6 +7,7 @@ import '../../data/providers.dart';
 import '../../player/playback_source.dart';
 import 'empty_state.dart';
 import 'episode_tile.dart';
+import 'frosted_header.dart';
 
 class EpisodeListBody extends ConsumerStatefulWidget {
   const EpisodeListBody({
@@ -131,7 +132,7 @@ class _EpisodeWindowList extends StatelessWidget {
     }
 
     final listPadding = queueStyle
-        ? const EdgeInsets.only(top: 4, bottom: 24)
+        ? belowFrostedBar(context, const EdgeInsets.only(top: 4, bottom: 24))
         : null;
     final list = reorder == null
         ? (queueStyle

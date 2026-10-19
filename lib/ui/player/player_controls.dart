@@ -372,31 +372,16 @@ class _QueueAction extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final count = ref.watch(queueCountProvider).value ?? 0;
     final open = ref.watch(playerPanelProvider) == PlayerPanel.playlist;
     final scheme = Theme.of(context).colorScheme;
-    final label = count > 99 ? '99+' : '$count';
     return IconButton(
-      tooltip: open
-          ? context.tr('Back to the episode')
-          : (count == 0
-                ? context.tr('Queue')
-                : context.tr('Queue ({count})', {'count': '$count'})),
+      tooltip: open ? context.tr('Back to the episode') : context.tr('Queue'),
       isSelected: open,
       style: IconButton.styleFrom(
         backgroundColor: open ? scheme.secondaryContainer : null,
       ),
       onPressed: () => ref.read(playerPanelProvider.notifier).toggle(),
-      icon: Badge(
-        isLabelVisible: count > 0,
-        backgroundColor: scheme.primary,
-        textColor: scheme.onPrimary,
-        label: Text(
-          label,
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
-        ),
-        child: const QueueMusicIcon(),
-      ),
+      icon: const QueueMusicIcon(),
     );
   }
 }

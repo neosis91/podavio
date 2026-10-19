@@ -11,7 +11,9 @@ import '../data/online_status.dart';
 import '../settings/settings_controller.dart';
 import 'router.dart';
 import 'widgets/empty_state.dart';
+import 'widgets/frosted_header.dart';
 import 'widgets/episode_list.dart';
+import 'widgets/list_play_button.dart';
 import 'widgets/messages.dart';
 
 import 'episodes/episodes_filters.dart';
@@ -74,9 +76,15 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
         filters.unreadOnly && !filters.downloadsOnly && !filters.inProgressOnly;
     final hasSearch = _search.isNotEmpty;
     final showFilterEmpty = hasFilters && !isInboxDefault;
+    final query = EpisodeQuery(
+      unreadOnly: filters.unreadOnly,
+      downloadsOnly: filters.downloadsOnly,
+      inProgressOnly: filters.inProgressOnly,
+      search: _search,
+    );
 
-    return Scaffold(
-      appBar: AppBar(
+    return FrostedScaffold(
+      appBar: FrostedAppBar(
         title: _searching
             ? TextField(
                 controller: _searchController,
@@ -98,6 +106,7 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
               )
             : null,
         actions: [
+          ListPlayButton(query: query),
           if (_searching)
             IconButton(
               tooltip: 'Effacer',
@@ -164,12 +173,7 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
           Expanded(
             child: EpisodeListBody(
               queueStyle: true,
-              query: EpisodeQuery(
-                unreadOnly: filters.unreadOnly,
-                downloadsOnly: filters.downloadsOnly,
-                inProgressOnly: filters.inProgressOnly,
-                search: _search,
-              ),
+              query: query,
               highlightQuery: _search,
               onRefresh: refreshing
                   ? null

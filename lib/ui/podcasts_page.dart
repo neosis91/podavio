@@ -14,7 +14,7 @@ import 'podcasts/podcasts_providers.dart';
 import 'podcasts/podcasts_tiles.dart';
 import 'router.dart';
 import 'widgets/empty_state.dart';
-import 'widgets/list_metrics.dart';
+import 'widgets/frosted_header.dart';
 
 export 'podcasts/podcast_feed_actions.dart';
 
@@ -88,8 +88,8 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
     final playedCounts = playedAsync.value ?? _lastPlayedCounts;
     final showBadges = counter != PodcastCounter.none;
 
-    return Scaffold(
-      appBar: AppBar(
+    return FrostedScaffold(
+      appBar: FrostedAppBar(
         title: _searching
             ? TextField(
                 controller: _searchController,
@@ -103,6 +103,11 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                 onChanged: (value) => setState(() => _query = value),
               )
             : Text(context.tr('Subscriptions')),
+        bottom: PodcastFilterChips(
+          filters: filters,
+          onChanged: (next) =>
+              ref.read(settingsProvider.notifier).setPodcastFilters(next),
+        ),
         leading: _searching
             ? IconButton(
                 tooltip: 'Fermer la recherche',
@@ -204,123 +209,105 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
           ],
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (!filters.isEmpty)
-            ActiveFiltersBar(
-              filters: filters,
-              onEdit: () => showPodcastFilterDialog(context, ref),
-              onChanged: (next) =>
-                  ref.read(settingsProvider.notifier).setPodcastFilters(next),
-            ),
-          Expanded(
-            child: podcasts.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => EmptyState(
-                title: 'Abonnements indisponibles',
-                message: error.toString(),
+      body: podcasts.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => EmptyState(
+          title: 'Abonnements indisponibles',
+          message: error.toString(),
+        ),
+        data: (items) {
+          if (items.isEmpty) {
+            return EmptyState(
+              title: 'Aucun abonnement',
+              message: 'Cherchez un podcast dans Explorer.',
+              action: FilledButton.icon(
+                onPressed: () => context.go(AppRoutes.discover),
+                icon: const Icon(Icons.explore),
+                label: Text(context.tr('Explore')),
               ),
-              data: (items) {
-                if (items.isEmpty) {
-                  return EmptyState(
-                    title: 'Aucun abonnement',
-                    message: 'Cherchez un podcast dans Explorer.',
-                    action: FilledButton.icon(
-                      onPressed: () => context.go(AppRoutes.discover),
-                      icon: const Icon(Icons.explore),
-                      label: Text(context.tr('Explore')),
-                    ),
-                  );
-                }
+            );
+          }
 
-                final needle = _query.trim();
-                final searched = needle.isEmpty
-                    ? items
-                    : items.where((p) => searchMatch(p.title, needle)).toList();
+          final needle = _query.trim();
+          final searched = needle.isEmpty
+              ? items
+              : items.where((p) => searchMatch(p.title, needle)).toList();
 
-                final filtered = filterPodcasts(
-                  searched,
-                  filters: filters,
-                  counterCounts: filters.counterAboveZero
-                      ? counterCounts
-                      : const {},
+          final filtered = filterPodcasts(
+            searched,
+            filters: filters,
+            counterCounts: filters.counterAboveZero ? counterCounts : const {},
+          );
+
+          if (filtered.isEmpty) {
+            final hasSearch = needle.isNotEmpty;
+            final hasFilters = !filters.isEmpty;
+            return EmptyState(
+              title: 'Aucun résultat',
+              message: hasSearch && !hasFilters
+                  ? 'Aucun abonnement ne correspond à « ${_query.trim()} ».'
+                  : hasSearch && hasFilters
+                  ? 'Aucun abonnement ne correspond à la recherche et aux filtres.'
+                  : 'Aucun abonnement ne correspond aux filtres.',
+              action: TextButton(
+                onPressed: () {
+                  if (hasSearch) _closeSearch();
+                  if (hasFilters) {
+                    ref
+                        .read(settingsProvider.notifier)
+                        .setPodcastFilters(PodcastFilters.empty);
+                  }
+                },
+                child: Text(
+                  hasSearch && hasFilters
+                      ? 'Effacer recherche et filtres'
+                      : hasSearch
+                      ? 'Effacer la recherche'
+                      : 'Effacer les filtres',
+                ),
+              ),
+            );
+          }
+
+          final visible = sortPodcasts(
+            filtered,
+            sort: sort,
+            counterCounts: counterCounts,
+            playedCounts: playedCounts,
+          );
+
+          final child = podcastList
+              ? ListView.separated(
+                  padding: belowFrostedBar(
+                    context,
+                    const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  itemCount: visible.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final podcast = visible[index];
+                    return PodcastListTile(
+                      key: ValueKey(podcast.id),
+                      podcast: podcast,
+                      showName: showNames || needle.isNotEmpty,
+                      highlightQuery: needle,
+                      count: showBadges ? (counterCounts[podcast.id] ?? 0) : 0,
+                    );
+                  },
+                )
+              : PodcastGrid(
+                  items: visible,
+                  columns: columns,
+                  showNames: showNames || needle.isNotEmpty,
+                  highlightQuery: needle,
+                  counts: showBadges ? counterCounts : const {},
                 );
-
-                if (filtered.isEmpty) {
-                  final hasSearch = needle.isNotEmpty;
-                  final hasFilters = !filters.isEmpty;
-                  return EmptyState(
-                    title: 'Aucun résultat',
-                    message: hasSearch && !hasFilters
-                        ? 'Aucun abonnement ne correspond à « ${_query.trim()} ».'
-                        : hasSearch && hasFilters
-                        ? 'Aucun abonnement ne correspond à la recherche et aux filtres.'
-                        : 'Aucun abonnement ne correspond aux filtres.',
-                    action: TextButton(
-                      onPressed: () {
-                        if (hasSearch) _closeSearch();
-                        if (hasFilters) {
-                          ref
-                              .read(settingsProvider.notifier)
-                              .setPodcastFilters(PodcastFilters.empty);
-                        }
-                      },
-                      child: Text(
-                        hasSearch && hasFilters
-                            ? 'Effacer recherche et filtres'
-                            : hasSearch
-                            ? 'Effacer la recherche'
-                            : 'Effacer les filtres',
-                      ),
-                    ),
-                  );
-                }
-
-                final visible = sortPodcasts(
-                  filtered,
-                  sort: sort,
-                  counterCounts: counterCounts,
-                  playedCounts: playedCounts,
-                );
-
-                final child = podcastList
-                    ? ListView.separated(
-                        padding: underChrome(
-                          context,
-                          const EdgeInsets.symmetric(vertical: 8),
-                        ),
-                        itemCount: visible.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final podcast = visible[index];
-                          return PodcastListTile(
-                            key: ValueKey(podcast.id),
-                            podcast: podcast,
-                            showName: showNames || needle.isNotEmpty,
-                            highlightQuery: needle,
-                            count: showBadges
-                                ? (counterCounts[podcast.id] ?? 0)
-                                : 0,
-                          );
-                        },
-                      )
-                    : PodcastGrid(
-                        items: visible,
-                        columns: columns,
-                        showNames: showNames || needle.isNotEmpty,
-                        highlightQuery: needle,
-                        counts: showBadges ? counterCounts : const {},
-                      );
-                if (refreshing || !supportsPullToRefresh) return child;
-                return RefreshIndicator(
-                  onRefresh: () => refreshSubscriptions(context, ref),
-                  child: child,
-                );
-              },
-            ),
-          ),
-        ],
+          if (refreshing || !supportsPullToRefresh) return child;
+          return RefreshIndicator(
+            onRefresh: () => refreshSubscriptions(context, ref),
+            child: child,
+          );
+        },
       ),
     );
   }

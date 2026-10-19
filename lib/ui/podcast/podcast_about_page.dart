@@ -6,6 +6,7 @@ import '../../core/format.dart';
 import '../../data/models.dart';
 import '../../data/providers.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/frosted_header.dart';
 import 'podcast_header.dart';
 
 class PodcastAboutPage extends ConsumerWidget {
@@ -19,8 +20,8 @@ class PodcastAboutPage extends ConsumerWidget {
     return podcast.when(
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (error, _) => Scaffold(
-        appBar: AppBar(),
+      error: (error, _) => FrostedScaffold(
+        appBar: FrostedAppBar(),
         body: EmptyState(
           title: 'Podcast introuvable',
           message: error.toString(),
@@ -28,8 +29,8 @@ class PodcastAboutPage extends ConsumerWidget {
       ),
       data: (item) {
         if (item == null) {
-          return Scaffold(
-            appBar: AppBar(),
+          return FrostedScaffold(
+            appBar: FrostedAppBar(),
             body: const EmptyState(
               title: 'Podcast introuvable',
               message: 'Cet abonnement n’est plus dans la bibliothèque.',
@@ -39,8 +40,8 @@ class PodcastAboutPage extends ConsumerWidget {
         final description = plainText(item.description);
         final titleStyle = Theme.of(context).textTheme.titleSmall
             ?.copyWith(color: Theme.of(context).colorScheme.primary);
-        return Scaffold(
-          appBar: AppBar(
+        return FrostedScaffold(
+          appBar: FrostedAppBar(
             title: Text(item.title, overflow: TextOverflow.ellipsis),
           ),
           body: ListView(

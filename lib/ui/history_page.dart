@@ -1,8 +1,5 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../data/app_database.dart';
 import '../l10n/l10n.dart';
@@ -11,92 +8,25 @@ import '../data/providers.dart';
 import '../player/playback_source.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
-import 'router.dart';
 import 'widgets/playing_cover.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/episode_tile.dart';
-import 'widgets/list_metrics.dart';
+import 'widgets/frosted_header.dart';
 
-/// Même écran que « Ajoutés récemment » : liste sous une barre floue, titre à part.
 class HistoryPage extends StatelessWidget {
   const HistoryPage({super.key});
 
-  static const _barHeight = kToolbarHeight;
-
   @override
   Widget build(BuildContext context) {
-    final top = MediaQuery.paddingOf(context).top;
-    return Scaffold(
-      body: Stack(
-        children: [
-          _HistoryList(topGap: top + _barHeight),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: top + _barHeight,
-            child: _HistoryBar(
-              onBack: () {
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go(AppRoutes.home);
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HistoryBar extends StatelessWidget {
-  const _HistoryBar({required this.onBack});
-
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final surface = theme.colorScheme.surface;
-    final frostAlpha = surface.computeLuminance() >= 0.5 ? 0.35 : 0.55;
-    final top = MediaQuery.paddingOf(context).top;
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: ColoredBox(
-          color: surface.withValues(alpha: frostAlpha),
-          child: Padding(
-            padding: EdgeInsets.only(top: top),
-            child: SizedBox(
-              height: kToolbarHeight,
-              child: NavigationToolbar(
-                leading: IconButton(
-                  tooltip: 'Retour',
-                  onPressed: onBack,
-                  icon: const Icon(Icons.arrow_back),
-                ),
-                middle: Text(
-                  context.tr('Recent plays'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleLarge,
-                ),
-                centerMiddle: false,
-              ),
-            ),
-          ),
-        ),
-      ),
+    return FrostedScaffold(
+      appBar: FrostedAppBar(title: Text(context.tr('Recent plays'))),
+      body: const _HistoryList(),
     );
   }
 }
 
 class _HistoryList extends ConsumerStatefulWidget {
-  const _HistoryList({required this.topGap});
-
-  final double topGap;
+  const _HistoryList();
 
   @override
   ConsumerState<_HistoryList> createState() => _HistoryListState();
@@ -114,26 +44,20 @@ class _HistoryListState extends ConsumerState<_HistoryList> {
     final window = loaded ?? _previous;
 
     if (window == null) {
-      return Padding(
-        padding: EdgeInsets.only(top: widget.topGap),
-        child: next.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => EmptyState(
-            title: 'Impossible de charger les épisodes',
-            message: error.toString(),
-          ),
-          data: (_) => const SizedBox.shrink(),
+      return next.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => EmptyState(
+          title: 'Impossible de charger les épisodes',
+          message: error.toString(),
         ),
+        data: (_) => const SizedBox.shrink(),
       );
     }
 
     if (window.entries.isEmpty) {
-      return Padding(
-        padding: EdgeInsets.only(top: widget.topGap),
-        child: const EmptyState(
-          title: 'Aucune lecture récente',
-          message: 'Les épisodes que vous lancez apparaîtront ici.',
-        ),
+      return const EmptyState(
+        title: 'Aucune lecture récente',
+        message: 'Les épisodes que vous lancez apparaîtront ici.',
       );
     }
 
@@ -150,7 +74,7 @@ class _HistoryListState extends ConsumerState<_HistoryList> {
         return false;
       },
       child: ListView.builder(
-        padding: underChrome(context, EdgeInsets.only(top: widget.topGap)),
+        padding: belowFrostedBar(context, EdgeInsets.zero),
         itemCount: entries.length + (window.hasMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index >= entries.length) {
@@ -199,11 +123,14 @@ class HistoryEpisodeRow extends ConsumerWidget {
           children: [
             Expanded(
               child: InkWell(
-                // La file a un ordre stable. Lectures récentes se retrie
-                // dès qu’un épisode démarre, donc « suivant » y rebondissait.
                 onTap: () => ref
                     .read(playerProvider.notifier)
-                    .playOrPauseEntry(entry, source: PlaybackSource.queue),
+                    .playOrPauseEntry(
+                      entry,
+                      source: PlaybackSource.fromQuery(
+                        const EpisodeQuery(historyOnly: true),
+                      ),
+                    ),
                 child: Row(
                   children: [
                     const SizedBox(width: 8),

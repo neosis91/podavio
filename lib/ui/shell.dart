@@ -99,7 +99,11 @@ class AppShell extends ConsumerWidget {
       return Stack(
         clipBehavior: Clip.none,
         children: [
-          Scaffold(body: page, bottomNavigationBar: navigation),
+          Scaffold(
+            extendBody: true,
+            body: page,
+            bottomNavigationBar: navigation,
+          ),
           ExpandablePlayer(
             bottomInset: padding.bottom + _expandedBody + _playerGap,
           ),
@@ -209,6 +213,7 @@ const _barPaddingTop = 4.0;
 const _barPaddingBottom = 8.0;
 const _expandedBody = _barPaddingTop + _barHeight + _barPaddingBottom;
 const _indicatorSize = 56.0;
+const _labelInset = 16.0;
 const _tabCap = 96.0;
 const _capsuleInset = 6.0;
 const _searchGap = 12.0;
@@ -452,6 +457,7 @@ class _TabCapsuleState extends State<_TabCapsule> {
             ),
           );
 
+    final labelScaler = _navLabelScaler(context, extent);
     final tabs = [
       for (var i = 0; i < count; i++)
         SizedBox(
@@ -460,6 +466,7 @@ class _TabCapsuleState extends State<_TabCapsule> {
           child: _NavButton(
             page: shellTabs[i],
             selected: (_drag?.round() ?? selected) == i,
+            labelScaler: labelScaler,
             onPressed: () => widget.onSelected(i),
           ),
         ),
@@ -527,15 +534,40 @@ class _SearchButton extends StatelessWidget {
   }
 }
 
+/// Même corps de texte pour les trois onglets, calé sur le libellé le plus long.
+TextScaler _navLabelScaler(BuildContext context, double extent) {
+  final style = Theme.of(context).textTheme.bodySmall;
+  final fontSize = style?.fontSize ?? 12;
+  final scaler = MediaQuery.textScalerOf(context);
+  final maxWidth = extent - _labelInset * 2;
+  var longest = 0.0;
+  for (final page in shellTabs) {
+    final painter = TextPainter(
+      text: TextSpan(text: context.tr(page.label), style: style),
+      textDirection: Directionality.of(context),
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    if (painter.width > longest) longest = painter.width;
+    painter.dispose();
+  }
+  if (longest <= maxWidth || longest == 0) return scaler;
+  return TextScaler.linear(
+    scaler.scale(fontSize) / fontSize * maxWidth / longest,
+  );
+}
+
 class _NavButton extends StatelessWidget {
   const _NavButton({
     required this.page,
     required this.selected,
+    required this.labelScaler,
     required this.onPressed,
   });
 
   final NavPage page;
   final bool selected;
+  final TextScaler labelScaler;
   final VoidCallback onPressed;
 
   @override
@@ -548,13 +580,18 @@ class _NavButton extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           page.buildIcon(color: foreground, selected: selected),
-          Text(
-            context.tr(page.label),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: foreground),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _labelInset),
+            child: MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: labelScaler),
+              child: Text(
+                context.tr(page.label),
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: foreground),
+              ),
+            ),
           ),
         ],
       ),

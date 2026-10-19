@@ -315,6 +315,10 @@ const _fr = <String, String>{
   'Shelves': 'Étagères',
   'Order and hide the home shelves':
       'Ordre et masquage des étagères de l’accueil',
+  'Good morning': 'Bonjour',
+  'Good afternoon': 'Bon après-midi',
+  'Good evening': 'Bonsoir',
+  'Good night': 'Bonne nuit',
   'Continue listening': 'Continuer d’écouter',
   'What\'s new': 'Les nouveautés',
   'Random': 'Aléatoire',

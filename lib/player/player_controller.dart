@@ -159,7 +159,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   var _started = false;
   var _disposed = false;
   var _advancing = false;
+  var _extendingQueue = false;
   var _sessionReady = false;
+
+  /// Suite de la liste d’origine, chargée par pages dans la file.
+  _QueueFeed? _queueFeed;
 
   /// True une fois que l’utilisateur a vraiment lancé la lecture cette session.
   var _hasPlayedInSession = false;
@@ -224,23 +228,147 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     EpisodeEntry entry, {
     PlaybackSource? source,
     bool autoplay = true,
-  }) {
+  }) async {
+    if (source != null && !source.isQueue) {
+      await _seedQueue(source, entry);
+      source = PlaybackSource.queue;
+    } else if (source == null) {
+      _queueFeed = null;
+    }
     if (source != null) _emit(_ui.copyWith(playbackSource: source));
     return _play(entry.episode, entry.podcast, autoplay: autoplay);
   }
 
+  /// Met la prochaine page de la liste d’origine à la fin de la file.
+  Future<void> extendQueue() => _appendQueuePage();
+
+  /// Met la page précédente en tête. Renvoie le nombre d’épisodes ajoutés.
+  Future<int> prependQueue() => _prependQueuePage();
+
+  static const _queuePageSize = 40;
+  static const _queuePrefetch = 8;
+
+  Future<void> _seedQueue(PlaybackSource source, EpisodeEntry entry) async {
+    final earlier = await _readQueuePage(source, before: entry);
+    final later = await _readQueuePage(
+      source,
+      after: entry,
+      limit: _queuePageSize - 1,
+    );
+    final slice = [...earlier.entries, entry, ...later.entries];
+    if (_disposed || !ref.mounted || slice.isEmpty) return;
+    await ref.read(databaseProvider).replaceQueue([
+      for (final item in slice) item.episode.id,
+    ]);
+    _queueFeed = _QueueFeed(
+      source: source,
+      head: slice.first,
+      cursor: slice.last,
+      exhaustedBefore: !earlier.mayHaveMore,
+      exhausted: !later.mayHaveMore,
+    );
+  }
+
+  Future<({List<EpisodeEntry> entries, bool mayHaveMore})> _readQueuePage(
+    PlaybackSource source, {
+    EpisodeEntry? after,
+    EpisodeEntry? before,
+    int limit = _queuePageSize,
+  }) {
+    final query = source.query;
+    return ref
+        .read(databaseProvider)
+        .readPlaybackPage(
+          unreadOnly: query.unreadOnly,
+          favoritesOnly: query.favoritesOnly,
+          downloadsOnly: query.downloadsOnly,
+          queuedOnly: query.queuedOnly,
+          historyOnly: query.historyOnly,
+          inProgressOnly: query.inProgressOnly,
+          podcastId: query.podcastId,
+          playlistId: query.playlistId,
+          search: query.search,
+          after: after,
+          before: before,
+          limit: limit,
+        );
+  }
+
+  Future<int> _prependQueuePage() async {
+    final feed = _queueFeed;
+    if (feed == null || feed.exhaustedBefore || _extendingQueue || _disposed) {
+      return 0;
+    }
+    _extendingQueue = true;
+    try {
+      final page = await _readQueuePage(feed.source, before: feed.head);
+      if (_disposed || !ref.mounted) return 0;
+      if (page.entries.isEmpty) {
+        feed.exhaustedBefore = true;
+        return 0;
+      }
+      await ref.read(databaseProvider).prependToQueue([
+        for (final item in page.entries) item.episode.id,
+      ]);
+      feed.head = page.entries.first;
+      if (!page.mayHaveMore) feed.exhaustedBefore = true;
+      return page.entries.length;
+    } finally {
+      _extendingQueue = false;
+    }
+  }
+
+  Future<void> _appendQueuePage() async {
+    final feed = _queueFeed;
+    if (feed == null || feed.exhausted || _extendingQueue || _disposed) return;
+    _extendingQueue = true;
+    try {
+      final page = await _readQueuePage(feed.source, after: feed.cursor);
+      if (_disposed || !ref.mounted) return;
+      if (page.entries.isEmpty) {
+        feed.exhausted = true;
+        return;
+      }
+      await ref.read(databaseProvider).appendToQueue([
+        for (final item in page.entries) item.episode.id,
+      ]);
+      feed.cursor = page.entries.last;
+      if (!page.mayHaveMore) feed.exhausted = true;
+    } finally {
+      _extendingQueue = false;
+    }
+  }
+
+  /// Charge la suite quand il reste peu d’épisodes après celui en cours.
+  Future<void> _prefetchQueue() async {
+    final feed = _queueFeed;
+    if (feed == null || feed.exhausted || _extendingQueue || _disposed) return;
+    final items = await PlaybackSource.queue
+        .watch(ref.read(databaseProvider))
+        .first;
+    if (_disposed) return;
+    final index = items.indexWhere(
+      (entry) => entry.episode.id == _ui.episodeId,
+    );
+    final remaining = index < 0 ? items.length : items.length - index - 1;
+    if (remaining > _queuePrefetch) return;
+    await _appendQueuePage();
+  }
+
   /// Lance l’épisode, ou bascule lecture / pause s’il est déjà chargé.
-  /// [source] retient la liste d’origine pour la playlist du lecteur.
+  ///
+  /// Une liste [source] remplace la file d’attente. Suivant et précédent
+  /// parcourent ensuite cette file. Un second appui sur l’épisode en cours
+  /// met seulement en pause.
   Future<void> playOrPauseEntry(
     EpisodeEntry entry, {
     PlaybackSource? source,
   }) async {
-    if (source != null) _emit(_ui.copyWith(playbackSource: source));
     if (_ui.episodeId == entry.episode.id) {
       await toggle();
       return;
     }
-    await playEntry(entry);
+    await playEntry(entry, source: source);
   }
 
   /// Recharge le dernier épisode en cours sans démarrer la lecture.
@@ -302,6 +430,22 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       await _markPlayedInSession();
       await _player.play();
     }
+  }
+
+  /// Lecture ou pause, sans inverser l’état s’il est déjà le bon.
+  Future<void> setPlaying(bool playing) async {
+    if (!_ui.hasEpisode) return;
+    final cast = _cast;
+    if (cast != null) {
+      if (playing) {
+        cast.play();
+      } else {
+        cast.pause();
+      }
+      return;
+    }
+    if (_player.playing == playing) return;
+    await toggle();
   }
 
   Future<void> seek(Duration position) async {
@@ -399,6 +543,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (_disposed || !ref.mounted) return;
     final settings = ref.read(settingsProvider);
     _hasPlayedInSession = false;
+    _queueFeed = null;
     _emit(PlayerUiState(speed: settings.speed, volume: settings.volume));
     if (ref.mounted) {
       ref.read(playerSheetProvider.notifier).collapse();
@@ -408,6 +553,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   /// Voisin dans la liste d’origine. `1` = suivant, `-1` = précédent.
   /// Hors de la file de lecture, le suivant retombe sur le premier, comme avant.
   Future<EpisodeEntry?> _relativeEntry(int delta) async {
+    if (delta > 0) await _prefetchQueue();
     final source = _ui.playbackSource;
     final items = await source.watch(ref.read(databaseProvider)).first;
     if (_disposed || items.isEmpty) return null;
@@ -456,8 +602,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (next == null || _disposed) return;
     _advancing = true;
     try {
-      // Ne pas retirer de la file : seulement à la fin complète de l’épisode.
-      // `_play` sync la position de l’épisode précédent.
+      // La file reste dans l’ordre affiché. `_play` sync la position précédente.
       await _play(next.episode, next.podcast);
     } finally {
       _advancing = false;
@@ -981,16 +1126,13 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     _advancing = true;
     try {
       final db = ref.read(databaseProvider);
-      final source = _ui.playbackSource;
       // Avant le marquage : un filtre « non lus » ou « en cours » retire
-      // l’épisode de la liste dès qu’il est terminé.
-      final following = source.isQueue ? null : await _relativeEntry(1);
+      // l’épisode de la liste dès qu’il est terminé. C’est le premier
+      // « À suivre » du grand lecteur. La file n’est pas modifiée.
+      final following = await _relativeEntry(1);
       // Sync finale puis marquage terminé (position épisode → 0).
       await syncPositionToEpisode();
       await db.setPlayed(id, played: true);
-      // Retrait auto de la file uniquement quand l’épisode est terminé,
-      // et seulement si la lecture vient de cette file.
-      if (source.isQueue) await db.removeFromQueue(id);
       // Garder l’épisode en « en cours » pour le mini-player au prochain lancement.
       await _rememberNowPlaying(id);
       final sleepAtEnd = _ui.sleepAtEnd;
@@ -1002,14 +1144,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         ),
       );
       var movedOn = false;
-      if (!sleepAtEnd && !_disposed) {
-        final next = source.isQueue
-            ? await db.nextInQueue(afterEpisodeId: id)
-            : following;
-        if (next != null && !_disposed) {
-          await _play(next.episode, next.podcast);
-          movedOn = _ui.episodeId != id;
-        }
+      if (!sleepAtEnd && !_disposed && following != null) {
+        await _play(following.episode, following.podcast);
+        movedOn = _ui.episodeId != id;
       }
       // Ici seulement : marquer lu à la main ne passe pas par cette méthode.
       await _deleteDownloadAfterPlayback(id, releasePlayer: !movedOn);
@@ -1101,4 +1238,21 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     await _stateSub?.cancel();
     await _player.dispose();
   }
+}
+
+/// Liste d’origine encore à verser dans la file, page par page.
+class _QueueFeed {
+  _QueueFeed({
+    required this.source,
+    required this.head,
+    required this.cursor,
+    required this.exhaustedBefore,
+    required this.exhausted,
+  });
+
+  final PlaybackSource source;
+  EpisodeEntry head;
+  EpisodeEntry cursor;
+  bool exhaustedBefore;
+  bool exhausted;
 }

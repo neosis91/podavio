@@ -26,7 +26,7 @@ void main() {
 
     final frenchTile = find.ancestor(
       of: find.text('Français'),
-      matching: find.byType(RadioListTile<String>),
+      matching: find.byType(ListTile),
     );
     expect(
       find.descendant(of: frenchTile, matching: find.text('fr - Système')),

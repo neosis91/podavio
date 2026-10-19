@@ -190,6 +190,11 @@ sealed class TogetherMessage {
             episode: episode,
           ),
         );
+      case 'room':
+        final name = json['name'];
+        final people = json['people'];
+        if (name is! String || people is! int || people < 0) return null;
+        return TogetherRoomMessage(name.trim(), people);
       case 'intent':
         final positionMs = json['positionMs'];
         if (positionMs is! int) return null;
@@ -237,6 +242,18 @@ class TogetherStateMessage extends TogetherMessage {
       'speed': snapshot.speed,
       'episode': snapshot.episode.toJson(),
     });
+  }
+}
+
+class TogetherRoomMessage extends TogetherMessage {
+  const TogetherRoomMessage(this.name, this.people);
+
+  final String name;
+  final int people;
+
+  @override
+  String encode() {
+    return jsonEncode({'v': 1, 'kind': 'room', 'name': name, 'people': people});
   }
 }
 

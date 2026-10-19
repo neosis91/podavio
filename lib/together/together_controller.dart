@@ -18,6 +18,8 @@ class TogetherUiState {
     this.role = TogetherRole.idle,
     this.code = '',
     this.name = '',
+    this.room = '',
+    this.people = 0,
     this.peers = const [],
     this.error,
     this.busy = false,
@@ -26,6 +28,12 @@ class TogetherUiState {
   final TogetherRole role;
   final String code;
   final String name;
+
+  /// Nom choisi par la personne qui a ouvert la salle.
+  final String room;
+
+  /// Personnes dans la salle, hôte compris.
+  final int people;
   final List<String> peers;
   final String? error;
   final bool busy;
@@ -34,6 +42,8 @@ class TogetherUiState {
     TogetherRole? role,
     String? code,
     String? name,
+    String? room,
+    int? people,
     List<String>? peers,
     String? error,
     bool clearError = false,
@@ -43,6 +53,8 @@ class TogetherUiState {
       role: role ?? this.role,
       code: code ?? this.code,
       name: name ?? this.name,
+      room: room ?? this.room,
+      people: people ?? this.people,
       peers: peers ?? this.peers,
       error: clearError ? null : error ?? this.error,
       busy: busy ?? this.busy,
@@ -60,6 +72,7 @@ class TogetherController extends Notifier<TogetherUiState> {
   StreamSubscription<TogetherIntent>? _intents;
   StreamSubscription<List<String>>? _peers;
   StreamSubscription<TogetherSnapshot>? _states;
+  StreamSubscription<TogetherRoomMessage>? _room;
   final _advertiser = TogetherAdvertiser();
   Timer? _pulse;
   TogetherEpisode? _episode;
@@ -67,6 +80,9 @@ class TogetherController extends Notifier<TogetherUiState> {
   var _seq = 0;
   var _lastRemoteSeq = 0;
   var _applying = false;
+
+  /// Lecture déjà partagée. Un écho local ne doit pas renvoyer l’ordre inverse.
+  bool? _sharedPlaying;
   var _leaving = false;
   var _publishTail = Future<void>.value();
   DateTime _seenAt = DateTime.now();
@@ -90,6 +106,7 @@ class TogetherController extends Notifier<TogetherUiState> {
     TogetherHostLink? link;
     try {
       link = await TogetherHostLink.open();
+      link.roomName = displayName;
       final code = newTogetherCode(Random());
       await _advertiser.start(port: link.port, code: code);
       _host = link;
@@ -154,10 +171,14 @@ class TogetherController extends Notifier<TogetherUiState> {
       _speedBefore = ref.read(playerProvider).speed;
       _lastRemoteSeq = 0;
       _states = guest.states.listen(_onRemote, onDone: _onGuestEnded);
+      _room = guest.room.listen(_onRoom);
+      final room = guest.latestRoom;
       state = TogetherUiState(
         role: TogetherRole.guest,
         code: code,
         name: displayName,
+        room: room?.name ?? '',
+        people: room?.people ?? 0,
       );
     } catch (_) {
       await _guest?.close();
@@ -217,7 +238,8 @@ class TogetherController extends Notifier<TogetherUiState> {
       final guest = _guest;
       if (guest == null) return;
       final positionMs = next.position.inMilliseconds;
-      if (playingChanged) {
+      if (playingChanged && next.playing != _sharedPlaying) {
+        _sharedPlaying = next.playing;
         guest.sendIntent(
           TogetherIntent(
             kind: next.playing
@@ -249,11 +271,12 @@ class TogetherController extends Notifier<TogetherUiState> {
         await player.seek(Duration(milliseconds: intent.positionMs));
       }
       if (!ref.mounted) return;
-      final playing = ref.read(playerProvider).playing;
-      if (intent.kind == TogetherIntentKind.play && !playing) {
-        await player.toggle();
-      } else if (intent.kind == TogetherIntentKind.pause && playing) {
-        await player.toggle();
+      if (intent.kind == TogetherIntentKind.play) {
+        _sharedPlaying = true;
+        await player.setPlaying(true);
+      } else if (intent.kind == TogetherIntentKind.pause) {
+        _sharedPlaying = false;
+        await player.setPlaying(false);
       }
     } finally {
       _applying = false;
@@ -264,6 +287,7 @@ class TogetherController extends Notifier<TogetherUiState> {
   Future<void> _onRemote(TogetherSnapshot remote) async {
     if (remote.seq <= _lastRemoteSeq || _applying) return;
     _lastRemoteSeq = remote.seq;
+    _sharedPlaying = remote.playing;
     final local = await _localSnapshot();
     if (!ref.mounted || _guest == null) return;
     final plan = planTogetherAdjustment(local: local, remote: remote);
@@ -286,10 +310,7 @@ class TogetherController extends Notifier<TogetherUiState> {
         await player.seek(Duration(milliseconds: remote.positionMs));
       }
       if (!ref.mounted) return;
-      final playing = ref.read(playerProvider).playing;
-      if (plan.playing != null && plan.playing != playing) {
-        await player.toggle();
-      }
+      if (plan.playing != null) await player.setPlaying(plan.playing!);
       if (ref.mounted) state = state.copyWith(clearError: true);
     } catch (_) {
       if (ref.mounted) {
@@ -298,6 +319,11 @@ class TogetherController extends Notifier<TogetherUiState> {
     } finally {
       _applying = false;
     }
+  }
+
+  void _onRoom(TogetherRoomMessage message) {
+    if (!ref.mounted || state.role != TogetherRole.guest) return;
+    state = state.copyWith(room: message.name, people: message.people);
   }
 
   void _onGuestEnded() {
@@ -397,9 +423,12 @@ class TogetherController extends Notifier<TogetherUiState> {
     await _intents?.cancel();
     await _peers?.cancel();
     await _states?.cancel();
+    await _room?.cancel();
     _intents = null;
     _peers = null;
     _states = null;
+    _room = null;
+    _sharedPlaying = null;
     final host = _host;
     final guest = _guest;
     _host = null;

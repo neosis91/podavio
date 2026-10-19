@@ -4,6 +4,21 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.10.17
+
+- Sur l’accueil, la salutation suit la langue de l’interface : Bonjour, Bon après-midi, Bonsoir ou Bonne nuit. « Lectures récentes » aussi.
+- Le haut des pages se voile un peu quand on fait défiler, comme sur l’accueil.
+- Dans les favoris, une playlist, la page d’un podcast et la liste des épisodes, un bouton lecture lance le premier épisode.
+- Lancer un épisode au milieu d’une longue liste prépare la suite. Les épisodes d’avant arrivent en remontant dans la file d’attente du lecteur, sans tout charger d’un coup.
+- Dans Écoutons ensemble, une personne qui a rejoint voit le nom de la session et combien de personnes écoutent.
+- En bas de l’écran, Accueil, Abonnements et Bibliothèque ont un peu d’air autour du texte, et la même taille de lettres.
+- Sur Linux, le fin trait clair sous le titre de la fenêtre a disparu.
+- Dans Abonnements, les filtres sont des pastilles sous le titre. Un appui active ou retire le compteur, les téléchargements automatiques et la mise à jour.
+- Dans Explorer, à la place des réglages, un globe ouvre le choix des langues.
+- Cette page a le même titre que l’accueil : il se voile en défilant, et la recherche est dedans. Les langues choisies sont des pastilles avec leur drapeau. La liste montre un drapeau rond quand la langue en a un, par exemple le breton, le corse ou le wallon. Le début de la liste n’est plus caché sous le titre.
+- Dans Interface, Langue a le même aspect : titre qui se voile, recherche dans le titre, pastille de la langue choisie et drapeaux. Une seule langue peut être choisie, avec un rond à cocher.
+- L’application s’ouvre tout de suite, sans écran d’attente. Sur Android et sur iPhone, le logo reste affiché le court instant du démarrage.
+
 ## 2026.10.16
 
 - Dans Préférences, Synchronisation relie Podavio à gPodder ou à gPodder Sync (Nextcloud). Les abonnements et la progression d’écoute se partagent avec les autres appareils. D’autres fournisseurs peuvent s’ajouter.

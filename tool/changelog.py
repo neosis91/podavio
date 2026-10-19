@@ -5,6 +5,7 @@ import argparse
 import html
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -178,6 +179,9 @@ def publish(version, date, site):
         json.dumps(latest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    builder = Path(site) / "tool" / "build_pages.py"
+    if builder.is_file():
+        subprocess.run([sys.executable, str(builder)], check=True)
 
 
 def main():

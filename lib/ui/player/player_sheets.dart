@@ -51,8 +51,97 @@ class PlayerQueue extends ConsumerStatefulWidget {
 }
 
 class _PlayerQueueState extends ConsumerState<PlayerQueue> {
+  final _scroll = ScrollController();
+  final _nowPlayingKey = GlobalKey();
   List<int>? _orderIds;
   PlaybackSource? _orderSource;
+  var _previousCount = 0;
+  var _queueReady = false;
+  var _revealed = false;
+  var _revealScheduled = false;
+  var _loadingEarlier = false;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _scheduleReveal() {
+    if (_revealed || !_queueReady || _revealScheduled) return;
+    _revealScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _revealScheduled = false;
+      _revealCurrent();
+    });
+  }
+
+  /// Amène l’épisode en cours en haut si les précédents le poussent hors écran.
+  void _revealCurrent() {
+    if (!mounted || _revealed) return;
+    if (!_scroll.hasClients || !_scroll.position.hasContentDimensions) {
+      _scheduleReveal();
+      return;
+    }
+    final count = _previousCount;
+    if (count <= 0) {
+      _revealed = true;
+      return;
+    }
+    final wide = _queueWide(context);
+    final rowHeight = wide ? 84.0 : 60.0;
+    const titleHeight = 36.0;
+    final target = titleHeight + count * rowHeight;
+    final position = _scroll.position;
+    const nowPlayingHeight = 80.0;
+    if (target + nowPlayingHeight <= position.viewportDimension) {
+      _revealed = true;
+      return;
+    }
+    final max = position.maxScrollExtent;
+    if (max + 1 < target) {
+      position.jumpTo(max);
+      _scheduleReveal();
+      return;
+    }
+    position.jumpTo(target.clamp(0.0, max));
+    _revealed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final targetContext = _nowPlayingKey.currentContext;
+      if (targetContext == null || !mounted) return;
+      Scrollable.ensureVisible(targetContext, alignment: 0);
+    });
+  }
+
+  /// Charge une page au-dessus et garde l’épisode affiché en place.
+  Future<void> _loadEarlier(double pixels) async {
+    if (_loadingEarlier) return;
+    _loadingEarlier = true;
+    final added = await ref.read(playerProvider.notifier).prependQueue();
+    if (!mounted || added == 0 || !_scroll.hasClients) {
+      _loadingEarlier = false;
+      return;
+    }
+    _holdPlace(pixels, added);
+  }
+
+  void _holdPlace(double pixels, int added, [int tries = 0]) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) {
+        _loadingEarlier = false;
+        return;
+      }
+      final position = _scroll.position;
+      final shift = added * (_queueWide(context) ? 84.0 : 60.0);
+      final target = pixels + shift;
+      if (tries < 4 && position.maxScrollExtent + 1 < target) {
+        _holdPlace(pixels, added, tries + 1);
+        return;
+      }
+      position.jumpTo(target.clamp(0.0, position.maxScrollExtent));
+      _loadingEarlier = false;
+    });
+  }
 
   List<EpisodeEntry> _ordered(
     List<EpisodeEntry> entries,
@@ -187,6 +276,9 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
     final emptyQueue = !window.isLoading && entries.isEmpty;
     final canAddToQueue =
         source.isQueue && !currentInQueue && !window.isLoading;
+    _previousCount = previous.length;
+    _queueReady = !window.isLoading || entries.isNotEmpty;
+    _scheduleReveal();
 
     final collapseBar = AppBar(
       leading: IconButton(
@@ -206,104 +298,122 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
           child: collapseBar,
         ),
         Expanded(
-          child: CustomScrollView(
-            slivers: [
-              if (previous.isNotEmpty) ...[
-                SliverToBoxAdapter(child: _QueueSectionTitle('Précédents')),
-                SliverList.builder(
-                  itemCount: previous.length,
-                  itemBuilder: (context, index) {
-                    final entry = previous[index];
-                    return _QueueRow(
-                      key: ValueKey('prev-${entry.episode.id}'),
-                      entry: entry,
-                      index: index,
-                      reorderable: false,
-                      onMore: editable
-                          ? () => _showActions(
-                              entry: entry,
-                              position: index,
-                              count: entries.length,
-                              entries: entries,
-                            )
-                          : null,
-                    );
-                  },
-                ),
-              ],
-              if (current != null)
-                SliverToBoxAdapter(
-                  child: _QueueNowPlaying(
-                    entry: current,
-                    canAdd: canAddToQueue,
-                  ),
-                ),
-              if (window.isLoading && entries.isEmpty)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else ...[
-                SliverToBoxAdapter(child: _QueueSectionTitle('À suivre')),
-                if (emptyQueue || upcoming.isEmpty)
-                  SliverToBoxAdapter(
-                    child: EmptyState(
-                      title: emptyQueue
-                          ? (source.isQueue
-                                ? 'La file d’attente est vide'
-                                : 'Cette liste est vide')
-                          : 'Rien à suivre',
-                      message: emptyQueue
-                          ? (source.isQueue
-                                ? 'Ajoutez des épisodes pour les écouter les uns à la suite des autres.'
-                                : 'Les épisodes de cette liste apparaîtront ici.')
-                          : 'Les épisodes suivants apparaîtront ici.',
-                    ),
-                  )
-                else if (editable)
-                  SliverReorderableList(
-                    itemCount: upcoming.length,
-                    proxyDecorator: _queueDragProxy,
-                    onReorder: (oldIndex, newIndex) {
-                      if (newIndex > oldIndex) newIndex -= 1;
-                      final next = [...upcoming];
-                      final moved = next.removeAt(oldIndex);
-                      next.insert(newIndex, moved);
-                      final head = entries.sublist(0, currentIndex + 1);
-                      _commit([...head, ...next]);
-                    },
-                    itemBuilder: (context, index) {
-                      final entry = upcoming[index];
-                      final position = currentIndex + 1 + index;
-                      return _QueueRow(
-                        key: ValueKey(entry.episode.id),
-                        entry: entry,
-                        index: index,
-                        onMore: () => _showActions(
-                          entry: entry,
-                          position: position,
-                          count: entries.length,
-                          entries: entries,
-                        ),
-                      );
-                    },
-                  )
-                else
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is! ScrollUpdateNotification &&
+                  notification is! ScrollEndNotification) {
+                return false;
+              }
+              if (!_revealed) return false;
+              final metrics = notification.metrics;
+              if (metrics.extentBefore < 480) {
+                _loadEarlier(metrics.pixels);
+              }
+              if (metrics.extentAfter < 480) {
+                ref.read(playerProvider.notifier).extendQueue();
+              }
+              return false;
+            },
+            child: CustomScrollView(
+              controller: _scroll,
+              slivers: [
+                if (previous.isNotEmpty) ...[
+                  SliverToBoxAdapter(child: _QueueSectionTitle('Précédents')),
                   SliverList.builder(
-                    itemCount: upcoming.length,
+                    itemCount: previous.length,
                     itemBuilder: (context, index) {
-                      final entry = upcoming[index];
+                      final entry = previous[index];
                       return _QueueRow(
-                        key: ValueKey(entry.episode.id),
+                        key: ValueKey('prev-${entry.episode.id}'),
                         entry: entry,
                         index: index,
                         reorderable: false,
+                        onMore: editable
+                            ? () => _showActions(
+                                entry: entry,
+                                position: index,
+                                count: entries.length,
+                                entries: entries,
+                              )
+                            : null,
                       );
                     },
                   ),
-                const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+                ],
+                if (current != null)
+                  SliverToBoxAdapter(
+                    child: _QueueNowPlaying(
+                      key: _nowPlayingKey,
+                      entry: current,
+                      canAdd: canAddToQueue,
+                    ),
+                  ),
+                if (window.isLoading && entries.isEmpty)
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else ...[
+                  SliverToBoxAdapter(child: _QueueSectionTitle('À suivre')),
+                  if (emptyQueue || upcoming.isEmpty)
+                    SliverToBoxAdapter(
+                      child: EmptyState(
+                        title: emptyQueue
+                            ? (source.isQueue
+                                  ? 'La file d’attente est vide'
+                                  : 'Cette liste est vide')
+                            : 'Rien à suivre',
+                        message: emptyQueue
+                            ? (source.isQueue
+                                  ? 'Ajoutez des épisodes pour les écouter les uns à la suite des autres.'
+                                  : 'Les épisodes de cette liste apparaîtront ici.')
+                            : 'Les épisodes suivants apparaîtront ici.',
+                      ),
+                    )
+                  else if (editable)
+                    SliverReorderableList(
+                      itemCount: upcoming.length,
+                      proxyDecorator: _queueDragProxy,
+                      onReorderItem: (oldIndex, newIndex) {
+                        final next = [...upcoming];
+                        final moved = next.removeAt(oldIndex);
+                        next.insert(newIndex, moved);
+                        final head = entries.sublist(0, currentIndex + 1);
+                        _commit([...head, ...next]);
+                      },
+                      itemBuilder: (context, index) {
+                        final entry = upcoming[index];
+                        final position = currentIndex + 1 + index;
+                        return _QueueRow(
+                          key: ValueKey(entry.episode.id),
+                          entry: entry,
+                          index: index,
+                          onMore: () => _showActions(
+                            entry: entry,
+                            position: position,
+                            count: entries.length,
+                            entries: entries,
+                          ),
+                        );
+                      },
+                    )
+                  else
+                    SliverList.builder(
+                      itemCount: upcoming.length,
+                      itemBuilder: (context, index) {
+                        final entry = upcoming[index];
+                        return _QueueRow(
+                          key: ValueKey(entry.episode.id),
+                          entry: entry,
+                          index: index,
+                          reorderable: false,
+                        );
+                      },
+                    ),
+                  const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ],
@@ -405,7 +515,11 @@ Widget _queueDragProxy(Widget child, int index, Animation<double> animation) {
 }
 
 class _QueueNowPlaying extends ConsumerWidget {
-  const _QueueNowPlaying({required this.entry, required this.canAdd});
+  const _QueueNowPlaying({
+    super.key,
+    required this.entry,
+    required this.canAdd,
+  });
 
   final EpisodeEntry entry;
   final bool canAdd;
@@ -419,56 +533,65 @@ class _QueueNowPlaying extends ConsumerWidget {
     );
     return Material(
       color: scheme.primaryContainer.withValues(alpha: 0.35),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(_queueWide(context) ? 28 : 20, 12, 8, 4),
-        child: Row(
-          children: [
-            PlayingEpisodeCover(
-              episodeId: entry.episode.id,
-              url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
-              localPath: entry.imagePath(
-                preferPodcastCover: preferPodcastCover,
+      child: InkWell(
+        onTap: () => ref.read(playerProvider.notifier).playOrPauseEntry(entry),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            _queueWide(context) ? 28 : 20,
+            _queueWide(context) ? 10 : 6,
+            8,
+            _queueWide(context) ? 10 : 6,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              PlayingEpisodeCover(
+                episodeId: entry.episode.id,
+                url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+                localPath: entry.imagePath(
+                  preferPodcastCover: preferPodcastCover,
+                ),
+                httpHeaders: podcastAuthHeaders(
+                  username: entry.podcast.authUsername,
+                  password: entry.podcast.authPassword,
+                ),
+                size: _queueWide(context) ? 72 : 55,
+                radius: 4,
               ),
-              httpHeaders: podcastAuthHeaders(
-                username: entry.podcast.authUsername,
-                password: entry.podcast.authPassword,
-              ),
-              size: _queueWide(context) ? 72 : 55,
-              radius: 4,
-            ),
-            SizedBox(width: _queueWide(context) ? 16 : 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.episode.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+              SizedBox(width: _queueWide(context) ? 16 : 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.episode.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    entry.podcast.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
+                    const SizedBox(height: 2),
+                    Text(
+                      entry.podcast.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            if (canAdd)
-              IconButton(
-                tooltip: 'Ajouter l’épisode',
-                onPressed: () =>
-                    ref.read(databaseProvider).addToQueue(entry.episode.id),
-                icon: const PlaylistAddIcon(),
-              ),
-          ],
+              if (canAdd)
+                IconButton(
+                  tooltip: 'Ajouter l’épisode',
+                  onPressed: () =>
+                      ref.read(databaseProvider).addToQueue(entry.episode.id),
+                  icon: const PlaylistAddIcon(),
+                ),
+            ],
+          ),
         ),
       ),
     );

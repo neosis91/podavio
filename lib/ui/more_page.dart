@@ -20,6 +20,7 @@ import '../sync/sync_controller.dart';
 import 'episodes_page.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
+import 'widgets/frosted_header.dart';
 import 'widgets/messages.dart';
 import 'widgets/update_prompt.dart';
 
@@ -30,10 +31,13 @@ class AboutPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(context.tr('About'))),
+    return FrostedScaffold(
+      appBar: FrostedAppBar(title: Text(context.tr('About'))),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+        padding: belowFrostedBar(
+          context,
+          const EdgeInsets.fromLTRB(24, 24, 24, 24),
+        ),
         children: [
           const Center(child: PodavioLogo()),
           const SizedBox(height: 16),
