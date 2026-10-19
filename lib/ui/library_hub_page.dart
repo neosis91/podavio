@@ -8,8 +8,8 @@ import 'history_page.dart';
 import 'nav_catalog.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
+import 'widgets/frosted_header.dart';
 import 'widgets/empty_state.dart';
-import 'widgets/list_metrics.dart';
 
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
@@ -78,8 +78,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         : entries.isEmpty
         ? 1
         : entries.length + (window!.hasMore ? 1 : 0);
-    return Scaffold(
-      appBar: AppBar(
+    return FrostedScaffold(
+      appBar: FrostedAppBar(
         title: Text(context.tr('Library')),
         actions: const [PreferencesButton()],
       ),
@@ -95,7 +95,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           return false;
         },
         child: ListView.builder(
-          padding: underChrome(
+          padding: belowFrostedBar(
             context,
             const EdgeInsets.only(top: 10, bottom: 24),
           ),
@@ -141,7 +141,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Lectures récentes',
+                      context.tr('Recent plays'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.headlineSmall,

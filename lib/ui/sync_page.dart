@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../sync/gpodder_client.dart';
 import '../sync/sync_controller.dart';
 import '../sync/sync_protocol.dart';
+import 'widgets/list_metrics.dart';
 import 'widgets/messages.dart';
 
 enum _SyncStep { home, providers, server, login, devices, authorize }
@@ -65,7 +66,7 @@ class _SyncPageState extends ConsumerState<SyncPage> {
   Widget _home(SyncStatus status) {
     if (!status.connected) {
       return ListView(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+        padding: underChrome(context, const EdgeInsets.fromLTRB(24, 8, 24, 24)),
         children: [
           Text(
             context.tr(
@@ -174,7 +175,7 @@ class _SyncPageState extends ConsumerState<SyncPage> {
     final option = _option;
     final insecure = _host.text.trim().startsWith('http://');
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: underChrome(context, const EdgeInsets.all(24)),
       children: [
         Text(
           context.tr(
@@ -209,7 +210,7 @@ class _SyncPageState extends ConsumerState<SyncPage> {
 
   Widget _login() {
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: underChrome(context, const EdgeInsets.all(24)),
       children: [
         TextField(
           controller: _username,
@@ -235,7 +236,7 @@ class _SyncPageState extends ConsumerState<SyncPage> {
   Widget _devices() {
     final devices = _draft?.devices ?? const <SyncDevice>[];
     return ListView(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: underChrome(context, const EdgeInsets.only(bottom: 24)),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -277,7 +278,7 @@ class _SyncPageState extends ConsumerState<SyncPage> {
 
   Widget _authorize() {
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: underChrome(context, const EdgeInsets.all(24)),
       children: [
         Text(context.tr('Authorize Podavio in the browser, then come back.')),
         const SizedBox(height: 24),

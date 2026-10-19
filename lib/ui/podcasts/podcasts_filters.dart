@@ -3,71 +3,76 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/app_database.dart';
 import '../../settings/settings_controller.dart';
+import '../widgets/selection_chip.dart';
 
-class ActiveFiltersBar extends StatelessWidget {
-  const ActiveFiltersBar({
+/// Rangée de filtres, mêmes pastilles que l’accueil.
+class PodcastFilterChips extends StatelessWidget
+    implements PreferredSizeWidget {
+  const PodcastFilterChips({
     super.key,
     required this.filters,
-    required this.onEdit,
     required this.onChanged,
   });
 
   final PodcastFilters filters;
-  final VoidCallback onEdit;
   final ValueChanged<PodcastFilters> onChanged;
 
   @override
+  Size get preferredSize => const Size.fromHeight(48);
+
+  @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final chips = <Widget>[
-      if (filters.counterAboveZero)
-        InputChip(
-          label: const Text('Compteur > 0'),
-          onPressed: onEdit,
-          onDeleted: () => onChanged(filters.copyWith(counterAboveZero: false)),
-        ),
-      if (filters.autoDownload == true)
-        InputChip(
-          label: const Text('Téléchargements auto'),
-          onPressed: onEdit,
-          onDeleted: () => onChanged(filters.copyWith(clearAutoDownload: true)),
-        ),
-      if (filters.autoDownload == false)
-        InputChip(
-          label: const Text('Sans téléchargements auto'),
-          onPressed: onEdit,
-          onDeleted: () => onChanged(filters.copyWith(clearAutoDownload: true)),
-        ),
-      if (filters.keepUpdated == true)
-        InputChip(
-          label: const Text('Maintenu à jour'),
-          onPressed: onEdit,
-          onDeleted: () => onChanged(filters.copyWith(clearKeepUpdated: true)),
-        ),
-      if (filters.keepUpdated == false)
-        InputChip(
-          label: const Text('Non maintenu à jour'),
-          onPressed: onEdit,
-          onDeleted: () => onChanged(filters.copyWith(clearKeepUpdated: true)),
-        ),
-      ActionChip(
-        avatar: Icon(Icons.clear_all, size: 18, color: scheme.primary),
-        label: const Text('Tout effacer'),
-        onPressed: () => onChanged(PodcastFilters.empty),
+    final chips = <(String, bool, PodcastFilters)>[
+      (
+        'Compteur > 0',
+        filters.counterAboveZero,
+        filters.copyWith(counterAboveZero: !filters.counterAboveZero),
+      ),
+      (
+        'Téléchargements auto',
+        filters.autoDownload == true,
+        filters.autoDownload == true
+            ? filters.copyWith(clearAutoDownload: true)
+            : filters.copyWith(autoDownload: true),
+      ),
+      (
+        'Sans téléchargements auto',
+        filters.autoDownload == false,
+        filters.autoDownload == false
+            ? filters.copyWith(clearAutoDownload: true)
+            : filters.copyWith(autoDownload: false),
+      ),
+      (
+        'Maintenu à jour',
+        filters.keepUpdated == true,
+        filters.keepUpdated == true
+            ? filters.copyWith(clearKeepUpdated: true)
+            : filters.copyWith(keepUpdated: true),
+      ),
+      (
+        'Non maintenu à jour',
+        filters.keepUpdated == false,
+        filters.keepUpdated == false
+            ? filters.copyWith(clearKeepUpdated: true)
+            : filters.copyWith(keepUpdated: false),
       ),
     ];
 
-    return Material(
-      color: scheme.surfaceContainerHighest.withValues(alpha: 0.65),
-      child: SizedBox(
-        height: 48,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          itemCount: chips.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 8),
-          itemBuilder: (context, index) => chips[index],
-        ),
+    return SizedBox(
+      height: preferredSize.height,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        itemCount: chips.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 4),
+        itemBuilder: (context, index) {
+          final (label, selected, next) = chips[index];
+          return SelectionChip(
+            label: label,
+            selected: selected,
+            onSelected: () => onChanged(next),
+          );
+        },
       ),
     );
   }

@@ -11,7 +11,6 @@ import 'l10n/l10n.dart';
 import 'settings/settings_controller.dart';
 import 'ui/app_router.dart';
 import 'ui/widgets/player_keyboard_shortcuts.dart';
-import 'ui/widgets/startup_splash.dart';
 
 class PodavioApp extends ConsumerWidget {
   const PodavioApp({super.key});
@@ -53,9 +52,7 @@ class PodavioApp extends ConsumerWidget {
       builder: (context, child) => InterfaceLocale(
         locale: locale,
         child: PlayerKeyboardShortcuts(
-          child: PlaybackLifecycle(
-            child: StartupSplash(child: child ?? const SizedBox.shrink()),
-          ),
+          child: PlaybackLifecycle(child: child ?? const SizedBox.shrink()),
         ),
       ),
     );

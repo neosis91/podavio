@@ -22,6 +22,7 @@ import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/choice_dialog.dart';
 import 'widgets/messages.dart';
+import 'widgets/list_metrics.dart';
 import 'widgets/player_keyboard_shortcuts.dart';
 
 class AppearancePage extends ConsumerWidget {
@@ -39,7 +40,7 @@ class AppearancePage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text(context.tr('Interface'))),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 32),
+        padding: underChrome(context, const EdgeInsets.only(bottom: 32)),
         children: [
           ListTile(
             title: Text(context.tr('Language')),
@@ -605,7 +606,7 @@ class PlaybackPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text(context.tr('Playback'))),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 32),
+        padding: underChrome(context, const EdgeInsets.only(bottom: 32)),
         children: [
           _SectionTitle(context.tr('Controls')),
           ListTile(

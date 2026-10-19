@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../core/build_info.dart';
 import '../core/licenses.dart';
 import 'widgets/brand.dart';
+import 'widgets/frosted_header.dart';
 
 final _packageInfo = PackageInfo.fromPlatform();
 
@@ -24,8 +25,8 @@ class _LicensesPageState extends State<LicensesPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: Text(context.tr('Licenses'))),
+    return FrostedScaffold(
+      appBar: FrostedAppBar(title: Text(context.tr('Licenses'))),
       body: FutureBuilder<List<_PackageLicense>>(
         future: _licenses,
         builder: (context, snapshot) {
@@ -111,10 +112,10 @@ class _LicenseDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final creators = package.creators.join('\n');
-    return Scaffold(
-      appBar: AppBar(title: Text(package.displayName)),
+    return FrostedScaffold(
+      appBar: FrostedAppBar(title: Text(package.displayName)),
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: belowFrostedBar(context, const EdgeInsets.all(24)),
         children: [
           if (creators.isNotEmpty) ...[
             Text(

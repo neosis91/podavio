@@ -33,6 +33,28 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
+// Breeze dessine un liseré d’un pixel sous la barre de titre. Il reste visible
+// au-dessus de chaque page.
+static void suppress_header_bar_border(GtkWidget* header_bar) {
+  GtkCssProvider* provider = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(
+      provider,
+      "headerbar {"
+      "  border: none;"
+      "  box-shadow: none;"
+      "  background-image: none;"
+      "}"
+      "headerbar:backdrop {"
+      "  border: none;"
+      "  box-shadow: none;"
+      "}",
+      -1, nullptr);
+  gtk_style_context_add_provider(
+      gtk_widget_get_style_context(header_bar), GTK_STYLE_PROVIDER(provider),
+      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(provider);
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
@@ -61,6 +83,7 @@ static void my_application_activate(GApplication* application) {
     gtk_widget_show(GTK_WIDGET(header_bar));
     gtk_header_bar_set_title(header_bar, "Podavio");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
+    suppress_header_bar_border(GTK_WIDGET(header_bar));
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
     gtk_window_set_title(window, "Podavio");

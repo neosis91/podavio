@@ -94,6 +94,28 @@ class DragIndicatorIcon extends StatelessWidget {
   }
 }
 
+class LanguageIcon extends StatelessWidget {
+  const LanguageIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Image.asset(
+        'assets/brand/language.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.medium,
+        semanticLabel: 'Langues',
+      ),
+    );
+  }
+}
+
 class SettingsIcon extends StatelessWidget {
   const SettingsIcon({super.key, this.size = 24});
 
@@ -242,6 +264,25 @@ class QueueMusicIcon extends StatelessWidget {
       height: size,
       colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
       semanticsLabel: 'File d’attente',
+    );
+  }
+}
+
+class PlayCircleIcon extends StatelessWidget {
+  const PlayCircleIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return SvgPicture.asset(
+      'assets/brand/play_circle.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      semanticsLabel: 'Lire',
     );
   }
 }

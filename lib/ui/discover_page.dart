@@ -9,20 +9,20 @@ import '../l10n/l10n.dart';
 import '../data/discover_providers.dart';
 import '../data/feed_service.dart';
 import 'discover/discover_hit_actions.dart';
-import 'library_hub_page.dart';
 import 'discover/discover_search_host.dart';
 import 'more_page.dart';
 import 'podcasts_page.dart';
 import 'router.dart';
+import 'widgets/brand.dart';
 import 'widgets/cover.dart';
-import 'widgets/list_metrics.dart';
+import 'widgets/frosted_header.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/highlighted_text.dart';
 import 'widgets/messages.dart';
 
 export '../data/discover_providers.dart';
 
-const _quickSuggestions = 16;
+const _suggestionRows = 4;
 const _tabletBreakpoint = 600.0;
 const _coverGap = 8.0;
 const _minCover = 76.0;
@@ -36,14 +36,14 @@ int _coverColumns(double gridWidth) {
   return columns;
 }
 
-/// Nombre de suggestions et de colonnes pour que chaque ligne soit pleine.
+/// Quatre rangées pleines. Le nombre de colonnes suit la largeur.
 ({int columns, int count}) _suggestionGrid(int available, double gridWidth) {
-  final desired = _coverColumns(gridWidth);
-  final capped = available < _quickSuggestions ? available : _quickSuggestions;
-  if (capped <= 0) return (columns: desired, count: 0);
-  if (capped < desired) return (columns: capped, count: capped);
-  final count = capped - (capped % desired);
-  return (columns: desired, count: count);
+  final columns = _coverColumns(gridWidth);
+  if (available <= 0) return (columns: columns, count: 0);
+  final rows = available ~/ columns;
+  if (rows == 0) return (columns: available, count: available);
+  final shown = rows < _suggestionRows ? rows : _suggestionRows;
+  return (columns: columns, count: columns * shown);
 }
 
 class DiscoverPage extends ConsumerStatefulWidget {
@@ -82,8 +82,8 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
         !offline &&
         (search.isLoading || (search.hasValue && search.value != null));
 
-    return Scaffold(
-      appBar: AppBar(
+    return FrostedScaffold(
+      appBar: FrostedAppBar(
         title: searching
             ? TextField(
                 controller: searchController,
@@ -109,7 +109,12 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
               )
             : null,
         actions: [
-          if (!searching) const PreferencesButton(),
+          if (!searching)
+            IconButton(
+              tooltip: context.tr('Languages'),
+              onPressed: () => context.push(AppRoutes.discoverLanguages),
+              icon: const LanguageIcon(),
+            ),
           if (searching)
             IconButton(
               tooltip: 'Effacer',
@@ -298,8 +303,8 @@ class _DiscoverMorePageState extends ConsumerState<DiscoverMorePage>
     final width = MediaQuery.sizeOf(context).width;
     final columns = width >= _tabletBreakpoint ? 6 : 4;
 
-    return Scaffold(
-      appBar: AppBar(
+    return FrostedScaffold(
+      appBar: FrostedAppBar(
         title: searching
             ? TextField(
                 controller: searchController,
@@ -325,7 +330,12 @@ class _DiscoverMorePageState extends ConsumerState<DiscoverMorePage>
               )
             : null,
         actions: [
-          if (!searching) const PreferencesButton(),
+          if (!searching)
+            IconButton(
+              tooltip: context.tr('Languages'),
+              onPressed: () => context.push(AppRoutes.discoverLanguages),
+              icon: const LanguageIcon(),
+            ),
           if (searching)
             IconButton(
               tooltip: 'Effacer',
@@ -371,59 +381,68 @@ class _DiscoverMorePageState extends ConsumerState<DiscoverMorePage>
                   );
                 }
                 if (charts.hasMore && !charts.loadingMore) _fillIfShort();
-                return CustomScrollView(
-                  controller: _scroll,
-                  slivers: [
-                    SliverPadding(
-                      padding: underChrome(
-                        context,
-                        const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                      ),
-                      sliver: SliverMainAxisGroup(
-                        slivers: [
-                          SliverToBoxAdapter(
-                            child: Text(
-                              'Apple Podcasts · Podcast Index · fyyd',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                            ),
-                          ),
-                          const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                          SliverGrid(
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: columns,
-                                  crossAxisSpacing: 8,
-                                  mainAxisSpacing: 8,
-                                ),
-                            delegate: SliverChildBuilderDelegate((
-                              context,
-                              index,
-                            ) {
-                              return _DiscoverCover(
-                                hit: items[index],
-                                busy: busyHits.contains(items[index].dedupeKey),
-                                onOpen: openHit,
-                              );
-                            }, childCount: items.length),
-                          ),
-                          if (charts.loadingMore)
-                            const SliverToBoxAdapter(
-                              child: Padding(
-                                padding: EdgeInsets.symmetric(vertical: 24),
-                                child: Center(
-                                  child: CircularProgressIndicator(),
-                                ),
+                return MediaQuery.removePadding(
+                  context: context,
+                  removeTop: true,
+                  removeBottom: true,
+                  child: CustomScrollView(
+                    controller: _scroll,
+                    slivers: [
+                      SliverPadding(
+                        padding: belowFrostedBar(
+                          context,
+                          const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                        ),
+                        sliver: SliverMainAxisGroup(
+                          slivers: [
+                            SliverToBoxAdapter(
+                              child: Text(
+                                'Apple Podcasts · Podcast Index · fyyd',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
                               ),
                             ),
-                        ],
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 8),
+                            ),
+                            SliverGrid(
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: columns,
+                                    crossAxisSpacing: 8,
+                                    mainAxisSpacing: 8,
+                                  ),
+                              delegate: SliverChildBuilderDelegate((
+                                context,
+                                index,
+                              ) {
+                                return _DiscoverCover(
+                                  hit: items[index],
+                                  busy: busyHits.contains(
+                                    items[index].dedupeKey,
+                                  ),
+                                  onOpen: openHit,
+                                );
+                              }, childCount: items.length),
+                            ),
+                            if (charts.loadingMore)
+                              const SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 24),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 );
               },
             ),
@@ -452,14 +471,15 @@ class _DiscoverHomeBody extends ConsumerWidget {
     final theme = Theme.of(context);
 
     return ListView(
-      padding: underChrome(context, const EdgeInsets.only(bottom: 24)),
+      padding: belowFrostedBar(context, const EdgeInsets.only(bottom: 24)),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: LayoutBuilder(
             builder: (context, constraints) {
+              final columns = _coverColumns(constraints.maxWidth);
               final grid = _suggestionGrid(
-                charts.asData?.value.hits.length ?? _quickSuggestions,
+                charts.asData?.value.hits.length ?? columns * _suggestionRows,
                 constraints.maxWidth,
               );
               return charts.when(

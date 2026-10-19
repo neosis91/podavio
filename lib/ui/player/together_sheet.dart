@@ -58,9 +58,11 @@ class _TogetherSheetState extends ConsumerState<TogetherSheet> {
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(24, 0, 24, bottom > 0 ? 8 : 24),
-        child: together.role == TogetherRole.idle
-            ? _idle(context, together, hasEpisode, theme)
-            : _live(context, together, theme),
+        child: switch (together.role) {
+          TogetherRole.idle => _idle(context, together, hasEpisode, theme),
+          TogetherRole.host => _live(context, together, theme),
+          TogetherRole.guest => _guest(context, together, theme),
+        },
       ),
     );
   }
@@ -198,6 +200,37 @@ class _TogetherSheetState extends ConsumerState<TogetherSheet> {
               color: theme.colorScheme.error,
             ),
           ),
+        ],
+        const SizedBox(height: 20),
+        TextButton(
+          onPressed: () => ref.read(togetherProvider.notifier).leave(),
+          child: Text(context.tr('Leave')),
+        ),
+      ],
+    );
+  }
+
+  Widget _guest(
+    BuildContext context,
+    TogetherUiState together,
+    ThemeData theme,
+  ) {
+    final count = together.people;
+    final people = count <= 1
+        ? context.tr('1 person is listening.')
+        : context.tr('{count} people are listening.', {'count': '$count'});
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          together.room,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleLarge,
+        ),
+        if (count > 0) ...[
+          const SizedBox(height: 12),
+          Text(people, textAlign: TextAlign.center),
         ],
         const SizedBox(height: 20),
         TextButton(

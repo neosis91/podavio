@@ -133,6 +133,96 @@ void main() {
     );
   });
 
+  test('playback pages walk backward and prepend keeps queue order', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final sameDay = DateTime.utc(2024, 2, 1);
+    final podcastId = (await database.saveFeed(
+      FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: '',
+        description: '',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a',
+            title: 'A',
+            description: '',
+            audioUrl: 'https://example.com/a.mp3',
+            publishedAt: DateTime.utc(2024, 1, 1),
+          ),
+          EpisodeDraft(
+            guid: 'b',
+            title: 'B',
+            description: '',
+            audioUrl: 'https://example.com/b.mp3',
+            publishedAt: sameDay,
+          ),
+          EpisodeDraft(
+            guid: 'c',
+            title: 'C',
+            description: '',
+            audioUrl: 'https://example.com/c.mp3',
+            publishedAt: sameDay,
+          ),
+          EpisodeDraft(
+            guid: 'd',
+            title: 'D',
+            description: '',
+            audioUrl: 'https://example.com/d.mp3',
+            publishedAt: DateTime.utc(2024, 3, 1),
+          ),
+        ],
+      ),
+    )).podcastId;
+
+    final all = await database.readPlaybackPage(
+      podcastId: podcastId,
+      limit: 10,
+    );
+    expect(all.entries.map((entry) => entry.episode.title), [
+      'D',
+      'C',
+      'B',
+      'A',
+    ]);
+
+    final anchor = all.entries[2];
+    final before = await database.readPlaybackPage(
+      podcastId: podcastId,
+      before: anchor,
+      limit: 1,
+    );
+    expect(before.entries.single.episode.title, 'C');
+    expect(before.mayHaveMore, isTrue);
+
+    final earlier = await database.readPlaybackPage(
+      podcastId: podcastId,
+      before: before.entries.single,
+      limit: 10,
+    );
+    expect(earlier.entries.map((entry) => entry.episode.title), ['D']);
+    expect(earlier.mayHaveMore, isFalse);
+
+    final after = await database.readPlaybackPage(
+      podcastId: podcastId,
+      after: anchor,
+      limit: 10,
+    );
+    expect(after.entries.map((entry) => entry.episode.title), ['A']);
+
+    await database.replaceQueue([
+      before.entries.single.episode.id,
+      anchor.episode.id,
+      after.entries.single.episode.id,
+    ]);
+    await database.prependToQueue([
+      for (final entry in earlier.entries) entry.episode.id,
+    ]);
+    final queued = await database.watchEpisodeWindow(queuedOnly: true).first;
+    expect(queued.map((entry) => entry.episode.title), ['D', 'C', 'B', 'A']);
+  });
+
   test('subscriptions are ordered by latest episode date', () async {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);

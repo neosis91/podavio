@@ -110,6 +110,13 @@ void main() {
       TogetherIntentKind.pause,
     );
     expect(TogetherMessage.decode('nope'), isNull);
+
+    final room = TogetherRoomMessage('Essai', 2);
+    final decodedRoom = TogetherMessage.decode(room.encode());
+    expect(decodedRoom, isA<TogetherRoomMessage>());
+    final joined = decodedRoom! as TogetherRoomMessage;
+    expect(joined.name, 'Essai');
+    expect(joined.people, 2);
   });
 
   test('listen together strings exist in every language', () {
@@ -149,6 +156,7 @@ void main() {
       address: InternetAddress.loopbackIPv4,
     );
     addTearDown(host.close);
+    host.roomName = 'Essai';
     final names = host.peers.first;
     final intents = host.intents.first;
     final guest = await TogetherGuestLink.connect(
@@ -159,6 +167,11 @@ void main() {
     addTearDown(guest.close);
 
     expect(await names.timeout(const Duration(seconds: 2)), ['Ada']);
+    final room =
+        guest.latestRoom ??
+        await guest.room.first.timeout(const Duration(seconds: 2));
+    expect(room.name, 'Essai');
+    expect(room.people, 2);
 
     final states = guest.states.first;
     host.publish(snapshot());

@@ -10,6 +10,7 @@ import '../../settings/settings_controller.dart';
 import '../podcasts/podcast_feed_actions.dart';
 import '../widgets/choice_dialog.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/list_metrics.dart';
 import '../widgets/messages.dart';
 
 class PodcastSettingsPage extends ConsumerWidget {
@@ -64,7 +65,7 @@ class PodcastSettingsPage extends ConsumerWidget {
             ),
           ),
           body: ListView(
-            padding: const EdgeInsets.only(bottom: 32),
+            padding: underChrome(context, const EdgeInsets.only(bottom: 32)),
             children: [
               const _PodcastSettingsSection('Lecture'),
               _PodcastSpeedTile(
