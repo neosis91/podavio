@@ -41,6 +41,9 @@ class DiscoverCharts {
 
 class DiscoverChartsNotifier extends AsyncNotifier<DiscoverCharts> {
   static const pageSize = 16;
+
+  /// Assez pour quatre rangées même avec le maximum de colonnes.
+  static const firstBatch = 48;
   static const _maxPages = 40;
 
   var _page = 0;
@@ -110,7 +113,7 @@ class DiscoverChartsNotifier extends AsyncNotifier<DiscoverCharts> {
     _reset();
     final hits = <DiscoverHit>[];
     var hasMore = true;
-    while (hits.length < pageSize && hasMore && _page < _maxPages) {
+    while (hits.length < firstBatch && hasMore && _page < _maxPages) {
       final fresh = await _fetchFresh();
       if (fresh.isEmpty) {
         hasMore = false;

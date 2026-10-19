@@ -9,8 +9,10 @@ import '../player/playback_source.dart';
 import 'playlist_membership.dart';
 import 'router.dart';
 import 'widgets/empty_state.dart';
+import 'widgets/frosted_header.dart';
 import 'widgets/episode_list.dart';
 import 'widgets/episode_tile.dart';
+import 'widgets/list_play_button.dart';
 
 class PlaylistsPage extends ConsumerWidget {
   const PlaylistsPage({super.key});
@@ -18,8 +20,8 @@ class PlaylistsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final playlists = ref.watch(playlistsProvider);
-    return Scaffold(
-      appBar: AppBar(
+    return FrostedScaffold(
+      appBar: FrostedAppBar(
         title: Text(context.tr('Playlists')),
         actions: [
           IconButton(
@@ -66,8 +68,8 @@ class PlaylistPage extends ConsumerWidget {
         .where((item) => item.id == playlistId)
         .firstOrNull;
     if (playlist == null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(context.tr('Playlist'))),
+      return FrostedScaffold(
+        appBar: FrostedAppBar(title: Text(context.tr('Playlist'))),
         body: playlists.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => EmptyState(
@@ -82,10 +84,17 @@ class PlaylistPage extends ConsumerWidget {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
+    return FrostedScaffold(
+      appBar: FrostedAppBar(
         title: Text(playlist.name),
-        actions: [_PlaylistMenu(playlist: playlist, popOnDelete: true)],
+        actions: [
+          ListPlayButton(
+            query: playlist.isDefault
+                ? const EpisodeQuery(queuedOnly: true, paginated: false)
+                : EpisodeQuery(playlistId: playlist.id, paginated: false),
+          ),
+          _PlaylistMenu(playlist: playlist, popOnDelete: true),
+        ],
       ),
       body: playlist.isDefault
           ? EpisodeListBody(
@@ -135,7 +144,10 @@ class _CustomPlaylistBody extends ConsumerWidget {
           );
         }
         return ReorderableListView.builder(
-          padding: const EdgeInsets.only(top: 4, bottom: 24),
+          padding: belowFrostedBar(
+            context,
+            const EdgeInsets.only(top: 4, bottom: 24),
+          ),
           buildDefaultDragHandles: false,
           proxyDecorator: queueStyleDragProxy,
           itemCount: entries.length,

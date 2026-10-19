@@ -6,7 +6,7 @@ import '../../data/feed_service.dart';
 import '../router.dart';
 import '../widgets/cover.dart';
 import '../widgets/highlighted_text.dart';
-import '../widgets/list_metrics.dart';
+import '../widgets/frosted_header.dart';
 
 const _gridPadding = 16.0;
 const _gridSpacing = 16.0;
@@ -94,7 +94,10 @@ class PodcastGrid extends StatelessWidget {
             : 0.0;
         final textHeight = showNames ? gap + titleHeight : 0.0;
         return GridView.builder(
-          padding: underChrome(context, const EdgeInsets.all(_gridPadding)),
+          padding: belowFrostedBar(
+            context,
+            const EdgeInsets.all(_gridPadding),
+          ),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
             mainAxisSpacing: _gridSpacing,

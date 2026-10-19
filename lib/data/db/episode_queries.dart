@@ -62,14 +62,6 @@ mixin _EpisodeQueries on _$AppDatabase {
     );
   }
 
-  Stream<int> watchQueueCount() {
-    final count = episodes.id.count();
-    final query = selectOnly(episodes)
-      ..addColumns([count])
-      ..where(episodes.queueIndex.isNotNull());
-    return query.watch().map((rows) => rows.single.read(count) ?? 0);
-  }
-
   Stream<List<EpisodeEntry>> watchEpisodes({
     bool unreadOnly = false,
     bool favoritesOnly = false,
@@ -261,6 +253,13 @@ mixin _EpisodeQueries on _$AppDatabase {
     int? podcastId,
     int? playlistId,
     int? limit,
+    bool stableOrder = false,
+    int? afterEpisodeId,
+    DateTime? afterPublishedAt,
+    DateTime? afterLastPlayedAt,
+    bool afterByLastPlayed = false,
+    int? afterPlaylistPosition,
+    bool beforeAnchor = false,
   }) {
     final query = selectOnly(episodes)
       ..addColumns([
@@ -346,23 +345,106 @@ mixin _EpisodeQueries on _$AppDatabase {
       // Listes « bibliothèque » : masquer les aperçus Explorer.
       query.where(podcasts.subscribed.equals(true));
     }
+    if (afterEpisodeId != null) {
+      if (afterPlaylistPosition != null) {
+        query.where(
+          beforeAnchor
+              ? playlistEpisodes.position.isSmallerThanValue(
+                  afterPlaylistPosition,
+                )
+              : playlistEpisodes.position.isBiggerThanValue(
+                  afterPlaylistPosition,
+                ),
+        );
+      } else if (afterByLastPlayed) {
+        final playedAt = episodes.lastPlayedAt;
+        query.where(
+          afterLastPlayedAt == null
+              ? playedAt.isNull() &
+                    (beforeAnchor
+                        ? episodes.id.isBiggerThanValue(afterEpisodeId)
+                        : episodes.id.isSmallerThanValue(afterEpisodeId))
+              : beforeAnchor
+              ? playedAt.isBiggerThanValue(afterLastPlayedAt) |
+                    (playedAt.equals(afterLastPlayedAt) &
+                        episodes.id.isBiggerThanValue(afterEpisodeId))
+              : playedAt.isSmallerThanValue(afterLastPlayedAt) |
+                    (playedAt.equals(afterLastPlayedAt) &
+                        episodes.id.isSmallerThanValue(afterEpisodeId)),
+        );
+      } else if (afterPublishedAt == null) {
+        query.where(
+          beforeAnchor
+              ? episodes.publishedAt.isNotNull() |
+                    (episodes.publishedAt.isNull() &
+                        episodes.id.isBiggerThanValue(afterEpisodeId))
+              : episodes.publishedAt.isNull() &
+                    episodes.id.isSmallerThanValue(afterEpisodeId),
+        );
+      } else {
+        final published = episodes.publishedAt;
+        query.where(
+          beforeAnchor
+              ? published.isBiggerThanValue(afterPublishedAt) |
+                    (published.equals(afterPublishedAt) &
+                        episodes.id.isBiggerThanValue(afterEpisodeId))
+              : published.isSmallerThanValue(afterPublishedAt) |
+                    (published.equals(afterPublishedAt) &
+                        episodes.id.isSmallerThanValue(afterEpisodeId)),
+        );
+      }
+    }
+    final tie = !stableOrder
+        ? null
+        : beforeAnchor
+        ? OrderingTerm.asc(episodes.id)
+        : OrderingTerm.desc(episodes.id);
+    final newestFirst = !beforeAnchor;
     if (randomOrder) {
       query.orderBy([OrderingTerm.random()]);
     } else if (inProgressOnly) {
-      query.orderBy([OrderingTerm.desc(episodes.lastPlayedAt)]);
+      query.orderBy([
+        newestFirst
+            ? OrderingTerm.desc(episodes.lastPlayedAt)
+            : OrderingTerm.asc(episodes.lastPlayedAt),
+        ?tie,
+      ]);
     } else if (recentDownloads) {
       query.orderBy([
-        OrderingTerm.desc(episodes.downloadedAt),
-        OrderingTerm.desc(episodes.publishedAt),
+        newestFirst
+            ? OrderingTerm.desc(episodes.downloadedAt)
+            : OrderingTerm.asc(episodes.downloadedAt),
+        newestFirst
+            ? OrderingTerm.desc(episodes.publishedAt)
+            : OrderingTerm.asc(episodes.publishedAt),
+        ?tie,
       ]);
     } else if (queuedOnly) {
       query.orderBy([OrderingTerm.asc(episodes.queueIndex)]);
     } else if (playlistId != null) {
-      query.orderBy([OrderingTerm.asc(playlistEpisodes.position)]);
+      query.orderBy([
+        newestFirst
+            ? OrderingTerm.asc(playlistEpisodes.position)
+            : OrderingTerm.desc(playlistEpisodes.position),
+        if (stableOrder)
+          newestFirst
+              ? OrderingTerm.asc(episodes.id)
+              : OrderingTerm.desc(episodes.id),
+      ]);
     } else if (historyOnly) {
-      query.orderBy([OrderingTerm.desc(episodes.lastPlayedAt)]);
+      query.orderBy([
+        newestFirst
+            ? OrderingTerm.desc(episodes.lastPlayedAt)
+            : OrderingTerm.asc(episodes.lastPlayedAt),
+        ?tie,
+      ]);
     } else {
-      query.orderBy([OrderingTerm.desc(episodes.publishedAt)]);
+      query.orderBy([
+        newestFirst
+            ? OrderingTerm.desc(episodes.publishedAt)
+            : OrderingTerm.asc(episodes.publishedAt),
+        ?tie,
+      ]);
     }
     if (limit != null) query.limit(limit);
     return query.map(
@@ -564,6 +646,129 @@ mixin _EpisodeQueries on _$AppDatabase {
 
   Future<void> setQueueOrder(List<int> episodeIds) {
     return transaction(() async {
+      for (var index = 0; index < episodeIds.length; index++) {
+        await (update(episodes)
+              ..where((table) => table.id.equals(episodeIds[index])))
+            .write(EpisodesCompanion(queueIndex: Value(index)));
+      }
+    });
+  }
+
+  /// Page suivante d’une liste, sans charger le reste.
+  ///
+  /// [after] est exclu. L’ordre est celui de la liste, avec l’id pour
+  /// départager les dates identiques. [mayHaveMore] est vrai quand la page
+  /// SQL était pleine, donc une suite reste possible.
+  Future<({List<EpisodeEntry> entries, bool mayHaveMore})> readPlaybackPage({
+    bool unreadOnly = false,
+    bool favoritesOnly = false,
+    bool downloadsOnly = false,
+    bool queuedOnly = false,
+    bool historyOnly = false,
+    bool inProgressOnly = false,
+    int? podcastId,
+    int? playlistId,
+    String search = '',
+    EpisodeEntry? after,
+    EpisodeEntry? before,
+    int limit = 40,
+  }) async {
+    final anchor = before ?? after;
+    final byPlayed = historyOnly || inProgressOnly;
+    final afterId = anchor?.episode.id;
+    final rows = await _episodeWindow(
+      unreadOnly: unreadOnly,
+      favoritesOnly: favoritesOnly,
+      downloadsOnly: downloadsOnly,
+      queuedOnly: queuedOnly,
+      historyOnly: historyOnly,
+      inProgressOnly: inProgressOnly,
+      podcastId: podcastId,
+      playlistId: playlistId,
+      limit: limit,
+      stableOrder: true,
+      afterEpisodeId: afterId,
+      afterByLastPlayed: byPlayed,
+      afterLastPlayedAt: byPlayed ? anchor?.episode.lastPlayedAt : null,
+      afterPublishedAt: byPlayed || playlistId != null
+          ? null
+          : anchor?.episode.publishedAt,
+      afterPlaylistPosition: afterId == null || playlistId == null
+          ? null
+          : await _playlistPosition(playlistId, afterId),
+      beforeAnchor: before != null,
+    ).get();
+    final needle = search.trim();
+    final entries = needle.isEmpty
+        ? rows
+        : [
+            for (final entry in rows)
+              if (searchMatch(entry.episode.title, needle) ||
+                  searchMatch(entry.podcast.title, needle))
+                entry,
+          ];
+    return (
+      entries: before != null ? entries.reversed.toList() : entries,
+      mayHaveMore: rows.length >= limit,
+    );
+  }
+
+  Future<int?> _playlistPosition(int playlistId, int episodeId) async {
+    final row =
+        await (select(playlistEpisodes)..where(
+              (table) =>
+                  table.playlistId.equals(playlistId) &
+                  table.episodeId.equals(episodeId),
+            ))
+            .getSingleOrNull();
+    return row?.position;
+  }
+
+  /// Place [episodeIds] en tête de file, dans cet ordre.
+  Future<void> prependToQueue(List<int> episodeIds) {
+    if (episodeIds.isEmpty) return Future.value();
+    return transaction(() async {
+      await customUpdate(
+        'UPDATE episodes SET queue_index = queue_index + ? '
+        'WHERE queue_index IS NOT NULL',
+        variables: [Variable<int>(episodeIds.length)],
+        updates: {episodes},
+      );
+      for (var index = 0; index < episodeIds.length; index++) {
+        await (update(episodes)
+              ..where((table) => table.id.equals(episodeIds[index])))
+            .write(EpisodesCompanion(queueIndex: Value(index)));
+      }
+    });
+  }
+
+  /// Ajoute [episodeIds] à la fin de la file, sans toucher à ceux déjà dedans.
+  Future<void> appendToQueue(List<int> episodeIds) {
+    if (episodeIds.isEmpty) return Future.value();
+    return transaction(() async {
+      final max = episodes.queueIndex.max();
+      final row =
+          await (selectOnly(episodes)
+                ..addColumns([max])
+                ..where(episodes.queueIndex.isNotNull()))
+              .getSingle();
+      var next = (row.read(max) ?? -1) + 1;
+      for (final id in episodeIds) {
+        final updated =
+            await (update(episodes)..where(
+                  (table) => table.id.equals(id) & table.queueIndex.isNull(),
+                ))
+                .write(EpisodesCompanion(queueIndex: Value(next)));
+        if (updated > 0) next++;
+      }
+    });
+  }
+
+  /// Vide la file, puis y place [episodeIds] dans cet ordre.
+  Future<void> replaceQueue(List<int> episodeIds) {
+    return transaction(() async {
+      await (update(episodes)..where((table) => table.queueIndex.isNotNull()))
+          .write(const EpisodesCompanion(queueIndex: Value(null)));
       for (var index = 0; index < episodeIds.length; index++) {
         await (update(episodes)
               ..where((table) => table.id.equals(episodeIds[index])))

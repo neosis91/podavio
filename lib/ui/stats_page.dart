@@ -10,6 +10,7 @@ import '../data/providers.dart';
 import 'router.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
+import 'widgets/frosted_header.dart';
 
 class StatsPage extends ConsumerWidget {
   const StatsPage({super.key});
@@ -19,8 +20,8 @@ class StatsPage extends ConsumerWidget {
     final stats = ref.watch(libraryStatsProvider);
     return DefaultTabController(
       length: 3,
-      child: Scaffold(
-        appBar: AppBar(
+      child: FrostedScaffold(
+        appBar: FrostedAppBar(
           title: Text(context.tr('Statistics')),
           bottom: const TabBar(
             tabs: [
@@ -65,7 +66,7 @@ class _SubscriptionsTab extends StatelessWidget {
 
     final theme = Theme.of(context);
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: belowFrostedBar(context, const EdgeInsets.only(bottom: 24)),
       itemCount: stats.subscriptions.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {
@@ -179,7 +180,10 @@ class _YearsTabState extends State<_YearsTab> {
         .clamp(1, 1 << 30);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      padding: belowFrostedBar(
+        context,
+        const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      ),
       children: [
         if (stats.years.length > 1) ...[
           SizedBox(
@@ -399,7 +403,7 @@ class _DownloadsTab extends StatelessWidget {
         .clamp(1, 1 << 62);
 
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: belowFrostedBar(context, const EdgeInsets.only(bottom: 24)),
       itemCount: stats.downloads.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {

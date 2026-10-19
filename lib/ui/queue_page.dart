@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/providers.dart';
 import '../l10n/l10n.dart';
 import 'widgets/empty_state.dart';
+import 'widgets/frosted_header.dart';
 import 'widgets/episode_list.dart';
 
 class QueuePage extends ConsumerWidget {
@@ -11,8 +12,8 @@ class QueuePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      appBar: AppBar(title: Text(context.tr('Playlist'))),
+    return FrostedScaffold(
+      appBar: FrostedAppBar(title: Text(context.tr('Playlist'))),
       body: EpisodeListBody(
         queueStyle: true,
         query: const EpisodeQuery(queuedOnly: true, paginated: false),

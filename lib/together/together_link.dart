@@ -14,6 +14,7 @@ class TogetherHostLink {
   final _intents = StreamController<TogetherIntent>.broadcast();
   TogetherSnapshot? _last;
   var _closed = false;
+  var roomName = '';
 
   int get port => _server.port;
 
@@ -80,6 +81,7 @@ class TogetherHostLink {
 
   void _emitPeers() {
     if (!_peers.isClosed) _peers.add(peerNames);
+    _sendAll(TogetherRoomMessage(roomName, _names.length + 1).encode());
   }
 
   void _sendAll(String data) {
@@ -95,9 +97,13 @@ class TogetherGuestLink {
 
   final WebSocket _socket;
   final _states = StreamController<TogetherSnapshot>.broadcast();
+  final _room = StreamController<TogetherRoomMessage>.broadcast();
+  TogetherRoomMessage? latestRoom;
   var _closed = false;
 
   Stream<TogetherSnapshot> get states => _states.stream;
+
+  Stream<TogetherRoomMessage> get room => _room.stream;
 
   static Future<TogetherGuestLink> connect({
     required String host,
@@ -122,17 +128,22 @@ class TogetherGuestLink {
     _closed = true;
     await _socket.close();
     await _states.close();
+    await _room.close();
   }
 
   void _onData(Object? data) {
     final message = TogetherMessage.decode(data);
     if (message is TogetherStateMessage && !_states.isClosed) {
       _states.add(message.snapshot);
+    } else if (message is TogetherRoomMessage) {
+      latestRoom = message;
+      if (!_room.isClosed) _room.add(message);
     }
   }
 
   void _end() {
     _closed = true;
     if (!_states.isClosed) _states.close();
+    if (!_room.isClosed) _room.close();
   }
 }

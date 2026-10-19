@@ -14,6 +14,7 @@ import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
+import 'widgets/frosted_header.dart';
 import 'widgets/episode_tile.dart';
 import 'widgets/show_notes.dart';
 
@@ -28,8 +29,8 @@ class EpisodePage extends ConsumerWidget {
     return episode.when(
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (error, _) => Scaffold(
-        appBar: AppBar(),
+      error: (error, _) => FrostedScaffold(
+        appBar: FrostedAppBar(),
         body: EmptyState(
           title: 'Épisode indisponible',
           message: error.toString(),
@@ -37,8 +38,8 @@ class EpisodePage extends ConsumerWidget {
       ),
       data: (entry) {
         if (entry == null) {
-          return Scaffold(
-            appBar: AppBar(),
+          return FrostedScaffold(
+            appBar: FrostedAppBar(),
             body: const EmptyState(
               title: 'Épisode introuvable',
               message: 'Cet épisode n’est plus dans la bibliothèque.',
@@ -98,8 +99,8 @@ class _EpisodeDetail extends ConsumerWidget {
       settingsProvider.select((s) => s.preferPodcastCover),
     );
 
-    return Scaffold(
-      appBar: AppBar(
+    return FrostedScaffold(
+      appBar: FrostedAppBar(
         title: Text(entry.podcast.title, overflow: TextOverflow.ellipsis),
       ),
       body: Align(
@@ -107,7 +108,10 @@ class _EpisodeDetail extends ConsumerWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            padding: belowFrostedBar(
+              context,
+              const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            ),
             children: [
               Center(
                 child: PodcastCover(

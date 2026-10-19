@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/providers.dart';
 import '../l10n/l10n.dart';
 import 'widgets/empty_state.dart';
+import 'widgets/frosted_header.dart';
 import 'widgets/episode_list.dart';
+import 'widgets/list_play_button.dart';
 
 class FavoritesPage extends ConsumerWidget {
   const FavoritesPage({super.key});
@@ -49,8 +51,11 @@ class _LibraryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(context.tr(title))),
+    return FrostedScaffold(
+      appBar: FrostedAppBar(
+        title: Text(context.tr(title)),
+        actions: [ListPlayButton(query: query)],
+      ),
       body: EpisodeListBody(
         query: query,
         queueStyle: true,

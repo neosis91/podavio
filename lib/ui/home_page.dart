@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,18 +19,20 @@ import 'player/together_sheet.dart';
 import 'podcasts/podcast_feed_actions.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
+import 'widgets/frosted_header.dart';
 import 'widgets/cover.dart';
 import 'widgets/playing_cover.dart';
 import 'widgets/episode_tile.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/list_metrics.dart';
+import 'widgets/selection_chip.dart';
 
-String _homeGreeting() {
+String _homeGreeting(BuildContext context) {
   final hour = DateTime.now().hour;
-  if (hour >= 6 && hour <= 12) return 'Bonjour';
-  if (hour >= 13 && hour <= 17) return 'Bon après-midi';
-  if (hour >= 18 && hour <= 23) return 'Bonsoir';
-  return 'Bonne nuit';
+  if (hour >= 6 && hour <= 12) return context.tr('Good morning');
+  if (hour >= 13 && hour <= 17) return context.tr('Good afternoon');
+  if (hour >= 18 && hour <= 23) return context.tr('Good evening');
+  return context.tr('Good night');
 }
 
 class HomePage extends ConsumerStatefulWidget {
@@ -115,9 +115,23 @@ class _HomePageState extends ConsumerState<HomePage> {
         played.isNotEmpty ||
         random.isNotEmpty ||
         downloads.isNotEmpty;
+    final categoryCover = category == null
+        ? null
+        : _firstCategoryCover(
+            ref.watch(homeCategoryHitsProvider(category)).value,
+          );
     return Scaffold(
       body: Stack(
         children: [
+          if (categoryCover != null || (category == null && shelves.isNotEmpty))
+            Positioned.fill(
+              child: _HomePageWash(
+                scroll: _scroll,
+                entry: categoryCover == null ? shelves.first.entry : null,
+                podcast: categoryCover == null ? shelves.first.podcast : null,
+                imageUrl: categoryCover,
+              ),
+            ),
           if (category != null)
             _CategoryHome(
               scroll: _scroll,
@@ -160,19 +174,11 @@ class _HomePageState extends ConsumerState<HomePage> {
           else
             ListView(
               controller: _scroll,
-              padding: underChrome(context, const EdgeInsets.only(bottom: 24)),
-              children: [
-                for (var i = 0; i < shelves.length; i++)
-                  if (i == 0)
-                    _ShelfWash(
-                      topGap: headerTop,
-                      entry: shelves[i].entry,
-                      podcast: shelves[i].podcast,
-                      child: shelves[i].shelf,
-                    )
-                  else
-                    shelves[i].shelf,
-              ],
+              padding: underChrome(
+                context,
+                EdgeInsets.only(top: headerTop, bottom: 24),
+              ),
+              children: [for (final shelf in shelves) shelf.shelf],
             ),
           Positioned(
             top: 0,
@@ -189,6 +195,17 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
     );
   }
+}
+
+String? _firstCategoryCover(List<HomeCategoryShelf>? shelves) {
+  if (shelves == null) return null;
+  for (final shelf in shelves) {
+    for (final hit in shelf.hits) {
+      final url = hit.imageUrl?.trim();
+      if (url != null && url.isNotEmpty) return url;
+    }
+  }
+  return null;
 }
 
 /// Hauteur de la barre (hors encoche), identique à l’ancien toolbar.
@@ -327,72 +344,56 @@ class _HomeHeaderOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final surface = theme.colorScheme.surface;
-    final frostAlpha = surface.computeLuminance() >= 0.5 ? 0.35 : 0.55;
     final top = MediaQuery.paddingOf(context).top;
     return SizedBox(
       height: top + _headerToolbar,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(end: scrolled ? 1 : 0),
-        duration: const Duration(milliseconds: 300),
-        builder: (context, t, child) {
-          final tint = ColoredBox(
-            color: surface.withValues(alpha: frostAlpha * t),
-            child: const SizedBox.expand(),
-          );
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              if (t > 0)
-                ClipRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 24 * t, sigmaY: 24 * t),
-                    child: tint,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FrostedHeaderBackdrop(scrolled: scrolled),
+          Padding(
+            padding: EdgeInsets.only(top: top),
+            child: Column(
+              children: [
+                SizedBox(
+                  height: _headerBrand,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16, right: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const PodavioLogo(width: 118),
+                              const SizedBox(height: 4),
+                              Text(
+                                _homeGreeting(context),
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const HistoryButton(),
+                        const _TogetherButton(),
+                        const PreferencesButton(),
+                      ],
+                    ),
                   ),
                 ),
-              Padding(
-                padding: EdgeInsets.only(top: top),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      height: _headerBrand,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 16, right: 4),
-                        child: child,
-                      ),
-                    ),
-                    SizedBox(
-                      height: _headerChips,
-                      child: _HomeChips(
-                        categories: categories,
-                        selected: selected,
-                        onSelected: onSelected,
-                      ),
-                    ),
-                  ],
+                SizedBox(
+                  height: _headerChips,
+                  child: _HomeChips(
+                    categories: categories,
+                    selected: selected,
+                    onSelected: onSelected,
+                  ),
                 ),
-              ),
-            ],
-          );
-        },
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const PodavioLogo(width: 118),
-                  const SizedBox(height: 4),
-                  Text(_homeGreeting(), style: theme.textTheme.bodySmall),
-                ],
-              ),
+              ],
             ),
-            const HistoryButton(),
-            const _TogetherButton(),
-            const PreferencesButton(),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -419,60 +420,19 @@ class _HomeChips extends StatelessWidget {
       separatorBuilder: (_, _) => const SizedBox(width: 4),
       itemBuilder: (context, index) {
         if (index == 0) {
-          return _HomeFilterChip(
+          return SelectionChip(
             label: context.tr('All'),
             selected: selected == null,
-            onTap: () => onSelected(null),
+            onSelected: () => onSelected(null),
           );
         }
         final id = ids[index - 1];
-        return _HomeFilterChip(
+        return SelectionChip(
           label: context.tr(homeCategoryTitle(id)),
           selected: selected == id,
-          onTap: () => onSelected(id),
+          onSelected: () => onSelected(id),
         );
       },
-    );
-  }
-}
-
-/// Pastille de l’accueil : plein `primary` si elle est choisie, sinon seulement
-/// un contour, comme les chips de SimpMusic. Pas de coche.
-class _HomeFilterChip extends StatelessWidget {
-  const _HomeFilterChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return FilterChip(
-      label: Text(label),
-      selected: selected,
-      showCheckmark: false,
-      visualDensity: VisualDensity.compact,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      elevation: 0,
-      pressElevation: 0,
-      shape: const StadiumBorder(),
-      side: BorderSide(
-        color: selected ? Colors.transparent : scheme.outlineVariant,
-      ),
-      color: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) return scheme.primary;
-        return Colors.transparent;
-      }),
-      labelStyle: TextStyle(
-        color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
-        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-      ),
-      onSelected: (_) => onTap(),
     );
   }
 }
@@ -748,10 +708,15 @@ class _ContinueShelf extends ConsumerWidget {
           height: rows * _quickRowHeight,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final itemWidth = (constraints.maxWidth - 30).clamp(
-                220.0,
-                constraints.maxWidth,
-              );
+              // Deux colonnes visibles dès que chacune reste lisible.
+              final columns = constraints.maxWidth >= 640 ? 2 : 1;
+              final overflow = entries.length > rows * columns;
+              final itemWidth = columns == 1
+                  ? (constraints.maxWidth - 30).clamp(
+                      220.0,
+                      constraints.maxWidth,
+                    )
+                  : (constraints.maxWidth - 12 - (overflow ? 28 : 0)) / 2;
               return GridView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -856,26 +821,27 @@ class _ContinueRow extends ConsumerWidget {
   }
 }
 
-/// Dégradé de la première étagère, calé sur la pochette, qui s’éteint
-/// vers le fond de la page.
-class _ShelfWash extends ConsumerStatefulWidget {
-  const _ShelfWash({
-    required this.topGap,
-    required this.child,
+/// Teinte de la pochette sur toute la page, en fondu depuis l’angle gauche.
+///
+/// Elle est calée sur le haut du contenu et part avec le défilement.
+class _HomePageWash extends ConsumerStatefulWidget {
+  const _HomePageWash({
+    required this.scroll,
     this.entry,
     this.podcast,
+    this.imageUrl,
   });
 
-  final double topGap;
+  final ScrollController scroll;
   final EpisodeEntry? entry;
   final Podcast? podcast;
-  final Widget child;
+  final String? imageUrl;
 
   @override
-  ConsumerState<_ShelfWash> createState() => _ShelfWashState();
+  ConsumerState<_HomePageWash> createState() => _HomePageWashState();
 }
 
-class _ShelfWashState extends ConsumerState<_ShelfWash> {
+class _HomePageWashState extends ConsumerState<_HomePageWash> {
   Color? _color;
   String? _loaded;
 
@@ -886,10 +852,11 @@ class _ShelfWashState extends ConsumerState<_ShelfWash> {
   }
 
   @override
-  void didUpdateWidget(_ShelfWash oldWidget) {
+  void didUpdateWidget(_HomePageWash oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.entry?.episode.id != widget.entry?.episode.id ||
-        oldWidget.podcast?.id != widget.podcast?.id) {
+        oldWidget.podcast?.id != widget.podcast?.id ||
+        oldWidget.imageUrl != widget.imageUrl) {
       _load();
     }
   }
@@ -911,7 +878,9 @@ class _ShelfWashState extends ConsumerState<_ShelfWash> {
     final path =
         entry?.imagePath(preferPodcastCover: prefer) ?? podcast?.imagePath;
     final url =
-        entry?.imageUrl(preferPodcastCover: prefer) ?? podcast?.imageUrl;
+        widget.imageUrl ??
+        entry?.imageUrl(preferPodcastCover: prefer) ??
+        podcast?.imageUrl;
     final source = podcast ?? entry?.podcast;
     final request = '${path ?? ''}\n${url ?? ''}';
     if (request == _loaded) return;
@@ -932,6 +901,7 @@ class _ShelfWashState extends ConsumerState<_ShelfWash> {
         current?.imagePath(preferPodcastCover: prefer) ??
         currentPodcast?.imagePath;
     final currentUrl =
+        widget.imageUrl ??
         current?.imageUrl(preferPodcastCover: prefer) ??
         currentPodcast?.imageUrl;
     if ('${currentPath ?? ''}\n${currentUrl ?? ''}' != request) return;
@@ -954,26 +924,31 @@ class _ShelfWashState extends ConsumerState<_ShelfWash> {
     );
     final surface = Theme.of(context).colorScheme.surface;
     final tint = tintFromCover ? _color : null;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: tint == null
-            ? null
-            : LinearGradient(
-                begin: const Alignment(-1, -0.2),
-                end: const Alignment(0.4, 1),
-                colors: [
-                  tint.withValues(alpha: 0.5),
-                  tint.withValues(alpha: 0.18),
-                  surface.withValues(alpha: 0),
-                ],
-                stops: const [0, 0.42, 1],
-              ),
-      ),
-      child: Column(
-        children: [
-          SizedBox(height: widget.topGap),
-          widget.child,
-        ],
+    return AnimatedBuilder(
+      animation: widget.scroll,
+      builder: (context, child) {
+        final offset = widget.scroll.hasClients ? widget.scroll.offset : 0.0;
+        return Transform.translate(offset: Offset(0, -offset), child: child);
+      },
+      child: IgnorePointer(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            gradient: tint == null
+                ? null
+                : RadialGradient(
+                    center: Alignment.topLeft,
+                    radius: 1.45,
+                    colors: [
+                      tint.withValues(alpha: 0.55),
+                      tint.withValues(alpha: 0.2),
+                      surface.withValues(alpha: 0),
+                    ],
+                    stops: const [0, 0.36, 0.72],
+                  ),
+          ),
+        ),
       ),
     );
   }

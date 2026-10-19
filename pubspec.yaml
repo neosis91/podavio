@@ -65,6 +65,7 @@ dependencies:
   saf_stream: ^4.0.1
   saf_util: ^3.1.1
   flutter_svg: ^2.3.0
+  circle_flags: ^5.0.1
   fl_chart: ^1.2.0
   flutter_cache_manager: ^3.4.5
   url_launcher: ^6.3.2
@@ -109,10 +110,12 @@ flutter:
     - assets/brand/skip_previous.svg
     - assets/brand/keyboard_arrow_down.svg
     - assets/brand/play_arrow.svg
+    - assets/brand/play_circle.svg
     - assets/brand/pause.svg
     - assets/brand/drag_indicator.svg
     - assets/brand/info.svg
     - assets/brand/settings.svg
+    - assets/brand/language.png
     - assets/brand/timer.svg
     - assets/brand/share.svg
     - assets/brand/podcasts.svg
@@ -127,6 +130,7 @@ flutter:
     - assets/brand/keyboard_double_arrow_down.svg
     - assets/brand/delete.svg
     - assets/brand/history.svg
+    - assets/flags/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

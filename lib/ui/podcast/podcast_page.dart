@@ -11,7 +11,9 @@ import '../../player/playback_source.dart';
 import '../../settings/settings_controller.dart';
 import '../router.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/frosted_header.dart';
 import '../widgets/episode_tile.dart';
+import '../widgets/list_play_button.dart';
 import '../widgets/messages.dart';
 import 'podcast_header.dart';
 
@@ -33,8 +35,8 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     return podcast.when(
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (error, _) => Scaffold(
-        appBar: AppBar(),
+      error: (error, _) => FrostedScaffold(
+        appBar: FrostedAppBar(),
         body: EmptyState(
           title: 'Podcast introuvable',
           message: error.toString(),
@@ -42,15 +44,15 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
       ),
       data: (item) {
         if (item == null) {
-          return Scaffold(
-            appBar: AppBar(),
+          return FrostedScaffold(
+            appBar: FrostedAppBar(),
             body: const EmptyState(
               title: 'Podcast introuvable',
               message: 'Cet abonnement n’est plus dans la bibliothèque.',
             ),
           );
         }
-        return Scaffold(
+        return FrostedScaffold(
           body: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
               if (notification is! ScrollUpdateNotification &&
@@ -92,8 +94,15 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
       slivers: [
         SliverAppBar(
           pinned: true,
+          forceMaterialTransparency: true,
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          flexibleSpace: const FrostedHeaderBackdrop(),
           title: Text(item.title, overflow: TextOverflow.ellipsis),
           actions: [
+            ListPlayButton(query: EpisodeQuery(podcastId: widget.podcastId)),
             IconButton(
               tooltip: 'Actualiser ce flux',
               onPressed: () => _refresh(context, ref, item.feedUrl),

@@ -15,7 +15,7 @@ Podavio est un lecteur de podcasts pour Android, iOS, Windows, macOS et Linux. O
 
 ## Prérequis
 
-- [Flutter](https://docs.flutter.dev/install) 3.47, canal stable
+- [Flutter](https://docs.flutter.dev/install) 3.47.7, canal stable
 - Pour Linux : CMake, Ninja, Clang, GTK 3 et mpv (`sudo pacman -S cmake ninja clang gtk3 mpv`)
 - Pour Android : Android SDK
 - Pour iOS et macOS : Xcode, sur un Mac
