@@ -259,7 +259,13 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       after: entry,
       limit: _queuePageSize - 1,
     );
-    final slice = [...earlier.entries, entry, ...later.entries];
+    // `earlier` = côté « avant » de la liste (plus récent si date DESC).
+    // `later` = côté « après » (plus ancien). Pour un podcast on écoute vers
+    // le plus récent : plus anciens → en cours → plus récents.
+    final towardNewer = source.playsTowardNewer;
+    final slice = towardNewer
+        ? [...later.entries.reversed, entry, ...earlier.entries.reversed]
+        : [...earlier.entries, entry, ...later.entries];
     if (_disposed || !ref.mounted || slice.isEmpty) return;
     await ref.read(databaseProvider).replaceQueue([
       for (final item in slice) item.episode.id,
@@ -268,8 +274,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       source: source,
       head: slice.first,
       cursor: slice.last,
-      exhaustedBefore: !earlier.mayHaveMore,
-      exhausted: !later.mayHaveMore,
+      towardNewer: towardNewer,
+      exhaustedBefore: towardNewer
+          ? !later.mayHaveMore
+          : !earlier.mayHaveMore,
+      exhausted: towardNewer ? !earlier.mayHaveMore : !later.mayHaveMore,
     );
   }
 
@@ -305,16 +314,20 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
     _extendingQueue = true;
     try {
-      final page = await _readQueuePage(feed.source, before: feed.head);
+      // Vers le plus récent : la tête est le plus ancien → page « after ».
+      final page = feed.towardNewer
+          ? await _readQueuePage(feed.source, after: feed.head)
+          : await _readQueuePage(feed.source, before: feed.head);
       if (_disposed || !ref.mounted) return 0;
       if (page.entries.isEmpty) {
         feed.exhaustedBefore = true;
         return 0;
       }
-      await ref.read(databaseProvider).prependToQueue([
-        for (final item in page.entries) item.episode.id,
-      ]);
-      feed.head = page.entries.first;
+      final ids = feed.towardNewer
+          ? [for (final item in page.entries.reversed) item.episode.id]
+          : [for (final item in page.entries) item.episode.id];
+      await ref.read(databaseProvider).prependToQueue(ids);
+      feed.head = feed.towardNewer ? page.entries.last : page.entries.first;
       if (!page.mayHaveMore) feed.exhaustedBefore = true;
       return page.entries.length;
     } finally {
@@ -327,16 +340,20 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (feed == null || feed.exhausted || _extendingQueue || _disposed) return;
     _extendingQueue = true;
     try {
-      final page = await _readQueuePage(feed.source, after: feed.cursor);
+      // Vers le plus récent : le curseur est le plus récent → page « before ».
+      final page = feed.towardNewer
+          ? await _readQueuePage(feed.source, before: feed.cursor)
+          : await _readQueuePage(feed.source, after: feed.cursor);
       if (_disposed || !ref.mounted) return;
       if (page.entries.isEmpty) {
         feed.exhausted = true;
         return;
       }
-      await ref.read(databaseProvider).appendToQueue([
-        for (final item in page.entries) item.episode.id,
-      ]);
-      feed.cursor = page.entries.last;
+      final ids = feed.towardNewer
+          ? [for (final item in page.entries.reversed) item.episode.id]
+          : [for (final item in page.entries) item.episode.id];
+      await ref.read(databaseProvider).appendToQueue(ids);
+      feed.cursor = feed.towardNewer ? page.entries.first : page.entries.last;
       if (!page.mayHaveMore) feed.exhausted = true;
     } finally {
       _extendingQueue = false;
@@ -1251,6 +1268,7 @@ class _QueueFeed {
     required this.source,
     required this.head,
     required this.cursor,
+    required this.towardNewer,
     required this.exhaustedBefore,
     required this.exhausted,
   });
@@ -1258,6 +1276,9 @@ class _QueueFeed {
   final PlaybackSource source;
   EpisodeEntry head;
   EpisodeEntry cursor;
+
+  /// File ordonnée du plus ancien au plus récent (podcast, etc.).
+  final bool towardNewer;
   bool exhaustedBefore;
   bool exhausted;
 }

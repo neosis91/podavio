@@ -13,6 +13,7 @@ import '../l10n/l10n.dart';
 import '../data/app_release.dart';
 import '../data/discover_languages.dart';
 import '../data/feed_refresh_controller.dart';
+import '../data/html_export.dart';
 import '../data/opml.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
@@ -262,6 +263,23 @@ class BackupRestorePage extends ConsumerWidget {
             subtitle: const Text('Fichier OPML'),
             onTap: () => _exportOpml(context, ref),
           ),
+          const _SectionTitle('HTML'),
+          ListTile(
+            leading: const Icon(Icons.language_outlined),
+            title: const Text('Exporter les abonnements'),
+            subtitle: const Text(
+              'Page HTML à ouvrir ou partager (pas de ré-import)',
+            ),
+            onTap: () => _exportSubscriptionsHtml(context, ref),
+          ),
+          ListTile(
+            leading: const Icon(Icons.favorite_outline),
+            title: const Text('Exporter les favoris'),
+            subtitle: const Text(
+              'Page HTML groupée par podcast (pas de ré-import)',
+            ),
+            onTap: () => _exportFavoritesHtml(context, ref),
+          ),
         ],
       ),
     );
@@ -284,6 +302,59 @@ class BackupRestorePage extends ConsumerWidget {
       showMessage(context, 'Abonnements exportés');
     }
   }
+
+  Future<void> _exportSubscriptionsHtml(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final podcasts = await ref.read(databaseProvider).listPodcasts();
+    if (podcasts.isEmpty) {
+      if (context.mounted) showMessage(context, 'Aucun abonnement à exporter');
+      return;
+    }
+    final html = await buildSubscriptionsHtml(podcasts);
+    final saved = await FilePicker.saveFile(
+      dialogTitle: 'Exporter les abonnements (HTML)',
+      fileName: 'podavio-abonnements-${_exportStamp()}.html',
+      bytes: Uint8List.fromList(utf8.encode(html)),
+      mimeType: 'text/html',
+    );
+    if (saved != null && context.mounted) {
+      showMessage(context, 'Abonnements exportés en HTML');
+    }
+  }
+
+  Future<void> _exportFavoritesHtml(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final favorites = await ref
+        .read(databaseProvider)
+        .watchEpisodes(favoritesOnly: true)
+        .first;
+    if (favorites.isEmpty) {
+      if (context.mounted) showMessage(context, 'Aucun favori à exporter');
+      return;
+    }
+    final html = await buildFavoritesHtml(favorites);
+    final saved = await FilePicker.saveFile(
+      dialogTitle: 'Exporter les favoris (HTML)',
+      fileName: 'podavio-favoris-${_exportStamp()}.html',
+      bytes: Uint8List.fromList(utf8.encode(html)),
+      mimeType: 'text/html',
+    );
+    if (saved != null && context.mounted) {
+      showMessage(context, 'Favoris exportés en HTML');
+    }
+  }
+}
+
+String _exportStamp() {
+  final now = DateTime.now();
+  final y = now.year.toString().padLeft(4, '0');
+  final m = now.month.toString().padLeft(2, '0');
+  final d = now.day.toString().padLeft(2, '0');
+  return '$y$m$d';
 }
 
 /// Sélectionne un fichier OPML et ouvre l’écran d’import.

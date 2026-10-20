@@ -9,6 +9,7 @@ import '../../data/download_controller.dart';
 import '../../data/download_service.dart';
 import '../../data/providers.dart';
 import '../../player/playback_source.dart';
+import 'app_bottom_sheet.dart';
 import 'brand.dart';
 import 'empty_state.dart';
 import 'episode_tile.dart';
@@ -106,56 +107,89 @@ class EpisodeSelectionAppBar extends ConsumerWidget
             icon: const SelectAllIcon(),
           ),
         if (canAct)
-          PopupMenuButton<_BulkMenuAction>(
+          IconButton(
             tooltip: 'Actions',
+            onPressed: () => _showBulkActionsSheet(context, ref),
             icon: const MoreVertIcon(),
-            onSelected: (action) => _runBulkAction(context, ref, action),
-            itemBuilder: (context) {
-              final items = <PopupMenuEntry<_BulkMenuAction>>[];
-              if (actions.favorite) {
-                final allFavorite = selected.every((e) => e.episode.favorite);
-                items.add(
-                  PopupMenuItem(
-                    value: allFavorite
-                        ? _BulkMenuAction.unfavorite
-                        : _BulkMenuAction.favorite,
-                    child: Text(
-                      allFavorite
-                          ? 'Retirer des favoris'
-                          : 'Ajouter aux favoris',
-                    ),
-                  ),
-                );
-              }
-              if (actions.download) {
-                final allDownloaded = selected.every(
-                  (e) => e.episode.downloadPath != null,
-                );
-                items.add(
-                  PopupMenuItem(
-                    value: allDownloaded
-                        ? _BulkMenuAction.removeDownload
-                        : _BulkMenuAction.download,
-                    child: Text(
-                      allDownloaded
-                          ? 'Supprimer les téléchargements'
-                          : 'Télécharger',
-                    ),
-                  ),
-                );
-              }
-              if (actions.onRemove != null) {
-                items.add(
-                  PopupMenuItem(
-                    value: _BulkMenuAction.remove,
-                    child: Text(actions.removeLabel),
-                  ),
-                );
-              }
-              return items;
-            },
           ),
       ],
+    );
+  }
+
+  void _showBulkActionsSheet(BuildContext context, WidgetRef ref) {
+    final selected = session.selected;
+    final actions = session.bulkActions;
+    final allFavorite =
+        actions.favorite && selected.every((e) => e.episode.favorite);
+    final allDownloaded =
+        actions.download &&
+        selected.every((e) => e.episode.downloadPath != null);
+    showAppModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (actions.favorite)
+                ListTile(
+                  leading: Icon(
+                    allFavorite ? Icons.favorite : Icons.favorite_border,
+                    color: allFavorite ? favoriteHeartColor : null,
+                  ),
+                  title: Text(
+                    allFavorite
+                        ? 'Retirer des favoris'
+                        : 'Ajouter aux favoris',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _runBulkAction(
+                      context,
+                      ref,
+                      allFavorite
+                          ? _BulkMenuAction.unfavorite
+                          : _BulkMenuAction.favorite,
+                    );
+                  },
+                ),
+              if (actions.download)
+                ListTile(
+                  leading: Icon(
+                    allDownloaded
+                        ? Icons.delete_outline
+                        : Icons.download_outlined,
+                  ),
+                  title: Text(
+                    allDownloaded
+                        ? 'Supprimer les téléchargements'
+                        : 'Télécharger',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _runBulkAction(
+                      context,
+                      ref,
+                      allDownloaded
+                          ? _BulkMenuAction.removeDownload
+                          : _BulkMenuAction.download,
+                    );
+                  },
+                ),
+              if (actions.onRemove != null)
+                ListTile(
+                  leading: const RemoveSelectionIcon(),
+                  title: Text(actions.removeLabel),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _runBulkAction(context, ref, _BulkMenuAction.remove);
+                  },
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 

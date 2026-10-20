@@ -283,7 +283,7 @@ class _PlayRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = showPause ? 'Pause' : 'Lire';
+    final label = showPause ? 'Pause' : 'Lecture';
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -294,9 +294,9 @@ class _PlayRow extends StatelessWidget {
           child: InkWell(
             onTap: onPlay,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 110, minHeight: 48),
+              constraints: const BoxConstraints(minHeight: 48),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 18),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

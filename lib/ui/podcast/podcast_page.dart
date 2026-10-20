@@ -12,6 +12,7 @@ import '../../player/playback_source.dart';
 import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
 import '../router.dart';
+import '../widgets/app_bottom_sheet.dart';
 import '../widgets/brand.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/episode_list.dart';
@@ -162,6 +163,14 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
             Colors.black;
         final playingHere = ref.watch(
           playerProvider.select(
+            (state) =>
+                state.podcastId == item.id &&
+                state.hasEpisode &&
+                state.playing,
+          ),
+        );
+        final loadedHere = ref.watch(
+          playerProvider.select(
             (state) => state.podcastId == item.id && state.hasEpisode,
           ),
         );
@@ -196,10 +205,15 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                       ? EpisodeSelectionAppBar(session: selection)
                       : FrostedAppBar(
                           alwaysFrosted: true,
-                          title: Text(
-                            item.title,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white),
+                          title: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              item.title,
+                              maxLines: 1,
+                              softWrap: false,
+                              style: const TextStyle(color: Colors.white),
+                            ),
                           ),
                           actions: _appBarActions(item),
                         ),
@@ -228,7 +242,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                           showPause: playingHere,
                           onPlay: first == null
                               ? null
-                              : () => _play(ref, item, first, playingHere),
+                              : () => _play(ref, item, first, loadedHere),
                         ),
                       )
                     : _podcastScrollView(
@@ -240,7 +254,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                         showPause: playingHere,
                         onPlay: first == null
                             ? null
-                            : () => _play(ref, item, first, playingHere),
+                            : () => _play(ref, item, first, loadedHere),
                       ),
               ),
             ),
@@ -265,76 +279,110 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
             color: item.preferred ? preferredStarColor : Colors.white,
           ),
         ),
-      PopupMenuButton<String>(
+      IconButton(
         tooltip: 'Plus',
+        onPressed: () => _showPodcastActions(item),
         icon: const Icon(Icons.more_vert, color: Colors.white),
-        onSelected: (value) {
-          switch (value) {
-            case 'refresh':
-              _refresh(context, ref, item.feedUrl);
-            case 'settings':
-              context.push(AppRoutes.podcastSettings(item.id));
-            case 'autoDownload':
-              ref
-                  .read(databaseProvider)
-                  .setPodcastAutoDownload(
-                    item.id,
-                    autoDownload: !item.autoDownload,
-                  );
-            case 'keepUpdated':
-              ref
-                  .read(databaseProvider)
-                  .setPodcastKeepUpdated(
-                    item.id,
-                    keepUpdated: !item.keepUpdated,
-                  );
-            case 'remove':
-              _unsubscribe(context, ref, item);
-          }
-        },
-        itemBuilder: (context) => [
-          const PopupMenuItem(
-            value: 'refresh',
-            child: Text('Actualiser ce flux'),
-          ),
-          if (item.subscribed)
-            const PopupMenuItem(value: 'settings', child: Text('Paramètres')),
-          if (item.subscribed)
-            PopupMenuItem(
-              value: 'autoDownload',
-              child: Text(
-                item.autoDownload
-                    ? 'Désactiver les téléchargements automatiques'
-                    : 'Activer les téléchargements automatiques',
-              ),
-            ),
-          if (item.subscribed)
-            PopupMenuItem(
-              value: 'keepUpdated',
-              child: Text(
-                item.keepUpdated
-                    ? 'Ne plus maintenir à jour'
-                    : 'Maintenir à jour',
-              ),
-            ),
-          PopupMenuItem(
-            value: 'remove',
-            child: Text(
-              item.subscribed ? 'Se désabonner' : 'Retirer l’aperçu',
-            ),
-          ),
-        ],
       ),
     ];
+  }
+
+  void _showPodcastActions(Podcast item) {
+    showAppModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: const Text('Actualiser ce flux'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _refresh(context, ref, item.feedUrl);
+                },
+              ),
+              if (item.subscribed)
+                ListTile(
+                  leading: const Icon(Icons.settings_outlined),
+                  title: const Text('Paramètres'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    context.push(AppRoutes.podcastSettings(item.id));
+                  },
+                ),
+              if (item.subscribed)
+                ListTile(
+                  leading: Icon(
+                    item.autoDownload
+                        ? Icons.download_done
+                        : Icons.download_outlined,
+                  ),
+                  title: Text(
+                    item.autoDownload
+                        ? 'Désactiver les téléchargements automatiques'
+                        : 'Activer les téléchargements automatiques',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    ref
+                        .read(databaseProvider)
+                        .setPodcastAutoDownload(
+                          item.id,
+                          autoDownload: !item.autoDownload,
+                        );
+                  },
+                ),
+              if (item.subscribed)
+                ListTile(
+                  leading: Icon(
+                    item.keepUpdated ? Icons.sync_disabled : Icons.sync,
+                  ),
+                  title: Text(
+                    item.keepUpdated
+                        ? 'Ne plus maintenir à jour'
+                        : 'Maintenir à jour',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    ref
+                        .read(databaseProvider)
+                        .setPodcastKeepUpdated(
+                          item.id,
+                          keepUpdated: !item.keepUpdated,
+                        );
+                  },
+                ),
+              ListTile(
+                leading: Icon(
+                  item.subscribed
+                      ? Icons.person_remove_outlined
+                      : Icons.delete_outline,
+                ),
+                title: Text(
+                  item.subscribed ? 'Se désabonner' : 'Retirer l’aperçu',
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _unsubscribe(context, ref, item);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _play(
     WidgetRef ref,
     Podcast item,
     EpisodeEntry first,
-    bool playingHere,
+    bool loadedHere,
   ) {
-    if (playingHere) {
+    if (loadedHere) {
       ref.read(playerProvider.notifier).toggle();
       return;
     }
@@ -450,10 +498,9 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         decoration: BoxDecoration(color: surface),
         sliver: SliverPadding(
           padding: const EdgeInsets.only(top: 4, bottom: 24),
-          sliver: SliverList.separated(
+          sliver: SliverList.builder(
             addAutomaticKeepAlives: false,
             itemCount: window.entries.length + (window.hasMore ? 1 : 0),
-            separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, index) {
               if (index >= window.entries.length) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -470,6 +517,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
               return EpisodeTile(
                 key: ValueKey(id),
                 entry: entry,
+                queueStyle: true,
                 showPodcast: false,
                 playbackSource: source,
                 selecting: _selecting,

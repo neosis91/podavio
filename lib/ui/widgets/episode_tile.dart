@@ -247,7 +247,6 @@ class EpisodeTile extends ConsumerWidget {
                     coverSize: coverSize,
                     listenFraction: listenFraction,
                     progressBarHeight: metrics.progressBarHeight,
-                    downloadProgress: progress,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -352,13 +351,12 @@ class _EpisodeTileTrailing extends StatelessWidget {
               ),
               const SizedBox(width: 4),
             ],
-            IconButton(
-              tooltip: 'Annuler le téléchargement',
-              onPressed: onCancelDownload,
-              padding: EdgeInsets.zero,
+            DownloadProgressRing(
+              progress: value,
+              size: metrics.progressRingSize,
+              onCancel: onCancelDownload,
               visualDensity: metrics.trailingVisualDensity,
               constraints: metrics.trailingConstraints,
-              icon: Icon(Icons.close, size: metrics.progressRingSize * 0.7),
             ),
           ],
         ),
@@ -445,7 +443,6 @@ class _EpisodeCoverWithProgress extends StatelessWidget {
     required this.coverSize,
     required this.listenFraction,
     required this.progressBarHeight,
-    this.downloadProgress,
   });
 
   final int episodeId;
@@ -455,7 +452,6 @@ class _EpisodeCoverWithProgress extends StatelessWidget {
   final double coverSize;
   final double? listenFraction;
   final double progressBarHeight;
-  final double? downloadProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -470,7 +466,6 @@ class _EpisodeCoverWithProgress extends StatelessWidget {
           httpHeaders: httpHeaders,
           size: coverSize,
           radius: 8,
-          downloadProgress: downloadProgress,
         ),
         if (fraction != null) ...[
           const SizedBox(height: 2),
@@ -723,7 +718,6 @@ class _QueueStyleRow extends StatelessWidget {
               ),
               size: 48,
               radius: 4,
-              downloadProgress: progress,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -769,12 +763,11 @@ class _QueueStyleRow extends StatelessWidget {
                     ),
             ),
             if (progress != null)
-              IconButton(
-                tooltip: 'Annuler le téléchargement',
-                onPressed: onCancelDownload,
-                icon: const Icon(Icons.close),
-              )
-            else if (onMore != null)
+              DownloadProgressRing(
+                progress: progress!,
+                onCancel: onCancelDownload,
+              ),
+            if (onMore != null)
               IconButton(
                 tooltip: 'Actions',
                 onPressed: onMore,
