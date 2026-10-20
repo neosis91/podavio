@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'chapters_parser.dart';
 
 class FeedDraft {
@@ -9,6 +11,8 @@ class FeedDraft {
     required this.episodes,
     this.imageUrl,
     this.link,
+    this.persons = const [],
+    this.funding = const [],
   });
 
   final String feedUrl;
@@ -17,7 +21,114 @@ class FeedDraft {
   final String description;
   final String? imageUrl;
   final String? link;
+  final List<PodcastPerson> persons;
+  final List<PodcastFunding> funding;
   final List<EpisodeDraft> episodes;
+}
+
+/// Personne du flux (`podcast:person`).
+class PodcastPerson {
+  const PodcastPerson({
+    required this.name,
+    this.role,
+    this.group,
+    this.image,
+    this.link,
+  });
+
+  final String name;
+  final String? role;
+  final String? group;
+  final String? image;
+  final String? link;
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    if (role != null) 'role': role,
+    if (group != null) 'group': group,
+    if (image != null) 'image': image,
+    if (link != null) 'link': link,
+  };
+
+  factory PodcastPerson.fromJson(Map<String, dynamic> json) {
+    return PodcastPerson(
+      name: (json['name'] as String?)?.trim() ?? '',
+      role: _blankToNull(json['role'] as String?),
+      group: _blankToNull(json['group'] as String?),
+      image: _blankToNull(json['image'] as String?),
+      link: _blankToNull(json['link'] as String?),
+    );
+  }
+}
+
+/// Lien de financement du flux (`podcast:funding`).
+class PodcastFunding {
+  const PodcastFunding({required this.url, this.label});
+
+  final String url;
+  final String? label;
+
+  Map<String, dynamic> toJson() => {
+    'url': url,
+    if (label != null) 'label': label,
+  };
+
+  factory PodcastFunding.fromJson(Map<String, dynamic> json) {
+    return PodcastFunding(
+      url: (json['url'] as String?)?.trim() ?? '',
+      label: _blankToNull(json['label'] as String?),
+    );
+  }
+}
+
+String encodePodcastPersons(List<PodcastPerson> persons) {
+  return jsonEncode([
+    for (final person in persons)
+      if (person.name.isNotEmpty) person.toJson(),
+  ]);
+}
+
+List<PodcastPerson> decodePodcastPersons(String raw) {
+  return _decodeList(raw, PodcastPerson.fromJson)
+      .where((person) => person.name.isNotEmpty)
+      .toList(growable: false);
+}
+
+String encodePodcastFunding(List<PodcastFunding> funding) {
+  return jsonEncode([
+    for (final item in funding)
+      if (item.url.isNotEmpty) item.toJson(),
+  ]);
+}
+
+List<PodcastFunding> decodePodcastFunding(String raw) {
+  return _decodeList(raw, PodcastFunding.fromJson)
+      .where((item) => item.url.isNotEmpty)
+      .toList(growable: false);
+}
+
+List<T> _decodeList<T>(
+  String raw,
+  T Function(Map<String, dynamic> json) fromJson,
+) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty || trimmed == '[]') return <T>[];
+  try {
+    final decoded = jsonDecode(trimmed);
+    if (decoded is! List) return <T>[];
+    return [
+      for (final item in decoded)
+        if (item is Map<String, dynamic>) fromJson(item),
+    ];
+  } catch (_) {
+    return <T>[];
+  }
+}
+
+String? _blankToNull(String? value) {
+  final trimmed = value?.trim() ?? '';
+  if (trimmed.isEmpty) return null;
+  return trimmed;
 }
 
 class EpisodeDraft {

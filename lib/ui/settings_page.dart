@@ -19,6 +19,7 @@ import '../data/discover_providers.dart';
 import '../settings/settings_controller.dart';
 import '../sync/sync_controller.dart';
 import 'router.dart';
+import 'widgets/app_bottom_sheet.dart';
 import 'widgets/brand.dart';
 import 'widgets/choice_dialog.dart';
 import 'widgets/messages.dart';
@@ -818,7 +819,7 @@ String _refreshIntervalLabel(int minutes) {
 }
 
 Future<void> _showHomeShelvesSheet(BuildContext context, WidgetRef ref) {
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
@@ -887,7 +888,7 @@ class _HomeShelvesSheet extends ConsumerWidget {
 }
 
 Future<void> _showHomeCategoriesSheet(BuildContext context, WidgetRef ref) {
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
@@ -1003,7 +1004,7 @@ class _HomeShelfRow extends StatelessWidget {
 }
 
 Future<void> _showMiniPlayerButtonsSheet(BuildContext context, WidgetRef ref) {
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,

@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/format.dart';
 import '../../data/app_database.dart';
 import '../../player/player_controller.dart';
+import 'app_bottom_sheet.dart';
 import 'brand.dart';
 
 Future<void> shareEpisode(EpisodeEntry entry) {
@@ -35,7 +36,7 @@ Future<void> showShareEpisodeSheet(
   WidgetRef ref,
   EpisodeEntry entry,
 ) {
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     builder: (context) => _ShareEpisodeSheet(entry: entry),

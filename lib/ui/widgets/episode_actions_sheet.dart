@@ -16,6 +16,7 @@ import '../../player/player_sheet_controller.dart';
 import '../../settings/settings_controller.dart';
 import '../playlist_membership.dart';
 import '../router.dart';
+import 'app_bottom_sheet.dart';
 import 'brand.dart';
 import 'cover.dart';
 import 'episode_share_sheet.dart';
@@ -34,7 +35,7 @@ Future<void> showEpisodeActionsSheet(
   VoidCallback? onSpeed,
   VoidCallback? onSleep,
 }) {
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
@@ -316,14 +317,12 @@ class _EpisodeActionsSheet extends ConsumerWidget {
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.9,
         ),
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.paddingOf(context).bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+        child: ListView(
+          shrinkWrap: true,
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.paddingOf(context).bottom,
+          ),
+          children: [
                 const SizedBox(height: 8),
                 DecoratedBox(
                   decoration: BoxDecoration(
@@ -390,9 +389,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
                 const SizedBox(height: 2),
                 ...actions,
                 const SizedBox(height: 8),
-              ],
-            ),
-          ),
+          ],
         ),
       ),
     );

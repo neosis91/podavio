@@ -4,6 +4,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 /// Rouge du cœur déjà en favori, le même que la carte Bibliothèque.
 const favoriteHeartColor = Color(0xffD10000);
 
+/// Jaune de l’étoile d’un podcast préféré.
+const preferredStarColor = Color(0xFFFFC107);
+
 class PodavioLogo extends StatelessWidget {
   const PodavioLogo({super.key, this.width = 240});
 
@@ -150,6 +153,37 @@ class InfoIcon extends StatelessWidget {
       height: size,
       colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
       semanticsLabel: 'Information',
+    );
+  }
+}
+
+/// Étoile d’un podcast préféré (contour / plein). Les cœurs restent aux épisodes.
+class PreferredStarIcon extends StatelessWidget {
+  const PreferredStarIcon({
+    super.key,
+    this.size = 24,
+    this.selected = false,
+    this.color,
+  });
+
+  final double size;
+  final bool selected;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved =
+        color ??
+        (selected
+            ? preferredStarColor
+            : IconTheme.of(context).color ??
+                  Theme.of(context).colorScheme.onSurface);
+    return SvgPicture.asset(
+      selected ? 'assets/brand/star_fill.svg' : 'assets/brand/star.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(resolved, BlendMode.srcIn),
+      semanticsLabel: selected ? 'Préféré' : 'Non préféré',
     );
   }
 }
@@ -416,6 +450,72 @@ class DeleteIcon extends StatelessWidget {
       height: size,
       colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
       semanticsLabel: 'Supprimer',
+    );
+  }
+}
+
+class SelectAllIcon extends StatelessWidget {
+  const SelectAllIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Image.asset(
+        'assets/brand/select_all.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.medium,
+        semanticLabel: 'Tout sélectionner',
+      ),
+    );
+  }
+}
+
+class DeselectAllIcon extends StatelessWidget {
+  const DeselectAllIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Image.asset(
+        'assets/brand/deselect_all.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.medium,
+        semanticLabel: 'Tout désélectionner',
+      ),
+    );
+  }
+}
+
+class RemoveSelectionIcon extends StatelessWidget {
+  const RemoveSelectionIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Image.asset(
+        'assets/brand/remove_selection.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.medium,
+        semanticLabel: 'Supprimer la sélection',
+      ),
     );
   }
 }

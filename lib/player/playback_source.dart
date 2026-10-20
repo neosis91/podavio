@@ -33,6 +33,17 @@ class PlaybackSource {
 
   bool get canEditOrder => isQueue || query.playlistId != null;
 
+  /// Sens de lecture pour le seed de file : vers les plus récents.
+  ///
+  /// Les listes datées (podcast, favoris, téléchargements, boîte) sont
+  /// affichées du plus récent au plus ancien : « suivant » doit remonter
+  /// vers le plus récent. Les playlists / la file gardent l’ordre affiché.
+  bool get playsTowardNewer {
+    if (isQueue || query.playlistId != null) return false;
+    if (query.historyOnly || query.inProgressOnly) return false;
+    return true;
+  }
+
   Stream<List<EpisodeEntry>> watch(AppDatabase database) {
     return database.watchEpisodeWindow(
       unreadOnly: query.unreadOnly,

@@ -15,6 +15,8 @@ class PodcastCover extends StatelessWidget {
     this.httpHeaders,
     this.size = 56,
     this.radius = 8,
+    this.expand = false,
+    this.fit = BoxFit.cover,
   });
 
   final String? url;
@@ -26,6 +28,12 @@ class PodcastCover extends StatelessWidget {
   final double? size;
   final double radius;
 
+  /// Remplit le parent au lieu du carré [size].
+  final bool expand;
+
+  /// `cover` pour les listes, `contain` pour voir toute la jaquette.
+  final BoxFit fit;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -34,9 +42,16 @@ class PodcastCover extends StatelessWidget {
       child: const Center(child: Icon(Icons.podcasts, size: 36)),
     );
     final ratio = MediaQuery.devicePixelRatioOf(context);
-    final memPixels = ((size ?? 180) * ratio)
-        .ceil()
-        .clamp(64, CoverCache.maxMemPixels);
+    final logical = expand
+        ? MediaQuery.sizeOf(context).shortestSide
+        : (size ?? 180);
+    final maxPixels = expand
+        ? CoverCache.maxHeroMemPixels
+        : CoverCache.maxMemPixels;
+    final memPixels = (logical * ratio).ceil().clamp(64, maxPixels);
+    final quality = expand || (size ?? 0) >= 160
+        ? FilterQuality.medium
+        : FilterQuality.low;
 
     final local = localPath?.trim();
     final imageUrl = url?.trim();
@@ -46,13 +61,13 @@ class PodcastCover extends StatelessWidget {
       // errorBuilder bascule sur le réseau ou le placeholder.
       image = Image.file(
         File(local),
-        fit: BoxFit.cover,
+        fit: fit,
         alignment: Alignment.center,
         width: double.infinity,
         height: double.infinity,
         cacheWidth: memPixels,
         cacheHeight: memPixels,
-        filterQuality: FilterQuality.low,
+        filterQuality: quality,
         gaplessPlayback: true,
         errorBuilder: (_, _, _) {
           if (imageUrl == null || imageUrl.isEmpty) return placeholder;
@@ -61,13 +76,13 @@ class PodcastCover extends StatelessWidget {
             httpHeaders: httpHeaders,
             cacheManager: CoverCache.manager,
             cacheKey: imageUrl,
-            fit: BoxFit.cover,
+            fit: fit,
             alignment: Alignment.center,
             width: double.infinity,
             height: double.infinity,
             memCacheWidth: memPixels,
             memCacheHeight: memPixels,
-            filterQuality: FilterQuality.low,
+            filterQuality: quality,
             fadeInDuration: Duration.zero,
             fadeOutDuration: Duration.zero,
             placeholder: (_, _) => placeholder,
@@ -81,13 +96,13 @@ class PodcastCover extends StatelessWidget {
         httpHeaders: httpHeaders,
         cacheManager: CoverCache.manager,
         cacheKey: imageUrl,
-        fit: BoxFit.cover,
+        fit: fit,
         alignment: Alignment.center,
         width: double.infinity,
         height: double.infinity,
         memCacheWidth: memPixels,
         memCacheHeight: memPixels,
-        filterQuality: FilterQuality.low,
+        filterQuality: quality,
         fadeInDuration: Duration.zero,
         fadeOutDuration: Duration.zero,
         placeholder: (_, _) => placeholder,
@@ -102,6 +117,7 @@ class PodcastCover extends StatelessWidget {
       child: image,
     );
 
+    if (expand) return square;
     if (size != null) {
       return SizedBox(width: size, height: size, child: square);
     }

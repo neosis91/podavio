@@ -764,10 +764,30 @@ class FeedService {
       );
     }
 
-    final author = podcast.persons
-        .map((person) => person.name.trim())
-        .where((name) => name.isNotEmpty)
-        .join(', ');
+    final persons = [
+      for (final person in podcast.persons)
+        if (person.name.trim().isNotEmpty)
+          PodcastPerson(
+            name: person.name.trim(),
+            role: _blankToNull(person.role),
+            group: _blankToNull(person.group),
+            image: _blankToNull(person.image),
+            link: _blankToNull(person.link),
+          ),
+    ];
+    final funding = [
+      for (final item in podcast.funding)
+        if ((item.url ?? '').trim().isNotEmpty)
+          PodcastFunding(
+            url: item.url!.trim(),
+            label: _blankToNull(item.value),
+          ),
+    ];
+    // `copyright` du package porte en pratique itunes:author.
+    final itunesAuthor = podcast.copyright?.trim() ?? '';
+    final author = persons.isNotEmpty
+        ? persons.map((person) => person.name).join(', ')
+        : itunesAuthor;
 
     return FeedDraft(
       feedUrl: url,
@@ -776,6 +796,8 @@ class FeedService {
       description: _bounded(podcast.description?.trim() ?? ''),
       imageUrl: _blankToNull(podcast.image),
       link: _blankToNull(podcast.link),
+      persons: persons,
+      funding: funding,
       episodes: episodes,
     );
   }

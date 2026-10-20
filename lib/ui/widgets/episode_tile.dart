@@ -40,6 +40,10 @@ class EpisodeTile extends ConsumerWidget {
     this.onMoveUp,
     this.onMoveDown,
     this.onRemove,
+    this.selecting = false,
+    this.selected = false,
+    this.onLongPress,
+    this.onToggleSelect,
   });
 
   final EpisodeEntry entry;
@@ -55,6 +59,10 @@ class EpisodeTile extends ConsumerWidget {
   final VoidCallback? onMoveUp;
   final VoidCallback? onMoveDown;
   final VoidCallback? onRemove;
+  final bool selecting;
+  final bool selected;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onToggleSelect;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -107,22 +115,33 @@ class EpisodeTile extends ConsumerWidget {
         playing: playing,
         progress: progress,
         preferPodcastCover: preferPodcastCover,
-        reorderIndex: reorderIndex,
+        reorderIndex: selecting ? null : reorderIndex,
         highlightQuery: highlightQuery,
         showPodcast: showPodcast,
-        onTap: () => ref
-            .read(playerProvider.notifier)
-            .playOrPauseEntry(entry, source: playbackSource),
+        selecting: selecting,
+        selected: selected,
+        onLongPress: onLongPress,
+        onTap: () {
+          if (selecting) {
+            onToggleSelect?.call();
+            return;
+          }
+          ref
+              .read(playerProvider.notifier)
+              .playOrPauseEntry(entry, source: playbackSource);
+        },
         onCancelDownload: () =>
             ref.read(downloadProgressProvider.notifier).cancel(episode.id),
-        onMore: () => showEpisodeActionsSheet(
-          context,
-          ref,
-          entry,
-          onMoveUp: onMoveUp,
-          onMoveDown: onMoveDown,
-          onRemove: onRemove,
-        ),
+        onMore: selecting
+            ? null
+            : () => showEpisodeActionsSheet(
+                context,
+                ref,
+                entry,
+                onMoveUp: onMoveUp,
+                onMoveDown: onMoveDown,
+                onRemove: onRemove,
+              ),
       );
     }
 
@@ -165,13 +184,28 @@ class EpisodeTile extends ConsumerWidget {
           alpha: 0.35,
         );
 
+        final selectedHighlight = theme.colorScheme.secondaryContainer
+            .withValues(alpha: 0.45);
         return Material(
-          color: playing ? playingHighlight : Colors.transparent,
+          color: selecting && selected
+              ? selectedHighlight
+              : playing
+              ? playingHighlight
+              : Colors.transparent,
           child: InkWell(
-            onTap: () => context.push(AppRoutes.episode(episode.id)),
+            onTap: () {
+              if (selecting) {
+                onToggleSelect?.call();
+                return;
+              }
+              context.push(AppRoutes.episode(episode.id));
+            },
+            onLongPress: onLongPress,
             child: Padding(
               padding: EdgeInsets.fromLTRB(
-                reorderIndex != null ? 4 : metrics.horizontalPadding,
+                reorderIndex != null || selecting
+                    ? 4
+                    : metrics.horizontalPadding,
                 metrics.verticalPadding,
                 4,
                 metrics.verticalPadding,
@@ -179,7 +213,16 @@ class EpisodeTile extends ConsumerWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (reorderIndex != null)
+                  if (selecting)
+                    SizedBox(
+                      width: 40,
+                      height: coverSize,
+                      child: Checkbox(
+                        value: selected,
+                        onChanged: (_) => onToggleSelect?.call(),
+                      ),
+                    )
+                  else if (reorderIndex != null)
                     Tooltip(
                       message: 'Déplacer',
                       child: ReorderableDragStartListener(
@@ -620,6 +663,9 @@ class _QueueStyleRow extends StatelessWidget {
     required this.onTap,
     required this.onCancelDownload,
     required this.onMore,
+    this.selecting = false,
+    this.selected = false,
+    this.onLongPress,
   });
 
   final EpisodeEntry entry;
@@ -631,7 +677,10 @@ class _QueueStyleRow extends StatelessWidget {
   final bool showPodcast;
   final VoidCallback onTap;
   final VoidCallback onCancelDownload;
-  final VoidCallback onMore;
+  final VoidCallback? onMore;
+  final bool selecting;
+  final bool selected;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -644,12 +693,19 @@ class _QueueStyleRow extends StatelessWidget {
     final podcastStyle = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
+    final selectedHighlight = scheme.secondaryContainer.withValues(alpha: 0.45);
     final row = InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 6, 8, 6),
+        padding: EdgeInsets.fromLTRB(selecting ? 8 : 20, 6, 8, 6),
         child: Row(
           children: [
+            if (selecting)
+              Checkbox(
+                value: selected,
+                onChanged: (_) => onTap(),
+              ),
             PlayingEpisodeCover(
               episodeId: episode.id,
               url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
@@ -689,7 +745,9 @@ class _QueueStyleRow extends StatelessWidget {
     );
     final dragIndex = reorderIndex;
     return Material(
-      color: playing
+      color: selecting && selected
+          ? selectedHighlight
+          : playing
           ? scheme.primaryContainer.withValues(alpha: 0.35)
           : Colors.transparent,
       child: Padding(
@@ -709,11 +767,12 @@ class _QueueStyleRow extends StatelessWidget {
                 progress: progress!,
                 onCancel: onCancelDownload,
               ),
-            IconButton(
-              tooltip: 'Actions',
-              onPressed: onMore,
-              icon: const MoreVertIcon(),
-            ),
+            if (onMore != null)
+              IconButton(
+                tooltip: 'Actions',
+                onPressed: onMore,
+                icon: const MoreVertIcon(),
+              ),
           ],
         ),
       ),

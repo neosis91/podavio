@@ -4,6 +4,15 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.10.19
+
+- On episode lists, a long press starts multi-select. A frosted bar replaces the title with select or deselect all, and a menu for bulk actions when there are any.
+- On a podcast page, Play and Pause sit in a pill that fits the label. The full podcast name stays in the title. The menu opens as a bottom sheet.
+- Playing from a podcast list queues toward newer episodes. The list matches Favorites and Downloads. Download progress stays next to the episode, not on the cover.
+- Preferred subscriptions show a star and sort first.
+- On a podcast’s About page, hosts and other people from the feed appear, with funding links when the feed provides them.
+- In Backup and restore, HTML export shares subscriptions or favorites as a page to open or send. Re-import is not supported.
+
 ## 2026.10.18
 
 - Sur Android, l’application s’ouvre de nouveau après le logo de démarrage.

@@ -102,6 +102,13 @@ final unreadCountsByPodcastProvider = StreamProvider<Map<int, int>>((ref) {
   return ref.watch(databaseProvider).watchUnreadCountsByPodcast();
 });
 
+final podcastEpisodeCountProvider = StreamProvider.family<int, int>((ref, id) {
+  return ref
+      .watch(databaseProvider)
+      .watchEpisodeCountsByPodcast()
+      .map((counts) => counts[id] ?? 0);
+});
+
 final playlistsProvider = StreamProvider<List<PlaylistSummary>>((ref) {
   return ref.watch(databaseProvider).watchPlaylists();
 });

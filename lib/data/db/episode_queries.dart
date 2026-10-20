@@ -492,6 +492,8 @@ mixin _EpisodeQueries on _$AppDatabase {
           skipOutroSeconds: row.read(podcasts.skipOutroSeconds)!,
           authUsername: row.read(podcasts.authUsername),
           authPassword: row.read(podcasts.authPassword),
+          personsJson: '[]',
+          fundingJson: '[]',
         ),
       ),
     );

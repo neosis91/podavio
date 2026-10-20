@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
 import '../app_router.dart';
+import 'app_bottom_sheet.dart';
 
 /// Raccourcis clavier du lecteur (desktop / TV).
 ///
@@ -131,7 +132,7 @@ Future<void> showPlayerKeyboardHelp([BuildContext? context]) {
   if (navContext == null || !navContext.mounted) {
     return Future<void>.value();
   }
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: navContext,
     useRootNavigator: true,
     showDragHandle: true,
