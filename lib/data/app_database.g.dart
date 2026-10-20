@@ -248,6 +248,30 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _personsJsonMeta = const VerificationMeta(
+    'personsJson',
+  );
+  @override
+  late final GeneratedColumn<String> personsJson = GeneratedColumn<String>(
+    'persons_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _fundingJsonMeta = const VerificationMeta(
+    'fundingJson',
+  );
+  @override
+  late final GeneratedColumn<String> fundingJson = GeneratedColumn<String>(
+    'funding_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -270,6 +294,8 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     skipOutroSeconds,
     authUsername,
     authPassword,
+    personsJson,
+    fundingJson,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -439,6 +465,24 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         ),
       );
     }
+    if (data.containsKey('persons_json')) {
+      context.handle(
+        _personsJsonMeta,
+        personsJson.isAcceptableOrUnknown(
+          data['persons_json']!,
+          _personsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('funding_json')) {
+      context.handle(
+        _fundingJsonMeta,
+        fundingJson.isAcceptableOrUnknown(
+          data['funding_json']!,
+          _fundingJsonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -528,6 +572,14 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         DriftSqlType.string,
         data['${effectivePrefix}auth_password'],
       ),
+      personsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}persons_json'],
+      )!,
+      fundingJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}funding_json'],
+      )!,
     );
   }
 
@@ -572,6 +624,12 @@ class Podcast extends DataClass implements Insertable<Podcast> {
 
   /// Mot de passe HTTP Basic du flux. `null` = pas d’authentification.
   final String? authPassword;
+
+  /// Personnes du flux (`podcast:person`), JSON.
+  final String personsJson;
+
+  /// Liens de financement (`podcast:funding`), JSON.
+  final String fundingJson;
   const Podcast({
     required this.id,
     required this.feedUrl,
@@ -593,6 +651,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     required this.skipOutroSeconds,
     this.authUsername,
     this.authPassword,
+    required this.personsJson,
+    required this.fundingJson,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -631,6 +691,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     if (!nullToAbsent || authPassword != null) {
       map['auth_password'] = Variable<String>(authPassword);
     }
+    map['persons_json'] = Variable<String>(personsJson);
+    map['funding_json'] = Variable<String>(fundingJson);
     return map;
   }
 
@@ -668,6 +730,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       authPassword: authPassword == null && nullToAbsent
           ? const Value.absent()
           : Value(authPassword),
+      personsJson: Value(personsJson),
+      fundingJson: Value(fundingJson),
     );
   }
 
@@ -699,6 +763,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       skipOutroSeconds: serializer.fromJson<int>(json['skipOutroSeconds']),
       authUsername: serializer.fromJson<String?>(json['authUsername']),
       authPassword: serializer.fromJson<String?>(json['authPassword']),
+      personsJson: serializer.fromJson<String>(json['personsJson']),
+      fundingJson: serializer.fromJson<String>(json['fundingJson']),
     );
   }
   @override
@@ -725,6 +791,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       'skipOutroSeconds': serializer.toJson<int>(skipOutroSeconds),
       'authUsername': serializer.toJson<String?>(authUsername),
       'authPassword': serializer.toJson<String?>(authPassword),
+      'personsJson': serializer.toJson<String>(personsJson),
+      'fundingJson': serializer.toJson<String>(fundingJson),
     };
   }
 
@@ -749,6 +817,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     int? skipOutroSeconds,
     Value<String?> authUsername = const Value.absent(),
     Value<String?> authPassword = const Value.absent(),
+    String? personsJson,
+    String? fundingJson,
   }) => Podcast(
     id: id ?? this.id,
     feedUrl: feedUrl ?? this.feedUrl,
@@ -772,6 +842,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     skipOutroSeconds: skipOutroSeconds ?? this.skipOutroSeconds,
     authUsername: authUsername.present ? authUsername.value : this.authUsername,
     authPassword: authPassword.present ? authPassword.value : this.authPassword,
+    personsJson: personsJson ?? this.personsJson,
+    fundingJson: fundingJson ?? this.fundingJson,
   );
   Podcast copyWithCompanion(PodcastsCompanion data) {
     return Podcast(
@@ -819,6 +891,12 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       authPassword: data.authPassword.present
           ? data.authPassword.value
           : this.authPassword,
+      personsJson: data.personsJson.present
+          ? data.personsJson.value
+          : this.personsJson,
+      fundingJson: data.fundingJson.present
+          ? data.fundingJson.value
+          : this.fundingJson,
     );
   }
 
@@ -844,13 +922,15 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           ..write('skipIntroSeconds: $skipIntroSeconds, ')
           ..write('skipOutroSeconds: $skipOutroSeconds, ')
           ..write('authUsername: $authUsername, ')
-          ..write('authPassword: $authPassword')
+          ..write('authPassword: $authPassword, ')
+          ..write('personsJson: $personsJson, ')
+          ..write('fundingJson: $fundingJson')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     feedUrl,
     title,
@@ -871,7 +951,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     skipOutroSeconds,
     authUsername,
     authPassword,
-  );
+    personsJson,
+    fundingJson,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -895,7 +977,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           other.skipIntroSeconds == this.skipIntroSeconds &&
           other.skipOutroSeconds == this.skipOutroSeconds &&
           other.authUsername == this.authUsername &&
-          other.authPassword == this.authPassword);
+          other.authPassword == this.authPassword &&
+          other.personsJson == this.personsJson &&
+          other.fundingJson == this.fundingJson);
 }
 
 class PodcastsCompanion extends UpdateCompanion<Podcast> {
@@ -919,6 +1003,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
   final Value<int> skipOutroSeconds;
   final Value<String?> authUsername;
   final Value<String?> authPassword;
+  final Value<String> personsJson;
+  final Value<String> fundingJson;
   const PodcastsCompanion({
     this.id = const Value.absent(),
     this.feedUrl = const Value.absent(),
@@ -940,6 +1026,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.skipOutroSeconds = const Value.absent(),
     this.authUsername = const Value.absent(),
     this.authPassword = const Value.absent(),
+    this.personsJson = const Value.absent(),
+    this.fundingJson = const Value.absent(),
   });
   PodcastsCompanion.insert({
     this.id = const Value.absent(),
@@ -962,6 +1050,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.skipOutroSeconds = const Value.absent(),
     this.authUsername = const Value.absent(),
     this.authPassword = const Value.absent(),
+    this.personsJson = const Value.absent(),
+    this.fundingJson = const Value.absent(),
   }) : feedUrl = Value(feedUrl),
        title = Value(title),
        subscribedAt = Value(subscribedAt);
@@ -986,6 +1076,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Expression<int>? skipOutroSeconds,
     Expression<String>? authUsername,
     Expression<String>? authPassword,
+    Expression<String>? personsJson,
+    Expression<String>? fundingJson,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1009,6 +1101,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       if (skipOutroSeconds != null) 'skip_outro_seconds': skipOutroSeconds,
       if (authUsername != null) 'auth_username': authUsername,
       if (authPassword != null) 'auth_password': authPassword,
+      if (personsJson != null) 'persons_json': personsJson,
+      if (fundingJson != null) 'funding_json': fundingJson,
     });
   }
 
@@ -1033,6 +1127,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Value<int>? skipOutroSeconds,
     Value<String?>? authUsername,
     Value<String?>? authPassword,
+    Value<String>? personsJson,
+    Value<String>? fundingJson,
   }) {
     return PodcastsCompanion(
       id: id ?? this.id,
@@ -1055,6 +1151,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       skipOutroSeconds: skipOutroSeconds ?? this.skipOutroSeconds,
       authUsername: authUsername ?? this.authUsername,
       authPassword: authPassword ?? this.authPassword,
+      personsJson: personsJson ?? this.personsJson,
+      fundingJson: fundingJson ?? this.fundingJson,
     );
   }
 
@@ -1121,6 +1219,12 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     if (authPassword.present) {
       map['auth_password'] = Variable<String>(authPassword.value);
     }
+    if (personsJson.present) {
+      map['persons_json'] = Variable<String>(personsJson.value);
+    }
+    if (fundingJson.present) {
+      map['funding_json'] = Variable<String>(fundingJson.value);
+    }
     return map;
   }
 
@@ -1146,7 +1250,9 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
           ..write('skipIntroSeconds: $skipIntroSeconds, ')
           ..write('skipOutroSeconds: $skipOutroSeconds, ')
           ..write('authUsername: $authUsername, ')
-          ..write('authPassword: $authPassword')
+          ..write('authPassword: $authPassword, ')
+          ..write('personsJson: $personsJson, ')
+          ..write('fundingJson: $fundingJson')
           ..write(')'))
         .toString();
   }
@@ -3634,6 +3740,8 @@ typedef $$PodcastsTableCreateCompanionBuilder = PodcastsCompanion Function({
   Value<int> skipOutroSeconds,
   Value<String?> authUsername,
   Value<String?> authPassword,
+  Value<String> personsJson,
+  Value<String> fundingJson,
 });
 typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<int> id,
@@ -3656,6 +3764,8 @@ typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<int> skipOutroSeconds,
   Value<String?> authUsername,
   Value<String?> authPassword,
+  Value<String> personsJson,
+  Value<String> fundingJson,
 });
 
 final class $$PodcastsTableReferences
@@ -3788,6 +3898,16 @@ class $$PodcastsTableFilterComposer
 
   ColumnFilters<String> get authPassword => $composableBuilder(
     column: $table.authPassword,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get personsJson => $composableBuilder(
+    column: $table.personsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fundingJson => $composableBuilder(
+    column: $table.fundingJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3925,6 +4045,16 @@ class $$PodcastsTableOrderingComposer
     column: $table.authPassword,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get personsJson => $composableBuilder(
+    column: $table.personsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fundingJson => $composableBuilder(
+    column: $table.fundingJson,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PodcastsTableAnnotationComposer
@@ -4020,6 +4150,16 @@ class $$PodcastsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get personsJson => $composableBuilder(
+    column: $table.personsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get fundingJson => $composableBuilder(
+    column: $table.fundingJson,
+    builder: (column) => column,
+  );
+
   Expression<T> episodesRefs<T extends Object>(
     Expression<T> Function($$EpisodesTableAnnotationComposer a) f,
   ) {
@@ -4094,6 +4234,8 @@ class $$PodcastsTableTableManager
                 Value<int> skipOutroSeconds = const Value.absent(),
                 Value<String?> authUsername = const Value.absent(),
                 Value<String?> authPassword = const Value.absent(),
+                Value<String> personsJson = const Value.absent(),
+                Value<String> fundingJson = const Value.absent(),
               }) => PodcastsCompanion(
                 id: id,
                 feedUrl: feedUrl,
@@ -4115,6 +4257,8 @@ class $$PodcastsTableTableManager
                 skipOutroSeconds: skipOutroSeconds,
                 authUsername: authUsername,
                 authPassword: authPassword,
+                personsJson: personsJson,
+                fundingJson: fundingJson,
               ),
           createCompanionCallback:
               ({
@@ -4138,6 +4282,8 @@ class $$PodcastsTableTableManager
                 Value<int> skipOutroSeconds = const Value.absent(),
                 Value<String?> authUsername = const Value.absent(),
                 Value<String?> authPassword = const Value.absent(),
+                Value<String> personsJson = const Value.absent(),
+                Value<String> fundingJson = const Value.absent(),
               }) => PodcastsCompanion.insert(
                 id: id,
                 feedUrl: feedUrl,
@@ -4159,6 +4305,8 @@ class $$PodcastsTableTableManager
                 skipOutroSeconds: skipOutroSeconds,
                 authUsername: authUsername,
                 authPassword: authPassword,
+                personsJson: personsJson,
+                fundingJson: fundingJson,
               ),
           withReferenceMapper: (p0) => p0
               .map(

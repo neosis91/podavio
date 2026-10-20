@@ -65,6 +65,7 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions,
     this.bottom,
     this.automaticallyImplyLeading = true,
+    this.alwaysFrosted = false,
   });
 
   final Widget? title;
@@ -72,6 +73,9 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget>? actions;
   final PreferredSizeWidget? bottom;
   final bool automaticallyImplyLeading;
+
+  /// Si vrai, le givre reste affiché même sans défilement.
+  final bool alwaysFrosted;
 
   @override
   Size get preferredSize =>
@@ -91,7 +95,9 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       scrolledUnderElevation: 0,
       shadowColor: Colors.transparent,
-      flexibleSpace: const FrostedHeaderBackdrop(),
+      flexibleSpace: FrostedHeaderBackdrop(
+        scrolled: alwaysFrosted ? true : null,
+      ),
     );
   }
 }

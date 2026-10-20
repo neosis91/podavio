@@ -5,9 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../player/player_controller.dart';
 import '../../together/together_controller.dart';
+import '../widgets/app_bottom_sheet.dart';
 
 Future<void> showTogetherSheet(BuildContext context) {
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,

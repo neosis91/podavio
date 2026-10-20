@@ -1051,13 +1051,9 @@ class _PodcastCard extends StatelessWidget {
                           ),
                           shape: BoxShape.circle,
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: Icon(
-                            Icons.star,
-                            size: 16,
-                            color: theme.colorScheme.primary,
-                          ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: PreferredStarIcon(selected: true, size: 16),
                         ),
                       ),
                     ),

@@ -307,6 +307,23 @@ void main() {
         ],
       ),
     )).podcastId;
+    final beta = (await database.saveFeed(
+      FeedDraft(
+        feedUrl: 'https://example.com/beta.xml',
+        title: 'Beta',
+        author: '',
+        description: '',
+        episodes: [
+          EpisodeDraft(
+            guid: 'b1',
+            title: 'À peine commencé',
+            description: '',
+            audioUrl: 'https://example.com/b1.mp3',
+            publishedAt: DateTime.utc(2024, 2, 1),
+          ),
+        ],
+      ),
+    )).podcastId;
     await database.saveFeed(
       const FeedDraft(
         feedUrl: 'https://example.com/zeta.xml',
@@ -320,18 +337,31 @@ void main() {
     final shows = await database.listPodcasts();
     final zebra = shows.singleWhere((podcast) => podcast.title == 'Zèbre');
     await database.setPodcastPreferred(zebra.id, preferred: true);
-    final ordered = await database.watchPodcastsByPreference().first;
-    expect(ordered.map((podcast) => podcast.title), ['Zèbre', 'Alpha']);
+    await database.setPodcastPreferred(beta, preferred: true);
 
-    final episodes = await database.watchEpisodes(podcastId: alpha).first;
-    final started = episodes.singleWhere(
+    final alphaEpisodes = await database.watchEpisodes(podcastId: alpha).first;
+    final started = alphaEpisodes.singleWhere(
       (entry) => entry.episode.title == 'Déjà commencé',
     );
     await database.setPosition(started.episode.id, 4000);
     await database.setDownloadPath(started.episode.id, '/tmp/episode.mp3');
 
+    final betaEpisodes = await database.watchEpisodes(podcastId: beta).first;
+    await database.setPosition(betaEpisodes.single.episode.id, 9000);
+
+    // Préférés d’abord (Beta plus écouté que Zèbre), puis Alpha (écoute).
+    final ordered = await database.watchPodcastsByPreference().first;
+    expect(ordered.map((podcast) => podcast.title), [
+      'Beta',
+      'Zèbre',
+      'Alpha',
+    ]);
+
     final progress = await database.watchInProgress().first;
-    expect(progress.single.episode.title, 'Déjà commencé');
+    expect(
+      progress.map((entry) => entry.episode.title),
+      containsAll(['Déjà commencé', 'À peine commencé']),
+    );
     final fresh = await database.watchFreshEpisodes().first;
     expect(fresh.map((entry) => entry.episode.title), ['Tout neuf']);
     final downloads = await database.watchRecentDownloads().first;
@@ -339,7 +369,10 @@ void main() {
 
     await database.setPlayed(started.episode.id, played: true);
     final random = await database.randomEpisodes(limit: 10);
-    expect(random.map((entry) => entry.episode.title), ['Tout neuf']);
+    expect(
+      random.map((entry) => entry.episode.title).toSet(),
+      {'Tout neuf', 'À peine commencé'},
+    );
   });
 
   test('podcastStats and libraryStats use aggregates', () async {
@@ -746,6 +779,42 @@ void main() {
       expect(afterSubscribe.newEpisodeIds, [arrived.episode.id]);
     },
   );
+
+  test('saveFeed stores podcast persons and funding', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final saved = await database.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/people.xml',
+        title: 'Émission',
+        author: 'Alice, Bob',
+        description: '',
+        persons: [
+          PodcastPerson(
+            name: 'Alice',
+            role: 'host',
+            link: 'https://alice.example',
+          ),
+          PodcastPerson(name: 'Bob', role: 'guest'),
+        ],
+        funding: [
+          PodcastFunding(
+            url: 'https://donate.example',
+            label: 'Soutenir',
+          ),
+        ],
+        episodes: [],
+      ),
+    );
+    final podcast = await database.getPodcast(saved.podcastId);
+    expect(podcast, isNotNull);
+    expect(podcast!.persons, hasLength(2));
+    expect(podcast.persons.first.name, 'Alice');
+    expect(podcast.persons.first.role, 'host');
+    expect(podcast.fundingLinks, hasLength(1));
+    expect(podcast.fundingLinks.single.label, 'Soutenir');
+  });
 }
 
 FeedDraft _feed(String url, List<EpisodeDraft> episodes) {
