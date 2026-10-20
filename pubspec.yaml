@@ -119,6 +119,9 @@ flutter:
     - assets/brand/info.svg
     - assets/brand/star.svg
     - assets/brand/star_fill.svg
+    - assets/brand/select_all.png
+    - assets/brand/deselect_all.png
+    - assets/brand/remove_selection.png
     - assets/brand/settings.svg
     - assets/brand/language.png
     - assets/brand/timer.svg

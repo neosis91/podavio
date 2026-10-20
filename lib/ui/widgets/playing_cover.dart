@@ -6,6 +6,9 @@ import 'cover.dart';
 
 /// Jaquette d’épisode. Pendant la lecture, les barres passent sur l’image
 /// assombrie. En pause, seule la jaquette reste.
+///
+/// Pendant un téléchargement, un anneau (comme le mini-lecteur) entoure la
+/// pochette : indéterminé au démarrage, puis progression.
 class PlayingEpisodeCover extends ConsumerWidget {
   const PlayingEpisodeCover({
     super.key,
@@ -15,6 +18,7 @@ class PlayingEpisodeCover extends ConsumerWidget {
     this.httpHeaders,
     this.size = 48,
     this.radius = 4,
+    this.downloadProgress,
   });
 
   final int episodeId;
@@ -24,6 +28,9 @@ class PlayingEpisodeCover extends ConsumerWidget {
   final double size;
   final double radius;
 
+  /// `null` = pas de téléchargement. `0` = spinner, `]0,1]` = progression.
+  final double? downloadProgress;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final playing = ref.watch(
@@ -31,29 +38,47 @@ class PlayingEpisodeCover extends ConsumerWidget {
         (state) => state.playing && state.episodeId == episodeId,
       ),
     );
+    final downloading = downloadProgress != null;
+    // Même proportion pochette / anneau que le mini-lecteur (26 / 40).
+    final coverSize = downloading ? size * 0.65 : size;
+    final coverRadius = downloading
+        ? (radius * coverSize / size).clamp(2.0, radius)
+        : radius;
     return SizedBox(
       width: size,
       height: size,
       child: Stack(
         alignment: Alignment.center,
         children: [
+          if (downloading)
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.all(1.5),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  value: downloadProgress == 0 ? null : downloadProgress,
+                ),
+              ),
+            ),
           PodcastCover(
             url: url,
             localPath: localPath,
             httpHeaders: httpHeaders,
-            size: size,
-            radius: radius,
+            size: coverSize,
+            radius: coverRadius,
           ),
           if (playing) ...[
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: const Color(0x73000000),
-                  borderRadius: BorderRadius.all(Radius.circular(radius)),
+                  borderRadius: BorderRadius.all(
+                    Radius.circular(downloading ? coverRadius : radius),
+                  ),
                 ),
               ),
             ),
-            _PlayingBars(size: size),
+            _PlayingBars(size: coverSize),
           ],
         ],
       ),

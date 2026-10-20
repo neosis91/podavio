@@ -5,13 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../data/app_database.dart';
 import '../l10n/l10n.dart';
 import '../data/providers.dart';
-import '../player/playback_source.dart';
 import 'playlist_membership.dart';
 import 'router.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/frosted_header.dart';
 import 'widgets/episode_list.dart';
-import 'widgets/episode_tile.dart';
 import 'widgets/list_play_button.dart';
 
 class PlaylistsPage extends ConsumerWidget {
@@ -56,16 +54,23 @@ class PlaylistsPage extends ConsumerWidget {
   }
 }
 
-class PlaylistPage extends ConsumerWidget {
+class PlaylistPage extends ConsumerStatefulWidget {
   const PlaylistPage({super.key, required this.playlistId});
 
   final int playlistId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PlaylistPage> createState() => _PlaylistPageState();
+}
+
+class _PlaylistPageState extends ConsumerState<PlaylistPage> {
+  EpisodeSelectionSession? _selection;
+
+  @override
+  Widget build(BuildContext context) {
     final playlists = ref.watch(playlistsProvider);
     final playlist = playlists.asData?.value
-        .where((item) => item.id == playlistId)
+        .where((item) => item.id == widget.playlistId)
         .firstOrNull;
     if (playlist == null) {
       return FrostedScaffold(
@@ -84,117 +89,74 @@ class PlaylistPage extends ConsumerWidget {
       );
     }
 
-    return FrostedScaffold(
-      appBar: FrostedAppBar(
-        title: Text(playlist.name),
-        actions: [
-          ListPlayButton(
-            query: playlist.isDefault
-                ? const EpisodeQuery(queuedOnly: true, paginated: false)
-                : EpisodeQuery(playlistId: playlist.id, paginated: false),
-          ),
-          _PlaylistMenu(playlist: playlist, popOnDelete: true),
-        ],
-      ),
-      body: playlist.isDefault
-          ? EpisodeListBody(
-              queueStyle: true,
-              query: const EpisodeQuery(queuedOnly: true, paginated: false),
-              reorder: (entries, oldIndex, newIndex) {
-                final next = [...entries];
-                final moved = next.removeAt(oldIndex);
-                next.insert(newIndex, moved);
-                ref
-                    .read(databaseProvider)
-                    .setQueueOrder(
-                      next.map((entry) => entry.episode.id).toList(),
-                    );
-              },
-              onRemove: (entry) =>
-                  ref.read(databaseProvider).removeFromQueue(entry.episode.id),
-              empty: const EmptyState(
-                title: 'La playlist est vide',
-                message: 'Ajoutez des épisodes pour les écouter les uns à la suite des autres.',
-              ),
-            )
-          : _CustomPlaylistBody(playlistId: playlist.id),
-    );
-  }
-}
-
-class _CustomPlaylistBody extends ConsumerWidget {
-  const _CustomPlaylistBody({required this.playlistId});
-
-  final int playlistId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final episodes = ref.watch(playlistEpisodesProvider(playlistId));
-    return episodes.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => EmptyState(
-        title: 'Impossible de charger la playlist',
-        message: error.toString(),
-      ),
-      data: (entries) {
-        if (entries.isEmpty) {
-          return const EmptyState(
-            title: 'Cette playlist est vide',
-            message: 'Ajoutez des épisodes depuis leur menu Playlists.',
-          );
+    final query = playlist.isDefault
+        ? const EpisodeQuery(queuedOnly: true, paginated: false)
+        : EpisodeQuery(playlistId: playlist.id, paginated: false);
+    final bulkActions = EpisodeBulkActions(
+      favorite: true,
+      download: true,
+      removeLabel: 'Retirer de la playlist',
+      onRemove: (entries) async {
+        final database = ref.read(databaseProvider);
+        if (playlist.isDefault) {
+          for (final entry in entries) {
+            await database.removeFromQueue(entry.episode.id);
+          }
+        } else {
+          for (final entry in entries) {
+            await database.removeFromPlaylist(playlist.id, entry.episode.id);
+          }
         }
-        return ReorderableListView.builder(
-          padding: belowFrostedBar(
-            context,
-            const EdgeInsets.only(top: 4, bottom: 24),
-          ),
-          buildDefaultDragHandles: false,
-          proxyDecorator: queueStyleDragProxy,
-          itemCount: entries.length,
-          onReorderItem: (oldIndex, newIndex) {
-            final next = [...entries];
-            final moved = next.removeAt(oldIndex);
-            next.insert(newIndex, moved);
+      },
+    );
+
+    return FrostedScaffold(
+      appBar: _selection != null
+          ? EpisodeSelectionAppBar(session: _selection!)
+          : FrostedAppBar(
+              title: Text(playlist.name),
+              actions: [
+                ListPlayButton(query: query),
+                _PlaylistMenu(playlist: playlist, popOnDelete: true),
+              ],
+            ),
+      body: EpisodeListBody(
+        queueStyle: true,
+        query: query,
+        bulkActions: bulkActions,
+        onSelectionChanged: (session) {
+          if (!mounted) return;
+          setState(() => _selection = session);
+        },
+        reorder: (entries, oldIndex, newIndex) {
+          final next = [...entries];
+          final moved = next.removeAt(oldIndex);
+          next.insert(newIndex, moved);
+          final ids = next.map((entry) => entry.episode.id).toList();
+          if (playlist.isDefault) {
+            ref.read(databaseProvider).setQueueOrder(ids);
+          } else {
+            ref.read(databaseProvider).setPlaylistOrder(playlist.id, ids);
+          }
+        },
+        onRemove: (entry) {
+          if (playlist.isDefault) {
+            ref.read(databaseProvider).removeFromQueue(entry.episode.id);
+          } else {
             ref
                 .read(databaseProvider)
-                .setPlaylistOrder(
-                  playlistId,
-                  next.map((entry) => entry.episode.id).toList(),
-                );
-          },
-          itemBuilder: (context, index) {
-            void move(int to) {
-              final next = [...entries];
-              final moved = next.removeAt(index);
-              next.insert(to, moved);
-              ref
-                  .read(databaseProvider)
-                  .setPlaylistOrder(
-                    playlistId,
-                    next.map((entry) => entry.episode.id).toList(),
-                  );
-            }
-
-            final entry = entries[index];
-            return EpisodeTile(
-              key: ValueKey(entry.episode.id),
-              entry: entry,
-              reorderIndex: index,
-              queueStyle: true,
-              playbackSource: PlaybackSource(
-                EpisodeQuery(playlistId: playlistId, paginated: false),
-              ),
-              onMoveUp: index == 0 ? null : () => move(index - 1),
-              onMoveDown: index >= entries.length - 1
-                  ? null
-                  : () => move(index + 1),
-              onRemove: () => ref
-                  .read(databaseProvider)
-                  .removeFromPlaylist(playlistId, entry.episode.id),
-            );
-          },
-        );
-      },
+                .removeFromPlaylist(playlist.id, entry.episode.id);
+          }
+        },
+        empty: EmptyState(
+          title: playlist.isDefault
+              ? 'La playlist est vide'
+              : 'Cette playlist est vide',
+          message: playlist.isDefault
+              ? 'Ajoutez des épisodes pour les écouter les uns à la suite des autres.'
+              : 'Ajoutez des épisodes depuis leur menu Playlists.',
+        ),
+      ),
     );
   }
 }

@@ -454,6 +454,72 @@ class DeleteIcon extends StatelessWidget {
   }
 }
 
+class SelectAllIcon extends StatelessWidget {
+  const SelectAllIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Image.asset(
+        'assets/brand/select_all.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.medium,
+        semanticLabel: 'Tout sélectionner',
+      ),
+    );
+  }
+}
+
+class DeselectAllIcon extends StatelessWidget {
+  const DeselectAllIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Image.asset(
+        'assets/brand/deselect_all.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.medium,
+        semanticLabel: 'Tout désélectionner',
+      ),
+    );
+  }
+}
+
+class RemoveSelectionIcon extends StatelessWidget {
+  const RemoveSelectionIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Image.asset(
+        'assets/brand/remove_selection.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.medium,
+        semanticLabel: 'Supprimer la sélection',
+      ),
+    );
+  }
+}
+
 class PlaylistRemoveIcon extends StatelessWidget {
   const PlaylistRemoveIcon({super.key, this.size = 24});
 

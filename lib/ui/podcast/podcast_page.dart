@@ -14,6 +14,7 @@ import '../../settings/settings_controller.dart';
 import '../router.dart';
 import '../widgets/brand.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/episode_list.dart';
 import '../widgets/frosted_header.dart';
 import '../widgets/episode_tile.dart';
 import '../widgets/messages.dart';
@@ -31,11 +32,95 @@ class PodcastPage extends ConsumerStatefulWidget {
 
 class _PodcastPageState extends ConsumerState<PodcastPage> {
   EpisodeWindow? _previousEpisodes;
+  var _selecting = false;
+  final _selected = <int>{};
+  final _scrollController = ScrollController();
 
   EpisodeQuery get _query => EpisodeQuery(podcastId: widget.podcastId);
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   void _loadMore() {
     ref.read(episodesProvider(_query).notifier).loadMore();
+  }
+
+  void _withScrollPinned(VoidCallback update) {
+    final offset = _scrollController.hasClients
+        ? _scrollController.offset
+        : null;
+    update();
+    if (offset == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      _scrollController.jumpTo(offset.clamp(0.0, max));
+    });
+  }
+
+  void _enterSelection(int id) {
+    _withScrollPinned(() {
+      setState(() {
+        _selecting = true;
+        _selected
+          ..clear()
+          ..add(id);
+      });
+    });
+  }
+
+  void _exitSelection() {
+    _withScrollPinned(() {
+      setState(() {
+        _selecting = false;
+        _selected.clear();
+      });
+    });
+  }
+
+  void _toggle(int id) {
+    _withScrollPinned(() {
+      setState(() {
+        if (!_selected.remove(id)) _selected.add(id);
+        if (_selected.isEmpty) _selecting = false;
+      });
+    });
+  }
+
+  void _selectAll(List<EpisodeEntry> entries) {
+    _withScrollPinned(() {
+      setState(() {
+        _selecting = true;
+        _selected
+          ..clear()
+          ..addAll(entries.map((entry) => entry.episode.id));
+      });
+    });
+  }
+
+  void _deselectAll() {
+    setState(() => _selected.clear());
+  }
+
+  EpisodeSelectionSession? _selectionSession(EpisodeWindow? window) {
+    if (!_selecting) return null;
+    final entries = window?.entries ?? const <EpisodeEntry>[];
+    final chosen = [
+      for (final entry in entries)
+        if (_selected.contains(entry.episode.id)) entry,
+    ];
+    return EpisodeSelectionSession(
+      selectedCount: _selected.length,
+      totalCount: entries.length,
+      selected: chosen,
+      onClose: _exitSelection,
+      onSelectAll: () => _selectAll(entries),
+      onDeselectAll: _deselectAll,
+      bulkActions: const EpisodeBulkActions(favorite: true, download: true),
+    );
   }
 
   @override
@@ -81,65 +166,84 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
           ),
         );
         final first = window?.entries.firstOrNull;
+        final selection = _selectionSession(window);
+        final selectingOverlay =
+            Theme.of(context).brightness == Brightness.dark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark;
+        // Toujours la même structure Theme → Scaffold → body pour ne pas
+        // démonter le CustomScrollView (sinon retour en haut de liste).
+        final baseTheme = Theme.of(context);
+        final appBarTheme = selection != null
+            ? baseTheme.appBarTheme
+            : const AppBarTheme(
+                foregroundColor: Colors.white,
+                iconTheme: IconThemeData(color: Colors.white),
+                actionsIconTheme: IconThemeData(color: Colors.white),
+              );
         return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: SystemUiOverlayStyle.light,
-          child: TweenAnimationBuilder<Color?>(
-            tween: ColorTween(end: background),
-            duration: const Duration(milliseconds: 500),
-            builder: (context, color, child) {
-              return Theme(
-                data: Theme.of(context).copyWith(
-                  appBarTheme: const AppBarTheme(
-                    foregroundColor: Colors.white,
-                    iconTheme: IconThemeData(color: Colors.white),
-                    actionsIconTheme: IconThemeData(color: Colors.white),
-                  ),
-                ),
-                child: FrostedScaffold(
-                  appBar: FrostedAppBar(
-                    alwaysFrosted: true,
-                    title: Text(
-                      item.title,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    actions: _appBarActions(item),
-                  ),
+          value: selection != null
+              ? selectingOverlay
+              : SystemUiOverlayStyle.light,
+          child: Theme(
+            data: baseTheme.copyWith(appBarTheme: appBarTheme),
+            child: TweenAnimationBuilder<Color?>(
+              tween: ColorTween(end: background),
+              duration: const Duration(milliseconds: 500),
+              builder: (context, color, child) {
+                return FrostedScaffold(
+                  appBar: selection != null
+                      ? EpisodeSelectionAppBar(session: selection)
+                      : FrostedAppBar(
+                          alwaysFrosted: true,
+                          title: Text(
+                            item.title,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          actions: _appBarActions(item),
+                        ),
                   body: ColoredBox(
                     color: color ?? Colors.black,
                     child: child,
                   ),
-                ),
-              );
-            },
-            child: supportsPullToRefresh
-                ? RefreshIndicator(
-                    color: Colors.white,
-                    backgroundColor: background,
-                    onRefresh: () => _refresh(context, ref, item.feedUrl),
-                    child: _podcastScrollView(
-                      item: item,
-                      window: window,
-                      episodes: episodes,
-                      pullToRefresh: true,
-                      background: background,
-                      showPause: playingHere,
-                      onPlay: first == null
-                          ? null
-                          : () => _play(ref, item, first, playingHere),
-                    ),
-                  )
-                : _podcastScrollView(
-                    item: item,
-                    window: window,
-                    episodes: episodes,
-                    pullToRefresh: false,
-                    background: background,
-                    showPause: playingHere,
-                    onPlay: first == null
-                        ? null
-                        : () => _play(ref, item, first, playingHere),
-                  ),
+                );
+              },
+              child: PopScope(
+                canPop: !_selecting,
+                onPopInvokedWithResult: (didPop, _) {
+                  if (!didPop && _selecting) _exitSelection();
+                },
+                child: supportsPullToRefresh
+                    ? RefreshIndicator(
+                        color: Colors.white,
+                        backgroundColor: background,
+                        onRefresh: () => _refresh(context, ref, item.feedUrl),
+                        child: _podcastScrollView(
+                          item: item,
+                          window: window,
+                          episodes: episodes,
+                          pullToRefresh: true,
+                          background: background,
+                          showPause: playingHere,
+                          onPlay: first == null
+                              ? null
+                              : () => _play(ref, item, first, playingHere),
+                        ),
+                      )
+                    : _podcastScrollView(
+                        item: item,
+                        window: window,
+                        episodes: episodes,
+                        pullToRefresh: false,
+                        background: background,
+                        showPause: playingHere,
+                        onPlay: first == null
+                            ? null
+                            : () => _play(ref, item, first, playingHere),
+                      ),
+              ),
+            ),
           ),
         );
       },
@@ -264,6 +368,8 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         return false;
       },
       child: CustomScrollView(
+        key: PageStorageKey<String>('podcast-scroll-${widget.podcastId}'),
+        controller: _scrollController,
         physics: pullToRefresh ? const AlwaysScrollableScrollPhysics() : null,
         slivers: [
           SliverPadding(
@@ -360,11 +466,16 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                 );
               }
               final entry = window.entries[index];
+              final id = entry.episode.id;
               return EpisodeTile(
-                key: ValueKey(entry.episode.id),
+                key: ValueKey(id),
                 entry: entry,
                 showPodcast: false,
                 playbackSource: source,
+                selecting: _selecting,
+                selected: _selected.contains(id),
+                onLongPress: () => _enterSelection(id),
+                onToggleSelect: () => _toggle(id),
               );
             },
           ),

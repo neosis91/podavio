@@ -10,89 +10,28 @@ import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
 import 'widgets/playing_cover.dart';
 import 'widgets/empty_state.dart';
+import 'widgets/episode_list.dart';
 import 'widgets/episode_tile.dart';
-import 'widgets/frosted_header.dart';
 
 class HistoryPage extends StatelessWidget {
   const HistoryPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return FrostedScaffold(
-      appBar: FrostedAppBar(title: Text(context.tr('Recent plays'))),
-      body: const _HistoryList(),
-    );
-  }
-}
-
-class _HistoryList extends ConsumerStatefulWidget {
-  const _HistoryList();
-
-  @override
-  ConsumerState<_HistoryList> createState() => _HistoryListState();
-}
-
-class _HistoryListState extends ConsumerState<_HistoryList> {
-  static const _query = EpisodeQuery(historyOnly: true);
-  EpisodeWindow? _previous;
-
-  @override
-  Widget build(BuildContext context) {
-    final next = ref.watch(episodesProvider(_query));
-    final loaded = next.asData?.value;
-    if (loaded != null) _previous = loaded;
-    final window = loaded ?? _previous;
-
-    if (window == null) {
-      return next.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => EmptyState(
-          title: 'Impossible de charger les épisodes',
-          message: error.toString(),
-        ),
-        data: (_) => const SizedBox.shrink(),
-      );
-    }
-
-    if (window.entries.isEmpty) {
-      return const EmptyState(
+    return EpisodeListScaffold(
+      title: Text(context.tr('Recent plays')),
+      queueStyle: true,
+      query: const EpisodeQuery(historyOnly: true),
+      bulkActions: const EpisodeBulkActions(favorite: true, download: true),
+      empty: const EmptyState(
         title: 'Aucune lecture récente',
         message: 'Les épisodes que vous lancez apparaîtront ici.',
-      );
-    }
-
-    final entries = window.entries;
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification is! ScrollUpdateNotification &&
-            notification is! ScrollEndNotification) {
-          return false;
-        }
-        if (notification.metrics.extentAfter < 800) {
-          ref.read(episodesProvider(_query).notifier).loadMore();
-        }
-        return false;
-      },
-      child: ListView.builder(
-        padding: belowFrostedBar(context, EdgeInsets.zero),
-        itemCount: entries.length + (window.hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index >= entries.length) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-          return HistoryEpisodeRow(
-            key: ValueKey(entries[index].episode.id),
-            entry: entries[index],
-          );
-        },
       ),
     );
   }
 }
 
+/// Compact history row used by the library hub shelf.
 class HistoryEpisodeRow extends ConsumerWidget {
   const HistoryEpisodeRow({
     super.key,
