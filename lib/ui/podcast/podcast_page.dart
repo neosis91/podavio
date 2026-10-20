@@ -156,9 +156,9 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
           onPressed: () => ref
               .read(databaseProvider)
               .setPodcastPreferred(item.id, preferred: !item.preferred),
-          icon: Icon(
-            item.preferred ? Icons.favorite : Icons.favorite_border,
-            color: item.preferred ? favoriteHeartColor : Colors.white,
+          icon: PreferredStarIcon(
+            selected: item.preferred,
+            color: item.preferred ? preferredStarColor : Colors.white,
           ),
         ),
       PopupMenuButton<String>(

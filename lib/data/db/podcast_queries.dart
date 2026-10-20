@@ -30,15 +30,26 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
         .watch();
   }
 
-  /// Preferred subscriptions first, then the others by title.
+  /// Accueil « Abonnements préférés » : préférés d’abord, puis les plus
+  /// écoutés (temps sur les épisodes commencés non terminés), puis le titre.
   Stream<List<Podcast>> watchPodcastsByPreference() {
-    return (select(podcasts)
-          ..where((table) => table.subscribed.equals(true))
+    final unfinishedListen = CustomExpression<int>(
+      'COALESCE(SUM(CASE WHEN episodes.played = 0 AND episodes.position_ms > 0 '
+      'THEN episodes.position_ms ELSE 0 END), 0)',
+    );
+    final query =
+        select(podcasts).join([
+            leftOuterJoin(episodes, episodes.podcastId.equalsExp(podcasts.id)),
+          ])
+          ..where(podcasts.subscribed.equals(true))
+          ..addColumns([unfinishedListen])
+          ..groupBy([podcasts.id])
           ..orderBy([
-            (table) => OrderingTerm.desc(table.preferred),
-            (table) => OrderingTerm.asc(table.title),
-          ]))
-        .watch();
+            OrderingTerm.desc(podcasts.preferred),
+            OrderingTerm.desc(unfinishedListen),
+            OrderingTerm.asc(podcasts.title),
+          ]);
+    return query.map((row) => row.readTable(podcasts)).watch();
   }
 
   Future<void> setPodcastPreferred(int id, {required bool preferred}) {
