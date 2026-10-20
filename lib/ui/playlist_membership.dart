@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/app_database.dart';
 import '../data/providers.dart';
+import 'widgets/app_bottom_sheet.dart';
 
 Future<String?> askPlaylistName(
   BuildContext context, {
@@ -81,7 +82,7 @@ Future<void> showPlaylistMembershipSheet(
   WidgetRef ref,
   EpisodeEntry entry,
 ) {
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,

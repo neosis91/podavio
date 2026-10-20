@@ -31,6 +31,7 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
   var _searching = false;
   var _search = '';
   Timer? _searchTimer;
+  EpisodeSelectionSession? _selection;
 
   @override
   void dispose() {
@@ -84,86 +85,88 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
     );
 
     return FrostedScaffold(
-      appBar: FrostedAppBar(
-        title: _searching
-            ? TextField(
-                controller: _searchController,
-                focusNode: _searchFocus,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Rechercher un épisode',
-                  border: InputBorder.none,
-                ),
-                textInputAction: TextInputAction.search,
-                onChanged: _onSearchChanged,
-              )
-            : Text(context.tr('Episodes')),
-        leading: _searching
-            ? IconButton(
-                tooltip: 'Fermer la recherche',
-                onPressed: _closeSearch,
-                icon: const Icon(Icons.arrow_back),
-              )
-            : null,
-        actions: [
-          ListPlayButton(query: query),
-          if (_searching)
-            IconButton(
-              tooltip: 'Effacer',
-              onPressed: _searchController.text.isEmpty
-                  ? _closeSearch
-                  : () {
-                      _searchTimer?.cancel();
-                      _searchController.clear();
-                      setState(() => _search = '');
+      appBar: _selection != null
+          ? EpisodeSelectionAppBar(session: _selection!)
+          : FrostedAppBar(
+              title: _searching
+                  ? TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocus,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'Rechercher un épisode',
+                        border: InputBorder.none,
+                      ),
+                      textInputAction: TextInputAction.search,
+                      onChanged: _onSearchChanged,
+                    )
+                  : Text(context.tr('Episodes')),
+              leading: _searching
+                  ? IconButton(
+                      tooltip: 'Fermer la recherche',
+                      onPressed: _closeSearch,
+                      icon: const Icon(Icons.arrow_back),
+                    )
+                  : null,
+              actions: [
+                ListPlayButton(query: query),
+                if (_searching)
+                  IconButton(
+                    tooltip: 'Effacer',
+                    onPressed: _searchController.text.isEmpty
+                        ? _closeSearch
+                        : () {
+                            _searchTimer?.cancel();
+                            _searchController.clear();
+                            setState(() => _search = '');
+                          },
+                    icon: const Icon(Icons.close),
+                  )
+                else ...[
+                  IconButton(
+                    tooltip: 'Rechercher',
+                    onPressed: _openSearch,
+                    icon: const Icon(Icons.search),
+                  ),
+                  IconButton(
+                    tooltip: refreshing
+                        ? 'Actualisation en cours'
+                        : 'Actualiser les abonnements',
+                    onPressed: refreshing
+                        ? null
+                        : () => refreshSubscriptions(context, ref),
+                    icon: const Icon(Icons.refresh),
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      switch (value) {
+                        case 'filter':
+                          await showEpisodeFilterDialog(context, ref);
+                        case 'played':
+                          await ref.read(databaseProvider).markAllPlayed();
+                          if (context.mounted) {
+                            showMessage(context, 'Épisodes marqués comme lus');
+                          }
+                      }
                     },
-              icon: const Icon(Icons.close),
-            )
-          else ...[
-            IconButton(
-              tooltip: 'Rechercher',
-              onPressed: _openSearch,
-              icon: const Icon(Icons.search),
-            ),
-            IconButton(
-              tooltip: refreshing
-                  ? 'Actualisation en cours'
-                  : 'Actualiser les abonnements',
-              onPressed: refreshing
-                  ? null
-                  : () => refreshSubscriptions(context, ref),
-              icon: const Icon(Icons.refresh),
-            ),
-            PopupMenuButton<String>(
-              onSelected: (value) async {
-                switch (value) {
-                  case 'filter':
-                    await showEpisodeFilterDialog(context, ref);
-                  case 'played':
-                    await ref.read(databaseProvider).markAllPlayed();
-                    if (context.mounted) {
-                      showMessage(context, 'Épisodes marqués comme lus');
-                    }
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'filter',
-                  child: Text(context.tr('Filter')),
-                ),
-                const PopupMenuItem(
-                  value: 'played',
-                  child: Text('Tout marquer comme lu'),
-                ),
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'filter',
+                        child: Text(context.tr('Filter')),
+                      ),
+                      const PopupMenuItem(
+                        value: 'played',
+                        child: Text('Tout marquer comme lu'),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
-          ],
-        ],
-      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (hasFilters)
+          if (hasFilters && _selection == null)
             ActiveEpisodeFiltersBar(
               filters: filters,
               onEdit: () => showEpisodeFilterDialog(context, ref),
@@ -175,6 +178,14 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
               queueStyle: true,
               query: query,
               highlightQuery: _search,
+              bulkActions: const EpisodeBulkActions(
+                favorite: true,
+                download: true,
+              ),
+              onSelectionChanged: (session) {
+                if (!mounted) return;
+                setState(() => _selection = session);
+              },
               onRefresh: refreshing
                   ? null
                   : () => refreshSubscriptions(context, ref),

@@ -48,6 +48,12 @@ class Podcasts extends Table {
 
   /// Mot de passe HTTP Basic du flux. `null` = pas d’authentification.
   TextColumn get authPassword => text().nullable()();
+
+  /// Personnes du flux (`podcast:person`), JSON.
+  TextColumn get personsJson => text().withDefault(const Constant('[]'))();
+
+  /// Liens de financement (`podcast:funding`), JSON.
+  TextColumn get fundingJson => text().withDefault(const Constant('[]'))();
 }
 
 @TableIndex(name: 'episodes_podcast_id', columns: {#podcastId})
@@ -189,7 +195,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -251,6 +257,10 @@ class AppDatabase extends _$AppDatabase
       if (from < 14) {
         await migrator.addColumn(podcasts, podcasts.episodeNotification);
       }
+      if (from < 15) {
+        await migrator.addColumn(podcasts, podcasts.personsJson);
+        await migrator.addColumn(podcasts, podcasts.fundingJson);
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -303,4 +313,10 @@ class AppDatabase extends _$AppDatabase
       'ON episodes (download_path)',
     );
   }
+}
+
+extension PodcastFeedMeta on Podcast {
+  List<PodcastPerson> get persons => decodePodcastPersons(personsJson);
+
+  List<PodcastFunding> get fundingLinks => decodePodcastFunding(fundingJson);
 }
