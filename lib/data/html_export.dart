@@ -46,11 +46,11 @@ Future<String> buildSubscriptionsHtml(List<Podcast> podcasts) async {
     cards.write(_subscriptionCard(podcast));
   }
   return _document(
-    title: 'Abonnements',
-    subtitle: 'Exportés depuis Podavio',
+    title: 'Subscriptions',
+    subtitle: 'Exported from Podavio',
     logoUri: await _logoDataUri(),
     body: cards.isEmpty
-        ? '<p class="empty">Aucun abonnement.</p>'
+        ? '<p class="empty">No subscriptions.</p>'
         : '<ul class="cards">$cards</ul>',
   );
 }
@@ -75,11 +75,11 @@ Future<String> buildFavoritesHtml(List<EpisodeEntry> favorites) async {
     sections.write('</ul></li>');
   }
   return _document(
-    title: 'Favoris',
-    subtitle: 'Exportés depuis Podavio',
+    title: 'Favorites',
+    subtitle: 'Exported from Podavio',
     logoUri: await _logoDataUri(),
     body: sections.isEmpty
-        ? '<p class="empty">Aucun favori.</p>'
+        ? '<p class="empty">No favorites.</p>'
         : '<ul class="cards">$sections</ul>',
   );
 }
@@ -91,8 +91,8 @@ String _subscriptionCard(Podcast podcast) {
   final feed = podcast.feedUrl.trim();
   final links = <String>[
     if (website != null && website.isNotEmpty)
-      '<a href="${_esc(website)}">Site</a>',
-    if (feed.isNotEmpty) '<a href="${_esc(feed)}">Flux</a>',
+      '<a href="${_esc(website)}">Website</a>',
+    if (feed.isNotEmpty) '<a href="${_esc(feed)}">Feed</a>',
   ].join(' · ');
   return '''
 <li>
@@ -114,8 +114,8 @@ String _feedHeader(Podcast podcast) {
   final feed = podcast.feedUrl.trim();
   final links = <String>[
     if (website != null && website.isNotEmpty)
-      '<a href="${_esc(website)}">Site</a>',
-    if (feed.isNotEmpty) '<a href="${_esc(feed)}">Flux</a>',
+      '<a href="${_esc(website)}">Website</a>',
+    if (feed.isNotEmpty) '<a href="${_esc(feed)}">Feed</a>',
   ].join(' · ');
   return '''
 <div class="card feed">
@@ -151,7 +151,7 @@ String _document({
   final safeTitle = _esc(title);
   final safeSubtitle = _esc(subtitle);
   return '''<!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

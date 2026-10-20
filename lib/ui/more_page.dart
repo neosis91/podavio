@@ -251,32 +251,36 @@ class BackupRestorePage extends ConsumerWidget {
           const _SectionTitle('OPML'),
           ListTile(
             leading: const Icon(Icons.file_upload_outlined),
-            title: const Text('Importer un fichier OPML'),
-            subtitle: const Text(
-              'Abonnements exportés depuis une autre application',
+            title: Text(context.tr('Import an OPML file')),
+            subtitle: Text(
+              context.tr('Subscriptions exported from another app'),
             ),
             onTap: () => importOpmlFile(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.file_download_outlined),
-            title: const Text('Exporter les abonnements'),
-            subtitle: const Text('Fichier OPML'),
+            title: Text(context.tr('Export subscriptions')),
+            subtitle: Text(context.tr('OPML file')),
             onTap: () => _exportOpml(context, ref),
           ),
           const _SectionTitle('HTML'),
           ListTile(
             leading: const Icon(Icons.language_outlined),
-            title: const Text('Exporter les abonnements'),
-            subtitle: const Text(
-              'Page HTML à ouvrir ou partager (pas de ré-import)',
+            title: Text(context.tr('Export subscriptions')),
+            subtitle: Text(
+              context.tr(
+                'HTML page to open or share (cannot be re-imported)',
+              ),
             ),
             onTap: () => _exportSubscriptionsHtml(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.favorite_outline),
-            title: const Text('Exporter les favoris'),
-            subtitle: const Text(
-              'Page HTML groupée par podcast (pas de ré-import)',
+            title: Text(context.tr('Export favorites')),
+            subtitle: Text(
+              context.tr(
+                'HTML page grouped by podcast (cannot be re-imported)',
+              ),
             ),
             onTap: () => _exportFavoritesHtml(context, ref),
           ),
@@ -286,20 +290,23 @@ class BackupRestorePage extends ConsumerWidget {
   }
 
   Future<void> _exportOpml(BuildContext context, WidgetRef ref) async {
+    final emptyMsg = context.tr('No subscriptions to export');
+    final dialogTitle = context.tr('Export subscriptions');
+    final doneMsg = context.tr('Subscriptions exported');
     final podcasts = await ref.read(databaseProvider).listPodcasts();
     if (podcasts.isEmpty) {
-      if (context.mounted) showMessage(context, 'Aucun abonnement à exporter');
+      if (context.mounted) showMessage(context, emptyMsg);
       return;
     }
     final xml = buildOpml(podcasts);
     final saved = await FilePicker.saveFile(
-      dialogTitle: 'Exporter les abonnements',
+      dialogTitle: dialogTitle,
       fileName: 'podavio.opml',
       bytes: Uint8List.fromList(utf8.encode(xml)),
       mimeType: 'text/x-opml',
     );
     if (saved != null && context.mounted) {
-      showMessage(context, 'Abonnements exportés');
+      showMessage(context, doneMsg);
     }
   }
 
@@ -307,20 +314,23 @@ class BackupRestorePage extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
   ) async {
+    final emptyMsg = context.tr('No subscriptions to export');
+    final dialogTitle = context.tr('Export subscriptions (HTML)');
+    final doneMsg = context.tr('Subscriptions exported as HTML');
     final podcasts = await ref.read(databaseProvider).listPodcasts();
     if (podcasts.isEmpty) {
-      if (context.mounted) showMessage(context, 'Aucun abonnement à exporter');
+      if (context.mounted) showMessage(context, emptyMsg);
       return;
     }
     final html = await buildSubscriptionsHtml(podcasts);
     final saved = await FilePicker.saveFile(
-      dialogTitle: 'Exporter les abonnements (HTML)',
-      fileName: 'podavio-abonnements-${_exportStamp()}.html',
+      dialogTitle: dialogTitle,
+      fileName: 'podavio-subscriptions-${_exportStamp()}.html',
       bytes: Uint8List.fromList(utf8.encode(html)),
       mimeType: 'text/html',
     );
     if (saved != null && context.mounted) {
-      showMessage(context, 'Abonnements exportés en HTML');
+      showMessage(context, doneMsg);
     }
   }
 
@@ -328,23 +338,26 @@ class BackupRestorePage extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
   ) async {
+    final emptyMsg = context.tr('No favorites to export');
+    final dialogTitle = context.tr('Export favorites (HTML)');
+    final doneMsg = context.tr('Favorites exported as HTML');
     final favorites = await ref
         .read(databaseProvider)
         .watchEpisodes(favoritesOnly: true)
         .first;
     if (favorites.isEmpty) {
-      if (context.mounted) showMessage(context, 'Aucun favori à exporter');
+      if (context.mounted) showMessage(context, emptyMsg);
       return;
     }
     final html = await buildFavoritesHtml(favorites);
     final saved = await FilePicker.saveFile(
-      dialogTitle: 'Exporter les favoris (HTML)',
-      fileName: 'podavio-favoris-${_exportStamp()}.html',
+      dialogTitle: dialogTitle,
+      fileName: 'podavio-favorites-${_exportStamp()}.html',
       bytes: Uint8List.fromList(utf8.encode(html)),
       mimeType: 'text/html',
     );
     if (saved != null && context.mounted) {
-      showMessage(context, 'Favoris exportés en HTML');
+      showMessage(context, doneMsg);
     }
   }
 }

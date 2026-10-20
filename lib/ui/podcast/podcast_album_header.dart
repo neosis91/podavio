@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/app_database.dart';
 import '../../data/feed_service.dart';
 import '../../data/providers.dart';
+import '../../l10n/l10n.dart';
 import '../podcasts/podcast_feed_actions.dart';
 import '../widgets/brand.dart';
 import '../widgets/cover.dart';
@@ -283,7 +284,7 @@ class _PlayRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = showPause ? 'Pause' : 'Lecture';
+    final label = context.tr(showPause ? 'Pause' : 'Play');
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
