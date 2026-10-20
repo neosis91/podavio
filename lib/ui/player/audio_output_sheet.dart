@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../player/player_controller.dart';
+import '../widgets/app_bottom_sheet.dart';
 
 /// Cherche les Chromecast du réseau avec l’API Bonsoir actuelle.
 Future<List<CastDevice>> searchCastDevices({
@@ -56,7 +57,7 @@ Future<List<CastDevice>> searchCastDevices({
 /// Feuille « Sortie audio » : l’appareil local, puis les récepteurs Cast.
 Future<void> showAudioOutputSheet(BuildContext context, WidgetRef ref) {
   final theme = _themeAbovePlayer(context) ?? Theme.of(context);
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
@@ -139,12 +140,12 @@ class _AudioOutputSheetState extends ConsumerState<_AudioOutputSheet> {
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.9,
         ),
-        child: SingleChildScrollView(
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+        child: ListView(
+          shrinkWrap: true,
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.paddingOf(context).bottom,
+          ),
+          children: [
                 const SizedBox(height: 8),
                 DecoratedBox(
                   decoration: BoxDecoration(
@@ -255,9 +256,7 @@ class _AudioOutputSheetState extends ConsumerState<_AudioOutputSheet> {
                 ),
                 const _VolumeRow(),
                 const SizedBox(height: 12),
-              ],
-            ),
-          ),
+          ],
         ),
       ),
     );

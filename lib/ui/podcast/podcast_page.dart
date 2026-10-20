@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,14 +9,16 @@ import '../../data/models.dart';
 import '../../data/providers.dart';
 import '../../data/status_notifications.dart';
 import '../../player/playback_source.dart';
+import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
 import '../router.dart';
+import '../widgets/brand.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/frosted_header.dart';
 import '../widgets/episode_tile.dart';
-import '../widgets/list_play_button.dart';
 import '../widgets/messages.dart';
-import 'podcast_header.dart';
+import 'cover_palette.dart';
+import 'podcast_album_header.dart';
 
 class PodcastPage extends ConsumerStatefulWidget {
   const PodcastPage({super.key, required this.podcastId});
@@ -27,11 +30,21 @@ class PodcastPage extends ConsumerStatefulWidget {
 }
 
 class _PodcastPageState extends ConsumerState<PodcastPage> {
+  EpisodeWindow? _previousEpisodes;
+
+  EpisodeQuery get _query => EpisodeQuery(podcastId: widget.podcastId);
+
+  void _loadMore() {
+    ref.read(episodesProvider(_query).notifier).loadMore();
+  }
+
   @override
   Widget build(BuildContext context) {
     final podcast = ref.watch(podcastProvider(widget.podcastId));
-    final query = EpisodeQuery(podcastId: widget.podcastId);
-    final episodes = ref.watch(episodesProvider(query));
+    final episodes = ref.watch(episodesProvider(_query));
+    final loaded = episodes.asData?.value;
+    if (loaded != null) _previousEpisodes = loaded;
+    final window = loaded ?? _previousEpisodes;
     return podcast.when(
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -52,31 +65,80 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
             ),
           );
         }
-        return FrostedScaffold(
-          body: NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              if (notification is! ScrollUpdateNotification &&
-                  notification is! ScrollEndNotification) {
-                return false;
-              }
-              if (notification.metrics.extentAfter < 800) {
-                ref.read(episodesProvider(query).notifier).loadMore();
-              }
-              return false;
+        final background =
+            ref
+                .watch(
+                  podcastCoverColorProvider(
+                    coverColorToken(path: item.imagePath, url: item.imageUrl),
+                  ),
+                )
+                .asData
+                ?.value ??
+            Colors.black;
+        final playingHere = ref.watch(
+          playerProvider.select(
+            (state) => state.podcastId == item.id && state.hasEpisode,
+          ),
+        );
+        final first = window?.entries.firstOrNull;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle.light,
+          child: TweenAnimationBuilder<Color?>(
+            tween: ColorTween(end: background),
+            duration: const Duration(milliseconds: 500),
+            builder: (context, color, child) {
+              return Theme(
+                data: Theme.of(context).copyWith(
+                  appBarTheme: const AppBarTheme(
+                    foregroundColor: Colors.white,
+                    iconTheme: IconThemeData(color: Colors.white),
+                    actionsIconTheme: IconThemeData(color: Colors.white),
+                  ),
+                ),
+                child: FrostedScaffold(
+                  appBar: FrostedAppBar(
+                    alwaysFrosted: true,
+                    title: Text(
+                      item.title,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    actions: _appBarActions(item),
+                  ),
+                  body: ColoredBox(
+                    color: color ?? Colors.black,
+                    child: child,
+                  ),
+                ),
+              );
             },
             child: supportsPullToRefresh
                 ? RefreshIndicator(
+                    color: Colors.white,
+                    backgroundColor: background,
                     onRefresh: () => _refresh(context, ref, item.feedUrl),
                     child: _podcastScrollView(
                       item: item,
+                      window: window,
                       episodes: episodes,
                       pullToRefresh: true,
+                      background: background,
+                      showPause: playingHere,
+                      onPlay: first == null
+                          ? null
+                          : () => _play(ref, item, first, playingHere),
                     ),
                   )
                 : _podcastScrollView(
                     item: item,
+                    window: window,
                     episodes: episodes,
                     pullToRefresh: false,
+                    background: background,
+                    showPause: playingHere,
+                    onPlay: first == null
+                        ? null
+                        : () => _play(ref, item, first, playingHere),
                   ),
           ),
         );
@@ -84,167 +146,228 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     );
   }
 
-  Widget _podcastScrollView({
-    required Podcast item,
-    required AsyncValue<EpisodeWindow> episodes,
-    required bool pullToRefresh,
-  }) {
-    return CustomScrollView(
-      physics: pullToRefresh ? const AlwaysScrollableScrollPhysics() : null,
-      slivers: [
-        SliverAppBar(
-          pinned: true,
-          forceMaterialTransparency: true,
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          flexibleSpace: const FrostedHeaderBackdrop(),
-          title: Text(item.title, overflow: TextOverflow.ellipsis),
-          actions: [
-            ListPlayButton(query: EpisodeQuery(podcastId: widget.podcastId)),
-            IconButton(
-              tooltip: 'Actualiser ce flux',
-              onPressed: () => _refresh(context, ref, item.feedUrl),
-              icon: const Icon(Icons.refresh),
-            ),
-            if (item.subscribed)
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  switch (value) {
-                    case 'preferred':
-                      ref
-                          .read(databaseProvider)
-                          .setPodcastPreferred(
-                            item.id,
-                            preferred: !item.preferred,
-                          );
-                    case 'autoDownload':
-                      ref
-                          .read(databaseProvider)
-                          .setPodcastAutoDownload(
-                            item.id,
-                            autoDownload: !item.autoDownload,
-                          );
-                    case 'keepUpdated':
-                      ref
-                          .read(databaseProvider)
-                          .setPodcastKeepUpdated(
-                            item.id,
-                            keepUpdated: !item.keepUpdated,
-                          );
-                    case 'unsubscribe':
-                      _unsubscribe(context, ref, item);
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'preferred',
-                    child: Text(
-                      item.preferred
-                          ? 'Retirer des préférés'
-                          : 'Marquer comme préféré',
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'autoDownload',
-                    child: Text(
-                      item.autoDownload
-                          ? 'Désactiver les téléchargements automatiques'
-                          : 'Activer les téléchargements automatiques',
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'keepUpdated',
-                    child: Text(
-                      item.keepUpdated
-                          ? 'Ne plus maintenir à jour'
-                          : 'Maintenir à jour',
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'unsubscribe',
-                    child: Text('Se désabonner'),
-                  ),
-                ],
-              )
-            else
-              IconButton(
-                tooltip: 'Retirer l’aperçu',
-                onPressed: () => _unsubscribe(context, ref, item),
-                icon: const Icon(Icons.close),
-              ),
-          ],
-        ),
-        SliverToBoxAdapter(
-          child: PodcastHeader(
-            podcast: item,
-            onInfo: () => context.push(AppRoutes.podcastAbout(item.id)),
-            onSettings: () => context.push(AppRoutes.podcastSettings(item.id)),
+  List<Widget> _appBarActions(Podcast item) {
+    return [
+      if (item.subscribed)
+        IconButton(
+          tooltip: item.preferred
+              ? 'Retirer des préférés'
+              : 'Marquer comme préféré',
+          onPressed: () => ref
+              .read(databaseProvider)
+              .setPodcastPreferred(item.id, preferred: !item.preferred),
+          icon: Icon(
+            item.preferred ? Icons.favorite : Icons.favorite_border,
+            color: item.preferred ? favoriteHeartColor : Colors.white,
           ),
         ),
-        ..._episodeSlivers(episodes),
-      ],
+      PopupMenuButton<String>(
+        tooltip: 'Plus',
+        icon: const Icon(Icons.more_vert, color: Colors.white),
+        onSelected: (value) {
+          switch (value) {
+            case 'refresh':
+              _refresh(context, ref, item.feedUrl);
+            case 'settings':
+              context.push(AppRoutes.podcastSettings(item.id));
+            case 'autoDownload':
+              ref
+                  .read(databaseProvider)
+                  .setPodcastAutoDownload(
+                    item.id,
+                    autoDownload: !item.autoDownload,
+                  );
+            case 'keepUpdated':
+              ref
+                  .read(databaseProvider)
+                  .setPodcastKeepUpdated(
+                    item.id,
+                    keepUpdated: !item.keepUpdated,
+                  );
+            case 'remove':
+              _unsubscribe(context, ref, item);
+          }
+        },
+        itemBuilder: (context) => [
+          const PopupMenuItem(
+            value: 'refresh',
+            child: Text('Actualiser ce flux'),
+          ),
+          if (item.subscribed)
+            const PopupMenuItem(value: 'settings', child: Text('Paramètres')),
+          if (item.subscribed)
+            PopupMenuItem(
+              value: 'autoDownload',
+              child: Text(
+                item.autoDownload
+                    ? 'Désactiver les téléchargements automatiques'
+                    : 'Activer les téléchargements automatiques',
+              ),
+            ),
+          if (item.subscribed)
+            PopupMenuItem(
+              value: 'keepUpdated',
+              child: Text(
+                item.keepUpdated
+                    ? 'Ne plus maintenir à jour'
+                    : 'Maintenir à jour',
+              ),
+            ),
+          PopupMenuItem(
+            value: 'remove',
+            child: Text(
+              item.subscribed ? 'Se désabonner' : 'Retirer l’aperçu',
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  void _play(
+    WidgetRef ref,
+    Podcast item,
+    EpisodeEntry first,
+    bool playingHere,
+  ) {
+    if (playingHere) {
+      ref.read(playerProvider.notifier).toggle();
+      return;
+    }
+    ref
+        .read(playerProvider.notifier)
+        .playOrPauseEntry(
+          first,
+          source: PlaybackSource.fromQuery(
+            EpisodeQuery(podcastId: item.id, paginated: false),
+          ),
+        );
+  }
+
+  Widget _podcastScrollView({
+    required Podcast item,
+    required EpisodeWindow? window,
+    required AsyncValue<EpisodeWindow> episodes,
+    required bool pullToRefresh,
+    required Color background,
+    required bool showPause,
+    required VoidCallback? onPlay,
+  }) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification.metrics.axis != Axis.vertical) return false;
+        if (notification is! ScrollUpdateNotification &&
+            notification is! ScrollEndNotification) {
+          return false;
+        }
+        if (notification.metrics.extentAfter < 800) _loadMore();
+        return false;
+      },
+      child: CustomScrollView(
+        physics: pullToRefresh ? const AlwaysScrollableScrollPhysics() : null,
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.only(
+              top: MediaQuery.viewPaddingOf(context).top + kToolbarHeight,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: PodcastAlbumHeader(
+                podcast: item,
+                background: background,
+                showPause: showPause,
+                onPlay: onPlay,
+                onAbout: () => context.push(AppRoutes.podcastAbout(item.id)),
+              ),
+            ),
+          ),
+          ..._episodeSlivers(window: window, episodes: episodes),
+        ],
+      ),
     );
   }
 
-  List<Widget> _episodeSlivers(AsyncValue<EpisodeWindow> episodes) {
-    return episodes.when(
-      loading: () => [
-        const SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      ],
-      error: (error, _) => [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: EmptyState(
-            title: 'Épisodes indisponibles',
-            message: error.toString(),
+  List<Widget> _episodeSlivers({
+    required EpisodeWindow? window,
+    required AsyncValue<EpisodeWindow> episodes,
+  }) {
+    final surface = Theme.of(context).colorScheme.surface;
+    if (window == null) {
+      return episodes.when(
+        loading: () => [
+          DecoratedSliver(
+            decoration: BoxDecoration(color: surface),
+            sliver: const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: CircularProgressIndicator()),
+            ),
           ),
-        ),
-      ],
-      data: (window) => [
-        if (window.entries.isEmpty)
-          const SliverFillRemaining(
+        ],
+        error: (error, _) => [
+          DecoratedSliver(
+            decoration: BoxDecoration(color: surface),
+            sliver: SliverFillRemaining(
+              hasScrollBody: false,
+              child: EmptyState(
+                title: 'Épisodes indisponibles',
+                message: error.toString(),
+              ),
+            ),
+          ),
+        ],
+        data: (_) => const [],
+      );
+    }
+    if (window.entries.isEmpty) {
+      return [
+        DecoratedSliver(
+          decoration: BoxDecoration(color: surface),
+          sliver: const SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: 'Aucun épisode',
               message: 'Ce flux ne contient pas encore d’épisode audio.',
             ),
-          )
-        else
-          ..._episodeListSlivers(window),
-      ],
-    );
+          ),
+        ),
+      ];
+    }
+    return _episodeListSlivers(window);
   }
 
   List<Widget> _episodeListSlivers(EpisodeWindow window) {
+    final source = PlaybackSource(
+      EpisodeQuery(podcastId: widget.podcastId, paginated: false),
+    );
+    final surface = Theme.of(context).colorScheme.surface;
     return [
-      SliverPadding(
-        padding: const EdgeInsets.only(top: 4, bottom: 24),
-        sliver: SliverList.builder(
-          addAutomaticKeepAlives: false,
-          itemCount: window.entries.length + (window.hasMore ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index >= window.entries.length) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(child: CircularProgressIndicator()),
+      DecoratedSliver(
+        decoration: BoxDecoration(color: surface),
+        sliver: SliverPadding(
+          padding: const EdgeInsets.only(top: 4, bottom: 24),
+          sliver: SliverList.separated(
+            addAutomaticKeepAlives: false,
+            itemCount: window.entries.length + (window.hasMore ? 1 : 0),
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              if (index >= window.entries.length) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  _loadMore();
+                });
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final entry = window.entries[index];
+              return EpisodeTile(
+                key: ValueKey(entry.episode.id),
+                entry: entry,
+                showPodcast: false,
+                playbackSource: source,
               );
-            }
-            final entry = window.entries[index];
-            return EpisodeTile(
-              key: ValueKey(entry.episode.id),
-              entry: entry,
-              showPodcast: false,
-              queueStyle: true,
-              playbackSource: PlaybackSource(
-                EpisodeQuery(podcastId: widget.podcastId, paginated: false),
-              ),
-            );
-          },
+            },
+          ),
         ),
       ),
     ];

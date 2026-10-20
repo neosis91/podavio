@@ -24,6 +24,7 @@ import 'player_sheet_controller.dart';
 class PlayerUiState {
   const PlayerUiState({
     this.episodeId,
+    this.podcastId,
     this.title = '',
     this.podcastTitle = '',
     this.imageUrl,
@@ -43,6 +44,7 @@ class PlayerUiState {
   });
 
   final int? episodeId;
+  final int? podcastId;
   final String title;
   final String podcastTitle;
   final String? imageUrl;
@@ -81,6 +83,7 @@ class PlayerUiState {
   PlayerUiState copyWith({
     int? episodeId,
     bool clearEpisode = false,
+    int? podcastId,
     String? title,
     String? podcastTitle,
     String? imageUrl,
@@ -107,6 +110,7 @@ class PlayerUiState {
   }) {
     return PlayerUiState(
       episodeId: clearEpisode ? null : episodeId ?? this.episodeId,
+      podcastId: clearEpisode ? null : podcastId ?? this.podcastId,
       title: title ?? this.title,
       podcastTitle: podcastTitle ?? this.podcastTitle,
       imageUrl: updateImage ? imageUrl : imageUrl ?? this.imageUrl,
@@ -806,6 +810,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     _emit(
       _ui.copyWith(
         episodeId: episode.id,
+        podcastId: podcast.id,
         title: episode.title,
         podcastTitle: podcast.title,
         imageUrl: remoteImage,

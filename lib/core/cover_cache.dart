@@ -4,8 +4,11 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 class CoverCache {
   CoverCache._();
 
-  /// Taille max utilisée pour le décodage mémoire des grandes jaquettes.
+  /// Taille max pour les petites jaquettes (listes, mini-lecteur).
   static const maxMemPixels = 800;
+
+  /// Taille max pour une jaquette plein cadre (page émission).
+  static const maxHeroMemPixels = 1600;
 
   static final CacheManager manager = CacheManager(
     Config(

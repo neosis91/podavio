@@ -746,6 +746,42 @@ void main() {
       expect(afterSubscribe.newEpisodeIds, [arrived.episode.id]);
     },
   );
+
+  test('saveFeed stores podcast persons and funding', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final saved = await database.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/people.xml',
+        title: 'Émission',
+        author: 'Alice, Bob',
+        description: '',
+        persons: [
+          PodcastPerson(
+            name: 'Alice',
+            role: 'host',
+            link: 'https://alice.example',
+          ),
+          PodcastPerson(name: 'Bob', role: 'guest'),
+        ],
+        funding: [
+          PodcastFunding(
+            url: 'https://donate.example',
+            label: 'Soutenir',
+          ),
+        ],
+        episodes: [],
+      ),
+    );
+    final podcast = await database.getPodcast(saved.podcastId);
+    expect(podcast, isNotNull);
+    expect(podcast!.persons, hasLength(2));
+    expect(podcast.persons.first.name, 'Alice');
+    expect(podcast.persons.first.role, 'host');
+    expect(podcast.fundingLinks, hasLength(1));
+    expect(podcast.fundingLinks.single.label, 'Soutenir');
+  });
 }
 
 FeedDraft _feed(String url, List<EpisodeDraft> episodes) {

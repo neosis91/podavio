@@ -57,6 +57,8 @@ void main() {
       subscribed: true,
       skipIntroSeconds: 0,
       skipOutroSeconds: 0,
+      personsJson: '[]',
+      fundingJson: '[]',
     );
     final entries = parseOpmlEntries(buildOpml([podcast]));
     expect(entries, hasLength(1));

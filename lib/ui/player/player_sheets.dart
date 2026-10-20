@@ -11,6 +11,7 @@ import '../../data/providers.dart';
 import '../../player/playback_source.dart';
 import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
+import '../widgets/app_bottom_sheet.dart';
 import '../widgets/brand.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/episode_tile.dart';
@@ -24,7 +25,7 @@ Future<void> showChaptersSheet({
   required WidgetRef ref,
   required int episodeId,
 }) {
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
@@ -189,7 +190,7 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
     required int count,
     required List<EpisodeEntry> entries,
   }) {
-    showModalBottomSheet<void>(
+    showAppModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {
@@ -709,7 +710,7 @@ Future<void> showNotesSheet({
   required BuildContext context,
   required int episodeId,
 }) {
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
@@ -764,7 +765,7 @@ class _NotesSheet extends ConsumerWidget {
 }
 
 Future<void> choosePlaybackSpeed(BuildContext context, WidgetRef ref) {
-  return showModalBottomSheet<void>(
+  return showAppModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     builder: (context) => const _SpeedSheet(),
@@ -876,7 +877,7 @@ class _SpeedSheet extends ConsumerWidget {
 }
 
 Future<void> chooseSleepTimer(BuildContext context, WidgetRef ref) async {
-  final choice = await showModalBottomSheet<_SleepChoice>(
+  final choice = await showAppModalBottomSheet<_SleepChoice>(
     context: context,
     showDragHandle: true,
     builder: (context) => SafeArea(

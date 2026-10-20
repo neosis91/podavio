@@ -1,12 +1,15 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
+import '../../data/app_database.dart';
 import '../../data/models.dart';
 import '../../data/providers.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/frosted_header.dart';
+import '../widgets/messages.dart';
 import 'podcast_header.dart';
 
 class PodcastAboutPage extends ConsumerWidget {
@@ -38,6 +41,8 @@ class PodcastAboutPage extends ConsumerWidget {
           );
         }
         final description = plainText(item.description);
+        final persons = item.persons;
+        final funding = item.fundingLinks;
         final titleStyle = Theme.of(context).textTheme.titleSmall
             ?.copyWith(color: Theme.of(context).colorScheme.primary);
         return FrostedScaffold(
@@ -66,11 +71,121 @@ class PodcastAboutPage extends ConsumerWidget {
                     ],
                   ),
                 ),
+              if (persons.isNotEmpty)
+                _PersonsSection(persons: persons, titleStyle: titleStyle),
+              if (funding.isNotEmpty)
+                _FundingSection(funding: funding, titleStyle: titleStyle),
             ],
           ),
         );
       },
     );
+  }
+}
+
+class _PersonsSection extends StatelessWidget {
+  const _PersonsSection({required this.persons, required this.titleStyle});
+
+  final List<PodcastPerson> persons;
+  final TextStyle? titleStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Personnes', style: titleStyle),
+          const SizedBox(height: 8),
+          for (final person in persons)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: _PersonAvatar(person: person),
+              title: Text(person.name),
+              subtitle: person.role == null && person.group == null
+                  ? null
+                  : Text(
+                      [
+                        if (person.role != null) person.role!,
+                        if (person.group != null) person.group!,
+                      ].join(' · '),
+                    ),
+              trailing: person.link == null
+                  ? null
+                  : const Icon(Icons.open_in_new, size: 18),
+              onTap: person.link == null
+                  ? null
+                  : () => _openExternalLink(context, person.link!),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PersonAvatar extends StatelessWidget {
+  const _PersonAvatar({required this.person});
+
+  final PodcastPerson person;
+
+  @override
+  Widget build(BuildContext context) {
+    final image = person.image;
+    final initial = person.name.isEmpty
+        ? '?'
+        : person.name.substring(0, 1).toUpperCase();
+    if (image == null) {
+      return CircleAvatar(child: Text(initial));
+    }
+    return CircleAvatar(backgroundImage: NetworkImage(image));
+  }
+}
+
+class _FundingSection extends StatelessWidget {
+  const _FundingSection({required this.funding, required this.titleStyle});
+
+  final List<PodcastFunding> funding;
+  final TextStyle? titleStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Financement', style: titleStyle),
+          const SizedBox(height: 8),
+          for (final item in funding)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.favorite_outline),
+              title: Text(
+                item.label?.isNotEmpty == true
+                    ? item.label!
+                    : 'Soutenir ce podcast',
+              ),
+              subtitle: Text(
+                item.url,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () => _openExternalLink(context, item.url),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _openExternalLink(BuildContext context, String url) async {
+  final uri = Uri.tryParse(url);
+  if (uri == null) return;
+  final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!opened && context.mounted) {
+    showMessage(context, 'Impossible d’ouvrir le lien');
   }
 }
 

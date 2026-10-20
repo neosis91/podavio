@@ -252,6 +252,8 @@ EpisodeEntry _entry({
       subscribed: true,
       skipIntroSeconds: 0,
       skipOutroSeconds: 0,
+      personsJson: '[]',
+      fundingJson: '[]',
     ),
   );
 }

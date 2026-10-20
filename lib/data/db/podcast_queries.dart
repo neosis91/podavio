@@ -185,6 +185,8 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
             description: Value(draft.description),
             imageUrl: Value(draft.imageUrl),
             link: Value(draft.link),
+            personsJson: Value(encodePodcastPersons(draft.persons)),
+            fundingJson: Value(encodePodcastFunding(draft.funding)),
             subscribedAt: DateTime.now(),
             refreshedAt: Value(DateTime.now()),
             subscribed: Value(subscribed ?? true),
@@ -205,6 +207,8 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
             imageUrl: Value(draft.imageUrl),
             imagePath: imageChanged ? const Value(null) : const Value.absent(),
             link: Value(draft.link),
+            personsJson: Value(encodePodcastPersons(draft.persons)),
+            fundingJson: Value(encodePodcastFunding(draft.funding)),
             refreshedAt: Value(DateTime.now()),
             subscribed: subscribed == null
                 ? const Value.absent()
