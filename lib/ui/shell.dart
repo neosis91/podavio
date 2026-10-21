@@ -57,6 +57,7 @@ const _libraryRoots = <String>[
   AppRoutes.playback,
   AppRoutes.downloadSettings,
   AppRoutes.about,
+  AppRoutes.nearbyShare,
   AppRoutes.licenses,
   AppRoutes.backupRestore,
 ];

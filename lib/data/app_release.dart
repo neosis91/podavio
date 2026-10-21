@@ -11,11 +11,26 @@ const latestReleaseUrl = 'https://podavio.com/latest.json';
 const downloadPageUrl = 'https://podavio.com/telecharger/';
 
 class AppRelease {
-  const AppRelease({required this.version, this.date, this.notes = const []});
+  const AppRelease({
+    required this.version,
+    this.date,
+    this.notes = const [],
+    this.files = const {},
+  });
 
   final String version;
   final DateTime? date;
   final List<String> notes;
+
+  /// Chemins relatifs sous podavio.com, ex. `android-universal`.
+  final Map<String, String> files;
+
+  /// URL absolue d’un artefact, ou null.
+  Uri? fileUri(String key) {
+    final relative = files[key]?.trim();
+    if (relative == null || relative.isEmpty) return null;
+    return Uri.parse('https://podavio.com/$relative');
+  }
 
   static AppRelease? tryParse(String body) {
     try {
@@ -32,10 +47,43 @@ class AppRelease {
           if (note is String && note.trim().isNotEmpty) notes.add(note.trim());
         }
       }
-      return AppRelease(version: version.trim(), date: date, notes: notes);
+      final files = <String, String>{};
+      final rawFiles = json['files'];
+      if (rawFiles is Map) {
+        rawFiles.forEach((key, value) {
+          if (key is String && value is String && value.trim().isNotEmpty) {
+            files[key] = value.trim();
+          }
+        });
+      }
+      return AppRelease(
+        version: version.trim(),
+        date: date,
+        notes: notes,
+        files: files,
+      );
     } catch (_) {
       return null;
     }
+  }
+}
+
+/// Dernière publication sur podavio.com, sans comparer à la version locale.
+Future<AppRelease?> fetchLatestRelease() async {
+  final client = http.Client();
+  try {
+    final response = await client
+        .get(
+          Uri.parse(latestReleaseUrl),
+          headers: const {'User-Agent': 'Podavio'},
+        )
+        .timeout(const Duration(seconds: 12));
+    if (response.statusCode != 200) return null;
+    return AppRelease.tryParse(response.body);
+  } catch (_) {
+    return null;
+  } finally {
+    client.close();
   }
 }
 

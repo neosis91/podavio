@@ -4,6 +4,10 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.10.20
+
+- On Android, About includes Share Podavio nearby. Over the same Wi-Fi or a phone hotspot, a QR code opens a page to download and install Podavio with no internet. Sharing stops when you leave the screen or switch apps.
+
 ## 2026.10.19
 
 - On episode lists, a long press starts multi-select. A frosted bar replaces the title with select or deselect all, and a menu for bulk actions when there are any.

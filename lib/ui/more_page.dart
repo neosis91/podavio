@@ -16,6 +16,7 @@ import '../data/feed_refresh_controller.dart';
 import '../data/html_export.dart';
 import '../data/opml.dart';
 import '../data/providers.dart';
+import '../nearby/nearby_apk_source.dart';
 import '../settings/settings_controller.dart';
 import '../sync/sync_controller.dart';
 import 'episodes_page.dart';
@@ -62,11 +63,23 @@ class AboutPage extends StatelessWidget {
             },
           ),
           const _CheckUpdateTile(),
+          if (NearbyApkSource().isSupported)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(context.tr('Share Podavio nearby')),
+              subtitle: Text(
+                context.tr(
+                  'Install on another phone over Wi-Fi, without internet',
+                ),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.nearbyShare),
+            ),
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(context.tr('Licenses')),
-            subtitle: const Text(
-              'Logiciels et bibliothèques utilisés par Podavio',
+            subtitle: Text(
+              context.tr('Software and libraries used by Podavio'),
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push(AppRoutes.licenses),

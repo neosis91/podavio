@@ -19,6 +19,7 @@ class AppRoutes {
   static const downloadSettings = '/download-settings';
   static const notifications = '/notifications';
   static const about = '/about';
+  static const nearbyShare = '/about/nearby-share';
   static const licenses = '/licenses';
   static const backupRestore = '/backup-restore';
   static const stats = '/stats';

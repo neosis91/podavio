@@ -74,6 +74,33 @@ const _fr = <String, String>{
   'Favorites exported as HTML': 'Favoris exportés en HTML',
   'Play': 'Lecture',
   'Pause': 'Pause',
+  'Share Podavio nearby': 'Partager Podavio à proximité',
+  'Install on another phone over Wi-Fi, without internet':
+      'Installer sur un autre téléphone en Wi‑Fi, sans internet',
+  'Turn on a hotspot or join the same Wi-Fi. The other phone scans the QR code, opens the page, and installs Podavio. No internet needed.':
+      'Activez un hotspot ou rejoignez le même Wi‑Fi. L’autre téléphone scanne le QR, ouvre la page et installe Podavio. Pas besoin d’internet.',
+  'Preparing Podavio…': 'Préparation de Podavio…',
+  'Try again': 'Réessayer',
+  'Copy link': 'Copier le lien',
+  'Link copied': 'Lien copié',
+  'Stop sharing': 'Arrêter le partage',
+  'Sharing stops when you leave this screen or switch apps.':
+      'Le partage s’arrête quand vous quittez cet écran ou changez d’appli.',
+  'Share nearby is only available on Android':
+      'Le partage à proximité n’est disponible que sur Android',
+  'Turn on a hotspot or join the same Wi-Fi, then try again':
+      'Activez un hotspot ou rejoignez le même Wi‑Fi, puis réessayez',
+  'This install cannot be shared offline. Download Podavio once from podavio.com while online, then try again.':
+      'Cette installation ne peut pas être partagée hors ligne. Téléchargez Podavio une fois depuis podavio.com en étant en ligne, puis réessayez.',
+  'Could not download a shareable APK. Check your connection and try again.':
+      'Impossible de télécharger un APK partageable. Vérifiez la connexion et réessayez.',
+  'Could not find the installed APK on this device.':
+      'Impossible de trouver l’APK installé sur cet appareil.',
+  'Could not start nearby sharing':
+      'Impossible de démarrer le partage à proximité',
+  'Version {version}': 'Version {version}',
+  'Software and libraries used by Podavio':
+      'Logiciels et bibliothèques utilisés par Podavio',
   'About': 'À propos',
   'Controls': 'Commandes',
   'Rewind': 'Retour rapide',
