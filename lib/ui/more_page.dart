@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -7,11 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:saf_util/saf_util.dart';
 
 import '../core/build_info.dart';
 import '../l10n/l10n.dart';
 import '../data/app_release.dart';
+import '../data/database_backup.dart';
 import '../data/discover_languages.dart';
+import '../data/download_service.dart';
 import '../data/feed_refresh_controller.dart';
 import '../data/html_export.dart';
 import '../data/opml.dart';
@@ -256,10 +260,54 @@ class BackupRestorePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final autoFolder = settings.automaticDatabaseBackupFolder;
     return Scaffold(
       appBar: AppBar(title: Text(context.tr('Backup and restore'))),
       body: ListView(
         children: [
+          _SectionTitle(context.tr('Database')),
+          ListTile(
+            leading: const Icon(Icons.file_download_outlined),
+            title: Text(context.tr('Export database')),
+            subtitle: Text(
+              context.tr(
+                'Subscriptions, queue, favorites, and playback progress. Not the downloaded audio files.',
+              ),
+            ),
+            onTap: () => _exportDatabase(context, ref),
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.schedule_outlined),
+            title: Text(context.tr('Automatic database export')),
+            subtitle: Text(
+              settings.automaticDatabaseBackup
+                  ? context.tr(
+                      'Every 3 days. Keeps the 5 most recent backups.{folder}',
+                      {
+                        'folder': autoFolder == null || autoFolder.isEmpty
+                            ? ''
+                            : '\n${downloadDirectoryLabel(autoFolder)}',
+                      },
+                    )
+                  : context.tr(
+                      'Saves a copy every 3 days and keeps the 5 most recent.',
+                    ),
+            ),
+            value: settings.automaticDatabaseBackup,
+            onChanged: (enabled) =>
+                _setAutomaticDatabaseBackup(context, ref, enabled),
+          ),
+          ListTile(
+            leading: const Icon(Icons.file_upload_outlined),
+            title: Text(context.tr('Import database')),
+            subtitle: Text(
+              context.tr(
+                'Replaces the current database. Downloaded episodes must be re-downloaded.',
+              ),
+            ),
+            onTap: () => _importDatabase(context, ref),
+          ),
           const _SectionTitle('OPML'),
           ListTile(
             leading: const Icon(Icons.file_upload_outlined),
@@ -299,6 +347,142 @@ class BackupRestorePage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _exportDatabase(BuildContext context, WidgetRef ref) async {
+    final dialogTitle = context.tr('Export database');
+    final doneMsg = context.tr('Database exported');
+    final failedMsg = context.tr('Could not export the database');
+    try {
+      final bytes = await exportDatabaseBytes(ref.read(databaseProvider));
+      final saved = await FilePicker.saveFile(
+        dialogTitle: dialogTitle,
+        fileName: databaseBackupFileName(),
+        bytes: bytes,
+        mimeType: 'application/x-sqlite3',
+      );
+      if (saved != null && context.mounted) {
+        showMessage(context, doneMsg);
+      }
+    } catch (error) {
+      if (context.mounted) {
+        showMessage(context, errorText(error).isEmpty ? failedMsg : errorText(error));
+      }
+    }
+  }
+
+  Future<void> _setAutomaticDatabaseBackup(
+    BuildContext context,
+    WidgetRef ref,
+    bool enabled,
+  ) async {
+    if (!enabled) {
+      await ref.read(settingsProvider.notifier).setAutomaticDatabaseBackup(false);
+      return;
+    }
+    final folder = await _pickBackupFolder(context, ref);
+    if (folder == null) return;
+    await ref
+        .read(settingsProvider.notifier)
+        .setAutomaticDatabaseBackupFolder(folder);
+    await ref.read(settingsProvider.notifier).setAutomaticDatabaseBackup(true);
+    if (context.mounted) {
+      showMessage(context, context.tr('Automatic database export is on'));
+    }
+  }
+
+  Future<String?> _pickBackupFolder(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final current = ref.read(settingsProvider).automaticDatabaseBackupFolder;
+    try {
+      if (Platform.isAndroid) {
+        final folder = await SafUtil().pickDirectory(
+          initialUri: current != null && isContentUri(current) ? current : null,
+          writePermission: true,
+          persistablePermission: true,
+        );
+        return folder?.uri;
+      }
+      return await FilePicker.getDirectoryPath(
+        dialogTitle: context.tr('Backup folder'),
+        initialDirectory: current != null && !isContentUri(current)
+            ? current
+            : null,
+      );
+    } catch (error) {
+      if (context.mounted) {
+        showMessage(context, errorText(error));
+      }
+      return null;
+    }
+  }
+
+  Future<void> _importDatabase(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Import database')),
+        content: Text(
+          context.tr(
+            'This replaces your current subscriptions, queue, favorites, and playback progress. Downloaded audio files are not restored. Continue?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.tr('Cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(context.tr('Import')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final file = await FilePicker.pickFile(
+      dialogTitle: context.tr('Import database'),
+      type: FileType.any,
+    );
+    if (file == null || !context.mounted) return;
+    final name = file.name.toLowerCase();
+    if (!name.endsWith('.sqlite') &&
+        !name.endsWith('.db') &&
+        !name.endsWith('.sqlite3')) {
+      showMessage(
+        context,
+        context.tr('Choose a .sqlite or .db database file'),
+      );
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      final bytes = await file.readAsBytes();
+      await importDatabaseBytes(ref, bytes);
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        showMessage(context, context.tr('Database imported'));
+        context.go(AppRoutes.home);
+      }
+    } catch (error) {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        showMessage(
+          context,
+          errorText(error).isEmpty
+              ? context.tr('Could not import the database')
+              : errorText(error),
+        );
+      }
+    }
   }
 
   Future<void> _exportOpml(BuildContext context, WidgetRef ref) async {

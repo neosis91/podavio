@@ -7,6 +7,7 @@ La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 ## 2026.10.20
 
 - On Android, Settings includes Share Podavio nearby. Over the same Wi-Fi or a phone hotspot, a QR code opens a page to download and install Podavio with no internet. Sharing stops when you leave the screen or switch apps.
+- In Backup and restore, Database can export or import the full library database, and optionally save a copy every 3 days (keeps the 5 most recent). Downloaded audio files are not included.
 
 ## 2026.10.19
 

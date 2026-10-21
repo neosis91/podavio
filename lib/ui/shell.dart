@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/database_backup.dart';
 import '../data/feed_refresh_controller.dart';
 import '../data/online_status.dart';
 import '../data/opml_import_controller.dart';
@@ -70,6 +71,7 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(coverPrefetchProvider);
+    ref.watch(automaticDatabaseBackupProvider);
     ref.watch(syncStatusProvider);
     final path = GoRouterState.of(context).uri.path;
     final wide = MediaQuery.sizeOf(context).width >= 600;
