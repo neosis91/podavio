@@ -6,7 +6,7 @@ La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
 ## 2026.10.20
 
-- On Android, About includes Share Podavio nearby. Over the same Wi-Fi or a phone hotspot, a QR code opens a page to download and install Podavio with no internet. Sharing stops when you leave the screen or switch apps.
+- On Android, Settings includes Share Podavio nearby. Over the same Wi-Fi or a phone hotspot, a QR code opens a page to download and install Podavio with no internet. Sharing stops when you leave the screen or switch apps.
 
 ## 2026.10.19
 

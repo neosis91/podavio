@@ -63,18 +63,6 @@ class AboutPage extends StatelessWidget {
             },
           ),
           const _CheckUpdateTile(),
-          if (NearbyApkSource().isSupported)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(context.tr('Share Podavio nearby')),
-              subtitle: Text(
-                context.tr(
-                  'Install on another phone over Wi-Fi, without internet',
-                ),
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push(AppRoutes.nearbyShare),
-            ),
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(context.tr('Licenses')),
@@ -228,6 +216,17 @@ class PreferencesPage extends ConsumerWidget {
             title: Text(context.tr('Backup and restore')),
             onTap: () => context.push(AppRoutes.backupRestore),
           ),
+          if (NearbyApkSource().isSupported)
+            ListTile(
+              leading: const Icon(Icons.qr_code_2_outlined),
+              title: Text(context.tr('Share Podavio nearby')),
+              subtitle: Text(
+                context.tr(
+                  'Install on another phone over Wi-Fi, without internet',
+                ),
+              ),
+              onTap: () => context.push(AppRoutes.nearbyShare),
+            ),
           ListTile(
             leading: const Icon(Icons.info_outline),
             title: Text(context.tr('About')),
