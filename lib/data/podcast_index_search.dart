@@ -111,6 +111,10 @@ class PodcastIndexSearch {
           ),
           feedUrl: feedUrl,
           source: DiscoverSource.podcastIndex,
+          episodeCount: _positiveInt(map['episodeCount']),
+          lastEpisodeAt: _unixDate(
+            map['newestItemPubdate'] ?? map['lastUpdate'],
+          ),
         ),
       );
     }
@@ -163,5 +167,27 @@ class PodcastIndexSearch {
     final trimmed = value?.trim();
     if (trimmed == null || trimmed.isEmpty) return null;
     return trimmed;
+  }
+
+  static int? _positiveInt(Object? value) {
+    final n = switch (value) {
+      final int i => i,
+      final num n => n.toInt(),
+      final String s => int.tryParse(s.trim()),
+      _ => null,
+    };
+    if (n == null || n <= 0) return null;
+    return n;
+  }
+
+  static DateTime? _unixDate(Object? value) {
+    final seconds = switch (value) {
+      final int i => i,
+      final num n => n.toInt(),
+      final String s => int.tryParse(s.trim()),
+      _ => null,
+    };
+    if (seconds == null || seconds <= 0) return null;
+    return DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
   }
 }

@@ -11,12 +11,16 @@ class HighlightedText extends StatelessWidget {
     required this.query,
     this.style,
     this.maxLines = 2,
+    this.softWrap = true,
+    this.overflow = TextOverflow.ellipsis,
   });
 
   final String text;
   final String query;
   final TextStyle? style;
   final int maxLines;
+  final bool softWrap;
+  final TextOverflow overflow;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +28,8 @@ class HighlightedText extends StatelessWidget {
       return Text(
         text,
         maxLines: maxLines,
-        overflow: TextOverflow.ellipsis,
+        softWrap: softWrap,
+        overflow: overflow,
         style: style,
       );
     }
@@ -40,7 +45,8 @@ class HighlightedText extends StatelessWidget {
       return Text(
         text,
         maxLines: maxLines,
-        overflow: TextOverflow.ellipsis,
+        softWrap: softWrap,
+        overflow: overflow,
         style: style,
       );
     }
@@ -88,7 +94,8 @@ class HighlightedText extends StatelessWidget {
     return Text.rich(
       TextSpan(children: spans),
       maxLines: maxLines,
-      overflow: TextOverflow.ellipsis,
+      softWrap: softWrap,
+      overflow: overflow,
     );
   }
 }

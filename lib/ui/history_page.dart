@@ -12,6 +12,7 @@ import 'widgets/playing_cover.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/episode_list.dart';
 import 'widgets/episode_tile.dart';
+import 'widgets/marquee_text.dart';
 
 class HistoryPage extends StatelessWidget {
   const HistoryPage({super.key});
@@ -93,10 +94,8 @@ class HistoryEpisodeRow extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            episode.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          MarqueeText(
+                            text: episode.title,
                             style: theme.textTheme.titleSmall,
                           ),
                           EpisodeListSubtitle(

@@ -1,5 +1,15 @@
 import 'discover_hit.dart';
 
+/// Sous-genre d’un regroupement (Apple / Podcast Index + fyyd).
+class CatalogSubcategory {
+  const CatalogSubcategory({required this.genre, required this.fyydId});
+
+  /// Nom transmis à Podcast Index (`cat`), aligné sur Apple.
+  final String genre;
+
+  final int fyydId;
+}
+
 /// Genre commun aux catalogues (Apple Podcasts, Podcast Index, fyyd).
 class CatalogCategory {
   const CatalogCategory({
@@ -7,6 +17,7 @@ class CatalogCategory {
     required this.title,
     required this.genre,
     required this.fyydId,
+    this.subcategories = const [],
   });
 
   final String id;
@@ -18,17 +29,64 @@ class CatalogCategory {
   final String genre;
 
   final int fyydId;
+
+  /// Sous-genres du regroupement (affichage plat, sans pastilles).
+  final List<CatalogSubcategory> subcategories;
+
+  /// Genres PI / Apple : parent puis sous-genres.
+  List<String> get regroupGenres => [
+    genre,
+    for (final sub in subcategories) sub.genre,
+  ];
+
+  /// Identifiants fyyd : parent puis sous-genres.
+  List<int> get regroupFyydIds => [
+    fyydId,
+    for (final sub in subcategories) sub.fyydId,
+  ];
 }
 
 /// Taxonomie de premier niveau, la même chez Apple, Podcast Index et fyyd.
+/// Chaque entrée est un regroupement : parent + sous-catégories.
 const catalogCategories = <CatalogCategory>[
-  CatalogCategory(id: 'comedy', title: 'Comedy', genre: 'Comedy', fyydId: 115),
-  CatalogCategory(id: 'news', title: 'News', genre: 'News', fyydId: 155),
+  CatalogCategory(
+    id: 'comedy',
+    title: 'Comedy',
+    genre: 'Comedy',
+    fyydId: 115,
+    subcategories: [
+      CatalogSubcategory(genre: 'Comedy Interviews', fyydId: 116),
+      CatalogSubcategory(genre: 'Improv', fyydId: 117),
+      CatalogSubcategory(genre: 'Stand-Up', fyydId: 118),
+    ],
+  ),
+  CatalogCategory(
+    id: 'news',
+    title: 'News',
+    genre: 'News',
+    fyydId: 155,
+    subcategories: [
+      CatalogSubcategory(genre: 'Business News', fyydId: 156),
+      CatalogSubcategory(genre: 'Daily News', fyydId: 157),
+      CatalogSubcategory(genre: 'Entertainment News', fyydId: 158),
+      CatalogSubcategory(genre: 'News Commentary', fyydId: 159),
+      CatalogSubcategory(genre: 'Politics', fyydId: 160),
+      CatalogSubcategory(genre: 'Sports News', fyydId: 161),
+      CatalogSubcategory(genre: 'Tech News', fyydId: 162),
+    ],
+  ),
   CatalogCategory(
     id: 'society',
     title: 'Society & Culture',
     genre: 'Society & Culture',
     fyydId: 181,
+    subcategories: [
+      CatalogSubcategory(genre: 'Documentary', fyydId: 182),
+      CatalogSubcategory(genre: 'Personal Journals', fyydId: 183),
+      CatalogSubcategory(genre: 'Philosophy', fyydId: 184),
+      CatalogSubcategory(genre: 'Places & Travel', fyydId: 185),
+      CatalogSubcategory(genre: 'Relationships', fyydId: 186),
+    ],
   ),
   CatalogCategory(
     id: 'trueCrime',
@@ -41,6 +99,12 @@ const catalogCategories = <CatalogCategory>[
     title: 'Education',
     genre: 'Education',
     fyydId: 119,
+    subcategories: [
+      CatalogSubcategory(genre: 'Courses', fyydId: 120),
+      CatalogSubcategory(genre: 'How To', fyydId: 121),
+      CatalogSubcategory(genre: 'Language Learning', fyydId: 122),
+      CatalogSubcategory(genre: 'Self-Improvement', fyydId: 123),
+    ],
   ),
   CatalogCategory(
     id: 'technology',
@@ -53,12 +117,28 @@ const catalogCategories = <CatalogCategory>[
     title: 'Business',
     genre: 'Business',
     fyydId: 108,
+    subcategories: [
+      CatalogSubcategory(genre: 'Careers', fyydId: 109),
+      CatalogSubcategory(genre: 'Entrepreneurship', fyydId: 110),
+      CatalogSubcategory(genre: 'Investing', fyydId: 111),
+      CatalogSubcategory(genre: 'Management', fyydId: 112),
+      CatalogSubcategory(genre: 'Marketing', fyydId: 113),
+      CatalogSubcategory(genre: 'Non-Profit', fyydId: 114),
+    ],
   ),
   CatalogCategory(
     id: 'health',
     title: 'Health & Fitness',
     genre: 'Health & Fitness',
     fyydId: 130,
+    subcategories: [
+      CatalogSubcategory(genre: 'Alternative Health', fyydId: 131),
+      CatalogSubcategory(genre: 'Fitness', fyydId: 132),
+      CatalogSubcategory(genre: 'Medicine', fyydId: 133),
+      CatalogSubcategory(genre: 'Mental Health', fyydId: 134),
+      CatalogSubcategory(genre: 'Nutrition', fyydId: 135),
+      CatalogSubcategory(genre: 'Sexuality', fyydId: 136),
+    ],
   ),
   CatalogCategory(
     id: 'history',
@@ -71,39 +151,132 @@ const catalogCategories = <CatalogCategory>[
     title: 'Science',
     genre: 'Science',
     fyydId: 171,
+    subcategories: [
+      CatalogSubcategory(genre: 'Astronomy', fyydId: 172),
+      CatalogSubcategory(genre: 'Chemistry', fyydId: 173),
+      CatalogSubcategory(genre: 'Earth Sciences', fyydId: 174),
+      CatalogSubcategory(genre: 'Life Sciences', fyydId: 175),
+      CatalogSubcategory(genre: 'Mathematics', fyydId: 176),
+      CatalogSubcategory(genre: 'Natural Sciences', fyydId: 177),
+      CatalogSubcategory(genre: 'Nature', fyydId: 178),
+      CatalogSubcategory(genre: 'Physics', fyydId: 179),
+      CatalogSubcategory(genre: 'Social Sciences', fyydId: 180),
+    ],
   ),
-  CatalogCategory(id: 'sports', title: 'Sports', genre: 'Sports', fyydId: 187),
-  CatalogCategory(id: 'music', title: 'Music', genre: 'Music', fyydId: 151),
+  CatalogCategory(
+    id: 'sports',
+    title: 'Sports',
+    genre: 'Sports',
+    fyydId: 187,
+    subcategories: [
+      CatalogSubcategory(genre: 'Baseball', fyydId: 188),
+      CatalogSubcategory(genre: 'Basketball', fyydId: 189),
+      CatalogSubcategory(genre: 'Cricket', fyydId: 190),
+      CatalogSubcategory(genre: 'Fantasy Sports', fyydId: 191),
+      CatalogSubcategory(genre: 'Football', fyydId: 192),
+      CatalogSubcategory(genre: 'Golf', fyydId: 193),
+      CatalogSubcategory(genre: 'Hockey', fyydId: 194),
+      CatalogSubcategory(genre: 'Rugby', fyydId: 195),
+      CatalogSubcategory(genre: 'Running', fyydId: 196),
+      CatalogSubcategory(genre: 'Soccer', fyydId: 197),
+      CatalogSubcategory(genre: 'Swimming', fyydId: 198),
+      CatalogSubcategory(genre: 'Tennis', fyydId: 199),
+      CatalogSubcategory(genre: 'Volleyball', fyydId: 200),
+      CatalogSubcategory(genre: 'Wilderness', fyydId: 201),
+      CatalogSubcategory(genre: 'Wrestling', fyydId: 202),
+    ],
+  ),
+  CatalogCategory(
+    id: 'music',
+    title: 'Music',
+    genre: 'Music',
+    fyydId: 151,
+    subcategories: [
+      CatalogSubcategory(genre: 'Music Commentary', fyydId: 152),
+      CatalogSubcategory(genre: 'Music History', fyydId: 153),
+      CatalogSubcategory(genre: 'Music Interviews', fyydId: 154),
+    ],
+  ),
   CatalogCategory(
     id: 'tvFilm',
     title: 'TV & Film',
     genre: 'TV & Film',
     fyydId: 205,
+    subcategories: [
+      CatalogSubcategory(genre: 'After Shows', fyydId: 206),
+      CatalogSubcategory(genre: 'Film History', fyydId: 207),
+      CatalogSubcategory(genre: 'Film Interviews', fyydId: 208),
+      CatalogSubcategory(genre: 'Film Reviews', fyydId: 209),
+      CatalogSubcategory(genre: 'TV Reviews', fyydId: 210),
+    ],
   ),
-  CatalogCategory(id: 'arts', title: 'Arts', genre: 'Arts', fyydId: 100),
+  CatalogCategory(
+    id: 'arts',
+    title: 'Arts',
+    genre: 'Arts',
+    fyydId: 100,
+    subcategories: [
+      CatalogSubcategory(genre: 'Books', fyydId: 102),
+      CatalogSubcategory(genre: 'Design', fyydId: 103),
+      CatalogSubcategory(genre: 'Fashion & Beauty', fyydId: 104),
+      CatalogSubcategory(genre: 'Food', fyydId: 105),
+      CatalogSubcategory(genre: 'Performing Arts', fyydId: 106),
+      CatalogSubcategory(genre: 'Visual Arts', fyydId: 107),
+    ],
+  ),
   CatalogCategory(
     id: 'kids',
     title: 'Kids & Family',
     genre: 'Kids & Family',
     fyydId: 137,
+    subcategories: [
+      CatalogSubcategory(genre: 'Education for Kids', fyydId: 138),
+      CatalogSubcategory(genre: 'Parenting', fyydId: 139),
+      CatalogSubcategory(genre: 'Pets & Animals', fyydId: 140),
+      CatalogSubcategory(genre: 'Stories for Kids', fyydId: 141),
+    ],
   ),
   CatalogCategory(
     id: 'leisure',
     title: 'Leisure',
     genre: 'Leisure',
     fyydId: 142,
+    subcategories: [
+      CatalogSubcategory(genre: 'Animation & Manga', fyydId: 143),
+      CatalogSubcategory(genre: 'Automotive', fyydId: 144),
+      CatalogSubcategory(genre: 'Aviation', fyydId: 145),
+      CatalogSubcategory(genre: 'Crafts', fyydId: 146),
+      CatalogSubcategory(genre: 'Games', fyydId: 147),
+      CatalogSubcategory(genre: 'Hobbies', fyydId: 148),
+      CatalogSubcategory(genre: 'Home & Garden', fyydId: 149),
+      CatalogSubcategory(genre: 'Video Games', fyydId: 150),
+    ],
   ),
   CatalogCategory(
     id: 'religion',
     title: 'Religion & Spirituality',
     genre: 'Religion & Spirituality',
     fyydId: 163,
+    subcategories: [
+      CatalogSubcategory(genre: 'Buddhism', fyydId: 164),
+      CatalogSubcategory(genre: 'Christianity', fyydId: 165),
+      CatalogSubcategory(genre: 'Hinduism', fyydId: 166),
+      CatalogSubcategory(genre: 'Islam', fyydId: 167),
+      CatalogSubcategory(genre: 'Judaism', fyydId: 168),
+      CatalogSubcategory(genre: 'Religion', fyydId: 169),
+      CatalogSubcategory(genre: 'Spirituality', fyydId: 170),
+    ],
   ),
   CatalogCategory(
     id: 'fiction',
     title: 'Fiction',
     genre: 'Fiction',
     fyydId: 124,
+    subcategories: [
+      CatalogSubcategory(genre: 'Comedy Fiction', fyydId: 125),
+      CatalogSubcategory(genre: 'Drama', fyydId: 126),
+      CatalogSubcategory(genre: 'Science Fiction', fyydId: 127),
+    ],
   ),
   CatalogCategory(
     id: 'government',

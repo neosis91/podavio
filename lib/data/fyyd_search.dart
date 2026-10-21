@@ -162,7 +162,40 @@ class FyydSearch {
       ),
       feedUrl: feedUrl,
       source: DiscoverSource.fyyd,
+      episodeCount: _positiveInt(
+        map['episode_count'] ?? map['episodeCount'] ?? map['episodes'],
+      ),
+      lastEpisodeAt: _fyydDate(
+        map['lastpub'] ?? map['last_pub'] ?? map['lastPublication'],
+      ),
     );
+  }
+
+  static int? _positiveInt(Object? value) {
+    final n = switch (value) {
+      final int i => i,
+      final num n => n.toInt(),
+      final String s => int.tryParse(s.trim()),
+      _ => null,
+    };
+    if (n == null || n <= 0) return null;
+    return n;
+  }
+
+  static DateTime? _fyydDate(Object? value) {
+    if (value is String && value.trim().isNotEmpty) {
+      return DateTime.tryParse(value.trim());
+    }
+    if (value is int && value > 0) {
+      return DateTime.fromMillisecondsSinceEpoch(value * 1000, isUtc: true);
+    }
+    if (value is num && value > 0) {
+      return DateTime.fromMillisecondsSinceEpoch(
+        value.toInt() * 1000,
+        isUtc: true,
+      );
+    }
+    return null;
   }
 
   static String? _blankToNull(String? value) {
