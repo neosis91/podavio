@@ -16,15 +16,16 @@ import '../settings/settings_controller.dart';
 import '../together/together_controller.dart';
 import 'library_hub_page.dart';
 import 'player/together_sheet.dart';
-import 'podcasts/podcast_feed_actions.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/frosted_header.dart';
 import 'widgets/cover.dart';
 import 'widgets/playing_cover.dart';
 import 'widgets/episode_tile.dart';
+import 'widgets/discover_category_tile.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/list_metrics.dart';
+import 'widgets/marquee_text.dart';
 import 'widgets/selection_chip.dart';
 
 String _homeGreeting(BuildContext context) {
@@ -72,6 +73,11 @@ class _HomePageState extends ConsumerState<HomePage> {
   void _onScroll() {
     final scrolled = _scroll.offset > 0;
     if (scrolled != _scrolled) setState(() => _scrolled = scrolled);
+    final category = _category;
+    if (category == null || !_scroll.hasClients) return;
+    if (_scroll.position.extentAfter < 800) {
+      ref.read(homeCategoryHitsProvider(category).notifier).loadMore();
+    }
   }
 
   @override
@@ -118,7 +124,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final categoryCover = category == null
         ? null
         : _firstCategoryCover(
-            ref.watch(homeCategoryHitsProvider(category)).value,
+            ref.watch(homeCategoryHitsProvider(category)).value?.hits,
           );
     return Scaffold(
       body: Stack(
@@ -197,13 +203,11 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
-String? _firstCategoryCover(List<HomeCategoryShelf>? shelves) {
-  if (shelves == null) return null;
-  for (final shelf in shelves) {
-    for (final hit in shelf.hits) {
-      final url = hit.imageUrl?.trim();
-      if (url != null && url.isNotEmpty) return url;
-    }
+String? _firstCategoryCover(List<DiscoverHit>? hits) {
+  if (hits == null) return null;
+  for (final hit in hits) {
+    final url = hit.imageUrl?.trim();
+    if (url != null && url.isNotEmpty) return url;
   }
   return null;
 }
@@ -437,7 +441,7 @@ class _HomeChips extends StatelessWidget {
   }
 }
 
-class _CategoryHome extends ConsumerWidget {
+class _CategoryHome extends ConsumerStatefulWidget {
   const _CategoryHome({
     required this.scroll,
     required this.headerTop,
@@ -449,146 +453,168 @@ class _CategoryHome extends ConsumerWidget {
   final String categoryId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final offline = ref.watch(onlineStatusProvider) == false;
-    final hits = ref.watch(homeCategoryHitsProvider(categoryId));
-    final title = context.tr(homeCategoryTitle(categoryId));
-    return ListView(
-      controller: scroll,
-      padding: underChrome(context, const EdgeInsets.only(bottom: 24)),
-      children: [
-        SizedBox(height: headerTop),
-        _ShelfHeader(title: title),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Text(
-            context.tr('Podcasts to discover'),
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        if (offline)
-          EmptyState(
-            title: context.tr('No internet connection'),
-            message: context.tr('Explore needs an internet connection.'),
-          )
-        else if (hits.isLoading)
-          const Padding(
-            padding: EdgeInsets.only(top: 48),
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (hits.hasError)
-          EmptyState(
-            title: title,
-            message: context.tr('The search failed.'),
-            action: FilledButton(
-              onPressed: () =>
-                  ref.invalidate(homeCategoryHitsProvider(categoryId)),
-              child: Text(context.tr('Retry')),
-            ),
-          )
-        else if ((hits.value ?? const []).isEmpty)
-          EmptyState(
-            title: context.tr('Nothing new in this category'),
-            message: context.tr('You already follow the podcasts found here.'),
-          )
-        else
-          for (final shelf in hits.value ?? const <HomeCategoryShelf>[]) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Text(
-                shelf.source.label,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            _CategoryGrid(hits: shelf.hits),
-          ],
-      ],
-    );
-  }
+  ConsumerState<_CategoryHome> createState() => _CategoryHomeState();
 }
 
-const _categoryTileWidth = 148.0;
-const _categoryTileHeight = 210.0;
+class _CategoryHomeState extends ConsumerState<_CategoryHome> {
+  @override
+  void didUpdateWidget(covariant _CategoryHome oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.categoryId != widget.categoryId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fillIfShort());
+    }
+  }
 
-class _CategoryGrid extends StatelessWidget {
-  const _CategoryGrid({required this.hits});
+  void _requestMore() {
+    ref.read(homeCategoryHitsProvider(widget.categoryId).notifier).loadMore();
+  }
 
-  final List<DiscoverHit> hits;
+  void _fillIfShort() {
+    if (!mounted || !widget.scroll.hasClients) return;
+    if (widget.scroll.position.maxScrollExtent < 800) _requestMore();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final rows = hits.length > 3 ? 2 : 1;
-    return SizedBox(
-      height: rows * _categoryTileHeight + (rows - 1) * 12,
-      child: GridView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: rows,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          mainAxisExtent: _categoryTileWidth,
-        ),
-        itemCount: hits.length,
-        itemBuilder: (context, index) => _CategoryCard(hit: hits[index]),
+    final offline = ref.watch(onlineStatusProvider) == false;
+    final async = ref.watch(homeCategoryHitsProvider(widget.categoryId));
+    final charts = async.value;
+    final title = context.tr(homeCategoryTitle(widget.categoryId));
+    final list = charts?.hits ?? const <DiscoverHit>[];
+    final loadingMore = charts?.loadingMore ?? false;
+    final hasMore = charts?.hasMore ?? false;
+    final showStatus =
+        offline ||
+        (async.isLoading && list.isEmpty) ||
+        (async.hasError && list.isEmpty) ||
+        (!async.isLoading && list.isEmpty && !async.hasError);
+    final showFooter = !showStatus && (hasMore || loadingMore);
+    final itemCount = showStatus ? 2 : 1 + list.length + (showFooter ? 1 : 0);
+
+    ref.listen(homeCategoryHitsProvider(widget.categoryId), (previous, next) {
+      final prevHits = previous?.asData?.value.hits.length ?? 0;
+      final nextHits = next.asData?.value.hits.length ?? 0;
+      final nextHasMore = next.asData?.value.hasMore ?? false;
+      final loading = next.asData?.value.loadingMore ?? false;
+      if (nextHits > prevHits ||
+          (previous?.isLoading == true && !loading && nextHasMore)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _fillIfShort());
+      }
+    });
+
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification is! ScrollUpdateNotification &&
+            notification is! OverscrollNotification) {
+          return false;
+        }
+        final metrics = notification.metrics;
+        if (metrics.extentAfter < 800) _requestMore();
+        return false;
+      },
+      child: ListView.separated(
+        controller: widget.scroll,
+        padding: underChrome(context, const EdgeInsets.only(bottom: 24)),
+        itemCount: itemCount,
+        separatorBuilder: (context, index) {
+          if (index == 0) return const SizedBox.shrink();
+          if (!showStatus && index >= list.length) {
+            return const SizedBox.shrink();
+          }
+          return Divider(
+            height: 1,
+            thickness: 1,
+            indent: 16,
+            endIndent: 16,
+            color: Theme.of(context).colorScheme.outlineVariant.withValues(
+              alpha: 0.5,
+            ),
+          );
+        },
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(height: widget.headerTop),
+                _ShelfHeader(title: title),
+                const SizedBox(height: 4),
+              ],
+            );
+          }
+          if (offline) {
+            return EmptyState(
+              title: context.tr('No internet connection'),
+              message: context.tr('Explore needs an internet connection.'),
+            );
+          }
+          if (async.isLoading && list.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.only(top: 48),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (async.hasError && list.isEmpty) {
+            return EmptyState(
+              title: title,
+              message: context.tr('The search failed.'),
+              action: FilledButton(
+                onPressed: () => ref
+                    .read(homeCategoryHitsProvider(widget.categoryId).notifier)
+                    .reload(),
+                child: Text(context.tr('Retry')),
+              ),
+            );
+          }
+          if (list.isEmpty) {
+            return EmptyState(
+              title: context.tr('Nothing new in this category'),
+              message: context.tr(
+                'You already follow the podcasts found here.',
+              ),
+            );
+          }
+          if (index == list.length + 1) {
+            if (hasMore && !loadingMore) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _requestMore();
+              });
+            }
+            return const _CategoryLoadMoreFooter();
+          }
+          final hit = list[index - 1];
+          return DiscoverCategoryTile(rank: index, hit: hit);
+        },
       ),
     );
   }
 }
 
-class _CategoryCard extends ConsumerWidget {
-  const _CategoryCard({required this.hit});
-
-  final DiscoverHit hit;
+class _CategoryLoadMoreFooter extends StatelessWidget {
+  const _CategoryLoadMoreFooter();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () => _open(context, ref),
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          PodcastCover(url: hit.imageUrl, size: _categoryTileWidth, radius: 10),
-          const SizedBox(height: 8),
-          Text(
-            hit.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleSmall?.copyWith(height: 1.25),
+          const SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
           ),
-          if (hit.author.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(
-              hit.author,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+          const SizedBox(height: 12),
+          Text(
+            'Chargement…',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: muted,
             ),
-          ],
+          ),
         ],
       ),
     );
-  }
-
-  Future<void> _open(BuildContext context, WidgetRef ref) async {
-    var url = hit.feedUrl.trim();
-    if (url.isEmpty && hit.appleId != null) {
-      try {
-        url = await ref
-            .read(feedServiceProvider)
-            .feedUrlForAppleShow(hit.appleId!);
-      } catch (_) {
-        url = '';
-      }
-    }
-    if (!context.mounted || url.isEmpty) return;
-    await openPodcastFromFeedUrl(context, ref, url);
   }
 }
 
@@ -787,10 +813,8 @@ class _ContinueRow extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      episode.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    MarqueeText(
+                      text: episode.title,
                       style: theme.textTheme.titleSmall,
                     ),
                     const SizedBox(height: 2),
@@ -987,10 +1011,8 @@ class _EpisodeCard extends ConsumerWidget {
               radius: 10,
             ),
             const SizedBox(height: 8),
-            Text(
-              episode.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            MarqueeText(
+              text: episode.title,
               style: theme.textTheme.titleSmall?.copyWith(height: 1.25),
             ),
             const SizedBox(height: 2),

@@ -15,6 +15,7 @@ import '../widgets/app_bottom_sheet.dart';
 import '../widgets/brand.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/episode_tile.dart';
+import '../widgets/marquee_text.dart';
 import '../widgets/playing_cover.dart';
 import '../widgets/show_notes.dart';
 import 'player_chapter.dart';
@@ -564,10 +565,8 @@ class _QueueNowPlaying extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      entry.episode.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    MarqueeText(
+                      text: entry.episode.title,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -680,10 +679,8 @@ class _QueueRow extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    entry.episode.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  MarqueeText(
+                    text: entry.episode.title,
                     style:
                         (_queueWide(context)
                                 ? theme.textTheme.titleMedium

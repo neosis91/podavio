@@ -20,6 +20,7 @@ import 'app_bottom_sheet.dart';
 import 'brand.dart';
 import 'cover.dart';
 import 'episode_share_sheet.dart';
+import 'marquee_text.dart';
 import 'messages.dart';
 
 enum EpisodeMenuAction { queue, played, favorite, download, share }
@@ -357,10 +358,8 @@ class _EpisodeActionsSheet extends ConsumerWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                episode.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              MarqueeText(
+                                text: episode.title,
                                 style: theme.textTheme.labelSmall,
                               ),
                               Text(

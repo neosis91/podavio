@@ -10,6 +10,7 @@ import '../../settings/settings_controller.dart';
 import '../player_page.dart';
 import 'brand.dart';
 import 'cover.dart';
+import 'marquee_text.dart';
 
 /// Hauteur de la pilule mini (hors inset bas géré par le positionnement).
 const miniPlayerHeight = 56.0;
@@ -393,10 +394,8 @@ class _MiniPlayerBar extends ConsumerWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        MarqueeText(
+                          text: title,
                           style: theme.textTheme.titleSmall,
                         ),
                         Text(
