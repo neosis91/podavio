@@ -8,6 +8,10 @@ La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
 - On Android, Settings includes Share Podavio nearby. Over the same Wi-Fi or a phone hotspot, a QR code opens a page to download and install Podavio with no internet. Sharing stops when you leave the screen or switch apps.
 - In Backup and restore, Database can export or import the full library database, and optionally save a copy every 3 days (keeps the 5 most recent). Downloaded audio files are not included.
+- On Home, a category opens a numbered podcast list. Each chip is a regroupement of related catalog genres; only the category title is shown, not subcategory tags. Scrolling loads more podcasts, with a loading indicator at the bottom.
+- Explore and Home categories hide podcasts you already follow.
+- On a podcast page, the background follows the cover’s average color. The episode count sits above the action pills. The copyright, title, and year line under the cover is gone.
+- In episode lists, a long title scrolls horizontally so you can read it in full.
 
 ## 2026.10.19
 
