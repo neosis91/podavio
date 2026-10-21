@@ -8,7 +8,7 @@ import '../core/release_version.dart';
 import 'providers.dart';
 
 const latestReleaseUrl = 'https://podavio.com/latest.json';
-const downloadPageUrl = 'https://podavio.com/telecharger/';
+const downloadPageUrl = 'https://podavio.com/download';
 
 class AppRelease {
   const AppRelease({
