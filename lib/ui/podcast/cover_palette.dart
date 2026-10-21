@@ -1,38 +1,21 @@
-import 'dart:io';
-
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/cover_cache.dart';
+import '../../core/cover_tone.dart';
 
-/// Couleur de page tirée de la pochette. Noir tant que l’image n’est pas lue.
+/// Couleur de page tirée de la moyenne de la pochette (comme le lecteur).
+/// Noir tant que l’image n’est pas lue.
 final podcastCoverColorProvider = FutureProvider.autoDispose
     .family<Color, String>((ref, token) async {
       final split = token.split('\n');
       final path = split.first;
       final url = split.length > 1 ? split[1] : '';
-      final ImageProvider provider;
-      if (path.isNotEmpty) {
-        provider = FileImage(File(path));
-      } else if (url.isNotEmpty) {
-        provider = CachedNetworkImageProvider(
-          url,
-          cacheKey: url,
-          cacheManager: CoverCache.manager,
-        );
-      } else {
-        return Colors.black;
-      }
-      try {
-        final scheme = await ColorScheme.fromImageProvider(
-          provider: provider,
-          brightness: Brightness.dark,
-        );
-        return immersiveBackground(scheme.primary);
-      } catch (_) {
-        return Colors.black;
-      }
+      final average = await loadCoverAverageColor(
+        path: path.isEmpty ? null : path,
+        url: url.isEmpty ? null : url,
+      );
+      if (average == null) return Colors.black;
+      return immersiveBackground(average);
     });
 
 String coverColorToken({String? path, String? url}) {
@@ -66,3 +49,4 @@ LinearGradient artworkScrim(Color color) {
 }
 
 double _smoothStep(double t) => t * t * (3 - 2 * t);
+

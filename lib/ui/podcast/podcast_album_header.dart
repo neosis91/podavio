@@ -78,7 +78,6 @@ class PodcastAlbumHeader extends ConsumerWidget {
                 padding: EdgeInsets.fromLTRB(gutter, 16, gutter, 0),
                 child: _TitleBlock(
                   title: podcast.title,
-                  author: podcast.author,
                   category: category,
                 ),
               ),
@@ -165,12 +164,8 @@ class _PortraitArtwork extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
               child: _TitleBlock(
                 title: podcast.title,
-                author: podcast.author,
                 category: category,
                 titleStyle: theme.textTheme.titleLarge?.copyWith(
-                  color: Colors.white,
-                ),
-                authorStyle: theme.textTheme.titleSmall?.copyWith(
                   color: Colors.white,
                 ),
               ),
@@ -219,17 +214,13 @@ class _LandscapeArtwork extends StatelessWidget {
 class _TitleBlock extends StatelessWidget {
   const _TitleBlock({
     required this.title,
-    required this.author,
     required this.category,
     this.titleStyle,
-    this.authorStyle,
   });
 
   final String title;
-  final String author;
   final String category;
   final TextStyle? titleStyle;
-  final TextStyle? authorStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -246,16 +237,6 @@ class _TitleBlock extends StatelessWidget {
               titleStyle ??
               theme.textTheme.titleLarge?.copyWith(color: Colors.white),
         ),
-        if (author.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            author,
-            textAlign: TextAlign.center,
-            style:
-                authorStyle ??
-                theme.textTheme.titleSmall?.copyWith(color: Colors.white),
-          ),
-        ],
         const SizedBox(height: 2),
         Text(
           category,

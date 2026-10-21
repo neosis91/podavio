@@ -113,6 +113,27 @@ ThemeData playbackTheme(Color background) {
 
 final _memory = <String, CoverTone>{};
 
+/// Moyenne des pixels de la pochette (hors blancs / gris très clairs).
+Future<Color?> loadCoverAverageColor({
+  String? path,
+  String? url,
+  Map<String, String>? headers,
+}) async {
+  final local = path?.trim();
+  final remote = url?.trim();
+  final file = await _coverFile(
+    local: local != null && local.isNotEmpty ? local : null,
+    remote: remote != null && remote.isNotEmpty ? remote : null,
+    headers: headers,
+  );
+  if (file == null) return null;
+  try {
+    return await _averageColor(file);
+  } catch (_) {
+    return null;
+  }
+}
+
 Future<CoverTone?> loadCoverTone({
   String? path,
   String? url,
@@ -128,23 +149,19 @@ Future<CoverTone?> loadCoverTone({
   final cached = _memory[key];
   if (cached != null) return cached;
 
-  final file = await _coverFile(
-    local: hasLocal ? local : null,
-    remote: hasRemote ? remote : null,
+  final average = await loadCoverAverageColor(
+    path: local,
+    url: remote,
     headers: headers,
   );
-  if (file == null) return null;
+  if (average == null) return null;
 
-  try {
-    final tone = CoverTone(coverBackground(await _averageColor(file)));
-    _memory[key] = tone;
-    if (_memory.length > 32) {
-      _memory.remove(_memory.keys.first);
-    }
-    return tone;
-  } catch (_) {
-    return null;
+  final tone = CoverTone(coverBackground(average));
+  _memory[key] = tone;
+  if (_memory.length > 32) {
+    _memory.remove(_memory.keys.first);
   }
+  return tone;
 }
 
 Future<Color> _averageColor(File file) async {
