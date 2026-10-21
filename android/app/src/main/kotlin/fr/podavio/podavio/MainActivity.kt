@@ -9,6 +9,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         FlutterEngineCache.getInstance().put(AndroidAutoBridge.ENGINE_ID, flutterEngine)
         AndroidAutoBridge.attach(flutterEngine)
+        NearbySharePlugin.attach(flutterEngine, applicationContext)
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {

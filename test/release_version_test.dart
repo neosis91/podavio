@@ -25,7 +25,11 @@ void main() {
 {
   "version": "2026.10.11",
   "date": "2026-10-07",
-  "notes": ["Fichiers Android et Linux disponibles sur podavio.com."]
+  "notes": ["Fichiers Android et Linux disponibles sur podavio.com."],
+  "files": {
+    "android-universal": "releases/2026.10.11/podavio-2026.10.11-android-universal.apk",
+    "linux-x64": "releases/2026.10.11/podavio-2026.10.11-linux-x64.tar.gz"
+  }
 }
 ''');
     expect(release?.version, '2026.10.11');
@@ -33,6 +37,10 @@ void main() {
     expect(release?.notes, [
       'Fichiers Android et Linux disponibles sur podavio.com.',
     ]);
+    expect(
+      release?.fileUri('android-universal')?.toString(),
+      'https://podavio.com/releases/2026.10.11/podavio-2026.10.11-android-universal.apk',
+    );
     expect(AppRelease.tryParse('{}'), isNull);
   });
 }

@@ -183,6 +183,19 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         // Toujours la même structure Theme → Scaffold → body pour ne pas
         // démonter le CustomScrollView (sinon retour en haut de liste).
         final baseTheme = Theme.of(context);
+        final pageColor = background;
+        final immersiveScheme = ColorScheme.dark(
+          primary: Colors.white,
+          onPrimary: Colors.black,
+          secondary: Colors.white70,
+          surface: pageColor,
+          onSurface: Colors.white,
+          onSurfaceVariant: Colors.white.withValues(alpha: 0.74),
+          secondaryContainer: Colors.white.withValues(alpha: 0.18),
+          onSecondaryContainer: Colors.white,
+          primaryContainer: Colors.white.withValues(alpha: 0.16),
+          onPrimaryContainer: Colors.white,
+        );
         final appBarTheme = selection != null
             ? baseTheme.appBarTheme
             : const AppBarTheme(
@@ -190,12 +203,28 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                 iconTheme: IconThemeData(color: Colors.white),
                 actionsIconTheme: IconThemeData(color: Colors.white),
               );
+        final pageTheme = baseTheme.copyWith(
+          brightness: Brightness.dark,
+          colorScheme: selection != null
+              ? baseTheme.colorScheme
+              : immersiveScheme,
+          scaffoldBackgroundColor: pageColor,
+          appBarTheme: appBarTheme,
+          progressIndicatorTheme: const ProgressIndicatorThemeData(
+            color: Colors.white,
+          ),
+          dividerColor: Colors.white24,
+          listTileTheme: const ListTileThemeData(
+            iconColor: Colors.white,
+            textColor: Colors.white,
+          ),
+        );
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: selection != null
               ? selectingOverlay
               : SystemUiOverlayStyle.light,
           child: Theme(
-            data: baseTheme.copyWith(appBarTheme: appBarTheme),
+            data: pageTheme,
             child: TweenAnimationBuilder<Color?>(
               tween: ColorTween(end: background),
               duration: const Duration(milliseconds: 500),
@@ -434,7 +463,11 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
               ),
             ),
           ),
-          ..._episodeSlivers(window: window, episodes: episodes),
+          ..._episodeSlivers(
+            window: window,
+            episodes: episodes,
+            background: background,
+          ),
         ],
       ),
     );
@@ -443,22 +476,24 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
   List<Widget> _episodeSlivers({
     required EpisodeWindow? window,
     required AsyncValue<EpisodeWindow> episodes,
+    required Color background,
   }) {
-    final surface = Theme.of(context).colorScheme.surface;
     if (window == null) {
       return episodes.when(
         loading: () => [
           DecoratedSliver(
-            decoration: BoxDecoration(color: surface),
+            decoration: BoxDecoration(color: background),
             sliver: const SliverFillRemaining(
               hasScrollBody: false,
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
             ),
           ),
         ],
         error: (error, _) => [
           DecoratedSliver(
-            decoration: BoxDecoration(color: surface),
+            decoration: BoxDecoration(color: background),
             sliver: SliverFillRemaining(
               hasScrollBody: false,
               child: EmptyState(
@@ -474,7 +509,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     if (window.entries.isEmpty) {
       return [
         DecoratedSliver(
-          decoration: BoxDecoration(color: surface),
+          decoration: BoxDecoration(color: background),
           sliver: const SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
@@ -485,17 +520,16 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         ),
       ];
     }
-    return _episodeListSlivers(window);
+    return _episodeListSlivers(window, background);
   }
 
-  List<Widget> _episodeListSlivers(EpisodeWindow window) {
+  List<Widget> _episodeListSlivers(EpisodeWindow window, Color background) {
     final source = PlaybackSource(
       EpisodeQuery(podcastId: widget.podcastId, paginated: false),
     );
-    final surface = Theme.of(context).colorScheme.surface;
     return [
       DecoratedSliver(
-        decoration: BoxDecoration(color: surface),
+        decoration: BoxDecoration(color: background),
         sliver: SliverPadding(
           padding: const EdgeInsets.only(top: 4, bottom: 24),
           sliver: SliverList.builder(
@@ -509,7 +543,9 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                 });
                 return const Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
                 );
               }
               final entry = window.entries[index];

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../settings/settings_controller.dart';
+import 'app_database.dart';
 import 'catalog_categories.dart';
 import 'discover_hit.dart';
 import 'online_status.dart';
@@ -58,14 +59,30 @@ class DiscoverChartsNotifier extends AsyncNotifier<DiscoverCharts> {
         (settings) => settings.discoverLanguages.join('\u0001'),
       ),
     );
+    ref.watch(podcastsProvider.select(_subscribedFeedsKey));
     ref.listen(onlineStatusProvider, (previous, next) {
       if (previous == false && next == true) unawaited(reload());
+    });
+    ref.listen(podcastsProvider, (previous, next) {
+      next.whenData(_dropSubscribedFromState);
     });
     _generation++;
     if (ref.read(onlineStatusProvider) == false) {
       return Future.value(const DiscoverCharts(hasMore: false));
     }
     return _loadFirst();
+  }
+
+  void _dropSubscribedFromState(List<Podcast> podcasts) {
+    final current = state.asData?.value;
+    if (current == null || current.hits.isEmpty) return;
+    final urls = subscribedFeedUrls(podcasts);
+    final kept = [
+      for (final hit in current.hits)
+        if (!isSubscribedDiscoverHit(hit, urls)) hit,
+    ];
+    if (kept.length == current.hits.length) return;
+    state = AsyncData(current.copyWith(hits: kept));
   }
 
   Future<void> reload() async {
@@ -137,8 +154,12 @@ class DiscoverChartsNotifier extends AsyncNotifier<DiscoverCharts> {
         );
     if (gen != _generation) return const [];
     _page = page + 1;
+    final urls = subscribedFeedUrls(
+      ref.read(podcastsProvider).asData?.value ?? const [],
+    );
     final fresh = <DiscoverHit>[];
     for (final hit in merged) {
+      if (isSubscribedDiscoverHit(hit, urls)) continue;
       if (_seen.add(hit.dedupeKey)) fresh.add(hit);
     }
     return fresh;
@@ -160,7 +181,22 @@ class DiscoverSearchNotifier extends AsyncNotifier<List<DiscoverHit>?> {
   String get query => _query;
 
   @override
-  Future<List<DiscoverHit>?> build() async => null;
+  Future<List<DiscoverHit>?> build() async {
+    ref.listen(podcastsProvider, (previous, next) {
+      next.whenData((podcasts) {
+        final current = state.asData?.value;
+        if (current == null || current.isEmpty) return;
+        final urls = subscribedFeedUrls(podcasts);
+        final kept = [
+          for (final hit in current)
+            if (!isSubscribedDiscoverHit(hit, urls)) hit,
+        ];
+        if (kept.length == current.length) return;
+        state = AsyncData(kept);
+      });
+    });
+    return null;
+  }
 
   Future<void> search(
     String query, {
@@ -180,11 +216,18 @@ class DiscoverSearchNotifier extends AsyncNotifier<List<DiscoverHit>?> {
     }
     state = const AsyncLoading();
     final languages = ref.read(settingsProvider).discoverLanguages;
-    final next = await AsyncValue.guard(
-      () => ref
+    final next = await AsyncValue.guard(() async {
+      final hits = await ref
           .read(feedServiceProvider)
-          .discoverSearch(trimmed, scope: scope, languages: languages),
-    );
+          .discoverSearch(trimmed, scope: scope, languages: languages);
+      final urls = subscribedFeedUrls(
+        ref.read(podcastsProvider).asData?.value ?? const [],
+      );
+      return [
+        for (final hit in hits)
+          if (!isSubscribedDiscoverHit(hit, urls)) hit,
+      ];
+    });
     if (gen != _generation) return;
     state = next;
   }
@@ -247,38 +290,153 @@ final displayedHomeCategoriesProvider = Provider<HomeCategories>((ref) {
   return HomeCategories.fromPlayRanks(ranks);
 });
 
-/// Podcasts d’une catégorie d’accueil, par catalogue, hors abonnements.
-final homeCategoryHitsProvider = FutureProvider.autoDispose
-    .family<List<HomeCategoryShelf>, String>((ref, id) async {
-      if (!HomeCategories.known.contains(id)) return const [];
-      if (ref.watch(onlineStatusProvider) == false) return const [];
-      final languages = ref.watch(
-        settingsProvider.select((settings) => settings.discoverLanguages),
-      );
-      final subscribed = await ref.watch(podcastsProvider.future);
-      final urls = {
-        for (final podcast in subscribed) normalizeFeedUrl(podcast.feedUrl),
-      };
-      final shelves = await ref
-          .read(feedServiceProvider)
-          .categoryShelves(id, languages: languages);
-      final seen = <String>{};
-      final out = <HomeCategoryShelf>[];
-      for (final shelf in shelves) {
-        final hits = <DiscoverHit>[];
-        for (final hit in shelf.hits) {
-          final feed = normalizeFeedUrl(hit.feedUrl);
-          if (feed.isNotEmpty && urls.contains(feed)) continue;
-          if (!seen.add(hit.dedupeKey)) continue;
-          hits.add(hit);
-          if (hits.length >= 12) break;
-        }
-        if (hits.isNotEmpty) {
-          out.add(HomeCategoryShelf(source: shelf.source, hits: hits));
-        }
-      }
-      return out;
+/// Podcasts d’une catégorie d’accueil (liste plate paginée, hors abonnements).
+final homeCategoryHitsProvider = AsyncNotifierProvider.autoDispose
+    .family<HomeCategoryHitsNotifier, DiscoverCharts, String>(
+      HomeCategoryHitsNotifier.new,
+    );
+
+class HomeCategoryHitsNotifier extends AsyncNotifier<DiscoverCharts> {
+  HomeCategoryHitsNotifier(this.categoryId);
+
+  final String categoryId;
+
+  static const pageSize = 20;
+  static const firstBatch = 24;
+  static const _maxPages = 40;
+
+  var _page = 0;
+  var _generation = 0;
+  var _loadingMore = false;
+  final _seen = <String>{};
+
+  @override
+  Future<DiscoverCharts> build() {
+    ref.watch(
+      settingsProvider.select(
+        (settings) => settings.discoverLanguages.join('\u0001'),
+      ),
+    );
+    ref.watch(podcastsProvider.select(_subscribedFeedsKey));
+    ref.listen(onlineStatusProvider, (previous, next) {
+      if (previous == false && next == true) unawaited(reload());
     });
+    ref.listen(podcastsProvider, (previous, next) {
+      next.whenData(_dropSubscribedFromState);
+    });
+    _generation++;
+    if (!HomeCategories.known.contains(categoryId)) {
+      return Future.value(const DiscoverCharts(hasMore: false));
+    }
+    if (ref.read(onlineStatusProvider) == false) {
+      return Future.value(const DiscoverCharts(hasMore: false));
+    }
+    return _loadFirst();
+  }
+
+  void _dropSubscribedFromState(List<Podcast> podcasts) {
+    final current = state.asData?.value;
+    if (current == null || current.hits.isEmpty) return;
+    final urls = subscribedFeedUrls(podcasts);
+    final kept = [
+      for (final hit in current.hits)
+        if (!isSubscribedDiscoverHit(hit, urls)) hit,
+    ];
+    if (kept.length == current.hits.length) return;
+    state = AsyncData(current.copyWith(hits: kept));
+  }
+
+  Future<void> reload() async {
+    _generation++;
+    _reset();
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(_loadFirst);
+  }
+
+  Future<void> loadMore() async {
+    if (ref.read(onlineStatusProvider) == false) return;
+    final current = state.asData?.value;
+    if (current == null || !current.hasMore || _loadingMore) return;
+    final gen = _generation;
+    _loadingMore = true;
+    state = AsyncData(current.copyWith(loadingMore: true));
+    try {
+      // Une page peut ne renvoyer que des doublons déjà vus : on enchaîne
+      // sur d’autres membres du regroupement avant d’abandonner.
+      final members =
+          catalogCategoryById(categoryId)?.regroupGenres.length ?? 1;
+      final maxAttempts = (members * 2).clamp(2, 16);
+      var fresh = <DiscoverHit>[];
+      for (var i = 0; i < maxAttempts && _page < _maxPages; i++) {
+        fresh = await _fetchFresh();
+        if (gen != _generation) return;
+        if (fresh.isNotEmpty) break;
+      }
+      if (gen != _generation) return;
+      final latest = state.asData?.value ?? current;
+      final hasMore = fresh.isNotEmpty && _page < _maxPages;
+      state = AsyncData(
+        latest.copyWith(
+          hits: fresh.isEmpty ? latest.hits : [...latest.hits, ...fresh],
+          hasMore: hasMore,
+          loadingMore: false,
+        ),
+      );
+    } catch (_) {
+      if (gen != _generation) return;
+      final latest = state.asData?.value ?? current;
+      state = AsyncData(latest.copyWith(loadingMore: false));
+    } finally {
+      if (gen == _generation) _loadingMore = false;
+    }
+  }
+
+  void _reset() {
+    _page = 0;
+    _loadingMore = false;
+    _seen.clear();
+  }
+
+  Future<DiscoverCharts> _loadFirst() async {
+    _reset();
+    final hits = <DiscoverHit>[];
+    var hasMore = true;
+    while (hits.length < firstBatch && hasMore && _page < _maxPages) {
+      final fresh = await _fetchFresh();
+      if (fresh.isEmpty) {
+        hasMore = false;
+        break;
+      }
+      hits.addAll(fresh);
+    }
+    return DiscoverCharts(hits: hits, hasMore: hasMore && _page < _maxPages);
+  }
+
+  Future<List<DiscoverHit>> _fetchFresh() async {
+    final gen = _generation;
+    final page = _page;
+    final languages = ref.read(settingsProvider).discoverLanguages;
+    final merged = await ref
+        .read(feedServiceProvider)
+        .categoryHitsPage(
+          id: categoryId,
+          page: page,
+          pageSize: pageSize,
+          languages: languages,
+        );
+    if (gen != _generation) return const [];
+    _page = page + 1;
+    final urls = subscribedFeedUrls(
+      ref.read(podcastsProvider).asData?.value ?? const [],
+    );
+    final fresh = <DiscoverHit>[];
+    for (final hit in merged) {
+      if (isSubscribedDiscoverHit(hit, urls)) continue;
+      if (_seen.add(hit.dedupeKey)) fresh.add(hit);
+    }
+    return fresh;
+  }
+}
 
 /// Adresse de flux comparable, sans slash final.
 String normalizeFeedUrl(String url) {
@@ -287,4 +445,23 @@ String normalizeFeedUrl(String url) {
     value = value.substring(0, value.length - 1);
   }
   return value;
+}
+
+Set<String> subscribedFeedUrls(Iterable<Podcast> podcasts) {
+  return {
+    for (final podcast in podcasts)
+      if (podcast.feedUrl.trim().isNotEmpty) normalizeFeedUrl(podcast.feedUrl),
+  };
+}
+
+bool isSubscribedDiscoverHit(DiscoverHit hit, Set<String> subscribedUrls) {
+  final feed = normalizeFeedUrl(hit.feedUrl);
+  return feed.isNotEmpty && subscribedUrls.contains(feed);
+}
+
+String _subscribedFeedsKey(AsyncValue<List<Podcast>> async) {
+  final podcasts = async.asData?.value;
+  if (podcasts == null || podcasts.isEmpty) return '';
+  final urls = subscribedFeedUrls(podcasts).toList()..sort();
+  return urls.join('\u0001');
 }
