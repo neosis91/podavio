@@ -12,8 +12,6 @@ import '../widgets/brand.dart';
 import '../widgets/cover.dart';
 import 'cover_palette.dart';
 
-const _ink = Color(0xC4FFFFFF);
-
 /// Haut de page d’une émission. En portrait : jaquette SimpMusic / Apple Music.
 class PodcastAlbumHeader extends ConsumerWidget {
   const PodcastAlbumHeader({
@@ -37,8 +35,6 @@ class PodcastAlbumHeader extends ConsumerWidget {
         .watch(podcastEpisodeCountProvider(podcast.id))
         .asData
         ?.value;
-    final year = podcast.refreshedAt?.year;
-    final category = year == null ? 'Podcast' : '$year · Podcast';
     final headers = podcastAuthHeaders(
       username: podcast.authUsername,
       password: podcast.authPassword,
@@ -63,26 +59,27 @@ class PodcastAlbumHeader extends ConsumerWidget {
                 podcast: podcast,
                 headers: headers,
                 background: background,
-                category: category,
                 width: width,
                 height: height,
               )
-            else ...[
+            else
               _LandscapeArtwork(
                 podcast: podcast,
                 headers: headers,
                 width: width,
                 height: height,
               ),
+            if (count != null)
               Padding(
-                padding: EdgeInsets.fromLTRB(gutter, 16, gutter, 0),
-                child: _TitleBlock(
-                  title: podcast.title,
-                  author: podcast.author,
-                  category: category,
+                padding: EdgeInsets.fromLTRB(gutter, 12, gutter, 0),
+                child: Text(
+                  count == 1 ? '1 épisode' : '$count épisodes',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                  ),
                 ),
               ),
-            ],
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: _PlayRow(
@@ -98,16 +95,6 @@ class PodcastAlbumHeader extends ConsumerWidget {
                 ),
               ),
             ),
-            if (count != null)
-              Padding(
-                padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 8),
-                child: Text(
-                  count == 1 ? '1 épisode' : '$count épisodes',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white,
-                  ),
-                ),
-              ),
           ],
         );
       },
@@ -115,13 +102,12 @@ class PodcastAlbumHeader extends ConsumerWidget {
   }
 }
 
-/// Demi-écran, bord à bord, recadrage, fondu et titre — comme SimpMusic.
+/// Demi-écran, bord à bord, recadrage et fondu — comme SimpMusic.
 class _PortraitArtwork extends StatelessWidget {
   const _PortraitArtwork({
     required this.podcast,
     required this.headers,
     required this.background,
-    required this.category,
     required this.width,
     required this.height,
   });
@@ -129,13 +115,11 @@ class _PortraitArtwork extends StatelessWidget {
   final Podcast podcast;
   final Map<String, String>? headers;
   final Color background;
-  final String category;
   final double width;
   final double height;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return SizedBox(
       width: width,
       height: height / 2,
@@ -156,23 +140,6 @@ class _PortraitArtwork extends StatelessWidget {
               child: Container(
                 height: height * 0.35,
                 decoration: BoxDecoration(gradient: artworkScrim(background)),
-              ),
-            ),
-          ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: _TitleBlock(
-                title: podcast.title,
-                author: podcast.author,
-                category: category,
-                titleStyle: theme.textTheme.titleLarge?.copyWith(
-                  color: Colors.white,
-                ),
-                authorStyle: theme.textTheme.titleSmall?.copyWith(
-                  color: Colors.white,
-                ),
               ),
             ),
           ),
@@ -212,57 +179,6 @@ class _LandscapeArtwork extends StatelessWidget {
           fit: BoxFit.contain,
         ),
       ),
-    );
-  }
-}
-
-class _TitleBlock extends StatelessWidget {
-  const _TitleBlock({
-    required this.title,
-    required this.author,
-    required this.category,
-    this.titleStyle,
-    this.authorStyle,
-  });
-
-  final String title;
-  final String author;
-  final String category;
-  final TextStyle? titleStyle;
-  final TextStyle? authorStyle;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          title,
-          maxLines: 2,
-          textAlign: TextAlign.center,
-          overflow: TextOverflow.ellipsis,
-          style:
-              titleStyle ??
-              theme.textTheme.titleLarge?.copyWith(color: Colors.white),
-        ),
-        if (author.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            author,
-            textAlign: TextAlign.center,
-            style:
-                authorStyle ??
-                theme.textTheme.titleSmall?.copyWith(color: Colors.white),
-          ),
-        ],
-        const SizedBox(height: 2),
-        Text(
-          category,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(color: _ink),
-        ),
-      ],
     );
   }
 }

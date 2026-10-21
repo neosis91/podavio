@@ -400,6 +400,90 @@ class FeedService {
     ];
   }
 
+  /// Une page de podcasts pour un regroupement de catégories.
+  ///
+  /// Page 0 : parent seul (Apple + PI + fyyd). Pages suivantes : un membre
+  /// du regroupement à la fois (parent puis sous-genres), pour que le scroll
+  /// apporte encore des podcasts nouveaux.
+  Future<List<DiscoverHit>> categoryHitsPage({
+    required String id,
+    required int page,
+    int pageSize = 20,
+    List<String> languages = const [discoverLanguagesAll],
+  }) async {
+    final category = catalogCategoryById(id);
+    if (category == null) return const [];
+
+    Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
+      try {
+        return await future;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final genres = category.regroupGenres;
+    final fyydIds = category.regroupFyydIds;
+    final piles = <List<DiscoverHit>?>[];
+    final weights = <double>[];
+
+    if (page == 0) {
+      final results = await Future.wait([
+        safe(
+          _appleChartHits(
+            languages: languages,
+            limit: pageSize,
+            genre: category.genre,
+          ),
+        ),
+        safe(
+          _podcastIndex.trending(
+            languages: languages,
+            max: pageSize,
+            category: category.genre,
+          ),
+        ),
+        safe(
+          _fyyd.category(
+            category.fyydId,
+            count: pageSize,
+            page: 0,
+            languages: languages,
+          ),
+        ),
+      ]);
+      piles.addAll(results);
+      weights.addAll(const [1.0, 1.0, 0.8]);
+    } else {
+      final index = (page - 1) % genres.length;
+      final deep = (page - 1) ~/ genres.length;
+      final pair = await Future.wait([
+        safe(
+          _podcastIndex.trending(
+            languages: languages,
+            max: (deep + 2) * pageSize,
+            category: genres[index],
+          ),
+        ),
+        safe(
+          _fyyd.category(
+            fyydIds[index],
+            count: pageSize,
+            page: deep + (fyydIds[index] == category.fyydId ? 1 : 0),
+            languages: languages,
+          ),
+        ),
+      ]);
+      piles.addAll(pair);
+      weights.addAll(const [1.0, 0.8]);
+    }
+
+    if (piles.every((list) => list == null)) {
+      throw Exception('La recherche a échoué.');
+    }
+    return _mergeHits(piles, weights);
+  }
+
   /// Recherche multi-annuaires (Apple, Podcast Index, fyyd).
   Future<List<DiscoverHit>> discoverSearch(
     String query, {
@@ -520,6 +604,8 @@ class FeedService {
           feedUrl: item.feedUrl?.trim() ?? '',
           source: DiscoverSource.apple,
           appleId: item.collectionId ?? item.trackId,
+          episodeCount: item.trackCount,
+          lastEpisodeAt: item.releaseDate,
         ),
     ];
     if (discoverLanguagesAreAll(languages) || hits.isEmpty) return hits;

@@ -597,6 +597,8 @@ class AppSettings {
     required this.deleteAfterPlayback,
     required this.episodeCacheCleanup,
     required this.downloadDirectory,
+    required this.automaticDatabaseBackup,
+    required this.automaticDatabaseBackupFolder,
     required this.refreshIntervalMinutes,
     required this.discoverLanguages,
     required this.discoverLanguagesPicked,
@@ -688,6 +690,12 @@ class AppSettings {
 
   final String? downloadDirectory;
 
+  /// Sauvegarde automatique de la base (style AntennaPod).
+  final bool automaticDatabaseBackup;
+
+  /// Dossier des sauvegardes auto (chemin local ou URI SAF).
+  final String? automaticDatabaseBackupFolder;
+
   /// Délai mini entre deux actualisations globales (0 = pas de limite).
   final int refreshIntervalMinutes;
 
@@ -742,6 +750,9 @@ class AppSettings {
     EpisodeCacheCleanup? episodeCacheCleanup,
     String? downloadDirectory,
     bool clearDownloadDirectory = false,
+    bool? automaticDatabaseBackup,
+    String? automaticDatabaseBackupFolder,
+    bool clearAutomaticDatabaseBackupFolder = false,
     int? refreshIntervalMinutes,
     List<String>? discoverLanguages,
     List<String>? discoverLanguagesPicked,
@@ -794,6 +805,12 @@ class AppSettings {
       downloadDirectory: clearDownloadDirectory
           ? null
           : (downloadDirectory ?? this.downloadDirectory),
+      automaticDatabaseBackup:
+          automaticDatabaseBackup ?? this.automaticDatabaseBackup,
+      automaticDatabaseBackupFolder: clearAutomaticDatabaseBackupFolder
+          ? null
+          : (automaticDatabaseBackupFolder ??
+                this.automaticDatabaseBackupFolder),
       refreshIntervalMinutes:
           refreshIntervalMinutes ?? this.refreshIntervalMinutes,
       discoverLanguages: discoverLanguages ?? this.discoverLanguages,
@@ -878,6 +895,11 @@ class SettingsNotifier extends Notifier<AppSettings> {
         preferences.getString('episodeCacheCleanup'),
       ),
       downloadDirectory: preferences.getString('downloadDirectory'),
+      automaticDatabaseBackup:
+          preferences.getBool('automaticDatabaseBackup') ?? false,
+      automaticDatabaseBackupFolder: preferences.getString(
+        'automaticDatabaseBackupFolder',
+      ),
       refreshIntervalMinutes: _refreshIntervalMinutes(
         preferences.getInt('refreshIntervalMinutes'),
       ),
@@ -1068,6 +1090,27 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await ref
         .read(sharedPreferencesProvider)
         .setBool('dequeueDeletedDownloads', enabled);
+  }
+
+  Future<void> setAutomaticDatabaseBackup(bool enabled) async {
+    state = state.copyWith(automaticDatabaseBackup: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('automaticDatabaseBackup', enabled);
+  }
+
+  Future<void> setAutomaticDatabaseBackupFolder(String? folder) async {
+    if (folder == null || folder.isEmpty) {
+      state = state.copyWith(clearAutomaticDatabaseBackupFolder: true);
+      await ref
+          .read(sharedPreferencesProvider)
+          .remove('automaticDatabaseBackupFolder');
+      return;
+    }
+    state = state.copyWith(automaticDatabaseBackupFolder: folder);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setString('automaticDatabaseBackupFolder', folder);
   }
 
   Future<void> setAutomaticDownload(bool enabled) async {

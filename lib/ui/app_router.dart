@@ -21,6 +21,7 @@ import 'library_hub_page.dart';
 import 'library_pages.dart';
 import 'licenses_page.dart';
 import 'more_page.dart';
+import 'nearby_share_page.dart';
 import 'opml_import_page.dart';
 import 'podcast_page.dart';
 import 'podcasts_page.dart';
@@ -159,6 +160,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.about,
             builder: (context, state) => const AboutPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.nearbyShare,
+            builder: (context, state) => const NearbySharePage(),
           ),
           GoRoute(
             path: AppRoutes.licenses,

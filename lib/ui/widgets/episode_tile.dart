@@ -17,6 +17,7 @@ import 'brand.dart';
 import 'episode_actions_sheet.dart';
 import 'highlighted_text.dart';
 import 'list_metrics.dart';
+import 'marquee_text.dart';
 import 'playing_cover.dart';
 
 export 'episode_actions_sheet.dart'
@@ -254,10 +255,9 @@ class EpisodeTile extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        HighlightedText(
+                        MarqueeText(
                           text: episode.title,
                           query: highlightQuery,
-                          maxLines: 2,
                           style: metrics.titleStyle,
                         ),
                         SizedBox(height: metrics.gap),
@@ -724,10 +724,9 @@ class _QueueStyleRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  HighlightedText(
+                  MarqueeText(
                     text: episode.title,
                     query: highlightQuery,
-                    maxLines: 1,
                     style: titleStyle,
                   ),
                   EpisodeListSubtitle(
