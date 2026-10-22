@@ -19,6 +19,7 @@ import '../widgets/episode_list.dart';
 import '../widgets/frosted_header.dart';
 import '../widgets/episode_tile.dart';
 import '../widgets/list_metrics.dart';
+import '../widgets/marquee_text.dart';
 import '../widgets/messages.dart';
 import 'cover_palette.dart';
 import 'podcast_album_header.dart';
@@ -232,15 +233,10 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                       ? EpisodeSelectionAppBar(session: selection)
                       : FrostedAppBar(
                           alwaysFrosted: true,
-                          title: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              item.title,
-                              maxLines: 1,
-                              softWrap: false,
-                              style: const TextStyle(color: Colors.white),
-                            ),
+                          title: MarqueeText(
+                            text: item.title,
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(color: Colors.white),
                           ),
                           actions: _appBarActions(item),
                         ),
@@ -447,7 +443,6 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
             sliver: SliverToBoxAdapter(
               child: PodcastAlbumHeader(
                 podcast: item,
-                background: background,
                 showPause: showPause,
                 onPlay: onPlay,
                 onAbout: () => context.push(AppRoutes.podcastAbout(item.id)),
