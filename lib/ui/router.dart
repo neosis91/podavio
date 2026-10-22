@@ -14,9 +14,11 @@ class AppRoutes {
   static const history = '/history';
   static const downloads = '/downloads';
   static const appearance = '/appearance';
+  static const languages = '/languages';
   static const interfaceLanguage = '/appearance/language';
   static const playback = '/playback';
   static const downloadSettings = '/download-settings';
+  static const network = '/network';
   static const notifications = '/notifications';
   static const about = '/about';
   static const nearbyShare = '/about/nearby-share';

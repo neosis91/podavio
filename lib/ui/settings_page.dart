@@ -11,6 +11,7 @@ import '../core/theme.dart';
 import '../core/wallpaper_colors.dart';
 import '../l10n/interface_locale.dart';
 import '../l10n/l10n.dart';
+import '../data/discover_languages.dart';
 import '../data/download_controller.dart';
 import '../data/download_service.dart';
 import '../data/providers.dart';
@@ -34,24 +35,11 @@ class AppearancePage extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
     final wallpaperOption = defaultTargetPlatform != TargetPlatform.iOS;
-    final interfaceLocale = resolveInterfaceLocale(
-      stored: settings.interfaceLanguage,
-      system: View.of(context).platformDispatcher.locale,
-    );
     return Scaffold(
       appBar: AppBar(title: Text(context.tr('Interface'))),
       body: ListView(
         padding: underChrome(context, const EdgeInsets.only(bottom: 32)),
         children: [
-          ListTile(
-            title: Text(context.tr('Language')),
-            subtitle: Text(
-              _interfaceLanguageSubtitle(context, settings, interfaceLocale),
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push(AppRoutes.interfaceLanguage),
-          ),
-          const Divider(),
           ListTile(title: Text(context.tr('Appearance'))),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -137,6 +125,54 @@ class AppearancePage extends ConsumerWidget {
   }
 }
 
+class LanguageSettingsPage extends ConsumerWidget {
+  const LanguageSettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final languages = settings.discoverLanguages;
+    final interfaceLocale = resolveInterfaceLocale(
+      stored: settings.interfaceLanguage,
+      system: View.of(context).platformDispatcher.locale,
+    );
+    return Scaffold(
+      appBar: AppBar(title: Text(context.tr('Language'))),
+      body: ListView(
+        children: [
+          ListTile(
+            title: Text(context.tr('Interface language')),
+            subtitle: Text(
+              _interfaceLanguageSubtitle(context, settings, interfaceLocale),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.interfaceLanguage),
+          ),
+          ListTile(
+            title: Text(context.tr('Listening language')),
+            subtitle: Text(_discoverLanguagesSubtitle(context, languages)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.discoverLanguages),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _discoverLanguagesSubtitle(
+  BuildContext context,
+  List<String> languages,
+) {
+  if (discoverLanguagesAreAll(languages)) {
+    return context.tr('All languages');
+  }
+  if (languages.length > 2) {
+    return context.tr('{count} languages', {'count': '${languages.length}'});
+  }
+  return discoverLanguagesSummary(languages);
+}
+
 String _interfaceLanguageSubtitle(
   BuildContext context,
   AppSettings settings,
@@ -180,6 +216,52 @@ String _wallpaperSubtitle(BuildContext context, WidgetRef ref) {
     return context.tr('The wallpaper could not be read');
   }
   return context.tr('Colors follow the wallpaper');
+}
+
+class NetworkSettingsPage extends ConsumerWidget {
+  const NetworkSettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final notifier = ref.read(settingsProvider.notifier);
+    return Scaffold(
+      appBar: AppBar(title: Text(context.tr('Network'))),
+      body: ListView(
+        children: [
+          _SectionTitle(context.tr('Data usage')),
+          SwitchListTile(
+            title: Text(context.tr('Episode downloads')),
+            subtitle: Text(
+              _networkModeLabel(context, settings.allowMobileData),
+            ),
+            value: settings.allowMobileData,
+            onChanged: notifier.setAllowMobileData,
+          ),
+          SwitchListTile(
+            title: Text(context.tr('Streaming')),
+            subtitle: Text(
+              _networkModeLabel(context, settings.allowMobileStreaming),
+            ),
+            value: settings.allowMobileStreaming,
+            onChanged: notifier.setAllowMobileStreaming,
+          ),
+          SwitchListTile(
+            title: Text(context.tr('Refresh')),
+            subtitle: Text(
+              _networkModeLabel(context, settings.allowMobileRefresh),
+            ),
+            value: settings.allowMobileRefresh,
+            onChanged: notifier.setAllowMobileRefresh,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _networkModeLabel(BuildContext context, bool unrestricted) {
+  return context.tr(unrestricted ? 'Wi-Fi and mobile data' : 'Wi-Fi only');
 }
 
 class DownloadSettingsPage extends ConsumerWidget {
@@ -232,16 +314,6 @@ class DownloadSettingsPage extends ConsumerWidget {
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _pickAutomaticDownloadLimit(context, ref),
-          ),
-          SwitchListTile(
-            title: Text(context.tr('Mobile data')),
-            subtitle: Text(
-              context.tr(
-                'Automatic downloads wait for Wi-Fi. Starting one on mobile data asks first.',
-              ),
-            ),
-            value: settings.allowMobileData,
-            onChanged: ref.read(settingsProvider.notifier).setAllowMobileData,
           ),
           ListTile(
             title: Text(context.tr('Episode cache')),

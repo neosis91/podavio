@@ -73,7 +73,7 @@ class _DiscoverLanguagesPageState extends ConsumerState<DiscoverLanguagesPage> {
                 textInputAction: TextInputAction.search,
                 onChanged: (value) => setState(() => _query = value),
               )
-            : Text(context.tr('Languages')),
+            : Text(context.tr('Listening language')),
         leading: _searching
             ? IconButton(
                 tooltip: 'Fermer la recherche',

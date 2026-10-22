@@ -14,7 +14,6 @@ import '../core/build_info.dart';
 import '../l10n/l10n.dart';
 import '../data/app_release.dart';
 import '../data/database_backup.dart';
-import '../data/discover_languages.dart';
 import '../data/download_service.dart';
 import '../data/feed_refresh_controller.dart';
 import '../data/html_export.dart';
@@ -157,9 +156,6 @@ class PreferencesPage extends ConsumerWidget {
     final refreshing = ref.watch(
       feedRefreshProvider.select((s) => s.isRunning),
     );
-    final languages = ref.watch(
-      settingsProvider.select((settings) => settings.discoverLanguages),
-    );
     final sync = ref.watch(syncStatusProvider);
     return Scaffold(
       appBar: AppBar(title: Text(context.tr('Settings'))),
@@ -178,81 +174,157 @@ class PreferencesPage extends ConsumerWidget {
             enabled: !refreshing,
             onTap: refreshing ? null : () => refreshSubscriptions(context, ref),
           ),
+          ListTile(
+            leading: const TranslateIcon(),
+            title: Text(context.tr('Language')),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.languages),
+          ),
           const Divider(),
-          ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: Text(context.tr('Interface')),
-            onTap: () => context.push(AppRoutes.appearance),
-          ),
-          ListTile(
-            leading: const Icon(Icons.language),
-            title: Text(context.tr('Explore')),
-            subtitle: Text(_discoverLanguagesSubtitle(context, languages)),
-            onTap: () => context.push(AppRoutes.discoverLanguages),
-          ),
-          ListTile(
-            leading: const Icon(Icons.speed),
-            title: Text(context.tr('Playback')),
-            onTap: () => context.push(AppRoutes.playback),
-          ),
-          ListTile(
-            leading: const Icon(Icons.sync),
-            title: Text(context.tr('Synchronization')),
-            subtitle: Text(
-              sync.connected
-                  ? context.tr(sync.provider?.titleKey ?? 'Synchronization')
-                  : context.tr('Synchronization is off'),
+          ..._alphabeticalSettings([
+            _SettingsLink(
+              context.tr('Network'),
+              ListTile(
+                leading: const Icon(Icons.wifi),
+                title: Text(context.tr('Network')),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.network),
+              ),
             ),
-            onTap: () => context.push(AppRoutes.sync),
-          ),
-          ListTile(
-            leading: const Icon(Icons.notifications_outlined),
-            title: Text(context.tr('Notifications')),
-            onTap: () => context.push(AppRoutes.notifications),
-          ),
-          ListTile(
-            leading: const Icon(Icons.download_outlined),
-            title: Text(context.tr('Download manager')),
-            onTap: () => context.push(AppRoutes.downloadSettings),
-          ),
-          ListTile(
-            leading: const Icon(Icons.archive_outlined),
-            title: Text(context.tr('Backup and restore')),
-            onTap: () => context.push(AppRoutes.backupRestore),
-          ),
-          if (NearbyApkSource().isSupported)
-            ListTile(
-              leading: const Icon(Icons.qr_code_2_outlined),
-              title: Text(context.tr('Share Podavio nearby')),
-              subtitle: Text(
-                context.tr(
-                  'Install on another phone over Wi-Fi, without internet',
+            _SettingsLink(
+              context.tr('Interface'),
+              ListTile(
+                leading: const Icon(Icons.palette_outlined),
+                title: Text(context.tr('Interface')),
+                onTap: () => context.push(AppRoutes.appearance),
+              ),
+            ),
+            _SettingsLink(
+              context.tr('Playback'),
+              ListTile(
+                leading: const Icon(Icons.speed),
+                title: Text(context.tr('Playback')),
+                onTap: () => context.push(AppRoutes.playback),
+              ),
+            ),
+            _SettingsLink(
+              context.tr('Synchronization'),
+              ListTile(
+                leading: const Icon(Icons.sync),
+                title: Text(context.tr('Synchronization')),
+                subtitle: Text(
+                  sync.connected
+                      ? context.tr(sync.provider?.titleKey ?? 'Synchronization')
+                      : context.tr('Synchronization is off'),
+                ),
+                onTap: () => context.push(AppRoutes.sync),
+              ),
+            ),
+            _SettingsLink(
+              context.tr('Notifications'),
+              ListTile(
+                leading: const Icon(Icons.notifications_outlined),
+                title: Text(context.tr('Notifications')),
+                onTap: () => context.push(AppRoutes.notifications),
+              ),
+            ),
+            _SettingsLink(
+              context.tr('Download manager'),
+              ListTile(
+                leading: const Icon(Icons.download_outlined),
+                title: Text(context.tr('Download manager')),
+                onTap: () => context.push(AppRoutes.downloadSettings),
+              ),
+            ),
+            _SettingsLink(
+              context.tr('Backup and restore'),
+              ListTile(
+                leading: const Icon(Icons.archive_outlined),
+                title: Text(context.tr('Backup and restore')),
+                onTap: () => context.push(AppRoutes.backupRestore),
+              ),
+            ),
+            if (NearbyApkSource().isSupported)
+              _SettingsLink(
+                context.tr('Share Podavio nearby'),
+                ListTile(
+                  leading: const Icon(Icons.qr_code_2_outlined),
+                  title: Text(context.tr('Share Podavio nearby')),
+                  subtitle: Text(
+                    context.tr(
+                      'Install on another phone over Wi-Fi, without internet',
+                    ),
+                  ),
+                  onTap: () => context.push(AppRoutes.nearbyShare),
                 ),
               ),
-              onTap: () => context.push(AppRoutes.nearbyShare),
+            _SettingsLink(
+              context.tr('About'),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text(context.tr('About')),
+                onTap: () => context.push(AppRoutes.about),
+              ),
             ),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: Text(context.tr('About')),
-            onTap: () => context.push(AppRoutes.about),
-          ),
+          ]),
         ],
       ),
     );
   }
 }
 
-String _discoverLanguagesSubtitle(
-  BuildContext context,
-  List<String> languages,
-) {
-  if (discoverLanguagesAreAll(languages)) {
-    return context.tr('All languages');
+class _SettingsLink {
+  const _SettingsLink(this.label, this.tile);
+
+  final String label;
+  final Widget tile;
+}
+
+List<Widget> _alphabeticalSettings(List<_SettingsLink> links) {
+  final sorted = [...links]
+    ..sort(
+      (a, b) => _alphabeticalKey(a.label).compareTo(_alphabeticalKey(b.label)),
+    );
+  return [for (final link in sorted) link.tile];
+}
+
+String _alphabeticalKey(String label) {
+  const folded = {
+    'à': 'a',
+    'á': 'a',
+    'â': 'a',
+    'ä': 'a',
+    'ã': 'a',
+    'å': 'a',
+    'æ': 'ae',
+    'ç': 'c',
+    'è': 'e',
+    'é': 'e',
+    'ê': 'e',
+    'ë': 'e',
+    'ì': 'i',
+    'í': 'i',
+    'î': 'i',
+    'ï': 'i',
+    'ñ': 'n',
+    'ò': 'o',
+    'ó': 'o',
+    'ô': 'o',
+    'ö': 'o',
+    'õ': 'o',
+    'œ': 'oe',
+    'ù': 'u',
+    'ú': 'u',
+    'û': 'u',
+    'ü': 'u',
+    'ý': 'y',
+    'ÿ': 'y',
+  };
+  final buffer = StringBuffer();
+  for (final char in label.toLowerCase().characters) {
+    buffer.write(folded[char] ?? char);
   }
-  if (languages.length > 2) {
-    return context.tr('{count} languages', {'count': '${languages.length}'});
-  }
-  return discoverLanguagesSummary(languages);
+  return buffer.toString();
 }
 
 class BackupRestorePage extends ConsumerWidget {
@@ -328,9 +400,7 @@ class BackupRestorePage extends ConsumerWidget {
             leading: const Icon(Icons.language_outlined),
             title: Text(context.tr('Export subscriptions')),
             subtitle: Text(
-              context.tr(
-                'HTML page to open or share (cannot be re-imported)',
-              ),
+              context.tr('HTML page to open or share (cannot be re-imported)'),
             ),
             onTap: () => _exportSubscriptionsHtml(context, ref),
           ),
@@ -366,7 +436,10 @@ class BackupRestorePage extends ConsumerWidget {
       }
     } catch (error) {
       if (context.mounted) {
-        showMessage(context, errorText(error).isEmpty ? failedMsg : errorText(error));
+        showMessage(
+          context,
+          errorText(error).isEmpty ? failedMsg : errorText(error),
+        );
       }
     }
   }
@@ -377,7 +450,9 @@ class BackupRestorePage extends ConsumerWidget {
     bool enabled,
   ) async {
     if (!enabled) {
-      await ref.read(settingsProvider.notifier).setAutomaticDatabaseBackup(false);
+      await ref
+          .read(settingsProvider.notifier)
+          .setAutomaticDatabaseBackup(false);
       return;
     }
     final folder = await _pickBackupFolder(context, ref);
@@ -391,10 +466,7 @@ class BackupRestorePage extends ConsumerWidget {
     }
   }
 
-  Future<String?> _pickBackupFolder(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  Future<String?> _pickBackupFolder(BuildContext context, WidgetRef ref) async {
     final current = ref.read(settingsProvider).automaticDatabaseBackupFolder;
     try {
       if (Platform.isAndroid) {
@@ -452,10 +524,7 @@ class BackupRestorePage extends ConsumerWidget {
     if (!name.endsWith('.sqlite') &&
         !name.endsWith('.db') &&
         !name.endsWith('.sqlite3')) {
-      showMessage(
-        context,
-        context.tr('Choose a .sqlite or .db database file'),
-      );
+      showMessage(context, context.tr('Choose a .sqlite or .db database file'));
       return;
     }
 
@@ -530,10 +599,7 @@ class BackupRestorePage extends ConsumerWidget {
     }
   }
 
-  Future<void> _exportFavoritesHtml(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  Future<void> _exportFavoritesHtml(BuildContext context, WidgetRef ref) async {
     final emptyMsg = context.tr('No favorites to export');
     final dialogTitle = context.tr('Export favorites (HTML)');
     final doneMsg = context.tr('Favorites exported as HTML');

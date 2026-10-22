@@ -68,6 +68,12 @@ void main() {
       '14 days after listening',
       '30 days after listening',
       'Mobile data',
+      'Network',
+      'Data usage',
+      'Episode downloads',
+      'Streaming',
+      'Wi-Fi only',
+      'Wi-Fi and mobile data',
       'Automatic downloads wait for Wi-Fi. Starting one on mobile data asks first.',
       'This download will use mobile data.',
     ];

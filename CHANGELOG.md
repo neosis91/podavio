@@ -13,6 +13,8 @@ La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 - On a podcast page, the background follows the cover’s average color. The episode count sits above the action pills. The copyright, title, and year line under the cover is gone.
 - In episode lists, a long title scrolls horizontally so you can read it in full.
 - In Download manager, Download limit caps how many episodes an automatic download fetches per podcast. The choices are unlimited, 1, 2, 3, 4, 5, 10, 20, 50, 100, 200, and 500. Episodes already downloaded and still unplayed count toward the limit. A download started by hand is not capped.
+- Settings opens a Network page. Under Data usage, episode downloads, streaming, and refresh can each stay on Wi-Fi only or also use mobile data.
+- Settings opens a Language page under Refresh all subscriptions. Interface language and listening language live there, no longer under Interface and Explore.
 
 ## 2026.10.19
 
