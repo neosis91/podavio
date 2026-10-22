@@ -181,150 +181,69 @@ class PreferencesPage extends ConsumerWidget {
             onTap: () => context.push(AppRoutes.languages),
           ),
           const Divider(),
-          ..._alphabeticalSettings([
-            _SettingsLink(
-              context.tr('Network'),
-              ListTile(
-                leading: const Icon(Icons.wifi),
-                title: Text(context.tr('Network')),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.network),
-              ),
+          _SectionTitle(context.tr('Advanced')),
+          ListTile(
+            leading: const Icon(Icons.palette_outlined),
+            title: Text(context.tr('Interface')),
+            onTap: () => context.push(AppRoutes.appearance),
+          ),
+          ListTile(
+            leading: const Icon(Icons.speed),
+            title: Text(context.tr('Playback')),
+            onTap: () => context.push(AppRoutes.playback),
+          ),
+          ListTile(
+            leading: const Icon(Icons.sync),
+            title: Text(context.tr('Synchronization')),
+            subtitle: Text(
+              sync.connected
+                  ? context.tr(sync.provider?.titleKey ?? 'Synchronization')
+                  : context.tr('Synchronization is off'),
             ),
-            _SettingsLink(
-              context.tr('Interface'),
-              ListTile(
-                leading: const Icon(Icons.palette_outlined),
-                title: Text(context.tr('Interface')),
-                onTap: () => context.push(AppRoutes.appearance),
-              ),
-            ),
-            _SettingsLink(
-              context.tr('Playback'),
-              ListTile(
-                leading: const Icon(Icons.speed),
-                title: Text(context.tr('Playback')),
-                onTap: () => context.push(AppRoutes.playback),
-              ),
-            ),
-            _SettingsLink(
-              context.tr('Synchronization'),
-              ListTile(
-                leading: const Icon(Icons.sync),
-                title: Text(context.tr('Synchronization')),
-                subtitle: Text(
-                  sync.connected
-                      ? context.tr(sync.provider?.titleKey ?? 'Synchronization')
-                      : context.tr('Synchronization is off'),
-                ),
-                onTap: () => context.push(AppRoutes.sync),
-              ),
-            ),
-            _SettingsLink(
-              context.tr('Notifications'),
-              ListTile(
-                leading: const Icon(Icons.notifications_outlined),
-                title: Text(context.tr('Notifications')),
-                onTap: () => context.push(AppRoutes.notifications),
-              ),
-            ),
-            _SettingsLink(
-              context.tr('Download manager'),
-              ListTile(
-                leading: const Icon(Icons.download_outlined),
-                title: Text(context.tr('Download manager')),
-                onTap: () => context.push(AppRoutes.downloadSettings),
-              ),
-            ),
-            _SettingsLink(
-              context.tr('Backup and restore'),
-              ListTile(
-                leading: const Icon(Icons.archive_outlined),
-                title: Text(context.tr('Backup and restore')),
-                onTap: () => context.push(AppRoutes.backupRestore),
-              ),
-            ),
-            if (NearbyApkSource().isSupported)
-              _SettingsLink(
-                context.tr('Share Podavio nearby'),
-                ListTile(
-                  leading: const Icon(Icons.qr_code_2_outlined),
-                  title: Text(context.tr('Share Podavio nearby')),
-                  subtitle: Text(
-                    context.tr(
-                      'Install on another phone over Wi-Fi, without internet',
-                    ),
-                  ),
-                  onTap: () => context.push(AppRoutes.nearbyShare),
+            onTap: () => context.push(AppRoutes.sync),
+          ),
+          ListTile(
+            leading: const Icon(Icons.notifications_outlined),
+            title: Text(context.tr('Notifications')),
+            onTap: () => context.push(AppRoutes.notifications),
+          ),
+          ListTile(
+            leading: const Icon(Icons.download_outlined),
+            title: Text(context.tr('Download manager')),
+            onTap: () => context.push(AppRoutes.downloadSettings),
+          ),
+          ListTile(
+            leading: const Icon(Icons.wifi),
+            title: Text(context.tr('Network')),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.network),
+          ),
+          ListTile(
+            leading: const Icon(Icons.archive_outlined),
+            title: Text(context.tr('Backup and restore')),
+            onTap: () => context.push(AppRoutes.backupRestore),
+          ),
+          _SectionTitle(context.tr('Miscellaneous')),
+          if (NearbyApkSource().isSupported)
+            ListTile(
+              leading: const Icon(Icons.qr_code_2_outlined),
+              title: Text(context.tr('Share Podavio nearby')),
+              subtitle: Text(
+                context.tr(
+                  'Install on another phone over Wi-Fi, without internet',
                 ),
               ),
-            _SettingsLink(
-              context.tr('About'),
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: Text(context.tr('About')),
-                onTap: () => context.push(AppRoutes.about),
-              ),
+              onTap: () => context.push(AppRoutes.nearbyShare),
             ),
-          ]),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: Text(context.tr('About')),
+            onTap: () => context.push(AppRoutes.about),
+          ),
         ],
       ),
     );
   }
-}
-
-class _SettingsLink {
-  const _SettingsLink(this.label, this.tile);
-
-  final String label;
-  final Widget tile;
-}
-
-List<Widget> _alphabeticalSettings(List<_SettingsLink> links) {
-  final sorted = [...links]
-    ..sort(
-      (a, b) => _alphabeticalKey(a.label).compareTo(_alphabeticalKey(b.label)),
-    );
-  return [for (final link in sorted) link.tile];
-}
-
-String _alphabeticalKey(String label) {
-  const folded = {
-    'à': 'a',
-    'á': 'a',
-    'â': 'a',
-    'ä': 'a',
-    'ã': 'a',
-    'å': 'a',
-    'æ': 'ae',
-    'ç': 'c',
-    'è': 'e',
-    'é': 'e',
-    'ê': 'e',
-    'ë': 'e',
-    'ì': 'i',
-    'í': 'i',
-    'î': 'i',
-    'ï': 'i',
-    'ñ': 'n',
-    'ò': 'o',
-    'ó': 'o',
-    'ô': 'o',
-    'ö': 'o',
-    'õ': 'o',
-    'œ': 'oe',
-    'ù': 'u',
-    'ú': 'u',
-    'û': 'u',
-    'ü': 'u',
-    'ý': 'y',
-    'ÿ': 'y',
-  };
-  final buffer = StringBuffer();
-  for (final char in label.toLowerCase().characters) {
-    buffer.write(folded[char] ?? char);
-  }
-  return buffer.toString();
 }
 
 class BackupRestorePage extends ConsumerWidget {

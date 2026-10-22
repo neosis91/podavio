@@ -18,6 +18,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/episode_list.dart';
 import '../widgets/frosted_header.dart';
 import '../widgets/episode_tile.dart';
+import '../widgets/list_metrics.dart';
 import '../widgets/messages.dart';
 import 'cover_palette.dart';
 import 'podcast_album_header.dart';
@@ -164,9 +165,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         final playingHere = ref.watch(
           playerProvider.select(
             (state) =>
-                state.podcastId == item.id &&
-                state.hasEpisode &&
-                state.playing,
+                state.podcastId == item.id && state.hasEpisode && state.playing,
           ),
         );
         final loadedHere = ref.watch(
@@ -176,8 +175,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         );
         final first = window?.entries.firstOrNull;
         final selection = _selectionSession(window);
-        final selectingOverlay =
-            Theme.of(context).brightness == Brightness.dark
+        final selectingOverlay = Theme.of(context).brightness == Brightness.dark
             ? SystemUiOverlayStyle.light
             : SystemUiOverlayStyle.dark;
         // Toujours la même structure Theme → Scaffold → body pour ne pas
@@ -246,10 +244,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                           ),
                           actions: _appBarActions(item),
                         ),
-                  body: ColoredBox(
-                    color: color ?? Colors.black,
-                    child: child,
-                  ),
+                  body: ColoredBox(color: color ?? Colors.black, child: child),
                 );
               },
               child: PopScope(
@@ -319,6 +314,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
   void _showPodcastActions(Podcast item) {
     showAppModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       showDragHandle: true,
       builder: (sheetContext) {
         return SafeArea(
@@ -405,12 +401,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     );
   }
 
-  void _play(
-    WidgetRef ref,
-    Podcast item,
-    EpisodeEntry first,
-    bool loadedHere,
-  ) {
+  void _play(WidgetRef ref, Podcast item, EpisodeEntry first, bool loadedHere) {
     if (loadedHere) {
       ref.read(playerProvider.notifier).toggle();
       return;
@@ -531,7 +522,10 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
       DecoratedSliver(
         decoration: BoxDecoration(color: background),
         sliver: SliverPadding(
-          padding: const EdgeInsets.only(top: 4, bottom: 24),
+          padding: underChrome(
+            context,
+            const EdgeInsets.only(top: 4, bottom: 24),
+          ),
           sliver: SliverList.builder(
             addAutomaticKeepAlives: false,
             itemCount: window.entries.length + (window.hasMore ? 1 : 0),
