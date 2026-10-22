@@ -4,6 +4,19 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.10.21
+
+- In Download manager, Download limit caps how many episodes an automatic download fetches per podcast. The choices are unlimited, 1, 2, 3, 4, 5, 10, 20, 50, 100, 200, and 500. Episodes already downloaded and still unplayed count toward the limit. A download started by hand is not capped.
+- Settings opens a Network page. Under Data usage, episode downloads, streaming, and refresh can each stay on Wi-Fi only or also use mobile data.
+- Settings opens a Language page under Refresh all subscriptions. Interface language and listening language live there, no longer under Interface and Explore. Each row shows the flags of the selected languages.
+- In Explore, the language button opens listening language, with the same icon as in Settings.
+- Settings are grouped under Advanced (Interface, Playback, Synchronization, Notifications, Download manager, Network, Backup and restore) and Miscellaneous (Share Podavio nearby, About).
+- On a podcast page, Play or Pause and the episode count sit on the cover, with Subscribe and About in the top right corner. The fade at the bottom of the cover is replaced by a light shadow.
+- On a podcast page, a long title scrolls instead of shrinking.
+- On a podcast page, the last episodes are no longer hidden behind the mini player and the navigation bar. The podcast menu opens above them.
+- On a podcast page, an episode menu no longer offers a link to that same podcast.
+- With pure black on, the mini player, the navigation bar, and the search button have a light outline.
+
 ## 2026.10.20
 
 - On Android, Settings includes Share Podavio nearby. Over the same Wi-Fi or a phone hotspot, a QR code opens a page to download and install Podavio with no internet. Sharing stops when you leave the screen or switch apps.
@@ -12,9 +25,6 @@ La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 - Explore and Home categories hide podcasts you already follow.
 - On a podcast page, the background follows the cover’s average color. The episode count sits above the action pills. The copyright, title, and year line under the cover is gone.
 - In episode lists, a long title scrolls horizontally so you can read it in full.
-- In Download manager, Download limit caps how many episodes an automatic download fetches per podcast. The choices are unlimited, 1, 2, 3, 4, 5, 10, 20, 50, 100, 200, and 500. Episodes already downloaded and still unplayed count toward the limit. A download started by hand is not capped.
-- Settings opens a Network page. Under Data usage, episode downloads, streaming, and refresh can each stay on Wi-Fi only or also use mobile data.
-- Settings opens a Language page under Refresh all subscriptions. Interface language and listening language live there, no longer under Interface and Explore.
 
 ## 2026.10.19
 
