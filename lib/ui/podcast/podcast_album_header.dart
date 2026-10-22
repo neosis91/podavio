@@ -10,21 +10,18 @@ import '../../l10n/l10n.dart';
 import '../podcasts/podcast_feed_actions.dart';
 import '../widgets/brand.dart';
 import '../widgets/cover.dart';
-import 'cover_palette.dart';
 
 /// Haut de page d’une émission. En portrait : jaquette SimpMusic / Apple Music.
 class PodcastAlbumHeader extends ConsumerWidget {
   const PodcastAlbumHeader({
     super.key,
     required this.podcast,
-    required this.background,
     required this.showPause,
     required this.onPlay,
     required this.onAbout,
   });
 
   final Podcast podcast;
-  final Color background;
   final bool showPause;
   final VoidCallback? onPlay;
   final VoidCallback onAbout;
@@ -49,74 +46,57 @@ class PodcastAlbumHeader extends ConsumerWidget {
             : media.size.width;
         final height = media.size.height;
         final portrait = width < height;
-        final gutter = math.min(32.0, width * 0.06);
+        final chrome = _CoverChrome(
+          count: count,
+          countStyle: theme.textTheme.bodyMedium,
+          showPause: showPause,
+          onPlay: onPlay,
+          onAbout: onAbout,
+          subscribed: podcast.subscribed,
+          onSubscribe: () => subscribeToFeed(
+            context,
+            ref,
+            podcast.feedUrl,
+            openPodcast: false,
+          ),
+        );
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (portrait)
-              _PortraitArtwork(
-                podcast: podcast,
-                headers: headers,
-                background: background,
-                width: width,
-                height: height,
-              )
-            else
-              _LandscapeArtwork(
-                podcast: podcast,
-                headers: headers,
-                width: width,
-                height: height,
-              ),
-            if (count != null)
-              Padding(
-                padding: EdgeInsets.fromLTRB(gutter, 12, gutter, 0),
-                child: Text(
-                  count == 1 ? '1 épisode' : '$count épisodes',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: _PlayRow(
-                showPause: showPause,
-                onPlay: onPlay,
-                onAbout: onAbout,
-                subscribed: podcast.subscribed,
-                onSubscribe: () => subscribeToFeed(
-                  context,
-                  ref,
-                  podcast.feedUrl,
-                  openPodcast: false,
-                ),
-              ),
-            ),
-          ],
+        if (portrait) {
+          return _PortraitArtwork(
+            podcast: podcast,
+            headers: headers,
+            width: width,
+            height: height,
+            chrome: chrome,
+          );
+        }
+        return _LandscapeArtwork(
+          podcast: podcast,
+          headers: headers,
+          width: width,
+          height: height,
+          chrome: chrome,
         );
       },
     );
   }
 }
 
-/// Demi-écran, bord à bord, recadrage et fondu — comme SimpMusic.
+/// Demi-écran, bord à bord. Les actions reposent sur la pochette.
 class _PortraitArtwork extends StatelessWidget {
   const _PortraitArtwork({
     required this.podcast,
     required this.headers,
-    required this.background,
     required this.width,
     required this.height,
+    required this.chrome,
   });
 
   final Podcast podcast;
   final Map<String, String>? headers;
-  final Color background;
   final double width;
   final double height;
+  final Widget chrome;
 
   @override
   Widget build(BuildContext context) {
@@ -134,15 +114,8 @@ class _PortraitArtwork extends StatelessWidget {
             expand: true,
             fit: BoxFit.cover,
           ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: IgnorePointer(
-              child: Container(
-                height: height * 0.35,
-                decoration: BoxDecoration(gradient: artworkScrim(background)),
-              ),
-            ),
-          ),
+          const _ArtworkShade(),
+          chrome,
         ],
       ),
     );
@@ -155,36 +128,74 @@ class _LandscapeArtwork extends StatelessWidget {
     required this.headers,
     required this.width,
     required this.height,
+    required this.chrome,
   });
 
   final Podcast podcast;
   final Map<String, String>? headers;
   final double width;
   final double height;
+  final Widget chrome;
 
   @override
   Widget build(BuildContext context) {
     final side = math
         .min(height * 0.72, width * 0.42)
         .clamp(140.0, math.min(width, height) * 0.9);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+    return SizedBox(
+      height: side,
       child: Center(
-        child: PodcastCover(
-          url: podcast.imageUrl,
-          localPath: podcast.imagePath,
-          httpHeaders: headers,
-          size: side,
-          radius: 12,
-          fit: BoxFit.contain,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox.square(
+            dimension: side,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                PodcastCover(
+                  url: podcast.imageUrl,
+                  localPath: podcast.imagePath,
+                  httpHeaders: headers,
+                  radius: 0,
+                  expand: true,
+                  fit: BoxFit.cover,
+                ),
+                const _ArtworkShade(),
+                chrome,
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-class _PlayRow extends StatelessWidget {
-  const _PlayRow({
+/// Ombre légère en bas de la pochette, pour détacher boutons et texte.
+class _ArtworkShade extends StatelessWidget {
+  const _ArtworkShade();
+
+  @override
+  Widget build(BuildContext context) {
+    return const IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0x00000000), Color(0x99000000)],
+            stops: [0.62, 1],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CoverChrome extends StatelessWidget {
+  const _CoverChrome({
+    required this.count,
+    required this.countStyle,
     required this.showPause,
     required this.onPlay,
     required this.onAbout,
@@ -192,6 +203,8 @@ class _PlayRow extends StatelessWidget {
     required this.onSubscribe,
   });
 
+  final int? count;
+  final TextStyle? countStyle;
   final bool showPause;
   final VoidCallback? onPlay;
   final VoidCallback onAbout;
@@ -200,93 +213,123 @@ class _PlayRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = context.tr(showPause ? 'Pause' : 'Play');
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    final labelStyle = Theme.of(context).textTheme.labelMedium;
+    return Stack(
       children: [
-        Material(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onPlay,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      showPause ? Icons.pause : Icons.play_arrow,
-                      color: Colors.black,
-                      size: 22,
+        Positioned(
+          top: 12,
+          right: 12,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!subscribed) ...[
+                _Pill(
+                  onTap: onSubscribe,
+                  color: Colors.white.withValues(alpha: 0.12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.add, color: Colors.white, size: 18),
+                        const SizedBox(width: 4),
+                        Text(
+                          'S’abonner',
+                          style: labelStyle?.copyWith(color: Colors.white),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      label,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: Colors.black,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Tooltip(
+                message: 'À propos',
+                child: _Pill(
+                  onTap: onAbout,
+                  color: Colors.white,
+                  child: const SizedBox.square(
+                    dimension: 36,
+                    child: Center(
+                      child: IconTheme(
+                        data: IconThemeData(color: Colors.black, size: 18),
+                        child: InfoIcon(size: 18),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Tooltip(
-          message: 'À propos',
-          child: Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onAbout,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                child: const Center(
-                  child: IconTheme(
-                    data: IconThemeData(color: Colors.black, size: 22),
-                    child: InfoIcon(size: 22),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
-        if (!subscribed) ...[
-          const SizedBox(width: 12),
-          Material(
-            color: Colors.white.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(24),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onSubscribe,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48),
+        Positioned(
+          left: 12,
+          right: 12,
+          bottom: 14,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (count != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    count == 1 ? '1 épisode' : '$count épisodes',
+                    textAlign: TextAlign.center,
+                    style: countStyle?.copyWith(color: Colors.white),
+                  ),
+                ),
+              _Pill(
+                onTap: onPlay,
+                color: Colors.white,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.add, color: Colors.white, size: 22),
+                      Icon(
+                        showPause ? Icons.pause : Icons.play_arrow,
+                        color: Colors.black,
+                        size: 18,
+                      ),
                       const SizedBox(width: 4),
                       Text(
-                        'S’abonner',
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: Colors.white,
-                        ),
+                        context.tr(showPause ? 'Pause' : 'Play'),
+                        style: labelStyle?.copyWith(color: Colors.black),
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ],
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.onTap, required this.color, required this.child});
+
+  final VoidCallback? onTap;
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color,
+      elevation: 2,
+      shadowColor: Colors.black54,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 36),
+          child: child,
+        ),
+      ),
     );
   }
 }

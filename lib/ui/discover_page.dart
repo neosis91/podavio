@@ -111,9 +111,9 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
         actions: [
           if (!searching)
             IconButton(
-              tooltip: context.tr('Languages'),
+              tooltip: context.tr('Listening language'),
               onPressed: () => context.push(AppRoutes.discoverLanguages),
-              icon: const LanguageIcon(),
+              icon: const TranslateIcon(),
             ),
           if (searching)
             IconButton(
@@ -332,9 +332,9 @@ class _DiscoverMorePageState extends ConsumerState<DiscoverMorePage>
         actions: [
           if (!searching)
             IconButton(
-              tooltip: context.tr('Languages'),
+              tooltip: context.tr('Listening language'),
               onPressed: () => context.push(AppRoutes.discoverLanguages),
-              icon: const LanguageIcon(),
+              icon: const TranslateIcon(),
             ),
           if (searching)
             IconButton(

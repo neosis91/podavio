@@ -12,6 +12,7 @@ import '../data/download_controller.dart';
 import '../data/download_policy.dart';
 import '../data/feed_service.dart';
 import '../data/http_auth.dart';
+import '../data/online_status.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import '../sync/sync_hooks.dart';
@@ -275,9 +276,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       head: slice.first,
       cursor: slice.last,
       towardNewer: towardNewer,
-      exhaustedBefore: towardNewer
-          ? !later.mayHaveMore
-          : !earlier.mayHaveMore,
+      exhaustedBefore: towardNewer ? !later.mayHaveMore : !earlier.mayHaveMore,
       exhausted: towardNewer ? !earlier.mayHaveMore : !later.mayHaveMore,
     );
   }
@@ -842,6 +841,19 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       ),
     );
     final sourceUri = _sourceUri(episode);
+    if (_isRemote(sourceUri) && !settings.allowMobileStreaming) {
+      final onMobile = await ref.read(mobileDataProbeProvider)();
+      if (!ref.mounted || _disposed) return;
+      if (onMobile) {
+        _emit(
+          _ui.copyWith(
+            playing: false,
+            error: 'Le streaming est limité au Wi-Fi.',
+          ),
+        );
+        return;
+      }
+    }
     unawaited(
       _publishStreamQuality(
         episodeId: episode.id,
@@ -1045,6 +1057,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       // Le flux reste lisible sans la ligne de qualité.
     }
   }
+
+  bool _isRemote(Uri uri) => uri.scheme == 'http' || uri.scheme == 'https';
 
   Uri _sourceUri(Episode episode) {
     final path = episode.downloadPath;

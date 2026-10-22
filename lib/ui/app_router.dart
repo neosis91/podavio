@@ -136,6 +136,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const DiscoverLanguagesPage(),
           ),
           GoRoute(
+            path: AppRoutes.languages,
+            builder: (context, state) => const LanguageSettingsPage(),
+          ),
+          GoRoute(
             path: AppRoutes.appearance,
             builder: (context, state) => const AppearancePage(),
             routes: [
@@ -152,6 +156,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.downloadSettings,
             builder: (context, state) => const DownloadSettingsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.network,
+            builder: (context, state) => const NetworkSettingsPage(),
           ),
           GoRoute(
             path: AppRoutes.notifications,

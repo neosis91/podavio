@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme.dart';
 import '../../data/providers.dart';
 import '../../player/player_controller.dart';
 import '../../player/player_sheet_controller.dart';
@@ -184,6 +185,11 @@ class _ExpandablePlayerState extends ConsumerState<ExpandablePlayer>
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(
                           miniPlayerHeight / 2 * (1 - t),
+                        ),
+                        side: BorderSide.lerp(
+                          pureBlackOutline(scheme),
+                          BorderSide.none,
+                          t,
                         ),
                       ),
                       clipBehavior: Clip.antiAlias,

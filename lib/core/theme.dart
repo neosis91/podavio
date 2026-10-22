@@ -58,6 +58,16 @@ ThemeData themeFromScheme(ColorScheme scheme, {bool pureBlack = false}) {
   return _theme(resolved);
 }
 
+/// Contour léger des éléments flottants, seulement en noir pur
+/// (sinon ils se fondent dans le fond).
+BorderSide pureBlackOutline(ColorScheme scheme) {
+  final pureBlack =
+      scheme.brightness == Brightness.dark &&
+      scheme.surfaceContainer == Colors.black;
+  if (!pureBlack) return BorderSide.none;
+  return BorderSide(color: Colors.white.withValues(alpha: 0.16));
+}
+
 ColorScheme _pureBlack(ColorScheme scheme) {
   return scheme.copyWith(
     surface: Colors.black,

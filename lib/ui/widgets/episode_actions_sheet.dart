@@ -36,6 +36,8 @@ Future<void> showEpisodeActionsSheet(
   VoidCallback? onSpeed,
   VoidCallback? onSleep,
 }) {
+  final onThisPodcast =
+      GoRouterState.of(context).uri.path == AppRoutes.podcast(entry.podcast.id);
   return showAppModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
@@ -47,6 +49,7 @@ Future<void> showEpisodeActionsSheet(
         episodeId: entry.episode.id,
         fallback: entry,
         fromPlayer: fromPlayer,
+        showPodcastLink: !onThisPodcast,
         onOpenEpisode: () {
           Navigator.pop(sheetContext);
           if (fromPlayer) ref.read(playerSheetProvider.notifier).collapse();
@@ -135,11 +138,13 @@ class _EpisodeActionsSheet extends ConsumerWidget {
     this.onSpeed,
     this.onSleep,
     this.fromPlayer = false,
+    this.showPodcastLink = true,
   });
 
   final int episodeId;
   final EpisodeEntry fallback;
   final bool fromPlayer;
+  final bool showPodcastLink;
   final VoidCallback onOpenEpisode;
   final ValueChanged<int> onOpenPodcast;
   final Future<void> Function(EpisodeEntry entry) onShare;
@@ -231,11 +236,12 @@ class _EpisodeActionsSheet extends ConsumerWidget {
         label: context.tr('Playlists'),
         onTap: () => onPlaylists(entry),
       ),
-      _SheetAction(
-        icon: const SubscriptionsIcon(),
-        label: entry.podcast.title,
-        onTap: () => onOpenPodcast(entry.podcast.id),
-      ),
+      if (showPodcastLink)
+        _SheetAction(
+          icon: const SubscriptionsIcon(),
+          label: entry.podcast.title,
+          onTap: () => onOpenPodcast(entry.podcast.id),
+        ),
       _SheetAction(
         icon: const ShareIcon(),
         label: context.tr('Share'),
@@ -324,70 +330,70 @@ class _EpisodeActionsSheet extends ConsumerWidget {
             bottom: MediaQuery.paddingOf(context).bottom,
           ),
           children: [
-                const SizedBox(height: 8),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(50),
-                  ),
-                  child: const SizedBox(width: 32, height: 4),
-                ),
-                const SizedBox(height: 6),
-                InkWell(
-                  onTap: onOpenEpisode,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
-                    child: Row(
-                      children: [
-                        PodcastCover(
-                          url: entry.imageUrl(
-                            preferPodcastCover: preferPodcastCover,
-                          ),
-                          localPath: entry.imagePath(
-                            preferPodcastCover: preferPodcastCover,
-                          ),
-                          httpHeaders: podcastAuthHeaders(
-                            username: entry.podcast.authUsername,
-                            password: entry.podcast.authPassword,
-                          ),
-                          size: 44,
-                          radius: 6,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              MarqueeText(
-                                text: episode.title,
-                                style: theme.textTheme.labelSmall,
-                              ),
-                              Text(
-                                entry.podcast.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+            const SizedBox(height: 8),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(50),
+              ),
+              child: const SizedBox(width: 32, height: 4),
+            ),
+            const SizedBox(height: 6),
+            InkWell(
+              onTap: onOpenEpisode,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
+                child: Row(
+                  children: [
+                    PodcastCover(
+                      url: entry.imageUrl(
+                        preferPodcastCover: preferPodcastCover,
+                      ),
+                      localPath: entry.imagePath(
+                        preferPodcastCover: preferPodcastCover,
+                      ),
+                      httpHeaders: podcastAuthHeaders(
+                        username: entry.podcast.authUsername,
+                        password: entry.podcast.authPassword,
+                      ),
+                      size: 44,
+                      radius: 6,
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          MarqueeText(
+                            text: episode.title,
+                            style: theme.textTheme.labelSmall,
+                          ),
+                          Text(
+                            entry.podcast.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: scheme.outlineVariant,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                ...actions,
-                const SizedBox(height: 8),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Divider(
+                height: 1,
+                thickness: 1,
+                color: scheme.outlineVariant,
+              ),
+            ),
+            const SizedBox(height: 2),
+            ...actions,
+            const SizedBox(height: 8),
           ],
         ),
       ),

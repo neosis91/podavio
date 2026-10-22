@@ -3,12 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../settings/settings_controller.dart';
 import 'app_database.dart';
 import 'models.dart';
+import 'online_status.dart';
 import 'providers.dart';
 import 'status_notifications.dart';
 
 enum FeedRefreshPhase { idle, running, completed }
 
-enum FeedRefreshStartResult { started, alreadyRunning, empty, throttled }
+enum FeedRefreshStartResult {
+  started,
+  alreadyRunning,
+  empty,
+  throttled,
+  mobileData,
+}
 
 class FeedRefreshStart {
   const FeedRefreshStart._(this.result, {this.retryAfter});
@@ -22,6 +29,9 @@ class FeedRefreshStart {
 
   const FeedRefreshStart.throttled(Duration retryAfter)
     : this._(FeedRefreshStartResult.throttled, retryAfter: retryAfter);
+
+  const FeedRefreshStart.mobileData()
+    : this._(FeedRefreshStartResult.mobileData);
 
   final FeedRefreshStartResult result;
   final Duration? retryAfter;
@@ -80,6 +90,11 @@ class FeedRefreshNotifier extends Notifier<FeedRefreshState> {
   /// Lance l'actualisation en arrière-plan (respecte l’intervalle des réglages).
   Future<FeedRefreshStart> start({bool force = false}) async {
     if (state.isRunning) return const FeedRefreshStart.alreadyRunning();
+
+    if (!ref.read(settingsProvider).allowMobileRefresh) {
+      final onMobile = await ref.read(mobileDataProbeProvider)();
+      if (onMobile) return const FeedRefreshStart.mobileData();
+    }
 
     if (!force) {
       final throttled = _throttleRemaining();

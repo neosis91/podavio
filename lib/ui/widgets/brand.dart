@@ -97,6 +97,25 @@ class DragIndicatorIcon extends StatelessWidget {
   }
 }
 
+class TranslateIcon extends StatelessWidget {
+  const TranslateIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return SvgPicture.asset(
+      'assets/brand/translate.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      semanticsLabel: 'Langue',
+    );
+  }
+}
+
 class LanguageIcon extends StatelessWidget {
   const LanguageIcon({super.key, this.size = 24});
 
