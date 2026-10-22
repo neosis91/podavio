@@ -12,6 +12,7 @@ La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 - Explore and Home categories hide podcasts you already follow.
 - On a podcast page, the background follows the cover’s average color. The episode count sits above the action pills. The copyright, title, and year line under the cover is gone.
 - In episode lists, a long title scrolls horizontally so you can read it in full.
+- In Download manager, Download limit caps how many episodes an automatic download fetches per podcast. The choices are unlimited, 1, 2, 3, 4, 5, 10, 20, 50, 100, 200, and 500. Episodes already downloaded and still unplayed count toward the limit. A download started by hand is not capped.
 
 ## 2026.10.19
 

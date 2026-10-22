@@ -58,10 +58,14 @@ class DownloadCandidate {
     required this.included,
     required this.played,
     required this.downloaded,
+    this.podcastId = 0,
     this.publishedAt,
   });
 
   final int id;
+
+  /// Podcast auquel appartient l’épisode. Sert au plafond par podcast.
+  final int podcastId;
 
   /// Le podcast est inclus dans le téléchargement automatique.
   final bool included;
@@ -80,12 +84,17 @@ class LocalDownload {
     required this.favorite,
     required this.inPlaylist,
     required this.played,
+    this.podcastId = 0,
     this.downloadedAt,
     this.publishedAt,
     this.lastPlayedAt,
   });
 
   final int id;
+
+  /// Podcast auquel appartient le fichier. Sert au plafond par podcast.
+  final int podcastId;
+
   final bool favorite;
 
   /// Présent dans la file de lecture (la playlist par défaut).
@@ -123,6 +132,9 @@ class AutomaticDownloadDecision {
 /// assez de places pour les nouveautés qui rentrent encore. Un favori n’est
 /// jamais effacé. Une bibliothèque déjà au-dessus du cache n’est pas vidée :
 /// on retire au plus un ancien fichier par nouveauté.
+///
+/// [perPodcastLimit] borne, pour chaque podcast, les non lus déjà là plus
+/// les nouveautés. `null` ne borne pas. Les plus récents passent d’abord.
 AutomaticDownloadDecision decideAutomaticDownloads({
   required bool enabled,
   required int? cacheSize,
@@ -130,6 +142,7 @@ AutomaticDownloadDecision decideAutomaticDownloads({
   required List<DownloadCandidate> incoming,
   required List<LocalDownload> cached,
   required DateTime now,
+  int? perPodcastLimit,
 }) {
   if (!enabled) {
     return const AutomaticDownloadDecision(downloadIds: [], deleteIds: []);
@@ -149,10 +162,11 @@ AutomaticDownloadDecision decideAutomaticDownloads({
     eligible.add(episode);
   }
   eligible.sort(_newerFirst);
+  final capped = _withinPodcastLimit(eligible, onDisk, perPodcastLimit);
 
   if (cacheSize == null) {
     return AutomaticDownloadDecision(
-      downloadIds: [for (final episode in eligible) episode.id],
+      downloadIds: [for (final episode in capped) episode.id],
       deleteIds: const [],
     );
   }
@@ -164,7 +178,7 @@ AutomaticDownloadDecision decideAutomaticDownloads({
 
   final freeSlots = cacheSize - onDisk.length;
   final openSlots = freeSlots < 0 ? 0 : freeSlots;
-  var downloadCount = eligible.length;
+  var downloadCount = capped.length;
   final room = openSlots + victims.length;
   if (downloadCount > room) downloadCount = room;
 
@@ -173,10 +187,33 @@ AutomaticDownloadDecision decideAutomaticDownloads({
 
   return AutomaticDownloadDecision(
     downloadIds: [
-      for (final episode in eligible.take(downloadCount)) episode.id,
+      for (final episode in capped.take(downloadCount)) episode.id,
     ],
     deleteIds: [for (final episode in victims.take(deleteCount)) episode.id],
   );
+}
+
+/// Garde les plus récents tant que les non lus déjà téléchargés plus les
+/// nouveautés ne dépassent pas [limit] pour ce podcast.
+List<DownloadCandidate> _withinPodcastLimit(
+  List<DownloadCandidate> eligible,
+  Map<int, LocalDownload> onDisk,
+  int? limit,
+) {
+  if (limit == null) return eligible;
+  final used = <int, int>{};
+  for (final episode in onDisk.values) {
+    if (episode.played) continue;
+    used[episode.podcastId] = (used[episode.podcastId] ?? 0) + 1;
+  }
+  final kept = <DownloadCandidate>[];
+  for (final episode in eligible) {
+    final count = used[episode.podcastId] ?? 0;
+    if (count >= limit) continue;
+    used[episode.podcastId] = count + 1;
+    kept.add(episode);
+  }
+  return kept;
 }
 
 int _newerFirst(DownloadCandidate a, DownloadCandidate b) {

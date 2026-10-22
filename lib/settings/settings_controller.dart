@@ -556,6 +556,35 @@ String episodeCacheSizeLabel(int? size) {
   return '$size episodes';
 }
 
+/// Plafond d’épisodes téléchargés automatiquement par podcast.
+/// Une valeur absente est illimitée.
+const automaticDownloadLimits = <int>[
+  1,
+  2,
+  3,
+  4,
+  5,
+  10,
+  20,
+  50,
+  100,
+  200,
+  500,
+];
+
+/// `null` ou une valeur inconnue → illimité.
+int? automaticDownloadLimitFromStored(int? stored) {
+  if (stored == null || !automaticDownloadLimits.contains(stored)) return null;
+  return stored;
+}
+
+/// Clé anglaise du plafond affiché. `null` = illimité.
+String automaticDownloadLimitLabel(int? limit) {
+  if (limit == null) return 'Unlimited';
+  if (limit == 1) return '1 episode';
+  return '$limit episodes';
+}
+
 class AppSettings {
   const AppSettings({
     required this.themeMode,
@@ -588,6 +617,7 @@ class AppSettings {
     required this.enqueueDownloads,
     required this.dequeueDeletedDownloads,
     required this.automaticDownload,
+    required this.automaticDownloadLimit,
     required this.allowMobileData,
     required this.notifyDownloadActivity,
     required this.notifyDownloadErrors,
@@ -659,6 +689,10 @@ class AppSettings {
   /// Téléchargement automatique. Éteint, le mécanisme s’arrête sans effacer
   /// le choix de chaque abonnement.
   final bool automaticDownload;
+
+  /// Nombre max d’épisodes à télécharger automatiquement par podcast.
+  /// `null` = illimité. Les non lus déjà téléchargés comptent dans le plafond.
+  final int? automaticDownloadLimit;
 
   /// Autorise les téléchargements automatiques sur les données mobiles.
   /// Sinon ils attendent le Wi-Fi. Un téléchargement lancé à la main demande
@@ -739,6 +773,8 @@ class AppSettings {
     bool? enqueueDownloads,
     bool? dequeueDeletedDownloads,
     bool? automaticDownload,
+    int? automaticDownloadLimit,
+    bool clearAutomaticDownloadLimit = false,
     bool? allowMobileData,
     bool? notifyDownloadActivity,
     bool? notifyDownloadErrors,
@@ -791,6 +827,9 @@ class AppSettings {
       dequeueDeletedDownloads:
           dequeueDeletedDownloads ?? this.dequeueDeletedDownloads,
       automaticDownload: automaticDownload ?? this.automaticDownload,
+      automaticDownloadLimit: clearAutomaticDownloadLimit
+          ? null
+          : (automaticDownloadLimit ?? this.automaticDownloadLimit),
       allowMobileData: allowMobileData ?? this.allowMobileData,
       notifyDownloadActivity:
           notifyDownloadActivity ?? this.notifyDownloadActivity,
@@ -880,6 +919,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
       dequeueDeletedDownloads:
           preferences.getBool('dequeueDeletedDownloads') ?? true,
       automaticDownload: preferences.getBool('automaticDownload') ?? false,
+      automaticDownloadLimit: automaticDownloadLimitFromStored(
+        preferences.getInt('automaticDownloadLimit'),
+      ),
       allowMobileData: preferences.getBool('allowMobileData') ?? false,
       notifyDownloadActivity:
           preferences.getBool('notifyDownloadActivity') ?? false,
@@ -1153,6 +1195,18 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await ref
         .read(sharedPreferencesProvider)
         .setBool('notifyNewEpisodes', enabled);
+  }
+
+  Future<void> setAutomaticDownloadLimit(int? limit) async {
+    final normalized = automaticDownloadLimitFromStored(limit);
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (normalized == null) {
+      state = state.copyWith(clearAutomaticDownloadLimit: true);
+      await preferences.remove('automaticDownloadLimit');
+      return;
+    }
+    state = state.copyWith(automaticDownloadLimit: normalized);
+    await preferences.setInt('automaticDownloadLimit', normalized);
   }
 
   Future<void> setEpisodeCacheSize(int? size) async {

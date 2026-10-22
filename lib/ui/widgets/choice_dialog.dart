@@ -39,3 +39,49 @@ Future<T?> showChoiceDialog<T>(
     },
   );
 }
+
+/// Liste à boutons radio. `null` si l’utilisateur annule.
+Future<T?> showRadioChoiceDialog<T>(
+  BuildContext context, {
+  required String title,
+  required T selected,
+  required List<ChoiceOption<T>> options,
+}) {
+  return showDialog<T>(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: Text(context.tr(title)),
+        contentPadding: const EdgeInsets.only(top: 8),
+        content: SingleChildScrollView(
+          child: RadioGroup<T>(
+            groupValue: selected,
+            onChanged: (value) {
+              if (value == null) return;
+              Navigator.pop(context, value);
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final option in options)
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    leading: Radio<T>(value: option.value),
+                    title: Text(context.tr(option.label)),
+                    onTap: () => Navigator.pop(context, option.value),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.end,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(context.tr('Cancel')),
+          ),
+        ],
+      );
+    },
+  );
+}

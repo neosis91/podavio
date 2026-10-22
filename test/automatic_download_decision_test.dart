@@ -7,12 +7,14 @@ void main() {
   DownloadCandidate candidate(
     int id,
     DateTime? publishedAt, {
+    int podcastId = 1,
     bool included = true,
     bool played = false,
     bool downloaded = false,
   }) {
     return DownloadCandidate(
       id: id,
+      podcastId: podcastId,
       included: included,
       played: played,
       downloaded: downloaded,
@@ -22,6 +24,7 @@ void main() {
 
   LocalDownload file(
     int id, {
+    int podcastId = 1,
     bool favorite = false,
     bool inPlaylist = false,
     bool played = false,
@@ -31,6 +34,7 @@ void main() {
   }) {
     return LocalDownload(
       id: id,
+      podcastId: podcastId,
       favorite: favorite,
       inPlaylist: inPlaylist,
       played: played,
@@ -43,6 +47,7 @@ void main() {
   AutomaticDownloadDecision decide({
     bool enabled = true,
     int? cacheSize = 5,
+    int? perPodcastLimit,
     EpisodeCacheCleanup cleanup = EpisodeCacheCleanup.never,
     List<DownloadCandidate> incoming = const [],
     List<LocalDownload> cached = const [],
@@ -50,6 +55,7 @@ void main() {
     return decideAutomaticDownloads(
       enabled: enabled,
       cacheSize: cacheSize,
+      perPodcastLimit: perPodcastLimit,
       cleanup: cleanup,
       incoming: incoming,
       cached: cached,
@@ -270,6 +276,73 @@ void main() {
       expect(decision.downloadIds, [5, 2, 8]);
     },
   );
+
+  test('an unlimited per-podcast cap keeps every eligible episode', () {
+    final decision = decide(
+      cacheSize: null,
+      perPodcastLimit: null,
+      incoming: [
+        candidate(1, DateTime.utc(2026, 1, 1)),
+        candidate(2, DateTime.utc(2026, 2, 1)),
+        candidate(3, DateTime.utc(2026, 3, 1)),
+      ],
+    );
+    expect(decision.downloadIds, [3, 2, 1]);
+  });
+
+  test('a limit of 2 keeps the two newest of one podcast', () {
+    final decision = decide(
+      cacheSize: null,
+      perPodcastLimit: 2,
+      incoming: [
+        candidate(1, DateTime.utc(2026, 1, 1)),
+        candidate(2, DateTime.utc(2026, 2, 1)),
+        candidate(3, DateTime.utc(2026, 3, 1)),
+      ],
+    );
+    expect(decision.downloadIds, [3, 2]);
+  });
+
+  test('already downloaded unplayed episodes use up the limit', () {
+    final decision = decide(
+      cacheSize: null,
+      perPodcastLimit: 2,
+      cached: [
+        file(9, played: false, downloadedAt: DateTime.utc(2026, 1, 1)),
+      ],
+      incoming: [
+        candidate(1, DateTime.utc(2026, 2, 1)),
+        candidate(2, DateTime.utc(2026, 3, 1)),
+      ],
+    );
+    expect(decision.downloadIds, [2]);
+  });
+
+  test('played downloads do not use up the limit', () {
+    final decision = decide(
+      cacheSize: null,
+      perPodcastLimit: 1,
+      cached: [
+        file(9, played: true, downloadedAt: DateTime.utc(2026, 1, 1)),
+      ],
+      incoming: [candidate(1, DateTime.utc(2026, 2, 1))],
+    );
+    expect(decision.downloadIds, [1]);
+  });
+
+  test('two podcasts are capped separately', () {
+    final decision = decide(
+      cacheSize: null,
+      perPodcastLimit: 1,
+      incoming: [
+        candidate(1, DateTime.utc(2026, 1, 1), podcastId: 10),
+        candidate(2, DateTime.utc(2026, 3, 1), podcastId: 10),
+        candidate(3, DateTime.utc(2026, 2, 1), podcastId: 20),
+        candidate(4, DateTime.utc(2026, 4, 1), podcastId: 20),
+      ],
+    );
+    expect(decision.downloadIds, [4, 2]);
+  });
 
   test('the oldest file is the one downloaded first', () {
     final decision = decide(

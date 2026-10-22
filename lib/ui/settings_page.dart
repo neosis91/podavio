@@ -224,6 +224,15 @@ class DownloadSettingsPage extends ConsumerWidget {
             onChanged: (enabled) =>
                 _setAutomaticDownload(context, ref, enabled),
           ),
+          ListTile(
+            title: Text(context.tr('Download limit')),
+            subtitle: Text(
+              '${context.tr('Maximum number of episodes to download per podcast during an automatic download.')}\n'
+              '${context.tr(automaticDownloadLimitLabel(settings.automaticDownloadLimit))}',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _pickAutomaticDownloadLimit(context, ref),
+          ),
           SwitchListTile(
             title: Text(context.tr('Mobile data')),
             subtitle: Text(
@@ -320,6 +329,27 @@ Future<void> _setAutomaticDownload(
     }
   }
   await ref.read(settingsProvider.notifier).setAutomaticDownload(enabled);
+}
+
+Future<void> _pickAutomaticDownloadLimit(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final current = ref.read(settingsProvider).automaticDownloadLimit;
+  final choice = await showRadioChoiceDialog<int>(
+    context,
+    title: 'Download limit',
+    selected: current ?? 0,
+    options: [
+      (value: 0, label: automaticDownloadLimitLabel(null)),
+      for (final limit in automaticDownloadLimits)
+        (value: limit, label: automaticDownloadLimitLabel(limit)),
+    ],
+  );
+  if (choice == null) return;
+  await ref
+      .read(settingsProvider.notifier)
+      .setAutomaticDownloadLimit(choice == 0 ? null : choice);
 }
 
 Future<void> _pickEpisodeCacheSize(BuildContext context, WidgetRef ref) async {
