@@ -125,6 +125,7 @@ flutter:
     - assets/brand/remove_selection.png
     - assets/brand/settings.svg
     - assets/brand/language.png
+    - assets/brand/translate.svg
     - assets/brand/timer.svg
     - assets/brand/share.svg
     - assets/brand/podcasts.svg

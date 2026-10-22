@@ -556,6 +556,23 @@ String episodeCacheSizeLabel(int? size) {
   return '$size episodes';
 }
 
+/// Plafond d’épisodes téléchargés automatiquement par podcast.
+/// Une valeur absente est illimitée.
+const automaticDownloadLimits = <int>[1, 2, 3, 4, 5, 10, 20, 50, 100, 200, 500];
+
+/// `null` ou une valeur inconnue → illimité.
+int? automaticDownloadLimitFromStored(int? stored) {
+  if (stored == null || !automaticDownloadLimits.contains(stored)) return null;
+  return stored;
+}
+
+/// Clé anglaise du plafond affiché. `null` = illimité.
+String automaticDownloadLimitLabel(int? limit) {
+  if (limit == null) return 'Unlimited';
+  if (limit == 1) return '1 episode';
+  return '$limit episodes';
+}
+
 class AppSettings {
   const AppSettings({
     required this.themeMode,
@@ -588,7 +605,10 @@ class AppSettings {
     required this.enqueueDownloads,
     required this.dequeueDeletedDownloads,
     required this.automaticDownload,
+    required this.automaticDownloadLimit,
     required this.allowMobileData,
+    required this.allowMobileStreaming,
+    required this.allowMobileRefresh,
     required this.notifyDownloadActivity,
     required this.notifyDownloadErrors,
     required this.notifySyncErrors,
@@ -660,10 +680,22 @@ class AppSettings {
   /// le choix de chaque abonnement.
   final bool automaticDownload;
 
-  /// Autorise les téléchargements automatiques sur les données mobiles.
+  /// Nombre max d’épisodes à télécharger automatiquement par podcast.
+  /// `null` = illimité. Les non lus déjà téléchargés comptent dans le plafond.
+  final int? automaticDownloadLimit;
+
+  /// Autorise les téléchargements sur les données mobiles.
   /// Sinon ils attendent le Wi-Fi. Un téléchargement lancé à la main demande
   /// confirmation. Départ : coupé.
   final bool allowMobileData;
+
+  /// Autorise le streaming sur les données mobiles. Sinon un fichier local
+  /// se lit, un flux distant attend le Wi-Fi. Départ : coupé.
+  final bool allowMobileStreaming;
+
+  /// Autorise l’actualisation des abonnements sur les données mobiles.
+  /// Sinon elle attend le Wi-Fi. Départ : coupé.
+  final bool allowMobileRefresh;
 
   /// Notification pendant un téléchargement, et à la fin. Départ : coupé.
   final bool notifyDownloadActivity;
@@ -739,7 +771,11 @@ class AppSettings {
     bool? enqueueDownloads,
     bool? dequeueDeletedDownloads,
     bool? automaticDownload,
+    int? automaticDownloadLimit,
+    bool clearAutomaticDownloadLimit = false,
     bool? allowMobileData,
+    bool? allowMobileStreaming,
+    bool? allowMobileRefresh,
     bool? notifyDownloadActivity,
     bool? notifyDownloadErrors,
     bool? notifySyncErrors,
@@ -791,7 +827,12 @@ class AppSettings {
       dequeueDeletedDownloads:
           dequeueDeletedDownloads ?? this.dequeueDeletedDownloads,
       automaticDownload: automaticDownload ?? this.automaticDownload,
+      automaticDownloadLimit: clearAutomaticDownloadLimit
+          ? null
+          : (automaticDownloadLimit ?? this.automaticDownloadLimit),
       allowMobileData: allowMobileData ?? this.allowMobileData,
+      allowMobileStreaming: allowMobileStreaming ?? this.allowMobileStreaming,
+      allowMobileRefresh: allowMobileRefresh ?? this.allowMobileRefresh,
       notifyDownloadActivity:
           notifyDownloadActivity ?? this.notifyDownloadActivity,
       notifyDownloadErrors: notifyDownloadErrors ?? this.notifyDownloadErrors,
@@ -880,7 +921,15 @@ class SettingsNotifier extends Notifier<AppSettings> {
       dequeueDeletedDownloads:
           preferences.getBool('dequeueDeletedDownloads') ?? true,
       automaticDownload: preferences.getBool('automaticDownload') ?? false,
+      automaticDownloadLimit: automaticDownloadLimitFromStored(
+        preferences.getInt('automaticDownloadLimit'),
+      ),
       allowMobileData: preferences.getBool('allowMobileData') ?? false,
+      allowMobileStreaming:
+          preferences.getBool('allowMobileStreaming') ??
+          preferences.getBool('allowMobileData') ??
+          false,
+      allowMobileRefresh: preferences.getBool('allowMobileRefresh') ?? false,
       notifyDownloadActivity:
           preferences.getBool('notifyDownloadActivity') ?? false,
       notifyDownloadErrors:
@@ -1127,6 +1176,20 @@ class SettingsNotifier extends Notifier<AppSettings> {
         .setBool('allowMobileData', enabled);
   }
 
+  Future<void> setAllowMobileStreaming(bool enabled) async {
+    state = state.copyWith(allowMobileStreaming: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('allowMobileStreaming', enabled);
+  }
+
+  Future<void> setAllowMobileRefresh(bool enabled) async {
+    state = state.copyWith(allowMobileRefresh: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('allowMobileRefresh', enabled);
+  }
+
   Future<void> setNotifyDownloadActivity(bool enabled) async {
     state = state.copyWith(notifyDownloadActivity: enabled);
     await ref
@@ -1153,6 +1216,18 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await ref
         .read(sharedPreferencesProvider)
         .setBool('notifyNewEpisodes', enabled);
+  }
+
+  Future<void> setAutomaticDownloadLimit(int? limit) async {
+    final normalized = automaticDownloadLimitFromStored(limit);
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (normalized == null) {
+      state = state.copyWith(clearAutomaticDownloadLimit: true);
+      await preferences.remove('automaticDownloadLimit');
+      return;
+    }
+    state = state.copyWith(automaticDownloadLimit: normalized);
+    await preferences.setInt('automaticDownloadLimit', normalized);
   }
 
   Future<void> setEpisodeCacheSize(int? size) async {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/theme.dart';
 import '../data/database_backup.dart';
 import '../data/feed_refresh_controller.dart';
 import '../data/online_status.dart';
@@ -55,8 +56,10 @@ const _libraryRoots = <String>[
   AppRoutes.stats,
   AppRoutes.preferences,
   AppRoutes.appearance,
+  AppRoutes.languages,
   AppRoutes.playback,
   AppRoutes.downloadSettings,
+  AppRoutes.network,
   AppRoutes.about,
   AppRoutes.nearbyShare,
   AppRoutes.licenses,
@@ -477,7 +480,10 @@ class _TabCapsuleState extends State<_TabCapsule> {
 
     return Material(
       color: scheme.surfaceContainer,
-      borderRadius: BorderRadius.circular(_barHeight / 2),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_barHeight / 2),
+        side: pureBlackOutline(scheme),
+      ),
       clipBehavior: Clip.antiAlias,
       child: GestureDetector(
         onHorizontalDragStart: (details) =>
@@ -518,7 +524,7 @@ class _SearchButton extends StatelessWidget {
       color: selected
           ? scheme.surfaceContainerHighest
           : scheme.surfaceContainer,
-      shape: const CircleBorder(),
+      shape: CircleBorder(side: pureBlackOutline(scheme)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onPressed,

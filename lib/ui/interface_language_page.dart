@@ -78,7 +78,7 @@ class _InterfaceLanguagePageState extends ConsumerState<InterfaceLanguagePage> {
                 textInputAction: TextInputAction.search,
                 onChanged: (value) => setState(() => _query = value),
               )
-            : Text(context.tr('Language')),
+            : Text(context.tr('Interface language')),
         leading: _searching
             ? IconButton(
                 tooltip: 'Fermer la recherche',

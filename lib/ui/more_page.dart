@@ -14,7 +14,6 @@ import '../core/build_info.dart';
 import '../l10n/l10n.dart';
 import '../data/app_release.dart';
 import '../data/database_backup.dart';
-import '../data/discover_languages.dart';
 import '../data/download_service.dart';
 import '../data/feed_refresh_controller.dart';
 import '../data/html_export.dart';
@@ -157,9 +156,6 @@ class PreferencesPage extends ConsumerWidget {
     final refreshing = ref.watch(
       feedRefreshProvider.select((s) => s.isRunning),
     );
-    final languages = ref.watch(
-      settingsProvider.select((settings) => settings.discoverLanguages),
-    );
     final sync = ref.watch(syncStatusProvider);
     return Scaffold(
       appBar: AppBar(title: Text(context.tr('Settings'))),
@@ -178,17 +174,18 @@ class PreferencesPage extends ConsumerWidget {
             enabled: !refreshing,
             onTap: refreshing ? null : () => refreshSubscriptions(context, ref),
           ),
+          ListTile(
+            leading: const TranslateIcon(),
+            title: Text(context.tr('Language')),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.languages),
+          ),
           const Divider(),
+          _SectionTitle(context.tr('Advanced')),
           ListTile(
             leading: const Icon(Icons.palette_outlined),
             title: Text(context.tr('Interface')),
             onTap: () => context.push(AppRoutes.appearance),
-          ),
-          ListTile(
-            leading: const Icon(Icons.language),
-            title: Text(context.tr('Explore')),
-            subtitle: Text(_discoverLanguagesSubtitle(context, languages)),
-            onTap: () => context.push(AppRoutes.discoverLanguages),
           ),
           ListTile(
             leading: const Icon(Icons.speed),
@@ -216,10 +213,17 @@ class PreferencesPage extends ConsumerWidget {
             onTap: () => context.push(AppRoutes.downloadSettings),
           ),
           ListTile(
+            leading: const Icon(Icons.wifi),
+            title: Text(context.tr('Network')),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.network),
+          ),
+          ListTile(
             leading: const Icon(Icons.archive_outlined),
             title: Text(context.tr('Backup and restore')),
             onTap: () => context.push(AppRoutes.backupRestore),
           ),
+          _SectionTitle(context.tr('Miscellaneous')),
           if (NearbyApkSource().isSupported)
             ListTile(
               leading: const Icon(Icons.qr_code_2_outlined),
@@ -240,19 +244,6 @@ class PreferencesPage extends ConsumerWidget {
       ),
     );
   }
-}
-
-String _discoverLanguagesSubtitle(
-  BuildContext context,
-  List<String> languages,
-) {
-  if (discoverLanguagesAreAll(languages)) {
-    return context.tr('All languages');
-  }
-  if (languages.length > 2) {
-    return context.tr('{count} languages', {'count': '${languages.length}'});
-  }
-  return discoverLanguagesSummary(languages);
 }
 
 class BackupRestorePage extends ConsumerWidget {
@@ -328,9 +319,7 @@ class BackupRestorePage extends ConsumerWidget {
             leading: const Icon(Icons.language_outlined),
             title: Text(context.tr('Export subscriptions')),
             subtitle: Text(
-              context.tr(
-                'HTML page to open or share (cannot be re-imported)',
-              ),
+              context.tr('HTML page to open or share (cannot be re-imported)'),
             ),
             onTap: () => _exportSubscriptionsHtml(context, ref),
           ),
@@ -366,7 +355,10 @@ class BackupRestorePage extends ConsumerWidget {
       }
     } catch (error) {
       if (context.mounted) {
-        showMessage(context, errorText(error).isEmpty ? failedMsg : errorText(error));
+        showMessage(
+          context,
+          errorText(error).isEmpty ? failedMsg : errorText(error),
+        );
       }
     }
   }
@@ -377,7 +369,9 @@ class BackupRestorePage extends ConsumerWidget {
     bool enabled,
   ) async {
     if (!enabled) {
-      await ref.read(settingsProvider.notifier).setAutomaticDatabaseBackup(false);
+      await ref
+          .read(settingsProvider.notifier)
+          .setAutomaticDatabaseBackup(false);
       return;
     }
     final folder = await _pickBackupFolder(context, ref);
@@ -391,10 +385,7 @@ class BackupRestorePage extends ConsumerWidget {
     }
   }
 
-  Future<String?> _pickBackupFolder(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  Future<String?> _pickBackupFolder(BuildContext context, WidgetRef ref) async {
     final current = ref.read(settingsProvider).automaticDatabaseBackupFolder;
     try {
       if (Platform.isAndroid) {
@@ -452,10 +443,7 @@ class BackupRestorePage extends ConsumerWidget {
     if (!name.endsWith('.sqlite') &&
         !name.endsWith('.db') &&
         !name.endsWith('.sqlite3')) {
-      showMessage(
-        context,
-        context.tr('Choose a .sqlite or .db database file'),
-      );
+      showMessage(context, context.tr('Choose a .sqlite or .db database file'));
       return;
     }
 
@@ -530,10 +518,7 @@ class BackupRestorePage extends ConsumerWidget {
     }
   }
 
-  Future<void> _exportFavoritesHtml(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  Future<void> _exportFavoritesHtml(BuildContext context, WidgetRef ref) async {
     final emptyMsg = context.tr('No favorites to export');
     final dialogTitle = context.tr('Export favorites (HTML)');
     final doneMsg = context.tr('Favorites exported as HTML');

@@ -254,5 +254,8 @@ Future<void> refreshSubscriptions(BuildContext context, WidgetRef ref) async {
       final wait = formatRefreshRetryAfter(outcome.retryAfter ?? Duration.zero);
       showMessage(context, 'Actualisation récente — réessayez dans $wait');
       break;
+    case FeedRefreshStartResult.mobileData:
+      showMessage(context, 'Actualisation uniquement en Wi-Fi');
+      break;
   }
 }
