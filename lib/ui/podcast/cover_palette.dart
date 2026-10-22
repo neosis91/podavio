@@ -33,20 +33,3 @@ Color immersiveBackground(Color base) {
   final darken = 0.26 + 0.38 * luminance;
   return Color.lerp(vivid, Colors.black, darken)!;
 }
-
-/// Fondu du bas de la pochette vers [color], sans bande grise.
-LinearGradient artworkScrim(Color color) {
-  const steps = 24;
-  return LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [
-      for (var i = 0; i <= steps; i++)
-        Color.lerp(color.withValues(alpha: 0), color, _smoothStep(i / steps))!,
-    ],
-    stops: [for (var i = 0; i <= steps; i++) i / steps],
-  );
-}
-
-double _smoothStep(double t) => t * t * (3 - 2 * t);
-
