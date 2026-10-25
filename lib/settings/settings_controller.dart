@@ -578,6 +578,7 @@ class AppSettings {
     required this.themeMode,
     required this.accent,
     required this.pureBlack,
+    required this.onboardingComplete,
     required this.wallpaperColors,
     required this.tintFromCover,
     required this.homeShelves,
@@ -628,6 +629,10 @@ class AppSettings {
   final ThemeMode themeMode;
   final AppAccent accent;
   final bool pureBlack;
+
+  /// L’accueil de première ouverture a été quitté.
+  final bool onboardingComplete;
+
   final bool wallpaperColors;
 
   /// Le lecteur et le haut de l’accueil prennent la couleur de la pochette.
@@ -744,6 +749,7 @@ class AppSettings {
     ThemeMode? themeMode,
     AppAccent? accent,
     bool? pureBlack,
+    bool? onboardingComplete,
     bool? wallpaperColors,
     bool? tintFromCover,
     HomeShelves? homeShelves,
@@ -799,6 +805,7 @@ class AppSettings {
       themeMode: themeMode ?? this.themeMode,
       accent: accent ?? this.accent,
       pureBlack: pureBlack ?? this.pureBlack,
+      onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       wallpaperColors: wallpaperColors ?? this.wallpaperColors,
       tintFromCover: tintFromCover ?? this.tintFromCover,
       homeShelves: homeShelves ?? this.homeShelves,
@@ -877,6 +884,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       themeMode: ThemeMode.values.asNameMap()[themeName] ?? ThemeMode.system,
       accent: AppAccent.byId(preferences.getString('accent')),
       pureBlack: preferences.getBool('pureBlack') ?? false,
+      onboardingComplete: preferences.getBool('onboardingComplete') ?? false,
       wallpaperColors: preferences.getBool('wallpaperColors') ?? false,
       tintFromCover: preferences.getBool('tintFromCover') ?? true,
       homeShelves: HomeShelves.fromIds(
@@ -1015,6 +1023,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setPureBlack(bool enabled) async {
     state = state.copyWith(pureBlack: enabled);
     await ref.read(sharedPreferencesProvider).setBool('pureBlack', enabled);
+  }
+
+  Future<void> setOnboardingComplete(bool enabled) async {
+    state = state.copyWith(onboardingComplete: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('onboardingComplete', enabled);
   }
 
   Future<void> setWallpaperColors(bool enabled) async {

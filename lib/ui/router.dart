@@ -1,5 +1,6 @@
 class AppRoutes {
   static const home = '/home';
+  static const welcome = '/welcome';
   static const library = '/library';
   static const episodes = '/episodes';
   static const queue = '/queue';
