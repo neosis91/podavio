@@ -6,6 +6,8 @@ La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
 ## 2026.10.21
 
+- Eco mode, from the home header or Settings, skips new cover downloads and the tint fetch. Saved or cached covers stay, with a leaf in the corner. Missing covers show the name on a themed square. Turning Eco mode on also turns on pure black.
+- The first time the library is empty, a welcome screen offers setup, restoring the library from a database backup, or continuing without setup. Setup walks through an OPML import, mobile data for streaming and downloads, then streaming or automatic download with a per-podcast limit.
 - In Download manager, Download limit caps how many episodes an automatic download fetches per podcast. The choices are unlimited, 1, 2, 3, 4, 5, 10, 20, 50, 100, 200, and 500. Episodes already downloaded and still unplayed count toward the limit. A download started by hand is not capped.
 - Settings opens a Network page. Under Data usage, episode downloads, streaming, and refresh can each stay on Wi-Fi only or also use mobile data.
 - Settings opens a Language page under Refresh all subscriptions. Interface language and listening language live there, no longer under Interface and Explore. Each row shows the flags of the selected languages.

@@ -83,7 +83,12 @@ final podcastsProvider = StreamProvider<List<Podcast>>((ref) {
 
 /// Télécharge automatiquement les jaquettes de podcasts manquantes.
 final coverPrefetchProvider = Provider<void>((ref) {
+  final eco = ref.watch(
+    settingsProvider.select((settings) => settings.ecoMode),
+  );
   final service = ref.watch(coverServiceProvider);
+  service.downloadsEnabled = !eco;
+  if (eco) return;
   ref.listen<AsyncValue<List<Podcast>>>(podcastsProvider, (_, next) {
     next.whenData((_) => service.schedulePodcastSync());
   });

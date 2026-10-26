@@ -41,10 +41,14 @@ final _coverToneProvider = FutureProvider.family<CoverTone?, _CoverToneKey>((
   ref,
   key,
 ) {
+  final eco = ref.watch(
+    settingsProvider.select((settings) => settings.ecoMode),
+  );
   return loadCoverTone(
     path: key.path,
     url: key.url,
     headers: podcastAuthHeaders(username: key.username, password: key.password),
+    allowDownload: !eco,
   );
 });
 
