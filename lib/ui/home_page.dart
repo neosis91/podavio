@@ -1040,6 +1040,7 @@ class _EpisodeCard extends ConsumerWidget {
               ),
               size: _cardWidth,
               radius: 10,
+              ecoTintFromImage: true,
             ),
             const SizedBox(height: 8),
             MarqueeText(

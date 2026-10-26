@@ -14,26 +14,86 @@ final downloadProgressProvider =
       DownloadProgressNotifier.new,
     );
 
-class DownloadProgressNotifier extends Notifier<Map<int, double>> {
+/// Épisodes en attente d’un créneau. Les fichiers déjà en cours sont dans
+/// [downloadProgressProvider].
+final downloadWaitingCountProvider =
+    NotifierProvider<DownloadWaitingCountNotifier, int>(
+      DownloadWaitingCountNotifier.new,
+    );
+
+class DownloadWaitingCountNotifier extends Notifier<int> {
   @override
-  Map<int, double> build() => const {};
+  int build() => 0;
+
+  void setCount(int value) {
+    if (state == value) return;
+    state = value;
+  }
+}
+
+class _QueuedDownload {
+  const _QueuedDownload({required this.episode, required this.automatic});
+
+  final Episode episode;
+  final bool automatic;
+}
+
+class DownloadProgressNotifier extends Notifier<Map<int, double>> {
+  final _waiting = <_QueuedDownload>[];
+  final _pending = <int, Completer<void>>{};
+
+  @override
+  Map<int, double> build() {
+    ref.listen(settingsProvider.select((s) => s.simultaneousDownloads), (_, _) {
+      _pump();
+    });
+    return const {};
+  }
 
   void cancel(int episodeId) {
+    final waitingIndex = _waiting.indexWhere(
+      (job) => job.episode.id == episodeId,
+    );
+    if (waitingIndex >= 0) {
+      _waiting.removeAt(waitingIndex);
+      _publishWaiting();
+      unawaited(ref.read(downloadNotificationsProvider).dismiss(episodeId));
+      _finish(episodeId, const DownloadCancelled());
+      return;
+    }
     ref.read(downloadServiceProvider).cancel(episodeId);
     unawaited(ref.read(downloadNotificationsProvider).dismiss(episodeId));
     _clear(episodeId);
   }
 
-  Future<void> download(Episode episode, {bool automatic = false}) async {
-    if (state.containsKey(episode.id) || episode.downloadPath != null) return;
-    if (automatic &&
+  /// Met [episode] en file. Le futur se termine quand ce fichier est fini,
+  /// pas quand un créneau se libère.
+  Future<void> download(Episode episode, {bool automatic = false}) {
+    if (episode.downloadPath != null) return Future.value();
+    final existing = _pending[episode.id];
+    if (existing != null) return existing.future;
+    final done = Completer<void>();
+    _pending[episode.id] = done;
+    _waiting.add(_QueuedDownload(episode: episode, automatic: automatic));
+    _publishWaiting();
+    _pump();
+    return done.future;
+  }
+
+  Future<void> _run(_QueuedDownload job) async {
+    final episode = job.episode;
+    if (job.automatic &&
         mobileDataBlocksDownload(
           allowMobileData: ref.read(settingsProvider).allowMobileData,
           mobileDataActive: await ref.read(mobileDataProbeProvider)(),
         )) {
+      _finish(episode.id, null);
       return;
     }
-    state = {...state, episode.id: 0};
+    if (!state.containsKey(episode.id)) {
+      _finish(episode.id, const DownloadCancelled());
+      return;
+    }
     final notifications = ref.read(downloadNotificationsProvider);
     final podcast = await ref
         .read(databaseProvider)
@@ -77,20 +137,33 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
       if (ref.read(settingsProvider).enqueueDownloads) {
         await ref.read(databaseProvider).addToQueue(episode.id);
       }
+      _finish(episode.id, null);
     } on DownloadCancelled {
       await notifications.dismiss(episode.id);
-      _clear(episode.id);
-      rethrow;
+      _finish(episode.id, const DownloadCancelled());
     } catch (error) {
       if (ref.read(settingsProvider).notifyDownloadErrors) {
         await notifications.showFailed(notice, downloadErrorText(error));
       } else {
         await notifications.dismiss(episode.id);
       }
-      _clear(episode.id);
-      rethrow;
+      _finish(episode.id, error);
     }
-    _clear(episode.id);
+  }
+
+  void _pump() {
+    final limit = ref.read(settingsProvider).simultaneousDownloads;
+    while (state.length < limit && _waiting.isNotEmpty) {
+      final job = _waiting.removeAt(0);
+      _publishWaiting();
+      if (state.containsKey(job.episode.id)) continue;
+      state = {...state, job.episode.id: 0};
+      unawaited(_run(job));
+    }
+  }
+
+  void _publishWaiting() {
+    ref.read(downloadWaitingCountProvider.notifier).setCount(_waiting.length);
   }
 
   void _showDownloadProgress(
@@ -120,5 +193,22 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
     if (!state.containsKey(episodeId)) return;
     final next = Map<int, double>.of(state)..remove(episodeId);
     state = next;
+    _pump();
+  }
+
+  void _finish(int episodeId, Object? error) {
+    if (state.containsKey(episodeId)) {
+      final next = Map<int, double>.of(state)..remove(episodeId);
+      state = next;
+    }
+    final done = _pending.remove(episodeId);
+    if (done != null && !done.isCompleted) {
+      if (error == null) {
+        done.complete();
+      } else {
+        done.completeError(error);
+      }
+    }
+    _pump();
   }
 }

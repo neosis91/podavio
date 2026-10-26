@@ -360,6 +360,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
                       ),
                       size: 44,
                       radius: 6,
+                      ecoTintFromImage: true,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
