@@ -31,6 +31,71 @@ import 'widgets/update_prompt.dart';
 
 final _packageInfo = PackageInfo.fromPlatform();
 
+/// Même import que « Importer la base de données ». Vrai si le fichier est lu.
+Future<bool> importLibraryDatabase(BuildContext context, WidgetRef ref) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(context.tr('Import database')),
+      content: Text(
+        context.tr(
+          'This replaces your current subscriptions, queue, favorites, and playback progress. Downloaded audio files are not restored. Continue?',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text(context.tr('Cancel')),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(context.tr('Import')),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return false;
+
+  final file = await FilePicker.pickFile(
+    dialogTitle: context.tr('Import database'),
+    type: FileType.any,
+  );
+  if (file == null || !context.mounted) return false;
+  final name = file.name.toLowerCase();
+  if (!name.endsWith('.sqlite') &&
+      !name.endsWith('.db') &&
+      !name.endsWith('.sqlite3')) {
+    showMessage(context, context.tr('Choose a .sqlite or .db database file'));
+    return false;
+  }
+
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => const Center(child: CircularProgressIndicator()),
+  );
+  try {
+    final bytes = await file.readAsBytes();
+    await importDatabaseBytes(ref, bytes);
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+      showMessage(context, context.tr('Database imported'));
+    }
+    return true;
+  } catch (error) {
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+      showMessage(
+        context,
+        errorText(error).isEmpty
+            ? context.tr('Could not import the database')
+            : errorText(error),
+      );
+    }
+    return false;
+  }
+}
+
 class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
 
@@ -217,6 +282,12 @@ class PreferencesPage extends ConsumerWidget {
             title: Text(context.tr('Network')),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push(AppRoutes.network),
+          ),
+          ListTile(
+            leading: const EcoIcon(),
+            title: Text(context.tr('Eco mode')),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.eco),
           ),
           ListTile(
             leading: const Icon(Icons.archive_outlined),
@@ -411,66 +482,8 @@ class BackupRestorePage extends ConsumerWidget {
   }
 
   Future<void> _importDatabase(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(context.tr('Import database')),
-        content: Text(
-          context.tr(
-            'This replaces your current subscriptions, queue, favorites, and playback progress. Downloaded audio files are not restored. Continue?',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(context.tr('Cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(context.tr('Import')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    final file = await FilePicker.pickFile(
-      dialogTitle: context.tr('Import database'),
-      type: FileType.any,
-    );
-    if (file == null || !context.mounted) return;
-    final name = file.name.toLowerCase();
-    if (!name.endsWith('.sqlite') &&
-        !name.endsWith('.db') &&
-        !name.endsWith('.sqlite3')) {
-      showMessage(context, context.tr('Choose a .sqlite or .db database file'));
-      return;
-    }
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
-    try {
-      final bytes = await file.readAsBytes();
-      await importDatabaseBytes(ref, bytes);
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-        showMessage(context, context.tr('Database imported'));
-        context.go(AppRoutes.home);
-      }
-    } catch (error) {
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-        showMessage(
-          context,
-          errorText(error).isEmpty
-              ? context.tr('Could not import the database')
-              : errorText(error),
-        );
-      }
-    }
+    final imported = await importLibraryDatabase(context, ref);
+    if (imported && context.mounted) context.go(AppRoutes.home);
   }
 
   Future<void> _exportOpml(BuildContext context, WidgetRef ref) async {
