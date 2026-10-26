@@ -72,7 +72,12 @@ class _DiscoverCategoryTileState extends ConsumerState<DiscoverCategoryTile> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  PodcastCover(url: hit.imageUrl, size: 64, radius: 6),
+                  PodcastCover(
+                    url: hit.imageUrl,
+                    label: hit.title,
+                    size: 64,
+                    radius: 6,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

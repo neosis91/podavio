@@ -44,6 +44,37 @@ flutter run -d windows
 flutter test
 ```
 
+## Compiler
+
+Linux :
+
+```bash
+flutter build linux
+```
+
+Le programme est dans `build/linux/x64/release/bundle/`.
+
+Android :
+
+```bash
+flutter build apk
+```
+
+L’APK est `build/app/outputs/flutter-apk/app-release.apk`. Une release signée passe par `tool/release_local.sh`, décrit plus bas.
+
+## Émulateur Android
+
+L’image installée sur cette machine est `Pixel_7_API_34`.
+
+```bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
+flutter emulators --launch Pixel_7_API_34
+flutter run -d emulator-5554
+```
+
+`flutter devices` confirme que l’émulateur est prêt avant `flutter run`.
+
 ## Publier une release
 
 Les binaires sont compilés sur cette machine, puis envoyés avec `glab`. Ça ne consomme pas de minutes GitLab. Android et Linux uniquement.
