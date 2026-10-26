@@ -10,6 +10,7 @@ class AppRoutes {
   static const discoverLanguages = '/discover-languages';
   static const preferences = '/preferences';
   static const sync = '/preferences/sync';
+  static const webCompanion = '/preferences/web';
   static const favorites = '/favorites';
   static const history = '/history';
   static const downloads = '/downloads';

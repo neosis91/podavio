@@ -1,0 +1,89 @@
+:root {
+  color-scheme: light dark;
+  --green: #2e895d;
+  --ink: #17211c;
+  --muted: #5d6b64;
+  --paper: #f7f4ef;
+  --card: #ffffff;
+  font-family: "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #f3f7f4;
+    --muted: #b7c4bc;
+    --paper: #101614;
+    --card: #1b2420;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+}
+
+.mark {
+  margin: 0;
+  color: var(--green);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1, h2 { margin: 4px 0 16px; }
+
+.pair, .player { text-align: center; }
+
+canvas {
+  background: white;
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.label, .number, li span {
+  color: var(--muted);
+}
+
+.number {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+li + li { margin-top: 8px; }
+
+button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 14px;
+  background: var(--card);
+  color: inherit;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+button strong, button span { display: block; }
+
+button.text, button.ghost {
+  width: auto;
+  background: transparent;
+  color: var(--green);
+  padding: 0 0 12px;
+}
+
+audio { width: 100%; margin-top: 12px; }
+
+.error { color: #b42318; }

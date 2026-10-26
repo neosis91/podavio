@@ -1,0 +1,60 @@
+<main>
+  <header>
+    <p class="mark">Podavio</p>
+    <h1>Podavio Web</h1>
+  </header>
+
+  @if (error) {
+    <p class="error">{{ error }}</p>
+  } @else if (podcasts.length === 0) {
+    <section class="pair">
+      @if (!fingerprint) {
+        <canvas #qr></canvas>
+      }
+      <p>{{ status }}</p>
+      @if (fingerprint) {
+        <p class="label">{{ text('Safety number', 'Empreinte de sécurité') }}</p>
+        <p class="number">{{ fingerprint }}</p>
+      }
+    </section>
+  } @else if (playing) {
+    <section class="player">
+      <button type="button" class="text" (click)="playing = null">{{ text('Back', 'Retour') }}</button>
+      <h2>{{ playing.title }}</h2>
+      <audio #audio controls (timeupdate)="onTime()" (pause)="sendProgress()" (ended)="sendProgress()"></audio>
+    </section>
+  } @else if (opened) {
+    <section>
+      <button type="button" class="text" (click)="closePodcast()">{{ text('Library', 'Bibliothèque') }}</button>
+      <h2>{{ opened.title }}</h2>
+      <ul>
+        @for (episode of opened.episodes; track episode.id) {
+          <li>
+            <button type="button" (click)="play(episode)">
+              <strong>{{ episode.title }}</strong>
+              <span>{{ episode.publishedAt }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+  } @else {
+    <section>
+      <p class="number">{{ fingerprint }}</p>
+      <ul>
+        @for (podcast of podcasts; track podcast.id) {
+          <li>
+            <button type="button" (click)="openPodcast(podcast)">
+              <strong>{{ podcast.title }}</strong>
+              <span>{{ podcast.author }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
+  @if (fingerprint) {
+    <button type="button" class="ghost" (click)="disconnect()">{{ text('Disconnect', 'Dissocier') }}</button>
+  }
+</main>

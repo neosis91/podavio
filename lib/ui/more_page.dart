@@ -22,6 +22,7 @@ import '../data/providers.dart';
 import '../nearby/nearby_apk_source.dart';
 import '../settings/settings_controller.dart';
 import '../sync/sync_controller.dart';
+import '../web_companion/web_companion_controller.dart';
 import 'episodes_page.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
@@ -201,6 +202,16 @@ class PreferencesPage extends ConsumerWidget {
                   : context.tr('Synchronization is off'),
             ),
             onTap: () => context.push(AppRoutes.sync),
+          ),
+          ListTile(
+            leading: const Icon(Icons.phonelink),
+            title: Text(context.tr('Podavio Web')),
+            subtitle: Text(
+              ref.watch(webCompanionProvider).browserOnline
+                  ? context.tr('Browser connected')
+                  : context.tr('Encrypted link to the browser'),
+            ),
+            onTap: () => context.push(AppRoutes.webCompanion),
           ),
           ListTile(
             leading: const Icon(Icons.notifications_outlined),
