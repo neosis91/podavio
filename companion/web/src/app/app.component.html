@@ -1,60 +1,102 @@
-<main>
-  <header>
-    <p class="mark">Podavio</p>
-    <h1>Podavio Web</h1>
-  </header>
+<header class="site">
+  <img class="wordmark" src="brand/logo.png" alt="Podavio" />
+  <span class="current">Podavio Web</span>
+  @if (fingerprint) {
+    <button type="button" class="link" (click)="disconnect()">{{ text('Disconnect', 'Dissocier') }}</button>
+  }
+</header>
 
-  @if (error) {
-    <p class="error">{{ error }}</p>
-  } @else if (podcasts.length === 0) {
-    <section class="pair">
-      @if (!fingerprint) {
-        <canvas #qr></canvas>
-      }
-      <p>{{ status }}</p>
+@if (error) {
+  <p class="banner error">{{ error }}</p>
+} @else if (podcasts.length === 0) {
+  <section class="hero">
+    <div class="copy">
+      <h1>{{ text('Scan to connect', 'Scannez pour vous connecter') }}</h1>
+      <p class="lead">{{ text('Open Podavio on your phone, then Podavio Web, and scan this code. The link is encrypted end to end.', 'Ouvrez Podavio sur votre téléphone, puis Podavio Web, et scannez ce code. Le lien est chiffré de bout en bout.') }}</p>
+      <ol>
+        <li>{{ text('Open Podavio on your phone', 'Ouvrez Podavio sur votre téléphone') }}</li>
+        <li>{{ text('Open Podavio Web from More', 'Ouvrez Podavio Web dans Plus') }}</li>
+        <li>{{ text('Scan this code to link this browser', 'Scannez ce code pour associer ce navigateur') }}</li>
+      </ol>
       @if (fingerprint) {
         <p class="label">{{ text('Safety number', 'Empreinte de sécurité') }}</p>
         <p class="number">{{ fingerprint }}</p>
       }
-    </section>
-  } @else if (playing) {
-    <section class="player">
-      <button type="button" class="text" (click)="playing = null">{{ text('Back', 'Retour') }}</button>
-      <h2>{{ playing.title }}</h2>
-      <audio #audio controls (timeupdate)="onTime()" (pause)="sendProgress()" (ended)="sendProgress()"></audio>
-    </section>
-  } @else if (opened) {
-    <section>
-      <button type="button" class="text" (click)="closePodcast()">{{ text('Library', 'Bibliothèque') }}</button>
-      <h2>{{ opened.title }}</h2>
-      <ul>
-        @for (episode of opened.episodes; track episode.id) {
-          <li>
-            <button type="button" (click)="play(episode)">
-              <strong>{{ episode.title }}</strong>
-              <span>{{ episode.publishedAt }}</span>
-            </button>
-          </li>
-        }
-      </ul>
-    </section>
-  } @else {
-    <section>
-      <p class="number">{{ fingerprint }}</p>
+      @if (status) {
+        <p class="status">{{ status }}</p>
+      }
+    </div>
+    <div class="qr">
+      @if (!fingerprint) {
+        <canvas #qr></canvas>
+      } @else {
+        <img class="mark" src="brand/icon.svg" alt="" />
+      }
+    </div>
+  </section>
+} @else {
+  <div class="app">
+    <aside>
       <ul>
         @for (podcast of podcasts; track podcast.id) {
           <li>
-            <button type="button" (click)="openPodcast(podcast)">
-              <strong>{{ podcast.title }}</strong>
-              <span>{{ podcast.author }}</span>
+            <button
+              type="button"
+              class="row"
+              [class.selected]="opened?.id === podcast.id"
+              (click)="openPodcast(podcast)"
+            >
+              @if (podcast.imageUrl) {
+                <img [src]="podcast.imageUrl" alt="" />
+              } @else {
+                <span class="avatar">{{ initial(podcast.title) }}</span>
+              }
+              <span class="meta">
+                <strong>{{ podcast.title }}</strong>
+                <span>{{ podcast.author }}</span>
+              </span>
             </button>
           </li>
         }
       </ul>
+    </aside>
+    <section class="pane">
+      @if (!opened) {
+        <div class="empty">
+          <img class="mark" src="brand/icon.svg" alt="" />
+          <p>{{ text('Select a podcast to see its episodes.', 'Sélectionnez une émission pour voir ses épisodes.') }}</p>
+        </div>
+      } @else {
+        <header class="pane-bar">
+          @if (opened.imageUrl) {
+            <img [src]="opened.imageUrl" alt="" />
+          } @else {
+            <span class="avatar">{{ initial(opened.title) }}</span>
+          }
+          <h2>{{ opened.title }}</h2>
+        </header>
+        <ul class="episodes">
+          @for (episode of opened.episodes; track episode.id) {
+            <li>
+              <button
+                type="button"
+                class="episode"
+                [class.current]="playing?.id === episode.id"
+                (click)="play(episode)"
+              >
+                <strong>{{ episode.title }}</strong>
+                <span>{{ formatWhen(episode.publishedAt) }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+        @if (playing) {
+          <div class="dock">
+            <p>{{ playing.title }}</p>
+            <audio #audio controls (timeupdate)="onTime()" (pause)="sendProgress()" (ended)="sendProgress()"></audio>
+          </div>
+        }
+      }
     </section>
-  }
-
-  @if (fingerprint) {
-    <button type="button" class="ghost" (click)="disconnect()">{{ text('Disconnect', 'Dissocier') }}</button>
-  }
-</main>
+  </div>
+}

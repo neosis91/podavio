@@ -85,6 +85,22 @@ export class AppComponent implements OnDestroy {
     return this.french ? fr : en;
   }
 
+  initial(title: string): string {
+    const trimmed = title.trim();
+    return trimmed ? trimmed.charAt(0).toUpperCase() : '·';
+  }
+
+  formatWhen(value: string | null): string {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString(this.french ? 'fr' : undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+
   async disconnect(): Promise<void> {
     localStorage.removeItem(storageKey);
     this.socket?.close();
@@ -180,7 +196,7 @@ export class AppComponent implements OnDestroy {
       session: stored.session,
       pub: stored.pwaPub,
     });
-    await QRCode.toCanvas(canvas, payload, { margin: 1, width: 280 });
+    await QRCode.toCanvas(canvas, payload, { margin: 1, width: 264 });
     this.status = this.text(
       'Scan this code with Podavio on the phone.',
       'Scannez ce code avec Podavio sur le téléphone.',
