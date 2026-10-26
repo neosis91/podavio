@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/theme.dart';
 import '../data/database_backup.dart';
+import '../data/download_controller.dart';
 import '../data/feed_refresh_controller.dart';
 import '../data/online_status.dart';
 import '../data/opml_import_controller.dart';
@@ -15,6 +16,7 @@ import '../player/player_sheet_controller.dart';
 import 'nav_catalog.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
+import 'widgets/download_banner.dart';
 import 'widgets/expandable_player.dart';
 import 'widgets/feed_refresh_banner.dart';
 import 'widgets/offline_banner.dart';
@@ -196,7 +198,10 @@ class _UnderChrome extends ConsumerWidget {
     final offline = ref.watch(onlineStatusProvider) == false;
     final refreshing = ref.watch(feedRefreshProvider).isVisible;
     final importing = ref.watch(opmlImportProvider).isVisible;
-    final page = offline || refreshing || importing
+    final downloading =
+        ref.watch(downloadProgressProvider).isNotEmpty ||
+        ref.watch(downloadWaitingCountProvider) > 0;
+    final page = offline || refreshing || importing || downloading
         ? MediaQuery.removePadding(
             context: context,
             removeTop: true,
@@ -206,6 +211,7 @@ class _UnderChrome extends ConsumerWidget {
     return Column(
       children: [
         if (offline) const OfflineBanner(),
+        const DownloadBanner(),
         const FeedRefreshBanner(),
         const OpmlImportBanner(),
         Expanded(child: page),

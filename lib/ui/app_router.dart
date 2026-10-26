@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../data/automatic_downloads.dart';
 import '../data/opml.dart';
 import '../data/providers.dart';
 import '../player/android_auto_bridge.dart';
@@ -299,6 +300,7 @@ class _PlaybackLifecycleState extends ConsumerState<PlaybackLifecycle>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(ref.read(playerProvider.notifier).restoreLastEpisode());
+      unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
     });
   }
 

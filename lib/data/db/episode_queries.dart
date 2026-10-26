@@ -590,6 +590,50 @@ mixin _EpisodeQueries on _$AppDatabase {
     )..where((table) => table.downloadPath.isNotNull())).get();
   }
 
+  /// Épisodes non lus, pas encore téléchargés, d’un podcast inclus.
+  Future<List<DownloadCandidate>> automaticDownloadCandidates() async {
+    final query = selectOnly(episodes)
+      ..addColumns([episodes.id, episodes.podcastId, episodes.publishedAt])
+      ..join([innerJoin(podcasts, podcasts.id.equalsExp(episodes.podcastId))])
+      ..where(
+        podcasts.autoDownload.equals(true) &
+            episodes.played.equals(false) &
+            episodes.downloadPath.isNull(),
+      );
+    final rows = await query.get();
+    return [
+      for (final row in rows)
+        DownloadCandidate(
+          id: row.read(episodes.id)!,
+          podcastId: row.read(episodes.podcastId)!,
+          included: true,
+          played: false,
+          downloaded: false,
+          publishedAt: row.read(episodes.publishedAt),
+        ),
+    ];
+  }
+
+  /// Fichiers locaux pris en compte par le cache du téléchargement automatique.
+  Future<List<LocalDownload>> cachedLocalDownloads() async {
+    final rows = await (select(
+      episodes,
+    )..where((table) => table.downloadPath.isNotNull())).get();
+    return [
+      for (final episode in rows)
+        LocalDownload(
+          id: episode.id,
+          podcastId: episode.podcastId,
+          favorite: episode.favorite,
+          inPlaylist: episode.queueIndex != null,
+          played: episode.played,
+          downloadedAt: episode.downloadedAt,
+          publishedAt: episode.publishedAt,
+          lastPlayedAt: episode.lastPlayedAt,
+        ),
+    ];
+  }
+
   Future<List<Episode>> episodesForPodcast(int podcastId) {
     return (select(episodes)
           ..where((table) => table.podcastId.equals(podcastId))

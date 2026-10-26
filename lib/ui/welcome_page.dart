@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/automatic_downloads.dart';
 import '../data/providers.dart';
 import '../l10n/l10n.dart';
 import '../settings/settings_controller.dart';
@@ -29,8 +32,10 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   }
 
   Future<void> _restoreBackup() async {
-    final imported = await importLibraryDatabase(context, ref);
-    if (imported) await _leave(AppRoutes.home);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final imported = await importLibraryDatabase(context);
+    if (!imported) return;
+    await container.read(settingsProvider.notifier).setOnboardingComplete(true);
   }
 
   Future<void> _setAutomaticDownload(bool enabled) async {
@@ -43,6 +48,9 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
       }
     }
     await ref.read(settingsProvider.notifier).setAutomaticDownload(enabled);
+    if (enabled) {
+      unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
+    }
   }
 
   Future<void> _chooseOffline(bool offline) async {

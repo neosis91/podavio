@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/automatic_downloads.dart';
 import '../../data/feed_service.dart';
 import '../../data/providers.dart';
 import '../../settings/settings_controller.dart';
@@ -156,6 +159,7 @@ Future<void> subscribeToFeed(
       if (openPodcast) {
         context.push(AppRoutes.podcast(result.podcastId));
       }
+      unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
       return;
     } catch (error) {
       busy.close();
