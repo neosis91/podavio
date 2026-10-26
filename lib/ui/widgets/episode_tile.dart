@@ -697,6 +697,7 @@ class _QueueStyleRow extends StatelessWidget {
     final episode = entry.episode;
     final titleStyle = theme.textTheme.titleSmall?.copyWith(
       fontWeight: FontWeight.w600,
+      color: episode.played ? scheme.onSurfaceVariant : scheme.onSurface,
     );
     final podcastStyle = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,

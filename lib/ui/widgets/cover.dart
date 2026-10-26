@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -199,6 +200,29 @@ class PodcastCover extends ConsumerWidget {
 
 double _leafInset(double? side) => side != null && side < 48 ? 2 : 6;
 
+class _EcoMark extends StatelessWidget {
+  const _EcoMark({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Transform.translate(
+          offset: const Offset(0, 1),
+          child: ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: 1.4, sigmaY: 1.4),
+            child: EcoIcon(size: size, color: Colors.white),
+          ),
+        ),
+        EcoIcon(size: size, color: podavioGreen),
+      ],
+    );
+  }
+}
+
 class _EcoLeaf extends StatelessWidget {
   const _EcoLeaf({required this.side});
 
@@ -206,21 +230,16 @@ class _EcoLeaf extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mark = side != null && side! < 48 ? 11.0 : 16.0;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(2),
-        child: EcoIcon(size: mark, color: podavioGreen),
-      ),
-    );
+    final mark = side == null
+        ? 14.0
+        : side! < 48
+        ? 10.0
+        : 14.0;
+    return _EcoMark(size: mark);
   }
 }
 
-/// Carré du thème. Bord, texte et feuille prennent la couleur de [seed].
+/// Carré coloré à partir du nom. Le texte est blanc et suit la taille du carré.
 class EcoNameCover extends StatelessWidget {
   const EcoNameCover({super.key, required this.label, required this.seed});
 
@@ -230,48 +249,45 @@ class EcoNameCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = ecoAccentColor(seed);
-    final surface = Theme.of(context).colorScheme.surface;
     return LayoutBuilder(
       builder: (context, constraints) {
         final side = constraints.biggest.shortestSide;
         final finite = side.isFinite && side > 0 ? side : 56.0;
-        final border = _ecoBorderWidth(finite);
         final compact = finite <= 80;
-        final square = DecoratedBox(
-          position: DecorationPosition.foreground,
-          decoration: BoxDecoration(
-            border: Border.all(color: accent, width: border),
-          ),
-          child: ColoredBox(
-            color: surface,
-            child: compact
-                ? Padding(
-                    padding: EdgeInsets.all(border),
-                    child: Center(
-                      child: EcoIcon(
-                        size: (finite - border * 2) * 0.62,
-                        color: accent,
-                      ),
-                    ),
-                  )
-                : Padding(
-                    padding: EdgeInsets.all(border + 8),
-                    child: Center(
-                      child: Text(
-                        label,
-                        textAlign: TextAlign.center,
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: accent,
-                          fontSize: (finite * 0.16).clamp(12.0, 22.0),
-                          fontWeight: FontWeight.w700,
-                          height: 1.15,
-                        ),
+        final padding = side <= 200 ? 10.0 : 16.0;
+        final textWidth = finite - padding * 2;
+        final textHeight = finite - padding * 2;
+        final base = Theme.of(context).textTheme.titleMedium;
+        final fontSize = _fitEcoFont(
+          text: label,
+          maxWidth: textWidth,
+          maxHeight: textHeight,
+          cap: side <= 200 ? 18 : 26,
+          scaler: MediaQuery.textScalerOf(context),
+          direction: Directionality.of(context),
+          base: base,
+        );
+        final square = ColoredBox(
+          color: accent,
+          child: compact
+              ? Center(
+                  child: _EcoMark(size: finite * 0.46),
+                )
+              : Padding(
+                  padding: EdgeInsets.all(padding),
+                  child: Center(
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: (base ?? const TextStyle()).copyWith(
+                        color: Colors.white,
+                        fontSize: fontSize,
+                        fontWeight: FontWeight.w700,
+                        height: 1.05,
                       ),
                     ),
                   ),
-          ),
+                ),
         );
         if (compact) return square;
         return Stack(
@@ -288,6 +304,48 @@ class EcoNameCover extends StatelessWidget {
       },
     );
   }
+}
+
+double _fitEcoFont({
+  required String text,
+  required double maxWidth,
+  required double maxHeight,
+  required double cap,
+  required TextScaler scaler,
+  required TextDirection direction,
+  required TextStyle? base,
+}) {
+  final sample = text.trim().isEmpty ? ' ' : text;
+  var low = 1.0;
+  var high = cap < maxHeight ? cap : maxHeight;
+  if (high < 8) high = 8;
+  var best = low;
+  for (var i = 0; i < 14; i++) {
+    final mid = (low + high) / 2;
+    final painter = TextPainter(
+      text: TextSpan(
+        text: sample,
+        style: (base ?? const TextStyle()).copyWith(
+          fontSize: mid,
+          fontWeight: FontWeight.w700,
+          height: 1.05,
+          color: Colors.white,
+        ),
+      ),
+      textAlign: TextAlign.center,
+      textDirection: direction,
+      textScaler: scaler,
+    )..layout(maxWidth: maxWidth);
+    final fits =
+        painter.width <= maxWidth + 0.5 && painter.height <= maxHeight + 0.5;
+    if (fits) {
+      best = mid;
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+  return best;
 }
 
 /// Fichier déjà dans le cache des jaquettes, sinon le carré au nom.
@@ -395,8 +453,6 @@ class _CachedOrNamedCoverState extends State<_CachedOrNamedCover> {
     );
   }
 }
-
-double _ecoBorderWidth(double side) => (side * 0.085).clamp(3.0, 7.0);
 
 /// Couleur vive et stable, déduite de [seed].
 Color ecoAccentColor(String seed) {

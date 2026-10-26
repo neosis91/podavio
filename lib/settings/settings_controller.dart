@@ -573,6 +573,27 @@ String automaticDownloadLimitLabel(int? limit) {
   return '$limit episodes';
 }
 
+/// Nombre de téléchargements en même temps. Défaut : 2.
+const simultaneousDownloadChoices = <int>[1, 2, 3, 4, 5];
+
+int simultaneousDownloadsFromStored(int? stored) {
+  if (stored == null || !simultaneousDownloadChoices.contains(stored)) {
+    return 2;
+  }
+  return stored;
+}
+
+/// Clé anglaise du nombre affiché.
+String simultaneousDownloadsLabel(int count) {
+  return switch (count) {
+    1 => '1 at a time',
+    2 => '2 at a time',
+    3 => '3 at a time',
+    4 => '4 at a time',
+    _ => '5 at a time',
+  };
+}
+
 class AppSettings {
   const AppSettings({
     required this.themeMode,
@@ -608,6 +629,7 @@ class AppSettings {
     required this.dequeueDeletedDownloads,
     required this.automaticDownload,
     required this.automaticDownloadLimit,
+    required this.simultaneousDownloads,
     required this.allowMobileData,
     required this.allowMobileStreaming,
     required this.allowMobileRefresh,
@@ -692,6 +714,9 @@ class AppSettings {
   /// Nombre max d’épisodes à télécharger automatiquement par podcast.
   /// `null` = illimité. Les non lus déjà téléchargés comptent dans le plafond.
   final int? automaticDownloadLimit;
+
+  /// Fichiers téléchargés en même temps, manuels compris.
+  final int simultaneousDownloads;
 
   /// Autorise les téléchargements sur les données mobiles.
   /// Sinon ils attendent le Wi-Fi. Un téléchargement lancé à la main demande
@@ -784,6 +809,7 @@ class AppSettings {
     bool? automaticDownload,
     int? automaticDownloadLimit,
     bool clearAutomaticDownloadLimit = false,
+    int? simultaneousDownloads,
     bool? allowMobileData,
     bool? allowMobileStreaming,
     bool? allowMobileRefresh,
@@ -843,6 +869,7 @@ class AppSettings {
       automaticDownloadLimit: clearAutomaticDownloadLimit
           ? null
           : (automaticDownloadLimit ?? this.automaticDownloadLimit),
+      simultaneousDownloads: simultaneousDownloads ?? this.simultaneousDownloads,
       allowMobileData: allowMobileData ?? this.allowMobileData,
       allowMobileStreaming: allowMobileStreaming ?? this.allowMobileStreaming,
       allowMobileRefresh: allowMobileRefresh ?? this.allowMobileRefresh,
@@ -940,6 +967,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
       automaticDownloadLimit: automaticDownloadLimitFromStored(
         preferences.getInt('automaticDownloadLimit'),
       ),
+      simultaneousDownloads: simultaneousDownloadsFromStored(
+        preferences.getInt('simultaneousDownloads'),
+      ),
       allowMobileData: preferences.getBool('allowMobileData') ?? false,
       allowMobileStreaming:
           preferences.getBool('allowMobileStreaming') ??
@@ -1019,6 +1049,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
+    if (state.ecoMode) return;
     state = state.copyWith(themeMode: mode);
     await ref.read(sharedPreferencesProvider).setString('theme', mode.name);
   }
@@ -1265,6 +1296,14 @@ class SettingsNotifier extends Notifier<AppSettings> {
     }
     state = state.copyWith(automaticDownloadLimit: normalized);
     await preferences.setInt('automaticDownloadLimit', normalized);
+  }
+
+  Future<void> setSimultaneousDownloads(int count) async {
+    final normalized = simultaneousDownloadsFromStored(count);
+    state = state.copyWith(simultaneousDownloads: normalized);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setInt('simultaneousDownloads', normalized);
   }
 
   Future<void> setEpisodeCacheSize(int? size) async {

@@ -32,7 +32,7 @@ import 'widgets/update_prompt.dart';
 final _packageInfo = PackageInfo.fromPlatform();
 
 /// Même import que « Importer la base de données ». Vrai si le fichier est lu.
-Future<bool> importLibraryDatabase(BuildContext context, WidgetRef ref) async {
+Future<bool> importLibraryDatabase(BuildContext context) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
@@ -55,6 +55,7 @@ Future<bool> importLibraryDatabase(BuildContext context, WidgetRef ref) async {
     ),
   );
   if (confirmed != true || !context.mounted) return false;
+  final container = ProviderScope.containerOf(context, listen: false);
 
   final file = await FilePicker.pickFile(
     dialogTitle: context.tr('Import database'),
@@ -69,22 +70,22 @@ Future<bool> importLibraryDatabase(BuildContext context, WidgetRef ref) async {
     return false;
   }
 
-  showDialog<void>(
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final dialog = DialogRoute<void>(
     context: context,
     barrierDismissible: false,
     builder: (context) => const Center(child: CircularProgressIndicator()),
   );
+  navigator.push(dialog);
   try {
     final bytes = await file.readAsBytes();
-    await importDatabaseBytes(ref, bytes);
+    await importDatabaseBytes(container, bytes);
     if (context.mounted) {
-      Navigator.of(context, rootNavigator: true).pop();
       showMessage(context, context.tr('Database imported'));
     }
     return true;
   } catch (error) {
     if (context.mounted) {
-      Navigator.of(context, rootNavigator: true).pop();
       showMessage(
         context,
         errorText(error).isEmpty
@@ -93,6 +94,10 @@ Future<bool> importLibraryDatabase(BuildContext context, WidgetRef ref) async {
       );
     }
     return false;
+  } finally {
+    if (dialog.isActive && navigator.mounted) {
+      navigator.removeRoute(dialog);
+    }
   }
 }
 
@@ -482,7 +487,7 @@ class BackupRestorePage extends ConsumerWidget {
   }
 
   Future<void> _importDatabase(BuildContext context, WidgetRef ref) async {
-    final imported = await importLibraryDatabase(context, ref);
+    final imported = await importLibraryDatabase(context);
     if (imported && context.mounted) context.go(AppRoutes.home);
   }
 

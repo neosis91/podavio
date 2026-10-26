@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,10 +14,33 @@ class OpmlImportBanner extends ConsumerStatefulWidget {
 
 class _OpmlImportBannerState extends ConsumerState<OpmlImportBanner> {
   var _expanded = false;
+  Timer? _dismissTimer;
+  String? _armKey;
+
+  @override
+  void dispose() {
+    _dismissTimer?.cancel();
+    super.dispose();
+  }
+
+  void _arm(OpmlImportState import) {
+    final key = '${import.phase.name}:$_expanded:${import.isVisible}';
+    if (key == _armKey) return;
+    _armKey = key;
+    _dismissTimer?.cancel();
+    _dismissTimer = null;
+    if (!import.isVisible || import.isRunning || _expanded) return;
+    _dismissTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted) return;
+      setState(() => _expanded = false);
+      ref.read(opmlImportProvider.notifier).dismiss();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final import = ref.watch(opmlImportProvider);
+    _arm(import);
     if (!import.isVisible) return const SizedBox.shrink();
 
     final scheme = Theme.of(context).colorScheme;

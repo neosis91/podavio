@@ -16,9 +16,18 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw StateError('SharedPreferences n’est pas initialisé.');
 });
 
+final _databaseClose = Expando<Future<void>>();
+
+/// Ferme [database] une seule fois. Un second appel attend la même fermeture.
+Future<void> closeAppDatabase(AppDatabase database) {
+  return _databaseClose[database] ??= database.close();
+}
+
 final databaseProvider = Provider<AppDatabase>((ref) {
   final database = AppDatabase.defaults();
-  ref.onDispose(database.close);
+  ref.onDispose(() {
+    unawaited(closeAppDatabase(database));
+  });
   return database;
 });
 

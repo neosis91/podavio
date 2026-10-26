@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/automatic_downloads.dart';
 import '../data/download_controller.dart';
 import '../data/providers.dart';
 import '../data/status_notifications.dart';
@@ -325,6 +326,7 @@ class SyncController extends Notifier<SyncStatus> {
               );
         } catch (_) {}
       }
+      if (ref.mounted) unawaited(runAutomaticDownloads(ref));
       for (final url in remote.removed) {
         if (addedQueue.contains(url)) continue;
         final existing = await database.findByFeedUrl(url);
