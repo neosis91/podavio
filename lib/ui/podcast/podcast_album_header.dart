@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,7 +9,7 @@ import '../podcasts/podcast_feed_actions.dart';
 import '../widgets/brand.dart';
 import '../widgets/cover.dart';
 
-/// Haut de page d’une émission. En portrait : jaquette SimpMusic / Apple Music.
+/// Haut de page d’une émission. En portrait : jaquette pleine largeur.
 class PodcastAlbumHeader extends ConsumerWidget {
   const PodcastAlbumHeader({
     super.key,
@@ -36,79 +34,164 @@ class PodcastAlbumHeader extends ConsumerWidget {
       username: podcast.authUsername,
       password: podcast.authPassword,
     );
-    final media = MediaQuery.of(context);
     final theme = Theme.of(context);
+    final chrome = _CoverChrome(
+      count: count,
+      countStyle: theme.textTheme.bodyMedium,
+      showPause: showPause,
+      onPlay: onPlay,
+      onAbout: onAbout,
+      subscribed: podcast.subscribed,
+      onSubscribe: () => subscribeToFeed(
+        context,
+        ref,
+        podcast.feedUrl,
+        openPodcast: false,
+      ),
+    );
+
+    return _PortraitArtwork(
+      podcast: podcast,
+      headers: headers,
+      chrome: chrome,
+    );
+  }
+}
+
+/// Paysage : pochette à gauche, liste à droite.
+/// Sous la pochette : nombre d’épisodes, pastille lecture, puis info.
+class PodcastLandscapeFrame extends ConsumerWidget {
+  const PodcastLandscapeFrame({
+    super.key,
+    required this.podcast,
+    required this.showPause,
+    required this.onPlay,
+    required this.onAbout,
+    required this.listColor,
+    required this.episodes,
+  });
+
+  final Podcast podcast;
+  final bool showPause;
+  final VoidCallback? onPlay;
+  final VoidCallback onAbout;
+  final Color listColor;
+  final Widget episodes;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref
+        .watch(podcastEpisodeCountProvider(podcast.id))
+        .asData
+        ?.value;
+    final headers = podcastAuthHeaders(
+      username: podcast.authUsername,
+      password: podcast.authPassword,
+    );
+    final media = MediaQuery.of(context);
+    final top = media.viewPadding.top + kToolbarHeight;
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final height = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : media.size.height;
         final width = constraints.maxWidth.isFinite
             ? constraints.maxWidth
             : media.size.width;
-        final height = media.size.height;
-        final portrait = width < height;
-        final chrome = _CoverChrome(
-          count: count,
-          countStyle: theme.textTheme.bodyMedium,
-          showPause: showPause,
-          onPlay: onPlay,
-          onAbout: onAbout,
-          subscribed: podcast.subscribed,
-          onSubscribe: () => subscribeToFeed(
-            context,
-            ref,
-            podcast.feedUrl,
-            openPodcast: false,
-          ),
-        );
-
-        if (portrait) {
-          return _PortraitArtwork(
-            podcast: podcast,
-            headers: headers,
-            width: width,
-            height: height,
-            chrome: chrome,
-          );
-        }
-        return _LandscapeArtwork(
-          podcast: podcast,
-          headers: headers,
-          width: width,
-          height: height,
-          chrome: chrome,
+        final available = (height - top).clamp(0.0, height);
+        // 32 de marge, 12 sous la pochette, 40 pour la rangée d’actions.
+        final side = (available - 84).clamp(0.0, width * 0.45);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: side + 24,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, top + 16, 8, 16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: SizedBox.square(
+                        dimension: side,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            PodcastCover(
+                              url: podcast.imageUrl,
+                              localPath: podcast.imagePath,
+                              label: podcast.title,
+                              httpHeaders: headers,
+                              radius: 0,
+                              expand: true,
+                              fit: BoxFit.cover,
+                            ),
+                            if (!podcast.subscribed)
+                              Positioned(
+                                top: 12,
+                                right: 12,
+                                child: _SubscribePill(
+                                  onTap: () => subscribeToFeed(
+                                    context,
+                                    ref,
+                                    podcast.feedUrl,
+                                    openPodcast: false,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _UnderCoverBar(
+                      count: count,
+                      showPause: showPause,
+                      onPlay: onPlay,
+                      onAbout: onAbout,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(top: top),
+                child: ColoredBox(color: listColor, child: episodes),
+              ),
+            ),
+          ],
         );
       },
     );
   }
 }
 
-/// Demi-écran, bord à bord. Les actions reposent sur la pochette.
+/// Pleine largeur, hauteur égale à la largeur. Les actions reposent sur la pochette.
 class _PortraitArtwork extends StatelessWidget {
   const _PortraitArtwork({
     required this.podcast,
     required this.headers,
-    required this.width,
-    required this.height,
     required this.chrome,
   });
 
   final Podcast podcast;
   final Map<String, String>? headers;
-  final double width;
-  final double height;
   final Widget chrome;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      height: height / 2,
+    return AspectRatio(
+      aspectRatio: 1,
       child: Stack(
         fit: StackFit.expand,
         children: [
           PodcastCover(
             url: podcast.imageUrl,
             localPath: podcast.imagePath,
+            label: podcast.title,
             httpHeaders: headers,
             radius: 0,
             expand: true,
@@ -117,55 +200,6 @@ class _PortraitArtwork extends StatelessWidget {
           const _ArtworkShade(),
           chrome,
         ],
-      ),
-    );
-  }
-}
-
-class _LandscapeArtwork extends StatelessWidget {
-  const _LandscapeArtwork({
-    required this.podcast,
-    required this.headers,
-    required this.width,
-    required this.height,
-    required this.chrome,
-  });
-
-  final Podcast podcast;
-  final Map<String, String>? headers;
-  final double width;
-  final double height;
-  final Widget chrome;
-
-  @override
-  Widget build(BuildContext context) {
-    final side = math
-        .min(height * 0.72, width * 0.42)
-        .clamp(140.0, math.min(width, height) * 0.9);
-    return SizedBox(
-      height: side,
-      child: Center(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: SizedBox.square(
-            dimension: side,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                PodcastCover(
-                  url: podcast.imageUrl,
-                  localPath: podcast.imagePath,
-                  httpHeaders: headers,
-                  radius: 0,
-                  expand: true,
-                  fit: BoxFit.cover,
-                ),
-                const _ArtworkShade(),
-                chrome,
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -304,6 +338,116 @@ class _CoverChrome extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Sous la pochette : nombre d’épisodes, puis pastille lecture et info.
+class _UnderCoverBar extends StatelessWidget {
+  const _UnderCoverBar({
+    required this.count,
+    required this.showPause,
+    required this.onPlay,
+    required this.onAbout,
+  });
+
+  final int? count;
+  final bool showPause;
+  final VoidCallback? onPlay;
+  final VoidCallback onAbout;
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = Theme.of(context).colorScheme.surface;
+    final countColor = surface.computeLuminance() > 0.45
+        ? Colors.black
+        : Colors.white;
+    final countStyle = Theme.of(context).textTheme.bodyMedium;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            count == null
+                ? ''
+                : count == 1
+                ? '1 épisode'
+                : '$count épisodes',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: countStyle?.copyWith(color: countColor),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Tooltip(
+          message: showPause ? 'Pause' : 'Lire',
+          child: Material(
+            color: Colors.white,
+            elevation: 2,
+            shadowColor: Colors.black54,
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onPlay,
+              customBorder: const CircleBorder(),
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                child: Icon(
+                  showPause ? Icons.pause : Icons.play_arrow,
+                  size: 28,
+                  color: onPlay == null ? Colors.black38 : Colors.black,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Tooltip(
+          message: 'À propos',
+          child: _Pill(
+            onTap: onAbout,
+            color: Colors.white,
+            child: const SizedBox.square(
+              dimension: 36,
+              child: Center(
+                child: IconTheme(
+                  data: IconThemeData(color: Colors.black, size: 18),
+                  child: InfoIcon(size: 18),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SubscribePill extends StatelessWidget {
+  const _SubscribePill({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelStyle = Theme.of(context).textTheme.labelMedium;
+    return _Pill(
+      onTap: onTap,
+      color: Colors.white.withValues(alpha: 0.12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.add, color: Colors.white, size: 18),
+            const SizedBox(width: 4),
+            Text(
+              'S’abonner',
+              style: labelStyle?.copyWith(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

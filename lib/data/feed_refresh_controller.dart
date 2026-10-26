@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../settings/settings_controller.dart';
 import 'app_database.dart';
+import 'automatic_downloads.dart';
 import 'models.dart';
 import 'online_status.dart';
 import 'providers.dart';

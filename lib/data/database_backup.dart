@@ -61,7 +61,10 @@ Future<Uint8List> exportDatabaseBytes(AppDatabase database) async {
 }
 
 /// Remplace la base ouverte par [bytes], puis invalide les providers Drift.
-Future<void> importDatabaseBytes(WidgetRef ref, Uint8List bytes) async {
+Future<void> importDatabaseBytes(
+  ProviderContainer container,
+  Uint8List bytes,
+) async {
   if (bytes.length < 16) {
     throw StateError('File is too small to be a SQLite database.');
   }
@@ -70,14 +73,14 @@ Future<void> importDatabaseBytes(WidgetRef ref, Uint8List bytes) async {
     throw StateError('Not a SQLite database.');
   }
 
-  await ref.read(playerProvider.notifier).dismiss();
+  await container.read(playerProvider.notifier).dismiss();
 
   final live = await podavioDatabaseFile();
-  final database = ref.read(databaseProvider);
+  final database = container.read(databaseProvider);
   try {
     await database.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
   } catch (_) {}
-  await database.close();
+  await closeAppDatabase(database);
 
   await live.writeAsBytes(bytes, flush: true);
   for (final suffix in ['-wal', '-shm', '-journal']) {
@@ -85,9 +88,9 @@ Future<void> importDatabaseBytes(WidgetRef ref, Uint8List bytes) async {
     if (await side.exists()) await side.delete();
   }
 
-  ref.invalidate(databaseProvider);
+  container.invalidate(databaseProvider);
   // Recreate immediately so dependents reopen a live connection.
-  ref.read(databaseProvider);
+  container.read(databaseProvider);
 }
 
 Future<void> writeBackupBytes(String folder, Uint8List bytes, String name) async {

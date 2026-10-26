@@ -114,7 +114,7 @@ class FeedService {
   /// Abonne plusieurs flux en parallèle (réseau), avec une limite de concurrence.
   Future<RefreshReport> subscribeMany(
     List<String> urls, {
-    int concurrency = 4,
+    int concurrency = 2,
     void Function(int done, int total, List<SubscribeFailure> failures)?
     onProgress,
   }) async {
@@ -150,7 +150,7 @@ class FeedService {
   Future<SavedFeed> refresh(String feedUrl) => _refreshUrl(feedUrl);
 
   Future<RefreshReport> refreshAll({
-    int concurrency = 4,
+    int concurrency = 2,
     bool notifyNewEpisodes = false,
     void Function(int done, int total, List<SubscribeFailure> failures)?
     onProgress,

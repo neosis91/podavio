@@ -4,6 +4,19 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.10.23
+
+- Automatic download now fetches eligible episodes, within the per-podcast limit and the episode cache. It starts when the app opens, after a refresh or a new subscription, and when the option is turned on.
+- Parallel downloads, in Download manager, caps how many files download at once, including ones started by hand. The choices are 1, 2, 3, 4, and 5, and the default is 2. A banner at the top shows how many are running and how many are waiting.
+- The refresh and OPML import banners close on their own a few seconds after they finish. Opening the error list holds the banner until it is closed.
+- Refreshing subscriptions and importing several feeds now handles 2 podcasts at a time.
+
+## 2026.10.22
+
+- Eco mode, from the home header or Settings, skips new cover downloads, the automatic cover fetch, and the tint fetch. Saved or cached covers stay, with a small leaf in the bottom left corner. Missing covers become a square filled with a color generated from the podcast name, with the same corners. The full name is written in white and kept to a modest size so it still fits in the square. In small lists the leaf sits in the center. Turning Eco mode on forces the dark theme and pure black, and neither can be turned off while Eco mode is on.
+- On a podcast page, Eco mode keeps a black background.
+- The first time the library is empty, a welcome screen offers setup, restoring the library from a database backup, or continuing without setup. Setup walks through an OPML import, mobile data for streaming and downloads, then streaming or automatic download with a per-podcast limit.
+
 ## 2026.10.21
 
 - Podavio Web pairs the phone with a browser through a self-hosted relay. The library and playback position are encrypted end to end. The browser plays the episode from its remote address, and an Android notification keeps the phone reachable.

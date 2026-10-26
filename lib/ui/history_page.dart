@@ -76,6 +76,8 @@ class HistoryEpisodeRow extends ConsumerWidget {
                     const SizedBox(width: 8),
                     PlayingEpisodeCover(
                       episodeId: episode.id,
+                      label: episode.title,
+                      colorKey: entry.podcast.title,
                       url: entry.imageUrl(
                         preferPodcastCover: preferPodcastCover,
                       ),

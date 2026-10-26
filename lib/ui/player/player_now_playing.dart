@@ -108,12 +108,15 @@ class PlayerNowPlaying extends ConsumerWidget {
                     child: PodcastCover(
                       url: imageUrl,
                       localPath: imagePath,
+                      label: title,
+                      colorKey: podcastTitle,
                       httpHeaders: podcastAuthHeaders(
                         username: podcast?.authUsername,
                         password: podcast?.authPassword,
                       ),
                       size: side,
                       radius: 16,
+                      ecoTintFromImage: true,
                     ),
                   ),
                 );

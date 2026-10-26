@@ -349,6 +349,8 @@ class _EpisodeActionsSheet extends ConsumerWidget {
                       url: entry.imageUrl(
                         preferPodcastCover: preferPodcastCover,
                       ),
+                      label: entry.episode.title,
+                      colorKey: entry.podcast.title,
                       localPath: entry.imagePath(
                         preferPodcastCover: preferPodcastCover,
                       ),
@@ -358,6 +360,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
                       ),
                       size: 44,
                       radius: 6,
+                      ecoTintFromImage: true,
                     ),
                     const SizedBox(width: 12),
                     Expanded(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -14,6 +15,7 @@ import '../l10n/l10n.dart';
 import '../data/discover_languages.dart';
 import '../data/download_controller.dart';
 import '../data/download_service.dart';
+import '../data/automatic_downloads.dart';
 import '../data/providers.dart';
 import '../data/catalog_categories.dart';
 import '../data/discover_providers.dart';
@@ -28,6 +30,44 @@ import 'widgets/messages.dart';
 import 'widgets/language_flag.dart';
 import 'widgets/list_metrics.dart';
 import 'widgets/player_keyboard_shortcuts.dart';
+
+class EcoModePage extends ConsumerWidget {
+  const EcoModePage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final enabled = ref.watch(
+      settingsProvider.select((settings) => settings.ecoMode),
+    );
+    final idle = Theme.of(context).colorScheme.onSurface;
+    return Scaffold(
+      appBar: AppBar(title: Text(context.tr('Eco mode'))),
+      body: ListView(
+        padding: underChrome(context, const EdgeInsets.only(bottom: 32)),
+        children: [
+          SwitchListTile(
+            secondary: EcoIcon(color: enabled ? podavioGreen : idle),
+            title: Text(context.tr('Eco mode')),
+            value: enabled,
+            onChanged: (value) =>
+                ref.read(settingsProvider.notifier).setEcoMode(value),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Text(
+              context.tr(
+                'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.',
+              ),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class AppearancePage extends ConsumerWidget {
   const AppearancePage({super.key});
@@ -60,16 +100,35 @@ class AppearancePage extends ConsumerWidget {
                   label: Text(context.tr('Dark')),
                 ),
               ],
-              selected: {settings.themeMode},
-              onSelectionChanged: (selection) =>
-                  notifier.setThemeMode(selection.first),
+              selected: {
+                settings.ecoMode ? ThemeMode.dark : settings.themeMode,
+              },
+              onSelectionChanged: settings.ecoMode
+                  ? null
+                  : (selection) => notifier.setThemeMode(selection.first),
             ),
           ),
+          if (settings.ecoMode)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text(
+                context.tr('Dark theme stays on while Eco mode is on'),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           SwitchListTile(
             title: Text(context.tr('Pure black')),
-            subtitle: Text(context.tr('Black background in dark mode')),
-            value: settings.pureBlack,
-            onChanged: notifier.setPureBlack,
+            subtitle: Text(
+              context.tr(
+                settings.ecoMode
+                    ? 'Pure black stays on while Eco mode is on'
+                    : 'Black background in dark mode',
+              ),
+            ),
+            value: settings.pureBlack || settings.ecoMode,
+            onChanged: settings.ecoMode ? null : notifier.setPureBlack,
           ),
           if (wallpaperOption)
             SwitchListTile(
@@ -383,6 +442,15 @@ class DownloadSettingsPage extends ConsumerWidget {
             onTap: () => _pickAutomaticDownloadLimit(context, ref),
           ),
           ListTile(
+            title: Text(context.tr('Parallel downloads')),
+            subtitle: Text(
+              '${context.tr('How many files download at the same time, including ones started by hand.')}\n'
+              '${context.tr(simultaneousDownloadsLabel(settings.simultaneousDownloads))}',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _pickSimultaneousDownloads(context, ref),
+          ),
+          ListTile(
             title: Text(context.tr('Episode cache')),
             subtitle: Text(
               context.tr(episodeCacheSizeLabel(settings.episodeCacheSize)),
@@ -468,6 +536,9 @@ Future<void> _setAutomaticDownload(
     }
   }
   await ref.read(settingsProvider.notifier).setAutomaticDownload(enabled);
+  if (enabled) {
+    unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
+  }
 }
 
 Future<void> _pickAutomaticDownloadLimit(
@@ -489,6 +560,24 @@ Future<void> _pickAutomaticDownloadLimit(
   await ref
       .read(settingsProvider.notifier)
       .setAutomaticDownloadLimit(choice == 0 ? null : choice);
+}
+
+Future<void> _pickSimultaneousDownloads(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final current = ref.read(settingsProvider).simultaneousDownloads;
+  final choice = await showRadioChoiceDialog<int>(
+    context,
+    title: 'Parallel downloads',
+    selected: current,
+    options: [
+      for (final count in simultaneousDownloadChoices)
+        (value: count, label: simultaneousDownloadsLabel(count)),
+    ],
+  );
+  if (choice == null) return;
+  await ref.read(settingsProvider.notifier).setSimultaneousDownloads(choice);
 }
 
 Future<void> _pickEpisodeCacheSize(BuildContext context, WidgetRef ref) async {

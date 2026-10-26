@@ -573,11 +573,34 @@ String automaticDownloadLimitLabel(int? limit) {
   return '$limit episodes';
 }
 
+/// Nombre de téléchargements en même temps. Défaut : 2.
+const simultaneousDownloadChoices = <int>[1, 2, 3, 4, 5];
+
+int simultaneousDownloadsFromStored(int? stored) {
+  if (stored == null || !simultaneousDownloadChoices.contains(stored)) {
+    return 2;
+  }
+  return stored;
+}
+
+/// Clé anglaise du nombre affiché.
+String simultaneousDownloadsLabel(int count) {
+  return switch (count) {
+    1 => '1 at a time',
+    2 => '2 at a time',
+    3 => '3 at a time',
+    4 => '4 at a time',
+    _ => '5 at a time',
+  };
+}
+
 class AppSettings {
   const AppSettings({
     required this.themeMode,
     required this.accent,
     required this.pureBlack,
+    required this.ecoMode,
+    required this.onboardingComplete,
     required this.wallpaperColors,
     required this.tintFromCover,
     required this.homeShelves,
@@ -606,6 +629,7 @@ class AppSettings {
     required this.dequeueDeletedDownloads,
     required this.automaticDownload,
     required this.automaticDownloadLimit,
+    required this.simultaneousDownloads,
     required this.allowMobileData,
     required this.allowMobileStreaming,
     required this.allowMobileRefresh,
@@ -628,6 +652,13 @@ class AppSettings {
   final ThemeMode themeMode;
   final AppAccent accent;
   final bool pureBlack;
+
+  /// Moins de requêtes : pas de nouvelles jaquettes, noir pur à l’activation.
+  final bool ecoMode;
+
+  /// L’accueil de première ouverture a été quitté.
+  final bool onboardingComplete;
+
   final bool wallpaperColors;
 
   /// Le lecteur et le haut de l’accueil prennent la couleur de la pochette.
@@ -683,6 +714,9 @@ class AppSettings {
   /// Nombre max d’épisodes à télécharger automatiquement par podcast.
   /// `null` = illimité. Les non lus déjà téléchargés comptent dans le plafond.
   final int? automaticDownloadLimit;
+
+  /// Fichiers téléchargés en même temps, manuels compris.
+  final int simultaneousDownloads;
 
   /// Autorise les téléchargements sur les données mobiles.
   /// Sinon ils attendent le Wi-Fi. Un téléchargement lancé à la main demande
@@ -744,6 +778,8 @@ class AppSettings {
     ThemeMode? themeMode,
     AppAccent? accent,
     bool? pureBlack,
+    bool? ecoMode,
+    bool? onboardingComplete,
     bool? wallpaperColors,
     bool? tintFromCover,
     HomeShelves? homeShelves,
@@ -773,6 +809,7 @@ class AppSettings {
     bool? automaticDownload,
     int? automaticDownloadLimit,
     bool clearAutomaticDownloadLimit = false,
+    int? simultaneousDownloads,
     bool? allowMobileData,
     bool? allowMobileStreaming,
     bool? allowMobileRefresh,
@@ -799,6 +836,8 @@ class AppSettings {
       themeMode: themeMode ?? this.themeMode,
       accent: accent ?? this.accent,
       pureBlack: pureBlack ?? this.pureBlack,
+      ecoMode: ecoMode ?? this.ecoMode,
+      onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       wallpaperColors: wallpaperColors ?? this.wallpaperColors,
       tintFromCover: tintFromCover ?? this.tintFromCover,
       homeShelves: homeShelves ?? this.homeShelves,
@@ -830,6 +869,7 @@ class AppSettings {
       automaticDownloadLimit: clearAutomaticDownloadLimit
           ? null
           : (automaticDownloadLimit ?? this.automaticDownloadLimit),
+      simultaneousDownloads: simultaneousDownloads ?? this.simultaneousDownloads,
       allowMobileData: allowMobileData ?? this.allowMobileData,
       allowMobileStreaming: allowMobileStreaming ?? this.allowMobileStreaming,
       allowMobileRefresh: allowMobileRefresh ?? this.allowMobileRefresh,
@@ -873,10 +913,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
   AppSettings build() {
     final preferences = ref.watch(sharedPreferencesProvider);
     final themeName = preferences.getString('theme') ?? ThemeMode.system.name;
+    final ecoMode = preferences.getBool('ecoMode') ?? false;
     return AppSettings(
       themeMode: ThemeMode.values.asNameMap()[themeName] ?? ThemeMode.system,
       accent: AppAccent.byId(preferences.getString('accent')),
-      pureBlack: preferences.getBool('pureBlack') ?? false,
+      pureBlack: ecoMode || (preferences.getBool('pureBlack') ?? false),
+      ecoMode: ecoMode,
+      onboardingComplete: preferences.getBool('onboardingComplete') ?? false,
       wallpaperColors: preferences.getBool('wallpaperColors') ?? false,
       tintFromCover: preferences.getBool('tintFromCover') ?? true,
       homeShelves: HomeShelves.fromIds(
@@ -923,6 +966,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
       automaticDownload: preferences.getBool('automaticDownload') ?? false,
       automaticDownloadLimit: automaticDownloadLimitFromStored(
         preferences.getInt('automaticDownloadLimit'),
+      ),
+      simultaneousDownloads: simultaneousDownloadsFromStored(
+        preferences.getInt('simultaneousDownloads'),
       ),
       allowMobileData: preferences.getBool('allowMobileData') ?? false,
       allowMobileStreaming:
@@ -1003,6 +1049,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
+    if (state.ecoMode) return;
     state = state.copyWith(themeMode: mode);
     await ref.read(sharedPreferencesProvider).setString('theme', mode.name);
   }
@@ -1013,8 +1060,29 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setPureBlack(bool enabled) async {
+    if (state.ecoMode && !enabled) return;
     state = state.copyWith(pureBlack: enabled);
     await ref.read(sharedPreferencesProvider).setBool('pureBlack', enabled);
+  }
+
+  /// Active le noir pur et l’y maintient. Le désactiver laisse le noir pur tel quel.
+  Future<void> setEcoMode(bool enabled) async {
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (enabled) {
+      state = state.copyWith(ecoMode: true, pureBlack: true);
+      await preferences.setBool('ecoMode', true);
+      await preferences.setBool('pureBlack', true);
+      return;
+    }
+    state = state.copyWith(ecoMode: false);
+    await preferences.setBool('ecoMode', false);
+  }
+
+  Future<void> setOnboardingComplete(bool enabled) async {
+    state = state.copyWith(onboardingComplete: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('onboardingComplete', enabled);
   }
 
   Future<void> setWallpaperColors(bool enabled) async {
@@ -1228,6 +1296,14 @@ class SettingsNotifier extends Notifier<AppSettings> {
     }
     state = state.copyWith(automaticDownloadLimit: normalized);
     await preferences.setInt('automaticDownloadLimit', normalized);
+  }
+
+  Future<void> setSimultaneousDownloads(int count) async {
+    final normalized = simultaneousDownloadsFromStored(count);
+    state = state.copyWith(simultaneousDownloads: normalized);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setInt('simultaneousDownloads', normalized);
   }
 
   Future<void> setEpisodeCacheSize(int? size) async {

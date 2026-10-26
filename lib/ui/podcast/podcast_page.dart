@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/platform.dart';
+import '../../data/automatic_downloads.dart';
 import '../../data/app_database.dart';
 import '../../data/models.dart';
 import '../../data/providers.dart';
@@ -153,20 +156,29 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
             ),
           );
         }
-        final background =
-            ref
-                .watch(
-                  podcastCoverColorProvider(
-                    coverColorToken(path: item.imagePath, url: item.imageUrl),
-                  ),
-                )
-                .asData
-                ?.value ??
-            Colors.black;
+        final eco = ref.watch(
+          settingsProvider.select((settings) => settings.ecoMode),
+        );
+        final background = eco
+            ? Colors.black
+            : ref
+                      .watch(
+                        podcastCoverColorProvider(
+                          coverColorToken(
+                            path: item.imagePath,
+                            url: item.imageUrl,
+                          ),
+                        ),
+                      )
+                      .asData
+                      ?.value ??
+                  Colors.black;
         final playingHere = ref.watch(
           playerProvider.select(
             (state) =>
-                state.podcastId == item.id && state.hasEpisode && state.playing,
+                state.podcastId == item.id &&
+                state.hasEpisode &&
+                state.playing,
           ),
         );
         final loadedHere = ref.watch(
@@ -176,13 +188,13 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         );
         final first = window?.entries.firstOrNull;
         final selection = _selectionSession(window);
-        final selectingOverlay = Theme.of(context).brightness == Brightness.dark
-            ? SystemUiOverlayStyle.light
-            : SystemUiOverlayStyle.dark;
         // Toujours la même structure Theme → Scaffold → body pour ne pas
         // démonter le CustomScrollView (sinon retour en haut de liste).
+        // L’en-tête garde la teinte de la pochette. La liste est assombrie
+        // pour le texte blanc, y compris quand l’application est en mode clair.
         final baseTheme = Theme.of(context);
         final pageColor = background;
+        final listBackground = immersiveBackground(background);
         final immersiveScheme = ColorScheme.dark(
           primary: Colors.white,
           onPrimary: Colors.black,
@@ -195,18 +207,24 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
           primaryContainer: Colors.white.withValues(alpha: 0.16),
           onPrimaryContainer: Colors.white,
         );
-        final appBarTheme = selection != null
-            ? baseTheme.appBarTheme
-            : const AppBarTheme(
-                foregroundColor: Colors.white,
-                iconTheme: IconThemeData(color: Colors.white),
-                actionsIconTheme: IconThemeData(color: Colors.white),
-              );
+        const appBarTheme = AppBarTheme(
+          foregroundColor: Colors.white,
+          iconTheme: IconThemeData(color: Colors.white),
+          actionsIconTheme: IconThemeData(color: Colors.white),
+        );
+        final lightOnPage = baseTheme.textTheme.apply(
+          bodyColor: Colors.white,
+          displayColor: Colors.white,
+        );
         final pageTheme = baseTheme.copyWith(
           brightness: Brightness.dark,
-          colorScheme: selection != null
-              ? baseTheme.colorScheme
-              : immersiveScheme,
+          colorScheme: immersiveScheme,
+          textTheme: lightOnPage,
+          primaryTextTheme: baseTheme.primaryTextTheme.apply(
+            bodyColor: Colors.white,
+            displayColor: Colors.white,
+          ),
+          iconTheme: const IconThemeData(color: Colors.white),
           scaffoldBackgroundColor: pageColor,
           appBarTheme: appBarTheme,
           progressIndicatorTheme: const ProgressIndicatorThemeData(
@@ -219,9 +237,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
           ),
         );
         return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: selection != null
-              ? selectingOverlay
-              : SystemUiOverlayStyle.light,
+          value: SystemUiOverlayStyle.light,
           child: Theme(
             data: pageTheme,
             child: TweenAnimationBuilder<Color?>(
@@ -258,7 +274,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                           window: window,
                           episodes: episodes,
                           pullToRefresh: true,
-                          background: background,
+                          background: listBackground,
                           showPause: playingHere,
                           onPlay: first == null
                               ? null
@@ -270,7 +286,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                         window: window,
                         episodes: episodes,
                         pullToRefresh: false,
-                        background: background,
+                        background: listBackground,
                         showPause: playingHere,
                         onPlay: first == null
                             ? null
@@ -348,12 +364,20 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                   ),
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    ref
-                        .read(databaseProvider)
-                        .setPodcastAutoDownload(
-                          item.id,
-                          autoDownload: !item.autoDownload,
-                        );
+                    final enable = !item.autoDownload;
+                    unawaited(() async {
+                      await ref
+                          .read(databaseProvider)
+                          .setPodcastAutoDownload(
+                            item.id,
+                            autoDownload: enable,
+                          );
+                      if (enable) {
+                        await ref
+                            .read(automaticDownloadRunProvider.notifier)
+                            .run();
+                      }
+                    }());
                   },
                 ),
               if (item.subscribed)
@@ -431,11 +455,35 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         if (notification.metrics.extentAfter < 800) _loadMore();
         return false;
       },
-      child: CustomScrollView(
-        key: PageStorageKey<String>('podcast-scroll-${widget.podcastId}'),
-        controller: _scrollController,
-        physics: pullToRefresh ? const AlwaysScrollableScrollPhysics() : null,
-        slivers: [
+      child: _podcastScroll(
+        item: item,
+        window: window,
+        episodes: episodes,
+        pullToRefresh: pullToRefresh,
+        background: background,
+        showPause: showPause,
+        onPlay: onPlay,
+      ),
+    );
+  }
+
+  Widget _podcastScroll({
+    required Podcast item,
+    required EpisodeWindow? window,
+    required AsyncValue<EpisodeWindow> episodes,
+    required bool pullToRefresh,
+    required Color background,
+    required bool showPause,
+    required VoidCallback? onPlay,
+  }) {
+    final size = MediaQuery.sizeOf(context);
+    final landscape = size.width > size.height;
+    final scroll = CustomScrollView(
+      key: PageStorageKey<String>('podcast-scroll-${widget.podcastId}'),
+      controller: _scrollController,
+      physics: pullToRefresh ? const AlwaysScrollableScrollPhysics() : null,
+      slivers: [
+        if (!landscape)
           SliverPadding(
             padding: EdgeInsets.only(
               top: MediaQuery.viewPaddingOf(context).top + kToolbarHeight,
@@ -449,13 +497,21 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
               ),
             ),
           ),
-          ..._episodeSlivers(
-            window: window,
-            episodes: episodes,
-            background: background,
-          ),
-        ],
-      ),
+        ..._episodeSlivers(
+          window: window,
+          episodes: episodes,
+          background: background,
+        ),
+      ],
+    );
+    if (!landscape) return scroll;
+    return PodcastLandscapeFrame(
+      podcast: item,
+      showPause: showPause,
+      onPlay: onPlay,
+      onAbout: () => context.push(AppRoutes.podcastAbout(item.id)),
+      listColor: background,
+      episodes: scroll,
     );
   }
 
@@ -544,6 +600,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                 entry: entry,
                 queueStyle: true,
                 showPodcast: false,
+                ecoFromShow: true,
                 playbackSource: source,
                 selecting: _selecting,
                 selected: _selected.contains(id),
@@ -552,6 +609,13 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
               );
             },
           ),
+        ),
+      ),
+      DecoratedSliver(
+        decoration: BoxDecoration(color: background),
+        sliver: const SliverFillRemaining(
+          hasScrollBody: false,
+          child: SizedBox.shrink(),
         ),
       ),
     ];
@@ -587,6 +651,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         );
       }
       if (context.mounted) showMessage(context, 'Flux actualisé');
+      unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
     } catch (error) {
       if (context.mounted) showMessage(context, errorText(error));
     }

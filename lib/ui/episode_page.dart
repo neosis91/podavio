@@ -116,6 +116,8 @@ class _EpisodeDetail extends ConsumerWidget {
               Center(
                 child: PodcastCover(
                   url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
+                  label: entry.episode.title,
+                  colorKey: entry.podcast.title,
                   localPath: entry.imagePath(
                     preferPodcastCover: preferPodcastCover,
                   ),
@@ -125,6 +127,7 @@ class _EpisodeDetail extends ConsumerWidget {
                   ),
                   size: 200,
                   radius: 16,
+                  ecoTintFromImage: true,
                 ),
               ),
               const SizedBox(height: 20),

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'automatic_downloads.dart';
 import 'models.dart';
 import 'opml.dart';
 import 'providers.dart';
@@ -88,6 +91,7 @@ class OpmlImportNotifier extends Notifier<OpmlImportState> {
       total: report.total,
       failures: _mapFailures(report.failures, titles),
     );
+    if (ref.mounted) unawaited(runAutomaticDownloads(ref));
   }
 
   List<OpmlImportFailure> _mapFailures(
