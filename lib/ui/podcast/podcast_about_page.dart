@@ -7,7 +7,6 @@ import '../../core/format.dart';
 import '../../data/app_database.dart';
 import '../../data/models.dart';
 import '../../data/providers.dart';
-import '../../settings/settings_controller.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/frosted_header.dart';
 import '../widgets/messages.dart';
@@ -125,21 +124,18 @@ class _PersonsSection extends StatelessWidget {
   }
 }
 
-class _PersonAvatar extends ConsumerWidget {
+class _PersonAvatar extends StatelessWidget {
   const _PersonAvatar({required this.person});
 
   final PodcastPerson person;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final image = person.image;
     final initial = person.name.isEmpty
         ? '?'
         : person.name.substring(0, 1).toUpperCase();
-    final eco = ref.watch(
-      settingsProvider.select((settings) => settings.ecoMode),
-    );
-    if (image == null || eco) {
+    if (image == null) {
       return CircleAvatar(child: Text(initial));
     }
     return CircleAvatar(backgroundImage: NetworkImage(image));

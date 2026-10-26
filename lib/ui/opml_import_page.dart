@@ -109,11 +109,7 @@ class _OpmlImportPageState extends ConsumerState<OpmlImportPage> {
                             }
                           });
                         },
-                  secondary: PodcastCover(
-                    url: entry.imageUrl,
-                    label: entry.title,
-                    size: 48,
-                  ),
+                  secondary: PodcastCover(url: entry.imageUrl, size: 48),
                   title: Text(
                     entry.title,
                     maxLines: 2,

@@ -29,44 +29,6 @@ import 'widgets/language_flag.dart';
 import 'widgets/list_metrics.dart';
 import 'widgets/player_keyboard_shortcuts.dart';
 
-class EcoModePage extends ConsumerWidget {
-  const EcoModePage({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final enabled = ref.watch(
-      settingsProvider.select((settings) => settings.ecoMode),
-    );
-    final idle = Theme.of(context).colorScheme.onSurface;
-    return Scaffold(
-      appBar: AppBar(title: Text(context.tr('Eco mode'))),
-      body: ListView(
-        padding: underChrome(context, const EdgeInsets.only(bottom: 32)),
-        children: [
-          SwitchListTile(
-            secondary: EcoIcon(color: enabled ? podavioGreen : idle),
-            title: Text(context.tr('Eco mode')),
-            value: enabled,
-            onChanged: (value) =>
-                ref.read(settingsProvider.notifier).setEcoMode(value),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Text(
-              context.tr(
-                'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in a square that follows the theme, with its own color for the border and the text. Pure black turns on to save battery. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.',
-              ),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class AppearancePage extends ConsumerWidget {
   const AppearancePage({super.key});
 
@@ -105,15 +67,9 @@ class AppearancePage extends ConsumerWidget {
           ),
           SwitchListTile(
             title: Text(context.tr('Pure black')),
-            subtitle: Text(
-              context.tr(
-                settings.ecoMode
-                    ? 'Pure black stays on while Eco mode is on'
-                    : 'Black background in dark mode',
-              ),
-            ),
-            value: settings.pureBlack || settings.ecoMode,
-            onChanged: settings.ecoMode ? null : notifier.setPureBlack,
+            subtitle: Text(context.tr('Black background in dark mode')),
+            value: settings.pureBlack,
+            onChanged: notifier.setPureBlack,
           ),
           if (wallpaperOption)
             SwitchListTile(

@@ -549,8 +549,6 @@ class _QueueNowPlaying extends ConsumerWidget {
             children: [
               PlayingEpisodeCover(
                 episodeId: entry.episode.id,
-                label: entry.episode.title,
-                colorKey: entry.podcast.title,
                 url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
                 localPath: entry.imagePath(
                   preferPodcastCover: preferPodcastCover,
@@ -665,8 +663,6 @@ class _QueueRow extends ConsumerWidget {
           children: [
             PlayingEpisodeCover(
               episodeId: entry.episode.id,
-              label: entry.episode.title,
-              colorKey: entry.podcast.title,
               url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
               localPath: entry.imagePath(
                 preferPodcastCover: preferPodcastCover,

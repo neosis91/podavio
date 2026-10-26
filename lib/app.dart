@@ -35,14 +35,8 @@ class PodavioApp extends ConsumerWidget {
           ? buildLightTheme(settings.accent)
           : themeFromScheme(fromWallpaper.light),
       darkTheme: fromWallpaper == null
-          ? buildDarkTheme(
-              settings.accent,
-              pureBlack: settings.pureBlack || settings.ecoMode,
-            )
-          : themeFromScheme(
-              fromWallpaper.dark,
-              pureBlack: settings.pureBlack || settings.ecoMode,
-            ),
+          ? buildDarkTheme(settings.accent, pureBlack: settings.pureBlack)
+          : themeFromScheme(fromWallpaper.dark, pureBlack: settings.pureBlack),
       themeMode: settings.themeMode,
       routerConfig: router,
       locale: locale,

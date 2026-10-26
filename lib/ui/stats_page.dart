@@ -99,12 +99,7 @@ class _SubscriptionTile extends StatelessWidget {
     final scheme = theme.colorScheme;
     final progress = item.progress;
     return ListTile(
-      leading: PodcastCover(
-        url: item.imageUrl,
-        label: item.title,
-        size: 48,
-        radius: 8,
-      ),
+      leading: PodcastCover(url: item.imageUrl, size: 48, radius: 8),
       title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -437,12 +432,7 @@ class _DownloadsTab extends StatelessWidget {
         final item = stats.downloads[index - 1];
         final ratio = (item.downloadBytes / maxBytes).clamp(0.0, 1.0);
         return ListTile(
-          leading: PodcastCover(
-        url: item.imageUrl,
-        label: item.title,
-        size: 48,
-        radius: 8,
-      ),
+          leading: PodcastCover(url: item.imageUrl, size: 48, radius: 8),
           title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

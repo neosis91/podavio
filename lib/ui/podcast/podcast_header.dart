@@ -30,7 +30,6 @@ class PodcastHeader extends ConsumerWidget {
           PodcastCover(
             url: podcast.imageUrl,
             localPath: podcast.imagePath,
-            label: podcast.title,
             httpHeaders: podcastAuthHeaders(
               username: podcast.authUsername,
               password: podcast.authPassword,
