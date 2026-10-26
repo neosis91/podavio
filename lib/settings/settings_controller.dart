@@ -578,6 +578,7 @@ class AppSettings {
     required this.themeMode,
     required this.accent,
     required this.pureBlack,
+    required this.ecoMode,
     required this.onboardingComplete,
     required this.wallpaperColors,
     required this.tintFromCover,
@@ -629,6 +630,9 @@ class AppSettings {
   final ThemeMode themeMode;
   final AppAccent accent;
   final bool pureBlack;
+
+  /// Moins de requêtes : pas de nouvelles jaquettes, noir pur à l’activation.
+  final bool ecoMode;
 
   /// L’accueil de première ouverture a été quitté.
   final bool onboardingComplete;
@@ -749,6 +753,7 @@ class AppSettings {
     ThemeMode? themeMode,
     AppAccent? accent,
     bool? pureBlack,
+    bool? ecoMode,
     bool? onboardingComplete,
     bool? wallpaperColors,
     bool? tintFromCover,
@@ -805,6 +810,7 @@ class AppSettings {
       themeMode: themeMode ?? this.themeMode,
       accent: accent ?? this.accent,
       pureBlack: pureBlack ?? this.pureBlack,
+      ecoMode: ecoMode ?? this.ecoMode,
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       wallpaperColors: wallpaperColors ?? this.wallpaperColors,
       tintFromCover: tintFromCover ?? this.tintFromCover,
@@ -884,6 +890,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       themeMode: ThemeMode.values.asNameMap()[themeName] ?? ThemeMode.system,
       accent: AppAccent.byId(preferences.getString('accent')),
       pureBlack: preferences.getBool('pureBlack') ?? false,
+      ecoMode: preferences.getBool('ecoMode') ?? false,
       onboardingComplete: preferences.getBool('onboardingComplete') ?? false,
       wallpaperColors: preferences.getBool('wallpaperColors') ?? false,
       tintFromCover: preferences.getBool('tintFromCover') ?? true,
@@ -1023,6 +1030,19 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setPureBlack(bool enabled) async {
     state = state.copyWith(pureBlack: enabled);
     await ref.read(sharedPreferencesProvider).setBool('pureBlack', enabled);
+  }
+
+  /// Active aussi le noir pur. Le désactiver laisse le noir pur tel quel.
+  Future<void> setEcoMode(bool enabled) async {
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (enabled) {
+      state = state.copyWith(ecoMode: true, pureBlack: true);
+      await preferences.setBool('ecoMode', true);
+      await preferences.setBool('pureBlack', true);
+      return;
+    }
+    state = state.copyWith(ecoMode: false);
+    await preferences.setBool('ecoMode', false);
   }
 
   Future<void> setOnboardingComplete(bool enabled) async {

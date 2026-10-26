@@ -185,6 +185,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const NetworkSettingsPage(),
           ),
           GoRoute(
+            path: AppRoutes.eco,
+            builder: (context, state) => const EcoModePage(),
+          ),
+          GoRoute(
             path: AppRoutes.notifications,
             builder: (context, state) => const NotificationSettingsPage(),
           ),

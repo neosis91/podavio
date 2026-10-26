@@ -284,6 +284,12 @@ class PreferencesPage extends ConsumerWidget {
             onTap: () => context.push(AppRoutes.network),
           ),
           ListTile(
+            leading: const EcoIcon(),
+            title: Text(context.tr('Eco mode')),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.eco),
+          ),
+          ListTile(
             leading: const Icon(Icons.archive_outlined),
             title: Text(context.tr('Backup and restore')),
             onTap: () => context.push(AppRoutes.backupRestore),

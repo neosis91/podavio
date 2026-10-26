@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/cover_tone.dart';
+import '../core/theme.dart';
 import '../l10n/l10n.dart';
 import '../data/app_database.dart';
 import '../data/catalog_categories.dart';
@@ -379,6 +380,7 @@ class _HomeHeaderOverlay extends StatelessWidget {
                             ],
                           ),
                         ),
+                        const _EcoButton(),
                         const HistoryButton(),
                         const _TogetherButton(),
                         const PreferencesButton(),
@@ -399,6 +401,23 @@ class _HomeHeaderOverlay extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _EcoButton extends ConsumerWidget {
+  const _EcoButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final enabled = ref.watch(
+      settingsProvider.select((settings) => settings.ecoMode),
+    );
+    final idle = Theme.of(context).colorScheme.onSurface;
+    return IconButton(
+      tooltip: context.tr('Eco mode'),
+      onPressed: () => ref.read(settingsProvider.notifier).setEcoMode(!enabled),
+      icon: EcoIcon(color: enabled ? podavioGreen : idle),
     );
   }
 }
@@ -526,9 +545,8 @@ class _CategoryHomeState extends ConsumerState<_CategoryHome> {
             thickness: 1,
             indent: 16,
             endIndent: 16,
-            color: Theme.of(context).colorScheme.outlineVariant.withValues(
-              alpha: 0.5,
-            ),
+            color: Theme.of(context).colorScheme.outlineVariant
+                .withValues(alpha: 0.5),
           );
         },
         itemBuilder: (context, index) {
@@ -608,9 +626,8 @@ class _CategoryLoadMoreFooter extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'Chargement…',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: muted,
-            ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: muted),
           ),
         ],
       ),
@@ -796,6 +813,8 @@ class _ContinueRow extends ConsumerWidget {
             children: [
               PlayingEpisodeCover(
                 episodeId: episode.id,
+                label: episode.title,
+                colorKey: entry.podcast.title,
                 url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
                 localPath: entry.imagePath(
                   preferPodcastCover: preferPodcastCover,
@@ -889,6 +908,9 @@ class _HomePageWashState extends ConsumerState<_HomePageWash> {
     final tintFromCover = ref.read(
       settingsProvider.select((settings) => settings.tintFromCover),
     );
+    final eco = ref.read(
+      settingsProvider.select((settings) => settings.ecoMode),
+    );
     if (!tintFromCover) {
       _loaded = null;
       _color = null;
@@ -911,6 +933,7 @@ class _HomePageWashState extends ConsumerState<_HomePageWash> {
     final tone = await loadCoverTone(
       path: path,
       url: url,
+      allowDownload: !eco,
       headers: source == null
           ? null
           : podcastAuthHeaders(
@@ -946,6 +969,12 @@ class _HomePageWashState extends ConsumerState<_HomePageWash> {
         if (previous != next) _load();
       },
     );
+    ref.listen<bool>(settingsProvider.select((settings) => settings.ecoMode), (
+      previous,
+      next,
+    ) {
+      if (previous != next) _load();
+    });
     final surface = Theme.of(context).colorScheme.surface;
     final tint = tintFromCover ? _color : null;
     return AnimatedBuilder(
@@ -1003,6 +1032,8 @@ class _EpisodeCard extends ConsumerWidget {
               localPath: entry.imagePath(
                 preferPodcastCover: preferPodcastCover,
               ),
+              label: episode.title,
+              colorKey: entry.podcast.title,
               httpHeaders: podcastAuthHeaders(
                 username: entry.podcast.authUsername,
                 password: entry.podcast.authPassword,
@@ -1055,6 +1086,8 @@ class _PodcastCard extends StatelessWidget {
                   PodcastCover(
                     url: podcast.imageUrl,
                     localPath: podcast.imagePath,
+                    label: podcast.title,
+                    colorKey: podcast.title,
                     httpHeaders: podcastAuthHeaders(
                       username: podcast.authUsername,
                       password: podcast.authPassword,

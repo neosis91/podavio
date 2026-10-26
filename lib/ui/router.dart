@@ -20,6 +20,7 @@ class AppRoutes {
   static const playback = '/playback';
   static const downloadSettings = '/download-settings';
   static const network = '/network';
+  static const eco = '/eco';
   static const notifications = '/notifications';
   static const about = '/about';
   static const nearbyShare = '/about/nearby-share';
