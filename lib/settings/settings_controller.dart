@@ -886,11 +886,12 @@ class SettingsNotifier extends Notifier<AppSettings> {
   AppSettings build() {
     final preferences = ref.watch(sharedPreferencesProvider);
     final themeName = preferences.getString('theme') ?? ThemeMode.system.name;
+    final ecoMode = preferences.getBool('ecoMode') ?? false;
     return AppSettings(
       themeMode: ThemeMode.values.asNameMap()[themeName] ?? ThemeMode.system,
       accent: AppAccent.byId(preferences.getString('accent')),
-      pureBlack: preferences.getBool('pureBlack') ?? false,
-      ecoMode: preferences.getBool('ecoMode') ?? false,
+      pureBlack: ecoMode || (preferences.getBool('pureBlack') ?? false),
+      ecoMode: ecoMode,
       onboardingComplete: preferences.getBool('onboardingComplete') ?? false,
       wallpaperColors: preferences.getBool('wallpaperColors') ?? false,
       tintFromCover: preferences.getBool('tintFromCover') ?? true,
@@ -1028,11 +1029,12 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setPureBlack(bool enabled) async {
+    if (state.ecoMode && !enabled) return;
     state = state.copyWith(pureBlack: enabled);
     await ref.read(sharedPreferencesProvider).setBool('pureBlack', enabled);
   }
 
-  /// Active aussi le noir pur. Le désactiver laisse le noir pur tel quel.
+  /// Active le noir pur et l’y maintient. Le désactiver laisse le noir pur tel quel.
   Future<void> setEcoMode(bool enabled) async {
     final preferences = ref.read(sharedPreferencesProvider);
     if (enabled) {

@@ -105,9 +105,15 @@ class AppearancePage extends ConsumerWidget {
           ),
           SwitchListTile(
             title: Text(context.tr('Pure black')),
-            subtitle: Text(context.tr('Black background in dark mode')),
-            value: settings.pureBlack,
-            onChanged: notifier.setPureBlack,
+            subtitle: Text(
+              context.tr(
+                settings.ecoMode
+                    ? 'Pure black stays on while Eco mode is on'
+                    : 'Black background in dark mode',
+              ),
+            ),
+            value: settings.pureBlack || settings.ecoMode,
+            onChanged: settings.ecoMode ? null : notifier.setPureBlack,
           ),
           if (wallpaperOption)
             SwitchListTile(
