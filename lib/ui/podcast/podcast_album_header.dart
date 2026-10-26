@@ -109,7 +109,6 @@ class _PortraitArtwork extends StatelessWidget {
           PodcastCover(
             url: podcast.imageUrl,
             localPath: podcast.imagePath,
-            label: podcast.title,
             httpHeaders: headers,
             radius: 0,
             expand: true,
@@ -156,7 +155,6 @@ class _LandscapeArtwork extends StatelessWidget {
                 PodcastCover(
                   url: podcast.imageUrl,
                   localPath: podcast.imagePath,
-                  label: podcast.title,
                   httpHeaders: headers,
                   radius: 0,
                   expand: true,

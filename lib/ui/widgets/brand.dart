@@ -97,28 +97,6 @@ class DragIndicatorIcon extends StatelessWidget {
   }
 }
 
-class EcoIcon extends StatelessWidget {
-  const EcoIcon({super.key, this.size = 24, this.color});
-
-  final double size;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final tint =
-        color ??
-        IconTheme.of(context).color ??
-        Theme.of(context).colorScheme.onSurface;
-    return SvgPicture.asset(
-      'assets/brand/eco.svg',
-      width: size,
-      height: size,
-      colorFilter: ColorFilter.mode(tint, BlendMode.srcIn),
-      semanticsLabel: 'Eco',
-    );
-  }
-}
-
 class TranslateIcon extends StatelessWidget {
   const TranslateIcon({super.key, this.size = 24});
 

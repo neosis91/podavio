@@ -23,9 +23,6 @@ class CoverService {
   var _syncRunning = false;
   Timer? _debounce;
 
-  /// Faux en mode éco : aucun nouveau téléchargement de jaquette.
-  var downloadsEnabled = true;
-
   Future<Directory> _coversDirectory() async {
     final cached = _coversDir;
     if (cached != null) return cached;
@@ -59,10 +56,6 @@ class CoverService {
 
   /// Planifie une sync (évite les rafales quand la liste des podcasts change).
   void schedulePodcastSync() {
-    if (!downloadsEnabled) {
-      _debounce?.cancel();
-      return;
-    }
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 800), () {
       unawaited(syncMissingPodcastCovers());
@@ -128,7 +121,7 @@ class CoverService {
   }
 
   Future<void> syncMissingPodcastCovers() async {
-    if (!downloadsEnabled || _syncRunning) return;
+    if (_syncRunning) return;
     _syncRunning = true;
     try {
       final items = await _database.podcastsMissingCovers();

@@ -384,8 +384,6 @@ class _MiniPlayerBar extends ConsumerWidget {
                     PodcastCover(
                       url: imageUrl,
                       localPath: imagePath,
-                      label: title,
-                      colorKey: podcastTitle,
                       size: 26,
                       radius: 13,
                     ),

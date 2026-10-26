@@ -237,8 +237,6 @@ class EpisodeTile extends ConsumerWidget {
                     ),
                   _EpisodeCoverWithProgress(
                     episodeId: episode.id,
-                    label: episode.title,
-                    colorKey: entry.podcast.title,
                     url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
                     localPath: entry.imagePath(
                       preferPodcastCover: preferPodcastCover,
@@ -439,8 +437,6 @@ class _EpisodeTileTrailing extends StatelessWidget {
 class _EpisodeCoverWithProgress extends StatelessWidget {
   const _EpisodeCoverWithProgress({
     required this.episodeId,
-    required this.label,
-    required this.colorKey,
     required this.url,
     required this.localPath,
     required this.httpHeaders,
@@ -450,8 +446,6 @@ class _EpisodeCoverWithProgress extends StatelessWidget {
   });
 
   final int episodeId;
-  final String label;
-  final String colorKey;
   final String? url;
   final String? localPath;
   final Map<String, String>? httpHeaders;
@@ -467,8 +461,6 @@ class _EpisodeCoverWithProgress extends StatelessWidget {
       children: [
         PlayingEpisodeCover(
           episodeId: episodeId,
-          label: label,
-          colorKey: colorKey,
           url: url,
           localPath: localPath,
           httpHeaders: httpHeaders,
@@ -716,8 +708,6 @@ class _QueueStyleRow extends StatelessWidget {
               ),
             PlayingEpisodeCover(
               episodeId: episode.id,
-              label: episode.title,
-              colorKey: entry.podcast.title,
               url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
               localPath: entry.imagePath(
                 preferPodcastCover: preferPodcastCover,

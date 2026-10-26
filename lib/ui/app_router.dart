@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../data/opml.dart';
-import '../data/providers.dart';
 import '../player/android_auto_bridge.dart';
 import '../player/player_controller.dart';
 import '../player/player_sheet_controller.dart';
@@ -33,35 +32,13 @@ import 'settings_page.dart';
 import 'shell.dart';
 import 'stats_page.dart';
 import 'sync_page.dart';
-import 'welcome_page.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final refresh = ValueNotifier<int>(0);
-  ref.onDispose(refresh.dispose);
-  ref.listen(settingsProvider.select((s) => s.onboardingComplete), (_, _) {
-    refresh.value++;
-  });
-  ref.listen(preferredPodcastsProvider, (_, _) {
-    refresh.value++;
-  });
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.home,
-    refreshListenable: refresh,
-    redirect: (context, state) {
-      final done = ref.read(settingsProvider).onboardingComplete;
-      final podcasts = ref.read(preferredPodcastsProvider).asData?.value;
-      final path = state.uri.path;
-      final atWelcome = path == AppRoutes.welcome;
-      final showWelcome = !done && podcasts != null && podcasts.isEmpty;
-      if (showWelcome) {
-        if (atWelcome || path == AppRoutes.opmlImport) return null;
-        return AppRoutes.welcome;
-      }
-      return atWelcome && done ? AppRoutes.home : null;
-    },
     routes: [
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
@@ -185,10 +162,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const NetworkSettingsPage(),
           ),
           GoRoute(
-            path: AppRoutes.eco,
-            builder: (context, state) => const EcoModePage(),
-          ),
-          GoRoute(
             path: AppRoutes.notifications,
             builder: (context, state) => const NotificationSettingsPage(),
           ),
@@ -235,11 +208,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             },
           ),
         ],
-      ),
-      GoRoute(
-        path: AppRoutes.welcome,
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => const WelcomePage(),
       ),
       GoRoute(
         path: AppRoutes.player,

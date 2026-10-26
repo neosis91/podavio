@@ -13,8 +13,6 @@ class PlayingEpisodeCover extends ConsumerWidget {
     this.url,
     this.localPath,
     this.httpHeaders,
-    this.label,
-    this.colorKey,
     this.size = 48,
     this.radius = 4,
   });
@@ -23,8 +21,6 @@ class PlayingEpisodeCover extends ConsumerWidget {
   final String? url;
   final String? localPath;
   final Map<String, String>? httpHeaders;
-  final String? label;
-  final String? colorKey;
   final double size;
   final double radius;
 
@@ -45,8 +41,6 @@ class PlayingEpisodeCover extends ConsumerWidget {
             url: url,
             localPath: localPath,
             httpHeaders: httpHeaders,
-            label: label,
-            colorKey: colorKey,
             size: size,
             radius: radius,
           ),

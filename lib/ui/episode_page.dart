@@ -116,8 +116,6 @@ class _EpisodeDetail extends ConsumerWidget {
               Center(
                 child: PodcastCover(
                   url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
-                  label: entry.episode.title,
-                  colorKey: entry.podcast.title,
                   localPath: entry.imagePath(
                     preferPodcastCover: preferPodcastCover,
                   ),

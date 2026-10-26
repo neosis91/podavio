@@ -118,7 +118,6 @@ Future<Color?> loadCoverAverageColor({
   String? path,
   String? url,
   Map<String, String>? headers,
-  bool allowDownload = true,
 }) async {
   final local = path?.trim();
   final remote = url?.trim();
@@ -126,7 +125,6 @@ Future<Color?> loadCoverAverageColor({
     local: local != null && local.isNotEmpty ? local : null,
     remote: remote != null && remote.isNotEmpty ? remote : null,
     headers: headers,
-    allowDownload: allowDownload,
   );
   if (file == null) return null;
   try {
@@ -140,7 +138,6 @@ Future<CoverTone?> loadCoverTone({
   String? path,
   String? url,
   Map<String, String>? headers,
-  bool allowDownload = true,
 }) async {
   final local = path?.trim();
   final remote = url?.trim();
@@ -156,7 +153,6 @@ Future<CoverTone?> loadCoverTone({
     path: local,
     url: remote,
     headers: headers,
-    allowDownload: allowDownload,
   );
   if (average == null) return null;
 
@@ -198,21 +194,12 @@ Future<File?> _coverFile({
   required String? local,
   required String? remote,
   required Map<String, String>? headers,
-  bool allowDownload = true,
 }) async {
   if (local != null) {
     final file = File(local);
     if (file.existsSync()) return file;
   }
   if (remote == null) return null;
-  if (!allowDownload) {
-    try {
-      final cached = await CoverCache.manager.getFileFromCache(remote);
-      return cached?.file;
-    } catch (_) {
-      return null;
-    }
-  }
   try {
     return await CoverCache.manager.getSingleFile(
       remote,

@@ -656,12 +656,7 @@ class _DiscoverCover extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              PodcastCover(
-                url: hit.imageUrl,
-                label: hit.title,
-                size: null,
-                radius: 0,
-              ),
+              PodcastCover(url: hit.imageUrl, size: null, radius: 0),
               if (busy)
                 const ColoredBox(
                   color: Color(0x66000000),
@@ -787,12 +782,7 @@ class _SearchResultsBody extends StatelessWidget {
                 horizontal: 16,
                 vertical: 6,
               ),
-              leading: PodcastCover(
-                url: hit.imageUrl,
-                label: hit.title,
-                size: 64,
-                radius: 8,
-              ),
+              leading: PodcastCover(url: hit.imageUrl, size: 64, radius: 8),
               title: HighlightedText(
                 text: hit.title,
                 query: needle,
