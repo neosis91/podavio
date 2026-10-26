@@ -578,6 +578,8 @@ class AppSettings {
     required this.themeMode,
     required this.accent,
     required this.pureBlack,
+    required this.ecoMode,
+    required this.onboardingComplete,
     required this.wallpaperColors,
     required this.tintFromCover,
     required this.homeShelves,
@@ -628,6 +630,13 @@ class AppSettings {
   final ThemeMode themeMode;
   final AppAccent accent;
   final bool pureBlack;
+
+  /// Moins de requêtes : pas de nouvelles jaquettes, noir pur à l’activation.
+  final bool ecoMode;
+
+  /// L’accueil de première ouverture a été quitté.
+  final bool onboardingComplete;
+
   final bool wallpaperColors;
 
   /// Le lecteur et le haut de l’accueil prennent la couleur de la pochette.
@@ -744,6 +753,8 @@ class AppSettings {
     ThemeMode? themeMode,
     AppAccent? accent,
     bool? pureBlack,
+    bool? ecoMode,
+    bool? onboardingComplete,
     bool? wallpaperColors,
     bool? tintFromCover,
     HomeShelves? homeShelves,
@@ -799,6 +810,8 @@ class AppSettings {
       themeMode: themeMode ?? this.themeMode,
       accent: accent ?? this.accent,
       pureBlack: pureBlack ?? this.pureBlack,
+      ecoMode: ecoMode ?? this.ecoMode,
+      onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       wallpaperColors: wallpaperColors ?? this.wallpaperColors,
       tintFromCover: tintFromCover ?? this.tintFromCover,
       homeShelves: homeShelves ?? this.homeShelves,
@@ -873,10 +886,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
   AppSettings build() {
     final preferences = ref.watch(sharedPreferencesProvider);
     final themeName = preferences.getString('theme') ?? ThemeMode.system.name;
+    final ecoMode = preferences.getBool('ecoMode') ?? false;
     return AppSettings(
       themeMode: ThemeMode.values.asNameMap()[themeName] ?? ThemeMode.system,
       accent: AppAccent.byId(preferences.getString('accent')),
-      pureBlack: preferences.getBool('pureBlack') ?? false,
+      pureBlack: ecoMode || (preferences.getBool('pureBlack') ?? false),
+      ecoMode: ecoMode,
+      onboardingComplete: preferences.getBool('onboardingComplete') ?? false,
       wallpaperColors: preferences.getBool('wallpaperColors') ?? false,
       tintFromCover: preferences.getBool('tintFromCover') ?? true,
       homeShelves: HomeShelves.fromIds(
@@ -1013,8 +1029,29 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setPureBlack(bool enabled) async {
+    if (state.ecoMode && !enabled) return;
     state = state.copyWith(pureBlack: enabled);
     await ref.read(sharedPreferencesProvider).setBool('pureBlack', enabled);
+  }
+
+  /// Active le noir pur et l’y maintient. Le désactiver laisse le noir pur tel quel.
+  Future<void> setEcoMode(bool enabled) async {
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (enabled) {
+      state = state.copyWith(ecoMode: true, pureBlack: true);
+      await preferences.setBool('ecoMode', true);
+      await preferences.setBool('pureBlack', true);
+      return;
+    }
+    state = state.copyWith(ecoMode: false);
+    await preferences.setBool('ecoMode', false);
+  }
+
+  Future<void> setOnboardingComplete(bool enabled) async {
+    state = state.copyWith(onboardingComplete: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('onboardingComplete', enabled);
   }
 
   Future<void> setWallpaperColors(bool enabled) async {
