@@ -43,7 +43,7 @@ class PodavioApp extends ConsumerWidget {
               fromWallpaper.dark,
               pureBlack: settings.pureBlack || settings.ecoMode,
             ),
-      themeMode: settings.themeMode,
+      themeMode: settings.ecoMode ? ThemeMode.dark : settings.themeMode,
       routerConfig: router,
       locale: locale,
       supportedLocales: [
