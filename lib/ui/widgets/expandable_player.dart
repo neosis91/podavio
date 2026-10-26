@@ -388,6 +388,7 @@ class _MiniPlayerBar extends ConsumerWidget {
                       colorKey: podcastTitle,
                       size: 26,
                       radius: 13,
+                      ecoTintFromImage: true,
                     ),
                   ],
                 ),

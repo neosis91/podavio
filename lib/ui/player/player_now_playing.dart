@@ -116,6 +116,7 @@ class PlayerNowPlaying extends ConsumerWidget {
                       ),
                       size: side,
                       radius: 16,
+                      ecoTintFromImage: true,
                     ),
                   ),
                 );

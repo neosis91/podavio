@@ -45,6 +45,7 @@ class EpisodeTile extends ConsumerWidget {
     this.selected = false,
     this.onLongPress,
     this.onToggleSelect,
+    this.ecoFromShow = false,
   });
 
   final EpisodeEntry entry;
@@ -65,6 +66,9 @@ class EpisodeTile extends ConsumerWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onToggleSelect;
 
+  /// En mode éco, toutes les pochettes prennent la teinte de l’émission.
+  final bool ecoFromShow;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final episode = entry.episode;
@@ -81,6 +85,9 @@ class EpisodeTile extends ConsumerWidget {
     final preferPodcastCover = ref.watch(
       settingsProvider.select((s) => s.preferPodcastCover),
     );
+    final ecoFromShow =
+        this.ecoFromShow &&
+        ref.watch(settingsProvider.select((s) => s.ecoMode));
     final duration = episode.durationSeconds == null
         ? null
         : Duration(seconds: episode.durationSeconds!);
@@ -116,6 +123,7 @@ class EpisodeTile extends ConsumerWidget {
         playing: playing,
         progress: progress,
         preferPodcastCover: preferPodcastCover,
+        ecoFromShow: ecoFromShow,
         reorderIndex: selecting ? null : reorderIndex,
         highlightQuery: highlightQuery,
         showPodcast: showPodcast,
@@ -665,6 +673,7 @@ class _QueueStyleRow extends StatelessWidget {
     required this.playing,
     required this.progress,
     required this.preferPodcastCover,
+    required this.ecoFromShow,
     required this.reorderIndex,
     required this.highlightQuery,
     required this.showPodcast,
@@ -680,6 +689,7 @@ class _QueueStyleRow extends StatelessWidget {
   final bool playing;
   final double? progress;
   final bool preferPodcastCover;
+  final bool ecoFromShow;
   final int? reorderIndex;
   final String highlightQuery;
   final bool showPodcast;
@@ -719,10 +729,12 @@ class _QueueStyleRow extends StatelessWidget {
               episodeId: episode.id,
               label: episode.title,
               colorKey: entry.podcast.title,
-              url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
-              localPath: entry.imagePath(
-                preferPodcastCover: preferPodcastCover,
-              ),
+              url: ecoFromShow
+                  ? entry.podcast.imageUrl
+                  : entry.imageUrl(preferPodcastCover: preferPodcastCover),
+              localPath: ecoFromShow
+                  ? entry.podcast.imagePath
+                  : entry.imagePath(preferPodcastCover: preferPodcastCover),
               httpHeaders: podcastAuthHeaders(
                 username: entry.podcast.authUsername,
                 password: entry.podcast.authPassword,

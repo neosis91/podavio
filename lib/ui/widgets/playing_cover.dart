@@ -49,6 +49,7 @@ class PlayingEpisodeCover extends ConsumerWidget {
             colorKey: colorKey,
             size: size,
             radius: radius,
+            ecoTintFromImage: true,
           ),
           if (playing) ...[
             Positioned.fill(

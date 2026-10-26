@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cover_cache.dart';
+import '../../core/cover_tone.dart';
 import '../../core/theme.dart';
 import '../../settings/settings_controller.dart';
 import 'brand.dart';
@@ -24,6 +25,7 @@ class PodcastCover extends ConsumerWidget {
     this.radius = 8,
     this.expand = false,
     this.fit = BoxFit.cover,
+    this.ecoTintFromImage = false,
   });
 
   final String? url;
@@ -47,6 +49,10 @@ class PodcastCover extends ConsumerWidget {
 
   /// `cover` pour les listes, `contain` pour voir toute la jaquette.
   final BoxFit fit;
+
+  /// En mode éco, le carré prend la teinte d’une image déjà présente,
+  /// sans la télécharger.
+  final bool ecoTintFromImage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -81,8 +87,17 @@ class PodcastCover extends ConsumerWidget {
               : (imageUrl != null && imageUrl.isNotEmpty
                     ? imageUrl
                     : (local ?? '')));
+    final plainLeaf = !expand && (size ?? 81) <= 80;
     final Widget image;
-    if (local != null && local.isNotEmpty) {
+    if (eco && ecoTintFromImage) {
+      image = _EcoTintedCover(
+        localPath: local,
+        url: imageUrl,
+        label: name,
+        seed: seed,
+        headers: httpHeaders,
+      );
+    } else if (local != null && local.isNotEmpty) {
       // Pas de existsSync ici : trop coûteux en liste. En cas d’échec,
       // errorBuilder bascule sur le réseau, le cache, ou le carré.
       image = Image.file(
@@ -99,7 +114,7 @@ class PodcastCover extends ConsumerWidget {
           if (!eco || child is EcoNameCover || child is _CachedOrNamedCover) {
             return child;
           }
-          return _cornerLeaf(child);
+          return _cornerLeaf(child, plain: plainLeaf);
         },
         errorBuilder: (_, _, _) {
           if (eco) {
@@ -111,6 +126,7 @@ class PodcastCover extends ConsumerWidget {
               fit: fit,
               memPixels: memPixels,
               quality: quality,
+              plainLeaf: plainLeaf,
             );
           }
           if (imageUrl == null || imageUrl.isEmpty) return placeholder;
@@ -133,6 +149,7 @@ class PodcastCover extends ConsumerWidget {
               fit: fit,
               memPixels: memPixels,
               quality: quality,
+              plainLeaf: plainLeaf,
             )
           : _networkImage(
               imageUrl: imageUrl,
@@ -157,7 +174,7 @@ class PodcastCover extends ConsumerWidget {
     return AspectRatio(aspectRatio: 1, child: framed    );
   }
 
-  Widget _cornerLeaf(Widget child) {
+  Widget _cornerLeaf(Widget child, {required bool plain}) {
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -165,7 +182,7 @@ class PodcastCover extends ConsumerWidget {
         Positioned(
           left: _leafInset(size),
           bottom: _leafInset(size),
-          child: IgnorePointer(child: _EcoLeaf(side: size)),
+          child: IgnorePointer(child: _EcoLeaf(side: size, plain: plain)),
         ),
       ],
     );
@@ -201,12 +218,16 @@ class PodcastCover extends ConsumerWidget {
 double _leafInset(double? side) => side != null && side < 48 ? 2 : 6;
 
 class _EcoMark extends StatelessWidget {
-  const _EcoMark({required this.size});
+  const _EcoMark({required this.size, this.plain = false});
 
   final double size;
 
+  /// Blanc, sans ombre : pastille des listes.
+  final bool plain;
+
   @override
   Widget build(BuildContext context) {
+    if (plain) return EcoIcon(size: size, color: Colors.white);
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -224,9 +245,10 @@ class _EcoMark extends StatelessWidget {
 }
 
 class _EcoLeaf extends StatelessWidget {
-  const _EcoLeaf({required this.side});
+  const _EcoLeaf({required this.side, this.plain = false});
 
   final double? side;
+  final bool plain;
 
   @override
   Widget build(BuildContext context) {
@@ -235,20 +257,28 @@ class _EcoLeaf extends StatelessWidget {
         : side! < 48
         ? 10.0
         : 14.0;
-    return _EcoMark(size: mark);
+    return _EcoMark(size: mark, plain: plain);
   }
 }
 
 /// Carré coloré à partir du nom. Le texte est blanc et suit la taille du carré.
 class EcoNameCover extends StatelessWidget {
-  const EcoNameCover({super.key, required this.label, required this.seed});
+  const EcoNameCover({
+    super.key,
+    required this.label,
+    required this.seed,
+    this.color,
+  });
 
   final String label;
   final String seed;
 
+  /// Teinte déjà déduite d’une image. Sinon, [ecoAccentColor] sert.
+  final Color? color;
+
   @override
   Widget build(BuildContext context) {
-    final accent = ecoAccentColor(seed);
+    final accent = color ?? ecoAccentColor(seed);
     return LayoutBuilder(
       builder: (context, constraints) {
         final side = constraints.biggest.shortestSide;
@@ -271,7 +301,7 @@ class EcoNameCover extends StatelessWidget {
           color: accent,
           child: compact
               ? Center(
-                  child: _EcoMark(size: finite * 0.46),
+                  child: _EcoMark(size: finite * 0.46, plain: true),
                 )
               : Padding(
                   padding: EdgeInsets.all(padding),
@@ -358,6 +388,7 @@ class _CachedOrNamedCover extends StatefulWidget {
     required this.fit,
     required this.memPixels,
     required this.quality,
+    required this.plainLeaf,
   });
 
   final String? url;
@@ -367,6 +398,7 @@ class _CachedOrNamedCover extends StatefulWidget {
   final BoxFit fit;
   final int memPixels;
   final FilterQuality quality;
+  final bool plainLeaf;
 
   @override
   State<_CachedOrNamedCover> createState() => _CachedOrNamedCoverState();
@@ -445,11 +477,103 @@ class _CachedOrNamedCoverState extends State<_CachedOrNamedCover> {
             Positioned(
               left: _leafInset(widget.side),
               bottom: _leafInset(widget.side),
-              child: IgnorePointer(child: _EcoLeaf(side: widget.side)),
+              child: IgnorePointer(
+                child: _EcoLeaf(side: widget.side, plain: widget.plainLeaf),
+              ),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+/// Carré éco dont la teinte vient d’une image déjà en local ou en cache.
+class _EcoTintedCover extends StatefulWidget {
+  const _EcoTintedCover({
+    required this.localPath,
+    required this.url,
+    required this.label,
+    required this.seed,
+    required this.headers,
+  });
+
+  final String? localPath;
+  final String? url;
+  final String label;
+  final String seed;
+  final Map<String, String>? headers;
+
+  @override
+  State<_EcoTintedCover> createState() => _EcoTintedCoverState();
+}
+
+class _EcoTintedCoverState extends State<_EcoTintedCover> {
+  static final _colors = <String, Color>{};
+  static final _pending = <String, Future<Color?>>{};
+
+  Color? _color;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(_EcoTintedCover oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.localPath == widget.localPath &&
+        oldWidget.url == widget.url) {
+      return;
+    }
+    _color = null;
+    _resolve();
+  }
+
+  Future<void> _resolve() async {
+    final local = widget.localPath?.trim();
+    final remote = widget.url?.trim();
+    final hasLocal = local != null && local.isNotEmpty;
+    final hasRemote = remote != null && remote.isNotEmpty;
+    if (!hasLocal && !hasRemote) return;
+    final key = '${local ?? ''}\n${remote ?? ''}';
+    final known = _colors[key];
+    if (known != null) {
+      _color = known;
+      return;
+    }
+    final future = _pending[key] ??= _sample(local, remote);
+    final color = await future;
+    _pending.remove(key);
+    if (!mounted ||
+        widget.localPath?.trim() != local ||
+        widget.url?.trim() != remote) {
+      return;
+    }
+    if (color == null) return;
+    _colors[key] = color;
+    if (_colors.length > 64) _colors.remove(_colors.keys.first);
+    setState(() => _color = color);
+  }
+
+  Future<Color?> _sample(String? local, String? remote) async {
+    final dominant = await loadCoverDominantColor(
+      path: local,
+      url: remote,
+      headers: widget.headers,
+      allowDownload: false,
+    );
+    if (dominant == null) return null;
+    return coverBackground(dominant);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return EcoNameCover(
+      label: widget.label,
+      seed: widget.seed,
+      color: _color,
     );
   }
 }

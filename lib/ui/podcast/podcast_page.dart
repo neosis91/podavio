@@ -190,10 +190,11 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         final selection = _selectionSession(window);
         // Toujours la même structure Theme → Scaffold → body pour ne pas
         // démonter le CustomScrollView (sinon retour en haut de liste).
-        // Le fond vient de la pochette et reste sombre : les textes suivent
-        // le thème sombre, y compris quand l’application est en mode clair.
+        // L’en-tête garde la teinte de la pochette. La liste est assombrie
+        // pour le texte blanc, y compris quand l’application est en mode clair.
         final baseTheme = Theme.of(context);
         final pageColor = background;
+        final listBackground = immersiveBackground(background);
         final immersiveScheme = ColorScheme.dark(
           primary: Colors.white,
           onPrimary: Colors.black,
@@ -273,7 +274,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                           window: window,
                           episodes: episodes,
                           pullToRefresh: true,
-                          background: background,
+                          background: listBackground,
                           showPause: playingHere,
                           onPlay: first == null
                               ? null
@@ -285,7 +286,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                         window: window,
                         episodes: episodes,
                         pullToRefresh: false,
-                        background: background,
+                        background: listBackground,
                         showPause: playingHere,
                         onPlay: first == null
                             ? null
@@ -454,11 +455,35 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         if (notification.metrics.extentAfter < 800) _loadMore();
         return false;
       },
-      child: CustomScrollView(
-        key: PageStorageKey<String>('podcast-scroll-${widget.podcastId}'),
-        controller: _scrollController,
-        physics: pullToRefresh ? const AlwaysScrollableScrollPhysics() : null,
-        slivers: [
+      child: _podcastScroll(
+        item: item,
+        window: window,
+        episodes: episodes,
+        pullToRefresh: pullToRefresh,
+        background: background,
+        showPause: showPause,
+        onPlay: onPlay,
+      ),
+    );
+  }
+
+  Widget _podcastScroll({
+    required Podcast item,
+    required EpisodeWindow? window,
+    required AsyncValue<EpisodeWindow> episodes,
+    required bool pullToRefresh,
+    required Color background,
+    required bool showPause,
+    required VoidCallback? onPlay,
+  }) {
+    final size = MediaQuery.sizeOf(context);
+    final landscape = size.width > size.height;
+    final scroll = CustomScrollView(
+      key: PageStorageKey<String>('podcast-scroll-${widget.podcastId}'),
+      controller: _scrollController,
+      physics: pullToRefresh ? const AlwaysScrollableScrollPhysics() : null,
+      slivers: [
+        if (!landscape)
           SliverPadding(
             padding: EdgeInsets.only(
               top: MediaQuery.viewPaddingOf(context).top + kToolbarHeight,
@@ -472,13 +497,21 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
               ),
             ),
           ),
-          ..._episodeSlivers(
-            window: window,
-            episodes: episodes,
-            background: background,
-          ),
-        ],
-      ),
+        ..._episodeSlivers(
+          window: window,
+          episodes: episodes,
+          background: background,
+        ),
+      ],
+    );
+    if (!landscape) return scroll;
+    return PodcastLandscapeFrame(
+      podcast: item,
+      showPause: showPause,
+      onPlay: onPlay,
+      onAbout: () => context.push(AppRoutes.podcastAbout(item.id)),
+      listColor: background,
+      episodes: scroll,
     );
   }
 
@@ -567,6 +600,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                 entry: entry,
                 queueStyle: true,
                 showPodcast: false,
+                ecoFromShow: true,
                 playbackSource: source,
                 selecting: _selecting,
                 selected: _selected.contains(id),
@@ -575,6 +609,13 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
               );
             },
           ),
+        ),
+      ),
+      DecoratedSliver(
+        decoration: BoxDecoration(color: background),
+        sliver: const SliverFillRemaining(
+          hasScrollBody: false,
+          child: SizedBox.shrink(),
         ),
       ),
     ];
