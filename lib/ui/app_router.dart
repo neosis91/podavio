@@ -12,6 +12,7 @@ import '../player/android_auto_bridge.dart';
 import '../player/player_controller.dart';
 import '../player/player_sheet_controller.dart';
 import '../settings/settings_controller.dart';
+import '../web_companion/web_companion_controller.dart';
 import 'discover_languages_page.dart';
 import 'discover_page.dart';
 import 'episode_page.dart';
@@ -34,6 +35,7 @@ import 'settings_page.dart';
 import 'shell.dart';
 import 'stats_page.dart';
 import 'sync_page.dart';
+import 'web_companion_page.dart';
 import 'welcome_page.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -210,6 +212,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const SyncPage(),
           ),
           GoRoute(
+            path: AppRoutes.webCompanion,
+            builder: (context, state) => const WebCompanionPage(),
+          ),
+          GoRoute(
             path: AppRoutes.backupRestore,
             builder: (context, state) => const BackupRestorePage(),
           ),
@@ -338,6 +344,7 @@ class _PlaybackLifecycleState extends ConsumerState<PlaybackLifecycle>
   Widget build(BuildContext context) {
     // Active le pont Android Auto (browse + sync session) sur Android.
     ref.watch(androidAutoBridgeProvider);
+    ref.watch(webCompanionProvider);
     final keepOn = ref.watch(
       settingsProvider.select((settings) => settings.keepScreenOn),
     );

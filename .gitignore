@@ -49,3 +49,8 @@ app.*.map.json
 
 # Paquets de release locale (tool/release_local.sh)
 /dist/
+
+# Podavio Web
+companion/**/node_modules/
+companion/**/dist/
+companion/web/.angular/

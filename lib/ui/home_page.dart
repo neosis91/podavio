@@ -14,9 +14,7 @@ import '../data/online_status.dart';
 import '../data/providers.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
-import '../together/together_controller.dart';
 import 'library_hub_page.dart';
-import 'player/together_sheet.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
 import 'widgets/frosted_header.dart';
@@ -382,7 +380,7 @@ class _HomeHeaderOverlay extends StatelessWidget {
                         ),
                         const _EcoButton(),
                         const HistoryButton(),
-                        const _TogetherButton(),
+                        const _WebButton(),
                         const PreferencesButton(),
                       ],
                     ),
@@ -635,19 +633,15 @@ class _CategoryLoadMoreFooter extends StatelessWidget {
   }
 }
 
-class _TogetherButton extends ConsumerWidget {
-  const _TogetherButton();
+class _WebButton extends StatelessWidget {
+  const _WebButton();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final live = ref.watch(
-      togetherProvider.select((state) => state.role != TogetherRole.idle),
-    );
+  Widget build(BuildContext context) {
     return IconButton(
-      tooltip: context.tr('Listen together'),
-      color: live ? Theme.of(context).colorScheme.primary : null,
-      onPressed: () => showTogetherSheet(context),
-      icon: Icon(live ? Icons.groups : Icons.groups_outlined),
+      tooltip: context.tr('Podavio Web'),
+      onPressed: () => context.push(AppRoutes.webCompanion),
+      icon: const Icon(Icons.qr_code_2),
     );
   }
 }
