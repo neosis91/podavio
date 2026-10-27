@@ -16,6 +16,7 @@ import '../data/online_status.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import '../sync/sync_hooks.dart';
+import '../web_companion/web_remote.dart';
 import 'cast_playback.dart';
 import 'playback_handler.dart';
 import 'stream_quality.dart';
@@ -166,6 +167,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   var _advancing = false;
   var _extendingQueue = false;
   var _sessionReady = false;
+  var _remote = false;
 
   /// Suite de la liste d’origine, chargée par pages dans la file.
   _QueueFeed? _queueFeed;
@@ -229,11 +231,102 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     return _ui;
   }
 
+  /// Le navigateur associé joue le son. Le téléphone n’est plus que l’écran.
+  void setWebRemote(bool active) {
+    if (_disposed || _remote == active) return;
+    _remote = active;
+    WebRemoteHooks.active = active;
+    if (!active) {
+      _emit(_ui.copyWith(playing: false));
+      return;
+    }
+    if (!_ui.hasEpisode) return;
+    if (_player.playing) unawaited(_player.pause());
+    WebRemoteHooks.command({
+      'type': 'command',
+      'action': 'prepare',
+      'episodeId': _ui.episodeId,
+      'positionMs': _ui.position.inMilliseconds,
+    });
+    ref.read(playerSheetProvider.notifier).expand();
+  }
+
+  /// Affiche l’épisode lu par le navigateur et ouvre le grand lecteur.
+  Future<void> showWebPlayback({
+    required int episodeId,
+    required Duration position,
+    bool? playing,
+    Duration? duration,
+  }) async {
+    if (_disposed || !ref.mounted) return;
+    final wasRemote = _remote;
+    _remote = true;
+    WebRemoteHooks.active = true;
+    if (_player.playing) unawaited(_player.pause());
+    final changed = _ui.episodeId != episodeId;
+    if (changed) {
+      final entry = await ref.read(databaseProvider).getEpisode(episodeId);
+      if (_disposed || !ref.mounted || entry == null || !_remote) return;
+      final settings = ref.read(settingsProvider);
+      final cover = EpisodeEntry(episode: entry.episode, podcast: entry.podcast);
+      final seconds = entry.episode.durationSeconds;
+      _emit(
+        _ui.copyWith(
+          episodeId: entry.episode.id,
+          podcastId: entry.podcast.id,
+          title: entry.episode.title,
+          podcastTitle: entry.podcast.title,
+          imageUrl: cover.imageUrl(
+            preferPodcastCover: settings.preferPodcastCover,
+          ),
+          imagePath: cover.imagePath(
+            preferPodcastCover: settings.preferPodcastCover,
+          ),
+          updateImage: true,
+          position: position,
+          duration: duration ??
+              (seconds == null ? Duration.zero : Duration(seconds: seconds)),
+          playing: playing ?? false,
+          clearError: true,
+        ),
+      );
+    } else {
+      _emit(
+        _ui.copyWith(
+          position: position,
+          playing: playing,
+          duration: duration,
+        ),
+      );
+    }
+    if (!wasRemote || changed) {
+      ref.read(playerSheetProvider.notifier).expand();
+    }
+  }
+
   Future<void> playEntry(
     EpisodeEntry entry, {
     PlaybackSource? source,
     bool autoplay = true,
   }) async {
+    if (_remote) {
+      final positionMs = entry.episode.positionMs;
+      WebRemoteHooks.command({
+        'type': 'command',
+        'action': autoplay ? 'play' : 'prepare',
+        'episodeId': entry.episode.id,
+        'positionMs': positionMs,
+      });
+      await showWebPlayback(
+        episodeId: entry.episode.id,
+        position: Duration(milliseconds: positionMs),
+        playing: autoplay,
+        duration: entry.episode.durationSeconds == null
+            ? null
+            : Duration(seconds: entry.episode.durationSeconds!),
+      );
+      return;
+    }
     if (source != null && !source.isQueue) {
       await _seedQueue(source, entry);
       source = PlaybackSource.queue;
@@ -430,6 +523,12 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   }
 
   Future<void> toggle() async {
+    if (_remote) {
+      if (!_ui.hasEpisode) return;
+      _emit(_ui.copyWith(playing: !_ui.playing));
+      WebRemoteHooks.command({'type': 'command', 'action': 'toggle'});
+      return;
+    }
     if (!_ui.hasEpisode) return;
     final cast = _cast;
     if (cast != null) {
@@ -469,6 +568,16 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   }
 
   Future<void> seek(Duration position) async {
+    if (_remote) {
+      if (!_ui.hasEpisode) return;
+      _emit(_ui.copyWith(position: position));
+      WebRemoteHooks.command({
+        'type': 'command',
+        'action': 'seek',
+        'positionMs': position.inMilliseconds,
+      });
+      return;
+    }
     if (!_ui.hasEpisode) return;
     final cast = _cast;
     if (cast != null) {
@@ -594,6 +703,14 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   /// Au-delà de 3 s, reprend l’épisode courant depuis le début (comme [skipChapter]).
   /// Sans précédent, revient aussi au début.
   Future<void> playPreviousInQueue() async {
+    if (_remote) {
+      if (_ui.position.inMilliseconds > 3000) {
+        await seek(Duration.zero);
+        return;
+      }
+      WebRemoteHooks.command({'type': 'command', 'action': 'previous'});
+      return;
+    }
     if (_advancing || _disposed || !_ui.hasEpisode) return;
     if (_ui.position.inMilliseconds > 3000) {
       await seek(Duration.zero);
@@ -617,6 +734,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   /// Passe à l’épisode suivant dans la playlist.
   Future<void> playNextInQueue() async {
+    if (_remote) {
+      WebRemoteHooks.command({'type': 'command', 'action': 'next'});
+      return;
+    }
     if (_advancing || _disposed) return;
     final next = await _relativeEntry(1);
     if (next == null || _disposed) return;
@@ -1097,7 +1218,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   void _bind() {
     _positionSub = _player.positionStream.listen((position) {
-      if (_cast != null) return;
+      if (_cast != null || _remote) return;
       final now = DateTime.now();
       if (now.difference(_lastPositionUi) >=
           const Duration(milliseconds: 250)) {
@@ -1118,12 +1239,12 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       );
     });
     _durationSub = _player.durationStream.listen((duration) {
-      if (duration == null) return;
+      if (duration == null || _remote) return;
       _emit(_ui.copyWith(duration: duration));
       _maybeSkipOutro(_ui.position);
     });
     _stateSub = _player.playerStateStream.listen((playerState) {
-      if (_cast != null) return;
+      if (_cast != null || _remote) return;
       _emit(_ui.copyWith(playing: playerState.playing));
       if (playerState.processingState == ProcessingState.completed) {
         unawaited(_onCompleted());
