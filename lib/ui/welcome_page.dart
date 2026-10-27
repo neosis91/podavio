@@ -33,9 +33,10 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
 
   Future<void> _restoreBackup() async {
     final container = ProviderScope.containerOf(context, listen: false);
-    final imported = await importLibraryDatabase(context);
+    final imported = await importLibraryDatabase(context, confirm: false);
     if (!imported) return;
     await container.read(settingsProvider.notifier).setOnboardingComplete(true);
+    if (mounted) context.go(AppRoutes.home);
   }
 
   Future<void> _setAutomaticDownload(bool enabled) async {
@@ -78,7 +79,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
           }
         }),
         onNext: () {
-          if (_setup! < 2) {
+          if (_setup! < 3) {
             setState(() => _setup = _setup! + 1);
           } else {
             _leave(AppRoutes.home);
@@ -240,7 +241,7 @@ class _SetupFlow extends ConsumerWidget {
           ],
         ),
       ),
-      _ => (
+      2 => (
         context.tr('How do you want to listen?'),
         context.tr('Choose your default preference. You can change it later.'),
         Column(
@@ -272,6 +273,31 @@ class _SetupFlow extends ConsumerWidget {
           ],
         ),
       ),
+      _ => (
+        context.tr('Eco mode'),
+        context.tr(
+          'Eco mode skips new cover downloads. You can turn it off later.',
+        ),
+        Column(
+          children: [
+            _SwitchCard(
+              label: context.tr('Eco mode'),
+              value: settings.ecoMode,
+              onChanged: (enabled) =>
+                  ref.read(settingsProvider.notifier).setEcoMode(enabled),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              context.tr(
+                'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.',
+              ),
+              style: title.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
     };
     return Scaffold(
       backgroundColor: scheme.surface,
@@ -293,7 +319,9 @@ class _SetupFlow extends ConsumerWidget {
                   CircleAvatar(
                     radius: 28,
                     backgroundColor: scheme.primaryContainer,
-                    child: const PodavioIcon(size: 34),
+                    child: step >= 3
+                        ? const EcoIcon(size: 34)
+                        : const PodavioIcon(size: 34),
                   ),
                   const SizedBox(height: 28),
                   Text(

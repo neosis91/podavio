@@ -44,6 +44,21 @@ flutter run -d windows
 flutter test
 ```
 
+## Podavio Web
+
+Le navigateur et le téléphone passent par le relais dans `companion/server`. Ce processus sert aussi la page, sur le port 8787. Le QR code pointe vers cette même adresse, donc la page et le relais se lancent ensemble.
+
+```bash
+cd companion/web
+npm install
+npm run build
+cd ../server
+npm install
+npm start
+```
+
+Puis ouvrir http://127.0.0.1:8787. `npm install` n’est utile que la première fois, ou après un changement de dépendances. Pour revoir la page après une modification, relancer `npm run build` dans `companion/web`, puis redémarrer `npm start`.
+
 ## Compiler
 
 Linux :

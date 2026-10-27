@@ -9,14 +9,12 @@ import '../../data/providers.dart';
 import '../../l10n/l10n.dart';
 import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
-import '../../together/together_controller.dart';
 import '../widgets/brand.dart';
 import '../widgets/episode_tile.dart';
 import 'audio_output_sheet.dart';
 import 'player_chapter.dart';
 import 'player_panel.dart';
 import 'player_sheets.dart';
-import 'together_sheet.dart';
 
 class PlayerTransport extends ConsumerWidget {
   const PlayerTransport({super.key});
@@ -239,18 +237,6 @@ class PlayerTransport extends ConsumerWidget {
                         episodeId: episodeId,
                       ),
                 icon: const InfoIcon(),
-              ),
-              IconButton(
-                tooltip: context.tr('Listen together'),
-                color: ref.watch(togetherProvider).role == TogetherRole.idle
-                    ? null
-                    : scheme.primary,
-                onPressed: () => showTogetherSheet(context),
-                icon: Icon(
-                  ref.watch(togetherProvider).role == TogetherRole.idle
-                      ? Icons.groups_outlined
-                      : Icons.groups,
-                ),
               ),
               IconButton(
                 tooltip: castName ?? context.tr('Audio output'),

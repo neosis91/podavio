@@ -77,9 +77,8 @@ Future<void> importDatabaseBytes(
 
   final live = await podavioDatabaseFile();
   final database = container.read(databaseProvider);
-  try {
-    await database.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
-  } catch (_) {}
+  // Pas de wal_checkpoint ici : le parcours d’accueil garde un watch ouvert,
+  // et TRUNCATE attendrait ce lecteur sans jamais finir.
   await closeAppDatabase(database);
 
   await live.writeAsBytes(bytes, flush: true);
