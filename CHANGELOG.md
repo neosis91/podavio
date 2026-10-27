@@ -4,6 +4,13 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.10.24
+
+- First-time setup ends with Eco mode. Turning it on skips new cover downloads and keeps the dark theme and pure black on. It can stay off, and Settings can change it later.
+- Restoring a database from the welcome screen no longer warns that the library will be replaced. Backup and restore in Settings still asks. The import no longer waits on an open database read, so the progress indicator closes instead of spinning.
+- Podavio Web places the pairing title, the introduction, the steps, and the QR code in one card. The browser address is https://web.podavio.com.
+- The home header opens Podavio Web with a QR code icon. The phone scans the code shown at https://web.podavio.com on a computer. Listen together is removed from the home header and the player.
+
 ## 2026.10.23
 
 - Automatic download now fetches eligible episodes, within the per-podcast limit and the episode cache. It starts when the app opens, after a refresh or a new subscription, and when the option is turned on.

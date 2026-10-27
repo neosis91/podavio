@@ -34,14 +34,14 @@ void main() {
       }),
       isNull,
     );
-    expect(
-      WebProgress.parse({
-        'type': 'progress',
-        'episodeId': 4,
-        'positionMs': 20,
-      })?.positionMs,
-      20,
-    );
+    final progress = WebProgress.parse({
+      'type': 'progress',
+      'episodeId': 4,
+      'positionMs': 20,
+      'ended': true,
+    });
+    expect(progress?.positionMs, 20);
+    expect(progress?.ended, isTrue);
   });
 
   test('the qr must carry a websocket address and a 32 byte key', () {

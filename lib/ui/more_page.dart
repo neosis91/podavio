@@ -33,29 +33,38 @@ import 'widgets/update_prompt.dart';
 final _packageInfo = PackageInfo.fromPlatform();
 
 /// Même import que « Importer la base de données ». Vrai si le fichier est lu.
-Future<bool> importLibraryDatabase(BuildContext context) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(context.tr('Import database')),
-      content: Text(
-        context.tr(
-          'This replaces your current subscriptions, queue, favorites, and playback progress. Downloaded audio files are not restored. Continue?',
+///
+/// [confirm] affiche l’avertissement de remplacement. Inutile au premier
+/// lancement, où la bibliothèque est encore vide.
+Future<bool> importLibraryDatabase(
+  BuildContext context, {
+  bool confirm = true,
+}) async {
+  if (confirm) {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Import database')),
+        content: Text(
+          context.tr(
+            'This replaces your current subscriptions, queue, favorites, and playback progress. Downloaded audio files are not restored. Continue?',
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.tr('Cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(context.tr('Import')),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: Text(context.tr('Cancel')),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: Text(context.tr('Import')),
-        ),
-      ],
-    ),
-  );
-  if (confirmed != true || !context.mounted) return false;
+    );
+    if (confirmed != true || !context.mounted) return false;
+  }
+  if (!context.mounted) return false;
   final container = ProviderScope.containerOf(context, listen: false);
 
   final file = await FilePicker.pickFile(
@@ -77,9 +86,24 @@ Future<bool> importLibraryDatabase(BuildContext context) async {
     barrierDismissible: false,
     builder: (context) => const Center(child: CircularProgressIndicator()),
   );
-  navigator.push(dialog);
+  Uint8List bytes;
   try {
-    final bytes = await file.readAsBytes();
+    bytes = await file.readAsBytes();
+  } catch (error) {
+    if (context.mounted) {
+      showMessage(
+        context,
+        errorText(error).isEmpty
+            ? context.tr('Could not import the database')
+            : errorText(error),
+      );
+    }
+    return false;
+  }
+  if (!context.mounted) return false;
+  navigator.push(dialog);
+  await WidgetsBinding.instance.endOfFrame;
+  try {
     await importDatabaseBytes(container, bytes);
     if (context.mounted) {
       showMessage(context, context.tr('Database imported'));
@@ -96,9 +120,27 @@ Future<bool> importLibraryDatabase(BuildContext context) async {
     }
     return false;
   } finally {
+    await _dismissImportDialog(navigator, dialog);
+  }
+}
+
+Future<void> _dismissImportDialog(
+  NavigatorState navigator,
+  Route<void> dialog,
+) async {
+  void remove() {
     if (dialog.isActive && navigator.mounted) {
       navigator.removeRoute(dialog);
     }
+  }
+
+  try {
+    remove();
+  } catch (_) {
+    await WidgetsBinding.instance.endOfFrame;
+    try {
+      remove();
+    } catch (_) {}
   }
 }
 

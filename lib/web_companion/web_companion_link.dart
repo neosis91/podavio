@@ -98,6 +98,10 @@ class WebCompanionLink {
     return _sendPlain(snapshot, 'phone');
   }
 
+  Future<void> sendCommand(Map<String, Object?> command) {
+    return _sendPlain(command, 'phone');
+  }
+
   Future<void> _loop() async {
     while (!_closed) {
       _conn = webCompanionRandomId(_random);

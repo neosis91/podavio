@@ -14,7 +14,7 @@ class WebCompanionPage extends ConsumerStatefulWidget {
 }
 
 class _WebCompanionPageState extends ConsumerState<WebCompanionPage> {
-  var _scanning = false;
+  var _scanning = true;
 
   bool get _canScan =>
       !kIsWeb &&
@@ -40,6 +40,11 @@ class _WebCompanionPageState extends ConsumerState<WebCompanionPage> {
           ),
           const SizedBox(height: 20),
           if (!link.linked) ...[
+            SelectableText(
+              'https://web.podavio.com',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
             if (_scanning && _canScan)
               SizedBox(
                 height: 280,

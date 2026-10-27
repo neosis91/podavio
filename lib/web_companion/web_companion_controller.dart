@@ -6,11 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/providers.dart';
 import '../player/player_controller.dart';
+import '../sync/sync_hooks.dart';
 import 'web_companion_crypto.dart';
 import 'web_companion_keepalive.dart';
 import 'web_companion_library.dart';
+import 'web_companion_snapshot.dart';
 import 'web_companion_link.dart';
 import 'web_companion_store.dart';
+import 'web_remote.dart';
 
 class WebCompanionState {
   const WebCompanionState({
@@ -55,6 +58,7 @@ class WebCompanionController extends Notifier<WebCompanionState> {
   WebCompanionLink? _link;
   Timer? _pushTimer;
   var _pushing = false;
+  DateTime _progressSavedAt = DateTime.fromMillisecondsSinceEpoch(0);
   var _generation = 0;
 
   @override
@@ -62,9 +66,12 @@ class WebCompanionController extends Notifier<WebCompanionState> {
     ref.onDispose(() {
       _generation++;
       _pushTimer?.cancel();
+      WebRemoteHooks.send = null;
+      WebRemoteHooks.active = false;
       unawaited(_link?.close());
     });
     ref.listen(preferredPodcastsProvider, (_, _) => _schedulePush());
+    ref.listen(unreadCountsByPodcastProvider, (_, _) => _schedulePush());
     ref.listen(
       playerProvider.select((player) => player.position),
       (_, _) => _schedulePush(),
@@ -139,13 +146,28 @@ class WebCompanionController extends Notifier<WebCompanionState> {
       onBrowser: (online) {
         if (generation != _generation) return;
         state = state.copyWith(browserOnline: online, socketOpen: true);
+        ref.read(playerProvider.notifier).setWebRemote(online);
         if (online) _schedulePush();
       },
       onProgress: (progress) {
-        unawaited(_saveProgress(progress.episodeId, progress.positionMs));
+        unawaited(_saveProgress(progress));
+        if (generation != _generation) return;
+        unawaited(
+          ref.read(playerProvider.notifier).showWebPlayback(
+            episodeId: progress.episodeId,
+            position: Duration(milliseconds: progress.positionMs),
+            playing: progress.ended ? false : progress.playing,
+            duration: progress.durationMs == null
+                ? null
+                : Duration(milliseconds: progress.durationMs!),
+          ),
+        );
       },
     );
     _link = link;
+    WebRemoteHooks.send = (command) {
+      unawaited(link.sendCommand(command));
+    };
     unawaited(link.start());
     if (generation == _generation) {
       state = state.copyWith(socketOpen: true, clearError: true);
@@ -176,11 +198,46 @@ class WebCompanionController extends Notifier<WebCompanionState> {
     }
   }
 
-  Future<void> _saveProgress(int episodeId, int positionMs) async {
+  Future<void> _saveProgress(WebProgress progress) async {
+    final settled = progress.ended || progress.playing == false;
+    final now = DateTime.now();
+    if (!settled && now.difference(_progressSavedAt) < const Duration(seconds: 5)) {
+      return;
+    }
+    _progressSavedAt = now;
+    final player = ref.read(playerProvider);
+    final sameEpisode = player.episodeId == progress.episodeId;
+    if (sameEpisode && player.playing && !WebRemoteHooks.active) return;
     final database = ref.read(databaseProvider);
-    final episode = await database.getEpisode(episodeId);
-    if (episode == null) return;
-    await database.setPosition(episodeId, positionMs);
+    final entry = await database.getEpisode(progress.episodeId);
+    if (entry == null) return;
+    if (progress.ended) {
+      await database.setPlayed(progress.episodeId, played: true);
+    } else {
+      await database.setPosition(progress.episodeId, progress.positionMs);
+      await database.upsertPlaybackPosition(
+        progress.episodeId,
+        progress.positionMs,
+      );
+      final total = entry.episode.durationSeconds ?? 0;
+      SyncHooks.reportEpisode(
+        SyncEpisodeReport(
+          episodeId: progress.episodeId,
+          feedUrl: entry.podcast.feedUrl,
+          audioUrl: entry.episode.audioUrl,
+          guid: entry.episode.guid,
+          action: 'play',
+          positionSeconds: progress.positionMs ~/ 1000,
+          startedSeconds: 0,
+          totalSeconds: total < 0 ? 0 : total,
+        ),
+      );
+    }
+    if (sameEpisode && !player.playing && !WebRemoteHooks.active) {
+      await ref
+          .read(playerProvider.notifier)
+          .seek(Duration(milliseconds: progress.ended ? 0 : progress.positionMs));
+    }
   }
 
   String _keepAliveTitle() {

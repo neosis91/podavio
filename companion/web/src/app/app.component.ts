@@ -1,4 +1,14 @@
-import { Component, ElementRef, OnDestroy, ViewChild, afterNextRender } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  Injector,
+  OnDestroy,
+  afterNextRender,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import QRCode from 'qrcode';
 
 import {
@@ -48,18 +58,20 @@ const storageKey = 'podavio-web-session';
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppComponent implements OnDestroy {
-  @ViewChild('qr') qrCanvas?: ElementRef<HTMLCanvasElement>;
-  @ViewChild('audio') audio?: ElementRef<HTMLAudioElement>;
+  private readonly injector = inject(Injector);
+  readonly qrCanvas = viewChild<ElementRef<HTMLCanvasElement>>('qr');
+  readonly audio = viewChild<ElementRef<HTMLAudioElement>>('audio');
 
-  french = navigator.language.toLowerCase().startsWith('fr');
-  fingerprint = '';
-  status = '';
-  podcasts: Podcast[] = [];
-  opened: Podcast | null = null;
-  playing: Episode | null = null;
-  error = '';
+  readonly french = navigator.language.toLowerCase().startsWith('fr');
+  readonly fingerprint = signal('');
+  readonly status = signal('');
+  readonly podcasts = signal<Podcast[]>([]);
+  readonly opened = signal<Podcast | null>(null);
+  readonly playing = signal<Episode | null>(null);
+  readonly error = signal('');
   private socket?: WebSocket;
   private stored?: StoredSession;
   private privateKey?: CryptoKey;
@@ -104,70 +116,144 @@ export class AppComponent implements OnDestroy {
   async disconnect(): Promise<void> {
     localStorage.removeItem(storageKey);
     this.socket?.close();
-    this.podcasts = [];
-    this.opened = null;
-    this.playing = null;
-    this.fingerprint = '';
+    this.podcasts.set([]);
+    this.opened.set(null);
+    this.playing.set(null);
+    this.fingerprint.set('');
     this.sessionKey = undefined;
     await this.start();
   }
 
   openPodcast(podcast: Podcast): void {
-    this.opened = podcast;
+    this.opened.set(podcast);
   }
 
   closePodcast(): void {
-    this.opened = null;
+    this.opened.set(null);
   }
 
-  async play(episode: Episode): Promise<void> {
-    this.playing = episode;
-    window.setTimeout(() => {
-      const player = this.audio?.nativeElement;
+  episodeCount(podcast: Podcast): string {
+    const count = podcast.episodes.length;
+    if (count === 1) return this.text('1 episode', '1 épisode');
+    return this.text(`${count} episodes`, `${count} épisodes`);
+  }
+
+  playOpened(): void {
+    const podcast = this.opened();
+    if (!podcast || podcast.episodes.length === 0) return;
+    const playing = this.playing();
+    const current = playing && podcast.episodes.some((episode) => episode.id === playing.id)
+      ? playing
+      : podcast.episodes[0];
+    this.play(current);
+  }
+
+  play(episode: Episode): void {
+    this.prepare(episode, true);
+  }
+
+  prepare(episode: Episode, autoplay: boolean): void {
+    const current = this.audio()?.nativeElement;
+    const same = this.playing()?.id === episode.id && !!current && current.src === episode.audioUrl;
+    this.playing.set(episode);
+    const podcast = this.podcasts().find((item) => item.episodes.some((entry) => entry.id === episode.id));
+    if (podcast) this.opened.set(podcast);
+    afterNextRender(() => {
+      const player = this.audio()?.nativeElement;
       if (!player) return;
-      player.src = episode.audioUrl;
-      if (episode.positionMs > 0) player.currentTime = episode.positionMs / 1000;
-      void player.play().catch(() => undefined);
-    });
+      if (!same) {
+        player.src = episode.audioUrl;
+        if (episode.positionMs > 0) player.currentTime = episode.positionMs / 1000;
+      }
+      if (autoplay) void player.play().catch(() => undefined);
+      else void this.sendProgress();
+    }, { injector: this.injector });
   }
 
   onTime(): void {
     const now = Date.now();
-    if (now - this.lastSent < 5000) return;
+    if (now - this.lastSent < 1000) return;
     this.lastSent = now;
     void this.sendProgress();
   }
 
   async sendProgress(): Promise<void> {
-    const episode = this.playing;
-    const player = this.audio?.nativeElement;
+    const episode = this.playing();
+    const player = this.audio()?.nativeElement;
     if (!episode || !player || !Number.isFinite(player.currentTime)) return;
     episode.positionMs = Math.floor(player.currentTime * 1000);
+    const durationMs = Number.isFinite(player.duration) ? Math.floor(player.duration * 1000) : null;
     await this.send({
       type: 'progress',
       episodeId: episode.id,
       positionMs: episode.positionMs,
+      durationMs,
+      playing: !player.paused && !player.ended,
+      ended: player.ended,
     });
   }
 
+  private handleCommand(payload: { action?: string; episodeId?: number; positionMs?: number; seconds?: number }): void {
+    const action = payload.action;
+    if ((action === 'play' || action === 'prepare') && typeof payload.episodeId === 'number') {
+      const episode = this.findEpisode(payload.episodeId);
+      if (!episode) return;
+      if (typeof payload.positionMs === 'number') episode.positionMs = payload.positionMs;
+      this.prepare(episode, action === 'play');
+      return;
+    }
+    const player = this.audio()?.nativeElement;
+    if (!player || !this.playing()) return;
+    if (action === 'toggle') {
+      if (player.paused) void player.play().catch(() => undefined);
+      else player.pause();
+    } else if (action === 'seek' && typeof payload.positionMs === 'number') {
+      player.currentTime = payload.positionMs / 1000;
+    } else if (action === 'skip' && typeof payload.seconds === 'number') {
+      player.currentTime = Math.max(0, player.currentTime + payload.seconds);
+    } else if (action === 'next' || action === 'previous') {
+      this.stepEpisode(action === 'next' ? 1 : -1);
+      return;
+    }
+    void this.sendProgress();
+  }
+
+  private findEpisode(id: number): Episode | undefined {
+    for (const podcast of this.podcasts()) {
+      const episode = podcast.episodes.find((item) => item.id === id);
+      if (episode) return episode;
+    }
+    return undefined;
+  }
+
+  private stepEpisode(delta: number): void {
+    const playing = this.playing();
+    if (!playing) return;
+    const podcast = this.podcasts().find((item) => item.episodes.some((entry) => entry.id === playing.id));
+    if (!podcast) return;
+    const index = podcast.episodes.findIndex((entry) => entry.id === playing.id);
+    const next = podcast.episodes[index + delta];
+    if (next) this.prepare(next, true);
+  }
+
   private async start(): Promise<void> {
-    this.error = '';
-    this.status = this.text('Preparing the encrypted link…', 'Préparation du lien chiffré…');
+    this.error.set('');
+    this.status.set(this.text('Preparing the encrypted link…', 'Préparation du lien chiffré…'));
     try {
       const saved = localStorage.getItem(storageKey);
       this.stored = saved ? (JSON.parse(saved) as StoredSession) : await this.createSession();
       this.privateKey = await importPrivate(base64ToBytes(this.stored.pwaPriv));
-      this.fingerprint = this.stored.fingerprint ?? '';
+      this.fingerprint.set(this.stored.fingerprint ?? '');
       if (this.stored.phonePub) {
         this.sessionKey = await deriveSessionKey(this.privateKey, base64ToBytes(this.stored.phonePub));
       }
       this.connect();
       if (!this.stored.phonePub) await this.drawQr();
     } catch {
-      this.error = this.text(
+      this.error.set(this.text(
         'This browser cannot start the encrypted link.',
         'Ce navigateur ne peut pas ouvrir le lien chiffré.',
-      );
+      ));
     }
   }
 
@@ -188,7 +274,7 @@ export class AppComponent implements OnDestroy {
 
   private async drawQr(): Promise<void> {
     const stored = this.stored;
-    const canvas = this.qrCanvas?.nativeElement;
+    const canvas = this.qrCanvas()?.nativeElement;
     if (!stored || !canvas) return;
     const payload = JSON.stringify({
       v: 1,
@@ -197,10 +283,10 @@ export class AppComponent implements OnDestroy {
       pub: stored.pwaPub,
     });
     await QRCode.toCanvas(canvas, payload, { margin: 1, width: 264 });
-    this.status = this.text(
+    this.status.set(this.text(
       'Scan this code with Podavio on the phone.',
       'Scannez ce code avec Podavio sur le téléphone.',
-    );
+    ));
   }
 
   private connect(): void {
@@ -219,14 +305,14 @@ export class AppComponent implements OnDestroy {
         role: 'browser',
         conn: this.conn,
       }));
-      this.status = this.text('Waiting for the phone…', 'En attente du téléphone…');
+      this.status.set(this.text('Waiting for the phone…', 'En attente du téléphone…'));
     });
     socket.addEventListener('message', (event) => {
       void this.onMessage(String(event.data));
     });
     socket.addEventListener('close', () => {
       if (this.socket !== socket) return;
-      this.status = this.text('Reconnecting…', 'Reconnexion…');
+      this.status.set(this.text('Reconnecting…', 'Reconnexion…'));
       window.setTimeout(() => this.connect(), 3000);
     });
   }
@@ -240,11 +326,12 @@ export class AppComponent implements OnDestroy {
         await this.acceptHello(this.pendingHello);
         this.pendingHello = null;
       }
+      void this.sendProgress();
       return;
     }
     if (message['type'] === 'bye') {
       this.peerConn = '';
-      this.status = this.text('Waiting for the phone…', 'En attente du téléphone…');
+      this.status.set(this.text('Waiting for the phone…', 'En attente du téléphone…'));
       return;
     }
     if (message['type'] === 'hello') {
@@ -276,9 +363,38 @@ export class AppComponent implements OnDestroy {
     this.sessionKey = key;
     stored.phonePub = hello.pub;
     stored.fingerprint = await safetyNumber(base64ToBytes(stored.pwaPub), phonePub);
-    this.fingerprint = stored.fingerprint;
+    this.fingerprint.set(stored.fingerprint);
     localStorage.setItem(storageKey, JSON.stringify(stored));
-    this.status = this.text('Phone linked. Waiting for the library…', 'Téléphone associé. En attente de la bibliothèque…');
+    this.status.set(this.text('Phone linked. Waiting for the library…', 'Téléphone associé. En attente de la bibliothèque…'));
+  }
+
+  private applySnapshot(podcasts: Podcast[]): void {
+    const playing = this.playing();
+    const audio = this.audio()?.nativeElement;
+    const locallyPlaying = !!playing && !!audio && !audio.paused && !audio.ended;
+    this.podcasts.set(podcasts);
+    const opened = this.opened();
+    if (opened) {
+      this.opened.set(podcasts.find((podcast) => podcast.id === opened.id) ?? null);
+    }
+    if (playing) {
+      const next = podcasts
+        .flatMap((podcast) => podcast.episodes)
+        .find((episode) => episode.id === playing.id);
+      if (!next) {
+        this.playing.set(null);
+      } else if (
+        audio &&
+        !locallyPlaying &&
+        Math.abs(audio.currentTime * 1000 - next.positionMs) > 1500
+      ) {
+        audio.currentTime = next.positionMs / 1000;
+        this.playing.set(next);
+      } else {
+        this.playing.set(locallyPlaying ? { ...next, positionMs: playing.positionMs } : next);
+      }
+    }
+    this.status.set('');
   }
 
   private async acceptBlob(message: Record<string, unknown>): Promise<void> {
@@ -292,10 +408,12 @@ export class AppComponent implements OnDestroy {
     const clear = await open(key, iv, ct, aad('phone', this.peerConn, n));
     if (!clear) return;
     const payload = JSON.parse(new TextDecoder().decode(clear)) as { type?: string; podcasts?: Podcast[] };
+    if (payload.type === 'command') {
+      this.handleCommand(payload as { action?: string; episodeId?: number; positionMs?: number; seconds?: number });
+      return;
+    }
     if (payload.type === 'snapshot' && Array.isArray(payload.podcasts)) {
-      this.podcasts = payload.podcasts;
-      this.opened = null;
-      this.status = '';
+      this.applySnapshot(payload.podcasts);
     }
   }
 

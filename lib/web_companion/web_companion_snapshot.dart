@@ -39,10 +39,21 @@ List<T> capWebCompanionEpisodes<T extends WebCompanionEpisodeRef>(
 }
 
 class WebProgress {
-  const WebProgress({required this.episodeId, required this.positionMs});
+  const WebProgress({
+    required this.episodeId,
+    required this.positionMs,
+    this.ended = false,
+    this.playing,
+    this.durationMs,
+  });
 
   final int episodeId;
   final int positionMs;
+  final bool ended;
+
+  /// `null` si l’ancien navigateur n’envoie pas l’état de lecture.
+  final bool? playing;
+  final int? durationMs;
 
   static WebProgress? parse(Object? raw) {
     if (raw is! Map) return null;
@@ -53,6 +64,13 @@ class WebProgress {
     if (positionMs is! int || positionMs < 0 || positionMs > 86400000 * 2) {
       return null;
     }
-    return WebProgress(episodeId: episodeId, positionMs: positionMs);
+    final durationMs = raw['durationMs'];
+    return WebProgress(
+      episodeId: episodeId,
+      positionMs: positionMs,
+      ended: raw['ended'] == true,
+      playing: raw['playing'] is bool ? raw['playing'] as bool : null,
+      durationMs: durationMs is int && durationMs >= 0 ? durationMs : null,
+    );
   }
 }
