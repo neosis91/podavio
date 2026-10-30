@@ -68,11 +68,13 @@ class WebCompanionLink {
     required this.session,
     required this.onProgress,
     required this.onBrowser,
+    required this.onUnlink,
   });
 
   final WebCompanionSession session;
   final void Function(WebProgress progress) onProgress;
   final void Function(bool online) onBrowser;
+  final void Function() onUnlink;
   final _random = Random.secure();
   var _closed = false;
   var _sendN = 0;
@@ -100,6 +102,17 @@ class WebCompanionLink {
 
   Future<void> sendCommand(Map<String, Object?> command) {
     return _sendPlain(command, 'phone');
+  }
+
+  /// Préviens l’autre côté, puis ferme sans rouvrir la session.
+  Future<void> unlink() async {
+    final socket = _socket;
+    if (socket != null) {
+      try {
+        socket.add(jsonEncode({'type': 'unlink'}));
+      } catch (_) {}
+    }
+    await close();
   }
 
   Future<void> _loop() async {
@@ -157,6 +170,10 @@ class WebCompanionLink {
       _recvN = 0;
       onBrowser(true);
       unawaited(_announce());
+    } else if (type == 'unlink') {
+      _peerConn = null;
+      _recvN = 0;
+      onUnlink();
     } else if (type == 'bye') {
       _peerConn = null;
       _recvN = 0;

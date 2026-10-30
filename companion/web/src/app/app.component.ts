@@ -114,13 +114,25 @@ export class AppComponent implements OnDestroy {
   }
 
   async disconnect(): Promise<void> {
+    await this.forget(true);
+  }
+
+  private async forget(notify: boolean): Promise<void> {
+    const socket = this.socket;
+    this.socket = undefined;
+    if (notify && socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'unlink' }));
+    }
+    socket?.close();
     localStorage.removeItem(storageKey);
-    this.socket?.close();
+    this.stored = undefined;
     this.podcasts.set([]);
     this.opened.set(null);
     this.playing.set(null);
     this.fingerprint.set('');
     this.sessionKey = undefined;
+    this.peerConn = '';
+    this.pendingHello = null;
     await this.start();
   }
 
@@ -308,6 +320,7 @@ export class AppComponent implements OnDestroy {
       this.status.set(this.text('Waiting for the phone…', 'En attente du téléphone…'));
     });
     socket.addEventListener('message', (event) => {
+      if (this.socket !== socket) return;
       void this.onMessage(String(event.data));
     });
     socket.addEventListener('close', () => {
@@ -327,6 +340,10 @@ export class AppComponent implements OnDestroy {
         this.pendingHello = null;
       }
       void this.sendProgress();
+      return;
+    }
+    if (message['type'] === 'unlink') {
+      await this.forget(false);
       return;
     }
     if (message['type'] === 'bye') {

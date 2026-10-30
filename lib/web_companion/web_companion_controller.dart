@@ -117,11 +117,19 @@ class WebCompanionController extends Notifier<WebCompanionState> {
     await _open(session, generation);
   }
 
-  Future<void> disconnect() async {
+  Future<void> disconnect({bool notifyPeer = true}) async {
     _generation++;
     _pushTimer?.cancel();
-    await _link?.close();
+    WebRemoteHooks.send = null;
+    WebRemoteHooks.active = false;
+    ref.read(playerProvider.notifier).setWebRemote(false);
+    final link = _link;
     _link = null;
+    if (notifyPeer) {
+      await link?.unlink();
+    } else {
+      await link?.close();
+    }
     await _store.clear();
     await stopWebCompanionKeepAlive();
     state = const WebCompanionState();
@@ -148,6 +156,10 @@ class WebCompanionController extends Notifier<WebCompanionState> {
         state = state.copyWith(browserOnline: online, socketOpen: true);
         ref.read(playerProvider.notifier).setWebRemote(online);
         if (online) _schedulePush();
+      },
+      onUnlink: () {
+        if (generation != _generation) return;
+        unawaited(disconnect(notifyPeer: false));
       },
       onProgress: (progress) {
         unawaited(_saveProgress(progress));
