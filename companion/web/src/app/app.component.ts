@@ -9,7 +9,10 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import QRCode from 'qrcode';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { QRCodeComponent } from 'angularx-qrcode';
+import { filter } from 'rxjs';
 
 import {
   aad,
@@ -88,13 +91,14 @@ const storageKey = 'podavio-web-session';
 
 @Component({
   selector: 'app-root',
+  imports: [QRCodeComponent, RouterLink, RouterLinkActive, RouterOutlet],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppComponent implements OnDestroy {
   private readonly injector = inject(Injector);
-  readonly qrCanvas = viewChild<ElementRef<HTMLCanvasElement>>('qr');
+  private readonly router = inject(Router);
   readonly audio = viewChild<ElementRef<HTMLAudioElement>>('audio');
 
   readonly french = navigator.language.toLowerCase().startsWith('fr');
@@ -102,13 +106,17 @@ export class AppComponent implements OnDestroy {
   readonly status = signal('');
   readonly podcasts = signal<Podcast[]>([]);
   readonly playlists = signal<Playlist[]>([]);
-  readonly page = signal<'home' | 'subscriptions' | 'library'>('home');
+  readonly path = signal(this.router.url);
   readonly randomSeed = signal(1);
-  readonly libraryView = signal<LibraryView>('hub');
-  readonly openedPlaylist = signal<Playlist | null>(null);
-  readonly opened = signal<Podcast | null>(null);
   readonly playing = signal<Episode | null>(null);
+  readonly playbackOn = signal(false);
+  readonly playbackMs = signal(0);
+  readonly playbackDurationMs = signal(0);
+  readonly actionsEpisode = signal<Episode | null>(null);
+  readonly playlistDraft = signal('');
+  readonly pendingDownloads = signal<number[]>([]);
   readonly error = signal('');
+  private readonly qrPayload = signal<string | null>(null);
   private socket?: WebSocket;
   private stored?: StoredSession;
   private privateKey?: CryptoKey;
@@ -119,8 +127,13 @@ export class AppComponent implements OnDestroy {
   private recvN = 0;
   private pendingHello: { pub: string; iv: string; ct: string } | null = null;
   private lastSent = 0;
+  private entered = false;
 
   constructor() {
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      takeUntilDestroyed(),
+    ).subscribe((event) => this.path.set(event.urlAfterRedirects));
     afterNextRender(() => {
       void this.start();
     });
@@ -163,61 +176,90 @@ export class AppComponent implements OnDestroy {
     socket?.close();
     localStorage.removeItem(storageKey);
     this.stored = undefined;
+    this.qrPayload.set(null);
     this.podcasts.set([]);
     this.playlists.set([]);
-    this.page.set('home');
-    this.libraryView.set('hub');
-    this.openedPlaylist.set(null);
-    this.opened.set(null);
+    this.entered = false;
     this.playing.set(null);
+    this.playbackOn.set(false);
     this.fingerprint.set('');
     this.sessionKey = undefined;
     this.peerConn = '';
     this.pendingHello = null;
+    await this.router.navigateByUrl('/');
     await this.start();
   }
 
-  openPodcast(podcast: Podcast): void {
-    this.page.set('subscriptions');
-    this.opened.set(podcast);
+  private locationPath(): string {
+    return locationPathOf(this.path());
   }
 
-  showHome(): void {
-    this.page.set('home');
-    this.opened.set(null);
-  }
-
-  closePodcast(): void {
-    this.page.set('subscriptions');
-    this.libraryView.set('hub');
-    this.openedPlaylist.set(null);
-    this.opened.set(null);
-  }
-
-  showLibrary(): void {
-    this.page.set('library');
-    this.opened.set(null);
-    this.libraryView.set('hub');
-    this.openedPlaylist.set(null);
-  }
-
-  openLibrary(view: LibraryView): void {
-    this.libraryView.set(view);
-    this.openedPlaylist.set(null);
-  }
-
-  openPlaylist(playlist: Playlist): void {
-    this.openedPlaylist.set(playlist);
-    this.libraryView.set('playlist');
-  }
-
-  libraryBack(): void {
-    if (this.libraryView() === 'playlist') {
-      this.libraryView.set('playlists');
-      this.openedPlaylist.set(null);
+  private followLibrary(podcasts: Podcast[], playlists: Playlist[]): void {
+    if (podcasts.length === 0) {
+      this.entered = false;
       return;
     }
-    this.libraryView.set('hub');
+    const path = this.locationPath();
+    if (!this.entered && path === '/') {
+      this.entered = true;
+      void this.router.navigateByUrl('/home');
+      return;
+    }
+    this.entered = true;
+    const podcastId = /^\/subscriptions\/(\d+)$/.exec(path);
+    if (podcastId && !podcasts.some((podcast) => podcast.id === Number(podcastId[1]))) {
+      void this.router.navigateByUrl('/subscriptions');
+    }
+    const playlistId = /^\/library\/playlists\/(\d+)$/.exec(path);
+    if (playlistId && !playlists.some((playlist) => playlist.id === Number(playlistId[1]))) {
+      void this.router.navigateByUrl('/library/playlists');
+    }
+  }
+
+  section(): 'connect' | 'home' | 'subscriptions' | 'library' {
+    const path = this.locationPath();
+    if (path.startsWith('/home')) return 'home';
+    if (path.startsWith('/subscriptions')) return 'subscriptions';
+    if (path.startsWith('/library')) return 'library';
+    return 'connect';
+  }
+
+  libraryView(): LibraryView {
+    const path = this.locationPath();
+    if (path.startsWith('/library/playlists/')) return 'playlist';
+    if (path === '/library/playlists') return 'playlists';
+    if (path === '/library/favorites') return 'favorites';
+    if (path === '/library/episodes') return 'episodes';
+    if (path === '/library/downloads') return 'downloads';
+    if (path === '/library/statistics') return 'stats';
+    return 'hub';
+  }
+
+  opened(): Podcast | null {
+    const match = /^\/subscriptions\/(\d+)$/.exec(this.locationPath());
+    if (!match) return null;
+    return this.podcasts().find((podcast) => podcast.id === Number(match[1])) ?? null;
+  }
+
+  openedPlaylist(): Playlist | null {
+    const match = /^\/library\/playlists\/(\d+)$/.exec(this.locationPath());
+    if (!match) return null;
+    return this.playlists().find((playlist) => playlist.id === Number(match[1])) ?? null;
+  }
+
+  shelfLink(id: HomeShelf['id']): string {
+    switch (id) {
+      case 'fresh':
+        return '/library/episodes';
+      case 'favorites':
+        return '/library/favorites';
+      case 'recent':
+        return '/library';
+      case 'downloads':
+        return '/library/downloads';
+      default:
+        return '/subscriptions';
+    }
   }
 
   libraryTitle(): string {
@@ -317,14 +359,6 @@ export class AppComponent implements OnDestroy {
       case 'downloads':
         return this.text('Recent downloads', 'Derniers téléchargements');
     }
-  }
-
-  openShelf(id: Exclude<HomeShelf['id'], 'continue' | 'random' | 'preferred'>): void {
-    const view = id === 'fresh' ? 'episodes' : id === 'recent' ? 'hub' : id;
-    this.page.set('library');
-    this.opened.set(null);
-    this.openedPlaylist.set(null);
-    this.libraryView.set(view);
   }
 
   reshuffle(): void {
@@ -443,6 +477,136 @@ export class AppComponent implements OnDestroy {
     this.play(current);
   }
 
+  openPlaying(): void {
+    const episode = this.playing();
+    if (!episode) return;
+    const podcast = this.podcasts().find((item) => item.episodes.some((entry) => entry.id === episode.id));
+    if (podcast) void this.router.navigate(['/subscriptions', podcast.id]);
+  }
+
+  playingShow(): string {
+    const episode = this.playing();
+    if (!episode) return '';
+    return this.podcasts().find((item) => item.episodes.some((entry) => entry.id === episode.id))?.title ?? '';
+  }
+
+  playingCover(): string | null {
+    const episode = this.playing();
+    if (!episode) return null;
+    if (episode.imageUrl) return episode.imageUrl;
+    return this.podcasts().find((item) => item.episodes.some((entry) => entry.id === episode.id))?.imageUrl ?? null;
+  }
+
+  ringDash(): string {
+    const circ = 2 * Math.PI * 17;
+    const total = this.playbackDurationMs() || this.playing()?.durationMs || 0;
+    const progress = total <= 0 ? 0 : Math.min(1, this.playbackMs() / total);
+    return `${circ * progress} ${circ}`;
+  }
+
+  togglePlayback(): void {
+    const player = this.audio()?.nativeElement;
+    if (!player) return;
+    if (player.paused) void player.play().catch(() => undefined);
+    else player.pause();
+  }
+
+  openActions(episode: Episode): void {
+    this.playlistDraft.set('');
+    this.actionsEpisode.set(episode);
+  }
+
+  closeActions(): void {
+    this.actionsEpisode.set(null);
+  }
+
+  downloading(episodeId: number): boolean {
+    return this.pendingDownloads().includes(episodeId);
+  }
+
+  inPlaylist(episode: Episode, playlist: Playlist): boolean {
+    return playlist.episodeIds.includes(episode.id);
+  }
+
+  toggleFavorite(episode: Episode | null = null): void {
+    const target = episode ?? this.playing();
+    if (!target) return;
+    const favorite = !target.favorite;
+    this.patchEpisode(target.id, { favorite });
+    void this.send({
+      type: 'library',
+      action: 'favorite',
+      episodeId: target.id,
+      favorite,
+    });
+  }
+
+  toggleDownload(episode: Episode): void {
+    if (this.downloading(episode.id)) return;
+    if (episode.downloaded) {
+      this.patchEpisode(episode.id, { downloaded: false, downloadedAt: null });
+      void this.send({
+        type: 'library',
+        action: 'remove-download',
+        episodeId: episode.id,
+      });
+      return;
+    }
+    this.pendingDownloads.update((ids) => [...ids, episode.id]);
+    void this.send({
+      type: 'library',
+      action: 'download',
+      episodeId: episode.id,
+    });
+  }
+
+  togglePlaylist(episode: Episode, playlist: Playlist): void {
+    const member = !playlist.episodeIds.includes(episode.id);
+    this.playlists.update((list) =>
+      list.map((item) => {
+        if (item.id !== playlist.id) return item;
+        const episodeIds = member
+          ? [...item.episodeIds, episode.id]
+          : item.episodeIds.filter((id) => id !== episode.id);
+        return { ...item, episodeIds };
+      }),
+    );
+    void this.send({
+      type: 'library',
+      action: 'playlist',
+      episodeId: episode.id,
+      playlistId: playlist.id,
+      member,
+    });
+  }
+
+  createPlaylist(episode: Episode, event: Event): void {
+    event.preventDefault();
+    const name = this.playlistDraft().trim();
+    if (!name || name.length > 80) return;
+    this.playlistDraft.set('');
+    void this.send({
+      type: 'library',
+      action: 'create-playlist',
+      episodeId: episode.id,
+      name,
+    });
+  }
+
+  private patchEpisode(id: number, change: Partial<Episode>): void {
+    const apply = (episode: Episode): Episode => (episode.id === id ? { ...episode, ...change } : episode);
+    this.podcasts.update((list) =>
+      list.map((podcast) => ({
+        ...podcast,
+        episodes: podcast.episodes.map(apply),
+      })),
+    );
+    const playing = this.playing();
+    if (playing?.id === id) this.playing.set(apply(playing));
+    const open = this.actionsEpisode();
+    if (open?.id === id) this.actionsEpisode.set(apply(open));
+  }
+
   play(episode: Episode, openShow = true): void {
     this.prepare(episode, true, openShow);
   }
@@ -451,10 +615,12 @@ export class AppComponent implements OnDestroy {
     const current = this.audio()?.nativeElement;
     const same = this.playing()?.id === episode.id && !!current && current.src === episode.audioUrl;
     this.playing.set(episode);
+    this.playbackMs.set(episode.positionMs);
+    this.playbackDurationMs.set(episode.durationMs ?? 0);
+    this.playbackOn.set(autoplay);
     const podcast = this.podcasts().find((item) => item.episodes.some((entry) => entry.id === episode.id));
     if (openShow && podcast) {
-      this.page.set('subscriptions');
-      this.opened.set(podcast);
+      void this.router.navigate(['/subscriptions', podcast.id]);
     }
     afterNextRender(() => {
       const player = this.audio()?.nativeElement;
@@ -469,10 +635,24 @@ export class AppComponent implements OnDestroy {
   }
 
   onTime(): void {
+    this.syncPlayback();
     const now = Date.now();
     if (now - this.lastSent < 1000) return;
     this.lastSent = now;
     void this.sendProgress();
+  }
+
+  onPlayback(): void {
+    this.syncPlayback();
+    void this.sendProgress();
+  }
+
+  private syncPlayback(): void {
+    const player = this.audio()?.nativeElement;
+    if (!player) return;
+    this.playbackOn.set(!player.paused && !player.ended);
+    if (Number.isFinite(player.currentTime)) this.playbackMs.set(Math.floor(player.currentTime * 1000));
+    if (Number.isFinite(player.duration)) this.playbackDurationMs.set(Math.floor(player.duration * 1000));
   }
 
   async sendProgress(): Promise<void> {
@@ -546,7 +726,7 @@ export class AppComponent implements OnDestroy {
         this.sessionKey = await deriveSessionKey(this.privateKey, base64ToBytes(this.stored.phonePub));
       }
       this.connect();
-      if (!this.stored.phonePub) await this.drawQr();
+      if (!this.stored.phonePub) this.drawQr();
     } catch {
       this.error.set(this.text(
         'This browser cannot start the encrypted link.',
@@ -570,17 +750,18 @@ export class AppComponent implements OnDestroy {
     return created;
   }
 
-  private async drawQr(): Promise<void> {
+  private drawQr(): void {
     const stored = this.stored;
-    const canvas = this.qrCanvas()?.nativeElement;
-    if (!stored || !canvas) return;
-    const payload = JSON.stringify({
+    if (!stored || stored.phonePub) {
+      this.qrPayload.set(null);
+      return;
+    }
+    this.qrPayload.set(JSON.stringify({
       v: 1,
       relay: stored.relay,
       session: stored.session,
       pub: stored.pwaPub,
-    });
-    await QRCode.toCanvas(canvas, payload, { margin: 1, width: 264 });
+    }));
     this.status.set(this.text(
       'Scan this code with Podavio on the phone.',
       'Scannez ce code avec Podavio sur le téléphone.',
@@ -603,7 +784,9 @@ export class AppComponent implements OnDestroy {
         role: 'browser',
         conn: this.conn,
       }));
-      this.status.set(this.text('Waiting for the phone…', 'En attente du téléphone…'));
+      if (stored.phonePub) {
+        this.status.set(this.text('Waiting for the phone…', 'En attente du téléphone…'));
+      }
     });
     socket.addEventListener('message', (event) => {
       if (this.socket !== socket) return;
@@ -677,16 +860,15 @@ export class AppComponent implements OnDestroy {
     const locallyPlaying = !!playing && !!audio && !audio.paused && !audio.ended;
     this.podcasts.set(podcasts);
     this.playlists.set(playlists);
-    const openedList = this.openedPlaylist();
-    if (openedList) {
-      const nextList = playlists.find((playlist) => playlist.id === openedList.id) ?? null;
-      this.openedPlaylist.set(nextList);
-      if (!nextList && this.libraryView() === 'playlist') this.libraryView.set('playlists');
+    this.pendingDownloads.update((ids) =>
+      ids.filter((id) => !podcasts.some((podcast) => podcast.episodes.some((episode) => episode.id === id && episode.downloaded))),
+    );
+    const open = this.actionsEpisode();
+    if (open) {
+      const next = podcasts.flatMap((podcast) => podcast.episodes).find((episode) => episode.id === open.id);
+      this.actionsEpisode.set(next ?? null);
     }
-    const opened = this.opened();
-    if (opened) {
-      this.opened.set(podcasts.find((podcast) => podcast.id === opened.id) ?? null);
-    }
+    this.followLibrary(podcasts, playlists);
     if (playing) {
       const next = podcasts
         .flatMap((podcast) => podcast.episodes)
@@ -722,6 +904,10 @@ export class AppComponent implements OnDestroy {
       podcasts?: unknown;
       playlists?: unknown;
     };
+    if (payload.type === 'library-result') {
+      this.applyLibraryResult(payload as { action?: string; episodeId?: number; ok?: boolean });
+      return;
+    }
     if (payload.type === 'command') {
       this.handleCommand(payload as { action?: string; episodeId?: number; positionMs?: number; seconds?: number });
       return;
@@ -729,6 +915,13 @@ export class AppComponent implements OnDestroy {
     if (payload.type === 'snapshot' && Array.isArray(payload.podcasts)) {
       this.applySnapshot(this.readPodcasts(payload.podcasts), this.readPlaylists(payload.playlists));
     }
+  }
+
+  private applyLibraryResult(payload: { action?: string; episodeId?: number; ok?: boolean }): void {
+    if (payload.action !== 'download' || typeof payload.episodeId !== 'number') return;
+    const episodeId = payload.episodeId;
+    this.pendingDownloads.update((ids) => ids.filter((id) => id !== episodeId));
+    if (payload.ok === true) this.patchEpisode(episodeId, { downloaded: true });
   }
 
   private readPodcasts(raw: unknown[]): Podcast[] {
@@ -808,6 +1001,12 @@ export class AppComponent implements OnDestroy {
     );
     socket.send(JSON.stringify({ type: 'blob', n: this.sendN, iv: sealed.iv, ct: sealed.ct }));
   }
+}
+
+function locationPathOf(url: string): string {
+  const path = url.split('?')[0].split('#')[0];
+  if (path.length > 1 && path.endsWith('/')) return path.slice(0, -1);
+  return path || '/';
 }
 
 function unfinishedListen(podcast: Podcast, episodes: LibraryEpisode[]): number {

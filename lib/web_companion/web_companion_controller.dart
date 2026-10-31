@@ -4,6 +4,9 @@ import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/app_database.dart';
+import '../data/download_controller.dart';
+import '../data/download_service.dart';
 import '../data/providers.dart';
 import '../player/player_controller.dart';
 import '../sync/sync_hooks.dart';
@@ -58,6 +61,7 @@ class WebCompanionController extends Notifier<WebCompanionState> {
   WebCompanionLink? _link;
   Timer? _pushTimer;
   var _pushing = false;
+  var _pushAgain = false;
   DateTime _progressSavedAt = DateTime.fromMillisecondsSinceEpoch(0);
   var _generation = 0;
 
@@ -110,10 +114,7 @@ class WebCompanionController extends Notifier<WebCompanionState> {
     );
     await _store.write(session);
     if (generation != _generation) return;
-    state = WebCompanionState(
-      linked: true,
-      fingerprint: session.fingerprint,
-    );
+    state = WebCompanionState(linked: true, fingerprint: session.fingerprint);
     await _open(session, generation);
   }
 
@@ -161,18 +162,24 @@ class WebCompanionController extends Notifier<WebCompanionState> {
         if (generation != _generation) return;
         unawaited(disconnect(notifyPeer: false));
       },
+      onLibrary: (action) {
+        if (generation != _generation) return;
+        unawaited(_applyLibrary(action));
+      },
       onProgress: (progress) {
         unawaited(_saveProgress(progress));
         if (generation != _generation) return;
         unawaited(
-          ref.read(playerProvider.notifier).showWebPlayback(
-            episodeId: progress.episodeId,
-            position: Duration(milliseconds: progress.positionMs),
-            playing: progress.ended ? false : progress.playing,
-            duration: progress.durationMs == null
-                ? null
-                : Duration(milliseconds: progress.durationMs!),
-          ),
+          ref
+              .read(playerProvider.notifier)
+              .showWebPlayback(
+                episodeId: progress.episodeId,
+                position: Duration(milliseconds: progress.positionMs),
+                playing: progress.ended ? false : progress.playing,
+                duration: progress.durationMs == null
+                    ? null
+                    : Duration(milliseconds: progress.durationMs!),
+              ),
         );
       },
     );
@@ -207,13 +214,104 @@ class WebCompanionController extends Notifier<WebCompanionState> {
       // La session peut se fermer pendant l’envoi.
     } finally {
       _pushing = false;
+      if (_pushAgain) {
+        _pushAgain = false;
+        unawaited(_push());
+      }
     }
+  }
+
+  /// Envoi immédiat : une action de bibliothèque ne doit pas attendre la
+  /// prochaine progression de lecture.
+  void _pushLibrary() {
+    if (_link?.browserOnline != true) return;
+    _pushTimer?.cancel();
+    if (_pushing) {
+      _pushAgain = true;
+      return;
+    }
+    unawaited(_push());
+  }
+
+  Future<void> _applyLibrary(WebLibraryAction action) async {
+    final database = ref.read(databaseProvider);
+    try {
+      switch (action.kind) {
+        case WebLibraryKind.favorite:
+          final favorite = action.favorite;
+          if (favorite == null) return;
+          if (await database.getEpisode(action.episodeId) == null) return;
+          await database.setFavorite(action.episodeId, favorite: favorite);
+        case WebLibraryKind.download:
+          await _downloadFromBrowser(database, action.episodeId);
+        case WebLibraryKind.removeDownload:
+          final entry = await database.getEpisode(action.episodeId);
+          final path = entry?.episode.downloadPath;
+          if (entry != null && path != null && path.isNotEmpty) {
+            await ref
+                .read(downloadProgressProvider.notifier)
+                .deleteDownload(entry.episode);
+          }
+        case WebLibraryKind.playlist:
+          final playlistId = action.playlistId;
+          final member = action.member;
+          if (playlistId == null || member == null) return;
+          if (await database.getEpisode(action.episodeId) == null) return;
+          if (member) {
+            await database.addToPlaylist(playlistId, action.episodeId);
+          } else {
+            await database.removeFromPlaylist(playlistId, action.episodeId);
+          }
+        case WebLibraryKind.createPlaylist:
+          final name = action.name;
+          if (name == null) return;
+          if (await database.getEpisode(action.episodeId) == null) return;
+          final id = await database.createPlaylist(name);
+          await database.addToPlaylist(id, action.episodeId);
+      }
+    } catch (_) {
+      // L’épisode ou la playlist a pu disparaître entre-temps.
+    }
+    _pushLibrary();
+  }
+
+  Future<void> _downloadFromBrowser(AppDatabase database, int episodeId) async {
+    final entry = await database.getEpisode(episodeId);
+    if (entry == null) {
+      await _downloadResult(episodeId, false);
+      return;
+    }
+    final path = entry.episode.downloadPath;
+    if (path != null && path.isNotEmpty) {
+      await _downloadResult(episodeId, true);
+      return;
+    }
+    var ok = false;
+    try {
+      await ref.read(downloadProgressProvider.notifier).download(entry.episode);
+      ok = true;
+    } on DownloadCancelled {
+      ok = false;
+    } catch (_) {
+      ok = false;
+    }
+    await _downloadResult(episodeId, ok);
+  }
+
+  Future<void> _downloadResult(int episodeId, bool ok) async {
+    await _link?.sendCommand({
+      'type': 'library-result',
+      'action': 'download',
+      'episodeId': episodeId,
+      'ok': ok,
+    });
   }
 
   Future<void> _saveProgress(WebProgress progress) async {
     final settled = progress.ended || progress.playing == false;
     final now = DateTime.now();
-    if (!settled && now.difference(_progressSavedAt) < const Duration(seconds: 5)) {
+    if (!settled &&
+        now.difference(_progressSavedAt) < const Duration(seconds: 5)) {
       return;
     }
     _progressSavedAt = now;
@@ -248,7 +346,9 @@ class WebCompanionController extends Notifier<WebCompanionState> {
     if (sameEpisode && !player.playing && !WebRemoteHooks.active) {
       await ref
           .read(playerProvider.notifier)
-          .seek(Duration(milliseconds: progress.ended ? 0 : progress.positionMs));
+          .seek(
+            Duration(milliseconds: progress.ended ? 0 : progress.positionMs),
+          );
     }
   }
 

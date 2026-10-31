@@ -25,35 +25,121 @@ void main() {
     expect(picked.where((episode) => episode.id == 1).length, 1);
   });
 
-  test('favorites, downloads, playlists and recent plays stay in the snapshot', () {
-    final episodes = [
-      for (var i = 0; i < 40; i++)
-        WebCompanionEpisodeRef(
-          id: i,
-          publishedAt: DateTime.utc(2026, 1, 1).add(Duration(days: i)),
-          positionMs: 0,
-          played: true,
-          favorite: i == 2,
-          downloaded: i == 3,
-          pinned: i == 4,
-          lastPlayedAt: i == 5 ? DateTime.utc(2026, 3, 1) : null,
-        ),
-    ];
-    final picked = capWebCompanionEpisodes(episodes);
-    expect(picked.any((episode) => episode.id == 2), isTrue);
-    expect(picked.any((episode) => episode.id == 3), isTrue);
-    expect(picked.any((episode) => episode.id == 4), isTrue);
-    expect(picked.any((episode) => episode.id == 5), isTrue);
-    expect(picked.where((episode) => episode.id == 2).length, 1);
+  test(
+    'favorites, downloads, playlists and recent plays stay in the snapshot',
+    () {
+      final episodes = [
+        for (var i = 0; i < 40; i++)
+          WebCompanionEpisodeRef(
+            id: i,
+            publishedAt: DateTime.utc(2026, 1, 1).add(Duration(days: i)),
+            positionMs: 0,
+            played: true,
+            favorite: i == 2,
+            downloaded: i == 3,
+            pinned: i == 4,
+            lastPlayedAt: i == 5 ? DateTime.utc(2026, 3, 1) : null,
+          ),
+      ];
+      final picked = capWebCompanionEpisodes(episodes);
+      expect(picked.any((episode) => episode.id == 2), isTrue);
+      expect(picked.any((episode) => episode.id == 3), isTrue);
+      expect(picked.any((episode) => episode.id == 4), isTrue);
+      expect(picked.any((episode) => episode.id == 5), isTrue);
+      expect(picked.where((episode) => episode.id == 2).length, 1);
+    },
+  );
+
+  test(
+    'a library action accepts a favorite, a playlist and a named playlist',
+    () {
+      final favorite = WebLibraryAction.parse({
+        'type': 'library',
+        'action': 'favorite',
+        'episodeId': 4,
+        'favorite': true,
+      });
+      expect(favorite?.kind, WebLibraryKind.favorite);
+      expect(favorite?.favorite, isTrue);
+
+      final playlist = WebLibraryAction.parse({
+        'type': 'library',
+        'action': 'playlist',
+        'episodeId': 4,
+        'playlistId': 2,
+        'member': false,
+      });
+      expect(playlist?.kind, WebLibraryKind.playlist);
+      expect(playlist?.member, isFalse);
+
+      final created = WebLibraryAction.parse({
+        'type': 'library',
+        'action': 'create-playlist',
+        'episodeId': 4,
+        'name': '  Soir  ',
+      });
+      expect(created?.name, 'Soir');
+      expect(
+        WebLibraryAction.parse({
+          'type': 'library',
+          'action': 'download',
+          'episodeId': 4,
+        })?.kind,
+        WebLibraryKind.download,
+      );
+    },
+  );
+
+  test('a library action rejects a progress message and a bad playlist', () {
+    expect(
+      WebLibraryAction.parse({
+        'type': 'progress',
+        'episodeId': 4,
+        'positionMs': 20,
+      }),
+      isNull,
+    );
+    expect(
+      WebLibraryAction.parse({
+        'type': 'library',
+        'action': 'favorite',
+        'episodeId': 4,
+      }),
+      isNull,
+    );
+    expect(
+      WebLibraryAction.parse({
+        'type': 'library',
+        'action': 'playlist',
+        'episodeId': 4,
+        'playlistId': 0,
+        'member': true,
+      }),
+      isNull,
+    );
+    expect(
+      WebLibraryAction.parse({
+        'type': 'library',
+        'action': 'create-playlist',
+        'episodeId': 4,
+        'name': '   ',
+      }),
+      isNull,
+    );
+    expect(
+      WebLibraryAction.parse({
+        'type': 'library',
+        'action': 'create-playlist',
+        'episodeId': 4,
+        'name': 'x' * 81,
+      }),
+      isNull,
+    );
   });
 
   test('a progress message rejects a negative position', () {
     expect(
-      WebProgress.parse({
-        'type': 'progress',
-        'episodeId': 4,
-        'positionMs': -1,
-      }),
+      WebProgress.parse({'type': 'progress', 'episodeId': 4, 'positionMs': -1}),
       isNull,
     );
     final progress = WebProgress.parse({
@@ -67,7 +153,12 @@ void main() {
   });
 
   test('the qr must carry a websocket address and a 32 byte key', () {
-    expect(WebCompanionQr.parse('{"relay":"https://x","session":"abcdefgh","pub":"aa"}'), isNull);
+    expect(
+      WebCompanionQr.parse(
+        '{"relay":"https://x","session":"abcdefgh","pub":"aa"}',
+      ),
+      isNull,
+    );
     final pub = webCompanionB64(List<int>.filled(32, 7));
     final qr = WebCompanionQr.parse(
       '{"v":1,"relay":"ws://127.0.0.1:8787/ws","session":"abcdefghij","pub":"$pub"}',
@@ -124,7 +215,9 @@ void main() {
     final shared = await X25519().sharedSecretKey(
       keyPair: privateKey,
       remotePublicKey: SimplePublicKey(
-        _hex('7ca2c72446533e08d6a21dd5609be86806c2cde9a6275623511258bcdd2b9d4a'),
+        _hex(
+          '7ca2c72446533e08d6a21dd5609be86806c2cde9a6275623511258bcdd2b9d4a',
+        ),
         type: KeyPairType.x25519,
       ),
     );

@@ -1,13 +1,20 @@
 <header class="site">
-  <img class="wordmark" src="brand/logo.svg?v=3" alt="Podavio Web" />
+  @if (podcasts().length > 0) {
+    <a class="wordmark-link" routerLink="/home">
+      <img class="wordmark" src="brand/logo.svg?v=3" alt="Podavio Web" />
+    </a>
+  } @else {
+    <img class="wordmark" src="brand/logo.svg?v=3" alt="Podavio Web" />
+  }
   @if (fingerprint()) {
     <button type="button" class="link" (click)="disconnect()">{{ text('Disconnect', 'Dissocier') }}</button>
   }
 </header>
+<router-outlet />
 
 @if (error()) {
   <p class="banner error">{{ error() }}</p>
-} @else if (podcasts().length === 0) {
+} @else if (podcasts().length === 0 || section() === 'connect') {
   <section class="hero">
     <div class="pair">
       <div class="copy">
@@ -28,7 +35,17 @@
       </div>
       <div class="qr">
         @if (!fingerprint()) {
-          <canvas #qr></canvas>
+          @if (qrPayload(); as payload) {
+            <qrcode
+              [qrdata]="payload"
+              [width]="264"
+              [margin]="1"
+              elementType="svg"
+              errorCorrectionLevel="M"
+              cssClass="qr-svg"
+              [ariaLabel]="text('Scan this code with Podavio on the phone.', 'Scannez ce code avec Podavio sur le téléphone.')"
+            />
+          }
         } @else {
           <img class="mark" src="brand/icon.svg" alt="" />
         }
@@ -40,37 +57,22 @@
     <nav class="rail">
       <img class="rail-mark" src="brand/icon.svg" alt="" />
       <div class="rail-group">
-        <button
-          type="button"
-          class="rail-item"
-          [class.on]="page() === 'home'"
-          (click)="showHome()"
-        >
+        <a class="rail-item" routerLink="/home" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: true }">
           <img src="brand/home.svg" alt="" />
           <span>{{ text('Home', 'Accueil') }}</span>
-        </button>
-        <button
-          type="button"
-          class="rail-item"
-          [class.on]="page() === 'subscriptions'"
-          (click)="closePodcast()"
-        >
+        </a>
+        <a class="rail-item" routerLink="/subscriptions" routerLinkActive="on">
           <img src="brand/subscriptions.svg" alt="" />
           <span>{{ text('Subscriptions', 'Abonnements') }}</span>
-        </button>
-        <button
-          type="button"
-          class="rail-item"
-          [class.on]="page() === 'library'"
-          (click)="showLibrary()"
-        >
+        </a>
+        <a class="rail-item" routerLink="/library" routerLinkActive="on">
           <img src="brand/library.svg" alt="" />
           <span>{{ text('Library', 'Bibliothèque') }}</span>
-        </button>
+        </a>
       </div>
     </nav>
     <div class="stage">
-      @if (page() === 'home') {
+      @if (section() === 'home') {
         <section class="home">
           @if (washUrl(); as url) {
             <img class="wash" [src]="url" alt="" />
@@ -85,10 +87,8 @@
                 <h2>{{ shelfTitle(shelf.id) }}</h2>
                 @if (shelf.id === 'random') {
                   <button type="button" class="more" [attr.aria-label]="text('Other episodes', 'Autres épisodes')" (click)="reshuffle()">↻</button>
-                } @else if (shelf.id === 'preferred') {
-                  <button type="button" class="more" (click)="closePodcast()">{{ text('More', 'Plus') }}</button>
                 } @else if (shelf.id !== 'continue') {
-                  <button type="button" class="more" (click)="openShelf(shelf.id)">{{ text('More', 'Plus') }}</button>
+                  <a class="more" [routerLink]="shelfLink(shelf.id)">{{ text('More', 'Plus') }}</a>
                 }
               </header>
               @if (shelf.id === 'continue') {
@@ -98,26 +98,29 @@
                   [class.rows-2]="continueRows(shelf.episodes.length) === 2"
                 >
                   @for (episode of shelf.episodes; track episode.id) {
-                    <button type="button" class="continue-row" [class.current]="playing()?.id === episode.id" (click)="play(episode, false)">
-                      @if (coverOf(episode); as cover) {
-                        <img [src]="cover" alt="" />
-                      } @else {
-                        <span class="fallback">{{ initial(episode.title) }}</span>
-                      }
-                      <span class="copy">
-                        <strong>{{ episode.title }}</strong>
-                        <span class="meta">{{ meta(episode) }}</span>
-                        @if (progress(episode); as fraction) {
-                          <span class="bar"><span [style.width.%]="fraction * 100"></span></span>
+                    <div class="continue-row" [class.current]="playing()?.id === episode.id">
+                      <button type="button" class="continue-open" (click)="play(episode, false)">
+                        @if (coverOf(episode); as cover) {
+                          <img [src]="cover" alt="" />
+                        } @else {
+                          <span class="fallback">{{ initial(episode.title) }}</span>
                         }
-                      </span>
-                    </button>
+                        <span class="copy">
+                          <strong>{{ episode.title }}</strong>
+                          <span class="meta">{{ meta(episode) }}</span>
+                          @if (progress(episode); as fraction) {
+                            <span class="bar"><span [style.width.%]="fraction * 100"></span></span>
+                          }
+                        </span>
+                      </button>
+                      <button type="button" class="row-more" [attr.aria-label]="text('Actions', 'Actions')" (click)="openActions(episode)">⋯</button>
+                    </div>
                   }
                 </div>
               } @else if (shelf.id === 'preferred') {
                 <div class="shelf-row">
                   @for (podcast of shelf.podcasts; track podcast.id) {
-                    <button type="button" class="cover-card" (click)="openPodcast(podcast)">
+                    <a class="cover-card" [routerLink]="['/subscriptions', podcast.id]">
                       <span class="art">
                         @if (podcast.imageUrl) {
                           <img [src]="podcast.imageUrl" alt="" />
@@ -129,57 +132,60 @@
                         }
                       </span>
                       <strong>{{ podcast.title }}</strong>
-                    </button>
+                    </a>
                   }
                 </div>
               } @else {
                 <div class="shelf-row">
                   @for (episode of shelf.episodes; track episode.id) {
-                    <button type="button" class="cover-card" [class.current]="playing()?.id === episode.id" (click)="play(episode, false)">
-                      @if (coverOf(episode); as cover) {
-                        <img [src]="cover" alt="" />
-                      } @else {
-                        <span class="fallback">{{ initial(episode.title) }}</span>
-                      }
-                      <strong>{{ episode.title }}</strong>
-                      <span class="show">{{ episode.podcastTitle }}</span>
-                    </button>
+                    <div class="cover-card" [class.current]="playing()?.id === episode.id">
+                      <button type="button" class="cover-open" (click)="play(episode, false)">
+                        @if (coverOf(episode); as cover) {
+                          <img [src]="cover" alt="" />
+                        } @else {
+                          <span class="fallback">{{ initial(episode.title) }}</span>
+                        }
+                        <strong>{{ episode.title }}</strong>
+                        <span class="show">{{ episode.podcastTitle }}</span>
+                      </button>
+                      <button type="button" class="row-more on-art" [attr.aria-label]="text('Actions', 'Actions')" (click)="openActions(episode)">⋯</button>
+                    </div>
                   }
                 </div>
               }
             }
           }
         </section>
-      } @else if (page() === 'library') {
+      } @else if (section() === 'library') {
         <section class="library">
           @if (libraryView() !== 'hub') {
-            <button type="button" class="back" (click)="libraryBack()">
+            <a class="back" [routerLink]="libraryView() === 'playlist' ? '/library/playlists' : '/library'">
               {{ text('Library', 'Bibliothèque') }}
-            </button>
+            </a>
             <h2>{{ libraryTitle() }}</h2>
           }
           @if (libraryView() === 'hub') {
             <div class="library-tiles">
-              <button type="button" class="library-tile favorites" (click)="openLibrary('favorites')">
+              <a class="library-tile favorites" routerLink="/library/favorites">
                 <span aria-hidden="true">♥</span>
                 <span class="tile-name">{{ text('Favorites', 'Favoris') }}</span>
-              </button>
-              <button type="button" class="library-tile episodes" (click)="openLibrary('episodes')">
+              </a>
+              <a class="library-tile episodes" routerLink="/library/episodes">
                 <span aria-hidden="true">▣</span>
                 <span class="tile-name">{{ text('Episodes', 'Épisodes') }}</span>
-              </button>
-              <button type="button" class="library-tile downloads" (click)="openLibrary('downloads')">
+              </a>
+              <a class="library-tile downloads" routerLink="/library/downloads">
                 <span aria-hidden="true">↓</span>
                 <span class="tile-name">{{ text('Downloads', 'Téléchargements') }}</span>
-              </button>
-              <button type="button" class="library-tile playlists" (click)="openLibrary('playlists')">
+              </a>
+              <a class="library-tile playlists" routerLink="/library/playlists">
                 <span aria-hidden="true">≡</span>
                 <span class="tile-name">{{ text('Playlists', 'Playlists') }}</span>
-              </button>
-              <button type="button" class="library-tile statistics" (click)="openLibrary('stats')">
+              </a>
+              <a class="library-tile statistics" routerLink="/library/statistics">
                 <span aria-hidden="true">↗</span>
                 <span class="tile-name">{{ text('Statistics', 'Statistiques') }}</span>
-              </button>
+              </a>
             </div>
             <h2 class="recent">{{ text('Recent plays', 'Lectures récentes') }}</h2>
             @if (recentEpisodes().length === 0) {
@@ -187,11 +193,12 @@
             } @else {
               <ul class="library-list">
                 @for (episode of recentEpisodes(); track episode.id) {
-                  <li>
+                  <li class="episode-line">
                     <button type="button" class="episode" [class.current]="playing()?.id === episode.id" (click)="play(episode, false)">
                       <strong>{{ episode.title }}</strong>
                       <span>{{ episode.podcastTitle }}</span>
                     </button>
+                    <button type="button" class="row-more" [attr.aria-label]="text('Actions', 'Actions')" (click)="openActions(episode)">⋯</button>
                   </li>
                 }
               </ul>
@@ -203,10 +210,10 @@
               <ul class="library-list">
                 @for (playlist of playlists(); track playlist.id) {
                   <li>
-                    <button type="button" class="episode" (click)="openPlaylist(playlist)">
+                    <a class="episode" [routerLink]="['/library/playlists', playlist.id]">
                       <strong>{{ playlist.name }}</strong>
                       <span>{{ playlist.episodeIds.length }}</span>
-                    </button>
+                    </a>
                   </li>
                 }
               </ul>
@@ -225,11 +232,12 @@
             } @else {
               <ul class="library-list">
                 @for (episode of libraryEpisodes(); track episode.id) {
-                  <li>
+                  <li class="episode-line">
                     <button type="button" class="episode" [class.current]="playing()?.id === episode.id" (click)="play(episode, false)">
                       <strong>{{ episode.title }}</strong>
                       <span>{{ episode.podcastTitle }} · {{ formatWhen(episode.publishedAt) }}</span>
                     </button>
+                    <button type="button" class="row-more" [attr.aria-label]="text('Actions', 'Actions')" (click)="openActions(episode)">⋯</button>
                   </li>
                 }
               </ul>
@@ -261,7 +269,7 @@
           </div>
           <ul class="episodes">
             @for (episode of current.episodes; track episode.id) {
-              <li>
+              <li class="episode-line">
                 <button
                   type="button"
                   class="episode"
@@ -271,6 +279,7 @@
                   <strong>{{ episode.title }}</strong>
                   <span>{{ formatWhen(episode.publishedAt) }}</span>
                 </button>
+                <button type="button" class="row-more" [attr.aria-label]="text('Actions', 'Actions')" (click)="openActions(episode)">⋯</button>
               </li>
             }
           </ul>
@@ -279,24 +288,118 @@
         <ul class="grid">
           @for (podcast of podcasts(); track podcast.id) {
             <li>
-              <button type="button" class="tile" (click)="openPodcast(podcast)">
+              <a class="tile" [routerLink]="['/subscriptions', podcast.id]">
                 @if (podcast.imageUrl) {
                   <img [src]="podcast.imageUrl" alt="" />
                 } @else {
                   <span class="fallback">{{ initial(podcast.title) }}</span>
                 }
                 <span class="tile-title">{{ podcast.title }}</span>
-              </button>
+              </a>
             </li>
           }
         </ul>
       }
-      @if (playing(); as currentEpisode) {
-        <div class="dock">
-          <p>{{ currentEpisode.title }}</p>
-          <audio #audio controls (timeupdate)="onTime()" (play)="sendProgress()" (pause)="sendProgress()" (ended)="sendProgress()"></audio>
-        </div>
+    </div>
+  </div>
+}
+@if (playing(); as currentEpisode) {
+  <div class="dock" [class.with-rail]="podcasts().length > 0 && section() !== 'connect'">
+    <div class="mini">
+      <span class="mini-art">
+        <svg class="ring" viewBox="0 0 40 40" aria-hidden="true">
+          <circle class="track" cx="20" cy="20" r="17" />
+          <circle class="value" cx="20" cy="20" r="17" [attr.stroke-dasharray]="ringDash()" />
+        </svg>
+        @if (playingCover(); as cover) {
+          <img [src]="cover" alt="" />
+        } @else {
+          <span class="fallback">{{ initial(currentEpisode.title) }}</span>
+        }
+      </span>
+      <button type="button" class="mini-copy" (click)="openPlaying()">
+        <strong>{{ currentEpisode.title }}</strong>
+        <span>{{ playingShow() }}</span>
+      </button>
+      <span class="pills">
+        <button
+          type="button"
+          class="pill"
+          [class.on]="currentEpisode.favorite"
+          [attr.aria-label]="currentEpisode.favorite ? text('Remove from favorites', 'Retirer des favoris') : text('Add to favorites', 'Ajouter aux favoris')"
+          (click)="toggleFavorite(currentEpisode)"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            @if (currentEpisode.favorite) {
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            } @else {
+              <path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55-.1.1-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.89-3.14 5.74-7.9 10.05z" />
+            }
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="pill play"
+          [attr.aria-label]="playbackOn() ? text('Pause', 'Pause') : text('Play', 'Lecture')"
+          (click)="togglePlayback()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            @if (playbackOn()) {
+              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+            } @else {
+              <path d="M8 5v14l11-7z" />
+            }
+          </svg>
+        </button>
+      </span>
+    </div>
+    <audio #audio (timeupdate)="onTime()" (play)="onPlayback()" (pause)="onPlayback()" (ended)="onPlayback()"></audio>
+  </div>
+}
+@if (actionsEpisode(); as episode) {
+  <div class="sheet-back" (click)="closeActions()">
+    <div
+      class="sheet"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="episode.title"
+      (click)="$event.stopPropagation()"
+    >
+      <h2>{{ episode.title }}</h2>
+      <button type="button" class="sheet-action" [class.on]="episode.favorite" (click)="toggleFavorite(episode)">
+        {{ episode.favorite ? text('Remove from favorites', 'Retirer des favoris') : text('Add to favorites', 'Ajouter aux favoris') }}
+      </button>
+      <button type="button" class="sheet-action" [disabled]="downloading(episode.id)" (click)="toggleDownload(episode)">
+        @if (downloading(episode.id)) {
+          {{ text('Downloading', 'Téléchargement…') }}
+        } @else if (episode.downloaded) {
+          {{ text('Delete the download', 'Supprimer le téléchargement') }}
+        } @else {
+          {{ text('Download on the phone', 'Télécharger sur le téléphone') }}
+        }
+      </button>
+      <h3>{{ text('Playlists', 'Playlists') }}</h3>
+      @for (playlist of playlists(); track playlist.id) {
+        <button type="button" class="sheet-row" (click)="togglePlaylist(episode, playlist)">
+          <span class="check" aria-hidden="true">{{ inPlaylist(episode, playlist) ? '●' : '○' }}</span>
+          <span class="sheet-copy">
+            <strong>{{ playlist.name }}</strong>
+            @if (playlist.isDefault) {
+              <span>{{ text('Default', 'Par défaut') }}</span>
+            }
+          </span>
+        </button>
       }
+      <form (submit)="createPlaylist(episode, $event)">
+        <input
+          [value]="playlistDraft()"
+          maxlength="80"
+          [attr.aria-label]="text('Playlist name', 'Nom de la playlist')"
+          [attr.placeholder]="text('New playlist', 'Nouvelle playlist')"
+          (input)="playlistDraft.set($any($event.target).value)"
+        />
+        <button type="submit">{{ text('Create', 'Créer') }}</button>
+      </form>
     </div>
   </div>
 }

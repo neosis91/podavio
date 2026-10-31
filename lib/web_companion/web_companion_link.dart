@@ -67,12 +67,14 @@ class WebCompanionLink {
   WebCompanionLink({
     required this.session,
     required this.onProgress,
+    required this.onLibrary,
     required this.onBrowser,
     required this.onUnlink,
   });
 
   final WebCompanionSession session;
   final void Function(WebProgress progress) onProgress;
+  final void Function(WebLibraryAction action) onLibrary;
   final void Function(bool online) onBrowser;
   final void Function() onUnlink;
   final _random = Random.secure();
@@ -128,11 +130,7 @@ class WebCompanionLink {
           return;
         }
         _socket = socket;
-        socket.listen(
-          _onFrame,
-          onDone: () {},
-          onError: (_) {},
-        );
+        socket.listen(_onFrame, onDone: () {}, onError: (_) {});
         socket.add(
           jsonEncode({
             'type': 'join',
@@ -251,6 +249,11 @@ class WebCompanionLink {
     try {
       decoded = jsonDecode(utf8.decode(plain));
     } catch (_) {
+      return;
+    }
+    final action = WebLibraryAction.parse(decoded);
+    if (action != null) {
+      onLibrary(action);
       return;
     }
     final progress = WebProgress.parse(decoded);
