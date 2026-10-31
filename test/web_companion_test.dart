@@ -25,6 +25,28 @@ void main() {
     expect(picked.where((episode) => episode.id == 1).length, 1);
   });
 
+  test('favorites, downloads, playlists and recent plays stay in the snapshot', () {
+    final episodes = [
+      for (var i = 0; i < 40; i++)
+        WebCompanionEpisodeRef(
+          id: i,
+          publishedAt: DateTime.utc(2026, 1, 1).add(Duration(days: i)),
+          positionMs: 0,
+          played: true,
+          favorite: i == 2,
+          downloaded: i == 3,
+          pinned: i == 4,
+          lastPlayedAt: i == 5 ? DateTime.utc(2026, 3, 1) : null,
+        ),
+    ];
+    final picked = capWebCompanionEpisodes(episodes);
+    expect(picked.any((episode) => episode.id == 2), isTrue);
+    expect(picked.any((episode) => episode.id == 3), isTrue);
+    expect(picked.any((episode) => episode.id == 4), isTrue);
+    expect(picked.any((episode) => episode.id == 5), isTrue);
+    expect(picked.where((episode) => episode.id == 2).length, 1);
+  });
+
   test('a progress message rejects a negative position', () {
     expect(
       WebProgress.parse({

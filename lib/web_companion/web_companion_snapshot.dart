@@ -6,12 +6,29 @@ class WebCompanionEpisodeRef {
     required this.publishedAt,
     required this.positionMs,
     required this.played,
+    this.favorite = false,
+    this.downloaded = false,
+    this.pinned = false,
+    this.lastPlayedAt,
   });
 
   final int id;
   final DateTime? publishedAt;
   final int positionMs;
   final bool played;
+  final bool favorite;
+  final bool downloaded;
+
+  /// Dans une playlist ou la file : à garder même hors du plafond récent.
+  final bool pinned;
+  final DateTime? lastPlayedAt;
+
+  bool get keptBeyondCap =>
+      (positionMs > 0 && !played) ||
+      favorite ||
+      downloaded ||
+      pinned ||
+      lastPlayedAt != null;
 }
 
 /// Épisodes récents, plus ceux déjà commencés s’ils sortent du plafond.
@@ -33,7 +50,7 @@ List<T> capWebCompanionEpisodes<T extends WebCompanionEpisodeRef>(
   }
   for (final episode in ordered) {
     if (seen.contains(episode.id)) continue;
-    if (episode.positionMs > 0 && !episode.played) picked.add(episode);
+    if (episode.keptBeyondCap) picked.add(episode);
   }
   return picked;
 }

@@ -33,15 +33,47 @@ interface Episode {
   durationMs: number | null;
   positionMs: number;
   publishedAt: string | null;
+  favorite: boolean;
+  downloaded: boolean;
+  played: boolean;
+  lastPlayedAt: string | null;
+  downloadedAt: string | null;
 }
+
+interface LibraryEpisode extends Episode {
+  podcastId: number;
+  podcastTitle: string;
+}
+
+interface Playlist {
+  id: number;
+  name: string;
+  isDefault: boolean;
+  episodeIds: number[];
+}
+
+type LibraryView =
+  | 'hub'
+  | 'favorites'
+  | 'episodes'
+  | 'downloads'
+  | 'playlists'
+  | 'playlist'
+  | 'stats';
 
 interface Podcast {
   id: number;
   title: string;
   author: string;
   imageUrl: string | null;
+  preferred: boolean;
   episodes: Episode[];
 }
+
+type HomeShelf =
+  | { id: 'continue'; episodes: LibraryEpisode[] }
+  | { id: 'fresh' | 'favorites' | 'recent' | 'random' | 'downloads'; episodes: LibraryEpisode[] }
+  | { id: 'preferred'; podcasts: Podcast[] };
 
 interface StoredSession {
   relay: string;
@@ -69,6 +101,11 @@ export class AppComponent implements OnDestroy {
   readonly fingerprint = signal('');
   readonly status = signal('');
   readonly podcasts = signal<Podcast[]>([]);
+  readonly playlists = signal<Playlist[]>([]);
+  readonly page = signal<'home' | 'subscriptions' | 'library'>('home');
+  readonly randomSeed = signal(1);
+  readonly libraryView = signal<LibraryView>('hub');
+  readonly openedPlaylist = signal<Playlist | null>(null);
   readonly opened = signal<Podcast | null>(null);
   readonly playing = signal<Episode | null>(null);
   readonly error = signal('');
@@ -127,6 +164,10 @@ export class AppComponent implements OnDestroy {
     localStorage.removeItem(storageKey);
     this.stored = undefined;
     this.podcasts.set([]);
+    this.playlists.set([]);
+    this.page.set('home');
+    this.libraryView.set('hub');
+    this.openedPlaylist.set(null);
     this.opened.set(null);
     this.playing.set(null);
     this.fingerprint.set('');
@@ -137,11 +178,253 @@ export class AppComponent implements OnDestroy {
   }
 
   openPodcast(podcast: Podcast): void {
+    this.page.set('subscriptions');
     this.opened.set(podcast);
   }
 
-  closePodcast(): void {
+  showHome(): void {
+    this.page.set('home');
     this.opened.set(null);
+  }
+
+  closePodcast(): void {
+    this.page.set('subscriptions');
+    this.libraryView.set('hub');
+    this.openedPlaylist.set(null);
+    this.opened.set(null);
+  }
+
+  showLibrary(): void {
+    this.page.set('library');
+    this.opened.set(null);
+    this.libraryView.set('hub');
+    this.openedPlaylist.set(null);
+  }
+
+  openLibrary(view: LibraryView): void {
+    this.libraryView.set(view);
+    this.openedPlaylist.set(null);
+  }
+
+  openPlaylist(playlist: Playlist): void {
+    this.openedPlaylist.set(playlist);
+    this.libraryView.set('playlist');
+  }
+
+  libraryBack(): void {
+    if (this.libraryView() === 'playlist') {
+      this.libraryView.set('playlists');
+      this.openedPlaylist.set(null);
+      return;
+    }
+    this.libraryView.set('hub');
+  }
+
+  libraryTitle(): string {
+    switch (this.libraryView()) {
+      case 'favorites':
+        return this.text('Favorites', 'Favoris');
+      case 'episodes':
+        return this.text('Episodes', 'Épisodes');
+      case 'downloads':
+        return this.text('Downloads', 'Téléchargements');
+      case 'playlists':
+        return this.text('Playlists', 'Playlists');
+      case 'playlist':
+        return this.openedPlaylist()?.name ?? this.text('Playlists', 'Playlists');
+      case 'stats':
+        return this.text('Statistics', 'Statistiques');
+      case 'hub':
+        return this.text('Library', 'Bibliothèque');
+    }
+  }
+
+  flatEpisodes(): LibraryEpisode[] {
+    return this.podcasts().flatMap((podcast) =>
+      podcast.episodes.map((episode) => ({
+        ...episode,
+        podcastId: podcast.id,
+        podcastTitle: podcast.title,
+      })),
+    );
+  }
+
+  recentEpisodes(): LibraryEpisode[] {
+    return this.flatEpisodes()
+      .filter((episode) => episode.lastPlayedAt)
+      .sort((a, b) => (b.lastPlayedAt ?? '').localeCompare(a.lastPlayedAt ?? ''));
+  }
+
+  libraryEpisodes(): LibraryEpisode[] {
+    const view = this.libraryView();
+    const episodes = this.flatEpisodes();
+    if (view === 'favorites') return episodes.filter((episode) => episode.favorite);
+    if (view === 'downloads') return episodes.filter((episode) => episode.downloaded);
+    if (view === 'episodes') {
+      return [...episodes].sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
+    }
+    if (view === 'playlist') {
+      const playlist = this.openedPlaylist();
+      if (!playlist) return [];
+      const byId = new Map(episodes.map((episode) => [episode.id, episode]));
+      return playlist.episodeIds.flatMap((id) => {
+        const episode = byId.get(id);
+        return episode ? [episode] : [];
+      });
+    }
+    return [];
+  }
+
+  statCount(kind: 'podcasts' | 'episodes' | 'favorites' | 'downloads' | 'playlists'): number {
+    if (kind === 'podcasts') return this.podcasts().length;
+    if (kind === 'playlists') return this.playlists().length;
+    if (kind === 'favorites') return this.flatEpisodes().filter((episode) => episode.favorite).length;
+    if (kind === 'downloads') return this.flatEpisodes().filter((episode) => episode.downloaded).length;
+    return this.flatEpisodes().length;
+  }
+
+  greeting(): string {
+    const hour = new Date().getHours();
+    if (hour >= 6 && hour <= 12) return this.text('Good morning', 'Bonjour');
+    if (hour >= 13 && hour <= 17) return this.text('Good afternoon', 'Bon après-midi');
+    if (hour >= 18 && hour <= 23) return this.text('Good evening', 'Bonsoir');
+    return this.text('Good night', 'Bonne nuit');
+  }
+
+  homeShelves(): HomeShelf[] {
+    const shelves: HomeShelf[] = [];
+    for (const id of ['continue', 'fresh', 'favorites', 'recent', 'random', 'preferred', 'downloads'] as const) {
+      const shelf = this.homeShelf(id);
+      if (shelf) shelves.push(shelf);
+    }
+    return shelves;
+  }
+
+  shelfTitle(id: HomeShelf['id']): string {
+    switch (id) {
+      case 'continue':
+        return this.text('Continue listening', 'Continuer d’écouter');
+      case 'fresh':
+        return this.text("What's new", 'Les nouveautés');
+      case 'favorites':
+        return this.text('Favorites', 'Favoris');
+      case 'recent':
+        return this.text('Recent plays', 'Lectures récentes');
+      case 'random':
+        return this.text('Random', 'Aléatoire');
+      case 'preferred':
+        return this.text('Preferred subscriptions', 'Abonnements préférés');
+      case 'downloads':
+        return this.text('Recent downloads', 'Derniers téléchargements');
+    }
+  }
+
+  openShelf(id: Exclude<HomeShelf['id'], 'continue' | 'random' | 'preferred'>): void {
+    const view = id === 'fresh' ? 'episodes' : id === 'recent' ? 'hub' : id;
+    this.page.set('library');
+    this.opened.set(null);
+    this.openedPlaylist.set(null);
+    this.libraryView.set(view);
+  }
+
+  reshuffle(): void {
+    this.randomSeed.update((seed) => seed + 1);
+  }
+
+  washUrl(): string | null {
+    const first = this.homeShelves()[0];
+    if (!first) return null;
+    if (first.id === 'preferred') return first.podcasts[0]?.imageUrl ?? null;
+    return this.coverOf(first.episodes[0]);
+  }
+
+  coverOf(episode: LibraryEpisode): string | null {
+    if (episode.imageUrl) return episode.imageUrl;
+    return this.podcasts().find((podcast) => podcast.id === episode.podcastId)?.imageUrl ?? null;
+  }
+
+  progress(episode: Episode): number | null {
+    const duration = episode.durationMs;
+    if (!duration || duration <= 0 || episode.positionMs <= 0) return null;
+    return Math.min(1, episode.positionMs / duration);
+  }
+
+  meta(episode: LibraryEpisode): string {
+    return [episode.podcastTitle, this.formatWhen(episode.publishedAt), this.formatDuration(episode.durationMs)]
+      .filter((part) => part.length > 0)
+      .join(' · ');
+  }
+
+  formatDuration(ms: number | null): string {
+    if (ms == null || ms <= 0) return '';
+    const total = Math.floor(ms / 1000);
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const seconds = total % 60;
+    const padded = String(seconds).padStart(2, '0');
+    if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${padded}`;
+    return `${minutes}:${padded}`;
+  }
+
+  continueRows(count: number): number {
+    return Math.min(3, Math.max(1, count));
+  }
+
+  private homeShelf(id: HomeShelf['id']): HomeShelf | null {
+    const episodes = this.flatEpisodes();
+    if (id === 'continue') {
+      const rows = episodes
+        .filter((episode) => !episode.played && episode.positionMs > 0)
+        .sort((a, b) => (b.lastPlayedAt ?? '').localeCompare(a.lastPlayedAt ?? ''))
+        .slice(0, 15);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    if (id === 'fresh') {
+      const rows = episodes
+        .filter((episode) => !episode.played && episode.positionMs === 0)
+        .sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''))
+        .slice(0, 16);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    if (id === 'favorites') {
+      const rows = episodes
+        .filter((episode) => episode.favorite)
+        .sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''))
+        .slice(0, 16);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    if (id === 'recent') {
+      const playing = new Set(
+        episodes.filter((episode) => !episode.played && episode.positionMs > 0).map((episode) => episode.id),
+      );
+      const rows = episodes
+        .filter((episode) => episode.lastPlayedAt && !playing.has(episode.id))
+        .sort((a, b) => (b.lastPlayedAt ?? '').localeCompare(a.lastPlayedAt ?? ''))
+        .slice(0, 12);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    if (id === 'random') {
+      const rows = shuffled(
+        episodes.filter((episode) => !episode.played),
+        this.randomSeed(),
+      ).slice(0, 12);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    if (id === 'downloads') {
+      const rows = episodes
+        .filter((episode) => episode.downloaded)
+        .sort((a, b) => {
+          const byDownload = (b.downloadedAt ?? '').localeCompare(a.downloadedAt ?? '');
+          return byDownload || (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '');
+        })
+        .slice(0, 12);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    const podcasts = [...this.podcasts()].sort((a, b) => {
+      if (a.preferred !== b.preferred) return a.preferred ? -1 : 1;
+      return unfinishedListen(b, episodes) - unfinishedListen(a, episodes) || a.title.localeCompare(b.title);
+    });
+    return podcasts.length ? { id: 'preferred', podcasts } : null;
   }
 
   episodeCount(podcast: Podcast): string {
@@ -160,16 +443,19 @@ export class AppComponent implements OnDestroy {
     this.play(current);
   }
 
-  play(episode: Episode): void {
-    this.prepare(episode, true);
+  play(episode: Episode, openShow = true): void {
+    this.prepare(episode, true, openShow);
   }
 
-  prepare(episode: Episode, autoplay: boolean): void {
+  prepare(episode: Episode, autoplay: boolean, openShow = true): void {
     const current = this.audio()?.nativeElement;
     const same = this.playing()?.id === episode.id && !!current && current.src === episode.audioUrl;
     this.playing.set(episode);
     const podcast = this.podcasts().find((item) => item.episodes.some((entry) => entry.id === episode.id));
-    if (podcast) this.opened.set(podcast);
+    if (openShow && podcast) {
+      this.page.set('subscriptions');
+      this.opened.set(podcast);
+    }
     afterNextRender(() => {
       const player = this.audio()?.nativeElement;
       if (!player) return;
@@ -385,11 +671,18 @@ export class AppComponent implements OnDestroy {
     this.status.set(this.text('Phone linked. Waiting for the library…', 'Téléphone associé. En attente de la bibliothèque…'));
   }
 
-  private applySnapshot(podcasts: Podcast[]): void {
+  private applySnapshot(podcasts: Podcast[], playlists: Playlist[]): void {
     const playing = this.playing();
     const audio = this.audio()?.nativeElement;
     const locallyPlaying = !!playing && !!audio && !audio.paused && !audio.ended;
     this.podcasts.set(podcasts);
+    this.playlists.set(playlists);
+    const openedList = this.openedPlaylist();
+    if (openedList) {
+      const nextList = playlists.find((playlist) => playlist.id === openedList.id) ?? null;
+      this.openedPlaylist.set(nextList);
+      if (!nextList && this.libraryView() === 'playlist') this.libraryView.set('playlists');
+    }
     const opened = this.opened();
     if (opened) {
       this.opened.set(podcasts.find((podcast) => podcast.id === opened.id) ?? null);
@@ -424,14 +717,83 @@ export class AppComponent implements OnDestroy {
     this.recvN = n;
     const clear = await open(key, iv, ct, aad('phone', this.peerConn, n));
     if (!clear) return;
-    const payload = JSON.parse(new TextDecoder().decode(clear)) as { type?: string; podcasts?: Podcast[] };
+    const payload = JSON.parse(new TextDecoder().decode(clear)) as {
+      type?: string;
+      podcasts?: unknown;
+      playlists?: unknown;
+    };
     if (payload.type === 'command') {
       this.handleCommand(payload as { action?: string; episodeId?: number; positionMs?: number; seconds?: number });
       return;
     }
     if (payload.type === 'snapshot' && Array.isArray(payload.podcasts)) {
-      this.applySnapshot(payload.podcasts);
+      this.applySnapshot(this.readPodcasts(payload.podcasts), this.readPlaylists(payload.playlists));
     }
+  }
+
+  private readPodcasts(raw: unknown[]): Podcast[] {
+    const podcasts: Podcast[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const podcast = item as Record<string, unknown>;
+      if (typeof podcast['id'] !== 'number' || typeof podcast['title'] !== 'string') continue;
+      const episodes = Array.isArray(podcast['episodes'])
+        ? podcast['episodes'].flatMap((entry) => {
+            const episode = this.readEpisode(entry);
+            return episode ? [episode] : [];
+          })
+        : [];
+      podcasts.push({
+        id: podcast['id'],
+        title: podcast['title'],
+        author: typeof podcast['author'] === 'string' ? podcast['author'] : '',
+        imageUrl: typeof podcast['imageUrl'] === 'string' ? podcast['imageUrl'] : null,
+        preferred: podcast['preferred'] === true,
+        episodes,
+      });
+    }
+    return podcasts;
+  }
+
+  private readEpisode(raw: unknown): Episode | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const episode = raw as Record<string, unknown>;
+    if (typeof episode['id'] !== 'number' || typeof episode['title'] !== 'string') return null;
+    if (typeof episode['audioUrl'] !== 'string') return null;
+    return {
+      id: episode['id'],
+      title: episode['title'],
+      audioUrl: episode['audioUrl'],
+      imageUrl: typeof episode['imageUrl'] === 'string' ? episode['imageUrl'] : null,
+      durationMs: typeof episode['durationMs'] === 'number' ? episode['durationMs'] : null,
+      positionMs: typeof episode['positionMs'] === 'number' ? episode['positionMs'] : 0,
+      publishedAt: typeof episode['publishedAt'] === 'string' ? episode['publishedAt'] : null,
+      favorite: episode['favorite'] === true,
+      downloaded: episode['downloaded'] === true,
+      played: episode['played'] === true,
+      lastPlayedAt: typeof episode['lastPlayedAt'] === 'string' ? episode['lastPlayedAt'] : null,
+      downloadedAt: typeof episode['downloadedAt'] === 'string' ? episode['downloadedAt'] : null,
+    };
+  }
+
+  private readPlaylists(raw: unknown): Playlist[] {
+    if (!Array.isArray(raw)) return [];
+    const playlists: Playlist[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const playlist = item as Record<string, unknown>;
+      if (typeof playlist['id'] !== 'number' || typeof playlist['name'] !== 'string') continue;
+      const episodeIds = Array.isArray(playlist['episodeIds'])
+        ? playlist['episodeIds'].filter((id): id is number => typeof id === 'number')
+        : [];
+      playlists.push({
+        id: playlist['id'],
+        name: playlist['name'],
+        isDefault: playlist['isDefault'] === true,
+        episodeIds,
+      });
+    }
+    return playlists;
   }
 
   private async send(payload: unknown): Promise<void> {
@@ -446,6 +808,29 @@ export class AppComponent implements OnDestroy {
     );
     socket.send(JSON.stringify({ type: 'blob', n: this.sendN, iv: sealed.iv, ct: sealed.ct }));
   }
+}
+
+function unfinishedListen(podcast: Podcast, episodes: LibraryEpisode[]): number {
+  let total = 0;
+  for (const episode of episodes) {
+    if (episode.podcastId === podcast.id && !episode.played && episode.positionMs > 0) {
+      total += episode.positionMs;
+    }
+  }
+  return total;
+}
+
+function shuffled<T>(items: T[], seed: number): T[] {
+  const copy = [...items];
+  let state = seed >>> 0 || 1;
+  for (let index = copy.length - 1; index > 0; index--) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const swap = copy[index];
+    const target = state % (index + 1);
+    copy[index] = copy[target];
+    copy[target] = swap;
+  }
+  return copy;
 }
 
 function randomId(): string {

@@ -39,13 +39,204 @@
   <div class="desktop">
     <nav class="rail">
       <img class="rail-mark" src="brand/icon.svg" alt="" />
-      <button type="button" class="rail-item" (click)="closePodcast()">
-        <img src="brand/subscriptions.svg" alt="" />
-        <span>{{ text('Subscriptions', 'Abonnements') }}</span>
-      </button>
+      <div class="rail-group">
+        <button
+          type="button"
+          class="rail-item"
+          [class.on]="page() === 'home'"
+          (click)="showHome()"
+        >
+          <img src="brand/home.svg" alt="" />
+          <span>{{ text('Home', 'Accueil') }}</span>
+        </button>
+        <button
+          type="button"
+          class="rail-item"
+          [class.on]="page() === 'subscriptions'"
+          (click)="closePodcast()"
+        >
+          <img src="brand/subscriptions.svg" alt="" />
+          <span>{{ text('Subscriptions', 'Abonnements') }}</span>
+        </button>
+        <button
+          type="button"
+          class="rail-item"
+          [class.on]="page() === 'library'"
+          (click)="showLibrary()"
+        >
+          <img src="brand/library.svg" alt="" />
+          <span>{{ text('Library', 'Bibliothèque') }}</span>
+        </button>
+      </div>
     </nav>
     <div class="stage">
-      @if (opened(); as current) {
+      @if (page() === 'home') {
+        <section class="home">
+          @if (washUrl(); as url) {
+            <img class="wash" [src]="url" alt="" />
+          }
+          <p class="greeting">{{ greeting() }}</p>
+          @if (homeShelves().length === 0) {
+            <p class="home-empty">{{ text('Nothing to play right now', 'Rien à écouter pour le moment') }}</p>
+            <p class="home-empty note">{{ text('Add a subscription to fill the home screen.', 'Ajoutez un abonnement pour remplir l’accueil.') }}</p>
+          } @else {
+            @for (shelf of homeShelves(); track shelf.id) {
+              <header class="shelf-head">
+                <h2>{{ shelfTitle(shelf.id) }}</h2>
+                @if (shelf.id === 'random') {
+                  <button type="button" class="more" [attr.aria-label]="text('Other episodes', 'Autres épisodes')" (click)="reshuffle()">↻</button>
+                } @else if (shelf.id === 'preferred') {
+                  <button type="button" class="more" (click)="closePodcast()">{{ text('More', 'Plus') }}</button>
+                } @else if (shelf.id !== 'continue') {
+                  <button type="button" class="more" (click)="openShelf(shelf.id)">{{ text('More', 'Plus') }}</button>
+                }
+              </header>
+              @if (shelf.id === 'continue') {
+                <div
+                  class="continue"
+                  [class.rows-1]="continueRows(shelf.episodes.length) === 1"
+                  [class.rows-2]="continueRows(shelf.episodes.length) === 2"
+                >
+                  @for (episode of shelf.episodes; track episode.id) {
+                    <button type="button" class="continue-row" [class.current]="playing()?.id === episode.id" (click)="play(episode, false)">
+                      @if (coverOf(episode); as cover) {
+                        <img [src]="cover" alt="" />
+                      } @else {
+                        <span class="fallback">{{ initial(episode.title) }}</span>
+                      }
+                      <span class="copy">
+                        <strong>{{ episode.title }}</strong>
+                        <span class="meta">{{ meta(episode) }}</span>
+                        @if (progress(episode); as fraction) {
+                          <span class="bar"><span [style.width.%]="fraction * 100"></span></span>
+                        }
+                      </span>
+                    </button>
+                  }
+                </div>
+              } @else if (shelf.id === 'preferred') {
+                <div class="shelf-row">
+                  @for (podcast of shelf.podcasts; track podcast.id) {
+                    <button type="button" class="cover-card" (click)="openPodcast(podcast)">
+                      <span class="art">
+                        @if (podcast.imageUrl) {
+                          <img [src]="podcast.imageUrl" alt="" />
+                        } @else {
+                          <span class="fallback">{{ initial(podcast.title) }}</span>
+                        }
+                        @if (podcast.preferred) {
+                          <span class="star" aria-hidden="true">★</span>
+                        }
+                      </span>
+                      <strong>{{ podcast.title }}</strong>
+                    </button>
+                  }
+                </div>
+              } @else {
+                <div class="shelf-row">
+                  @for (episode of shelf.episodes; track episode.id) {
+                    <button type="button" class="cover-card" [class.current]="playing()?.id === episode.id" (click)="play(episode, false)">
+                      @if (coverOf(episode); as cover) {
+                        <img [src]="cover" alt="" />
+                      } @else {
+                        <span class="fallback">{{ initial(episode.title) }}</span>
+                      }
+                      <strong>{{ episode.title }}</strong>
+                      <span class="show">{{ episode.podcastTitle }}</span>
+                    </button>
+                  }
+                </div>
+              }
+            }
+          }
+        </section>
+      } @else if (page() === 'library') {
+        <section class="library">
+          @if (libraryView() !== 'hub') {
+            <button type="button" class="back" (click)="libraryBack()">
+              {{ text('Library', 'Bibliothèque') }}
+            </button>
+            <h2>{{ libraryTitle() }}</h2>
+          }
+          @if (libraryView() === 'hub') {
+            <div class="library-tiles">
+              <button type="button" class="library-tile favorites" (click)="openLibrary('favorites')">
+                <span aria-hidden="true">♥</span>
+                <span class="tile-name">{{ text('Favorites', 'Favoris') }}</span>
+              </button>
+              <button type="button" class="library-tile episodes" (click)="openLibrary('episodes')">
+                <span aria-hidden="true">▣</span>
+                <span class="tile-name">{{ text('Episodes', 'Épisodes') }}</span>
+              </button>
+              <button type="button" class="library-tile downloads" (click)="openLibrary('downloads')">
+                <span aria-hidden="true">↓</span>
+                <span class="tile-name">{{ text('Downloads', 'Téléchargements') }}</span>
+              </button>
+              <button type="button" class="library-tile playlists" (click)="openLibrary('playlists')">
+                <span aria-hidden="true">≡</span>
+                <span class="tile-name">{{ text('Playlists', 'Playlists') }}</span>
+              </button>
+              <button type="button" class="library-tile statistics" (click)="openLibrary('stats')">
+                <span aria-hidden="true">↗</span>
+                <span class="tile-name">{{ text('Statistics', 'Statistiques') }}</span>
+              </button>
+            </div>
+            <h2 class="recent">{{ text('Recent plays', 'Lectures récentes') }}</h2>
+            @if (recentEpisodes().length === 0) {
+              <p class="empty">{{ text('No recent plays', 'Aucune lecture récente') }}</p>
+            } @else {
+              <ul class="library-list">
+                @for (episode of recentEpisodes(); track episode.id) {
+                  <li>
+                    <button type="button" class="episode" [class.current]="playing()?.id === episode.id" (click)="play(episode, false)">
+                      <strong>{{ episode.title }}</strong>
+                      <span>{{ episode.podcastTitle }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          } @else if (libraryView() === 'playlists') {
+            @if (playlists().length === 0) {
+              <p class="empty">{{ text('No playlists', 'Aucune playlist') }}</p>
+            } @else {
+              <ul class="library-list">
+                @for (playlist of playlists(); track playlist.id) {
+                  <li>
+                    <button type="button" class="episode" (click)="openPlaylist(playlist)">
+                      <strong>{{ playlist.name }}</strong>
+                      <span>{{ playlist.episodeIds.length }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          } @else if (libraryView() === 'stats') {
+            <ul class="stats">
+              <li><strong>{{ statCount('podcasts') }}</strong><span>{{ text('Subscriptions', 'Abonnements') }}</span></li>
+              <li><strong>{{ statCount('episodes') }}</strong><span>{{ text('Episodes', 'Épisodes') }}</span></li>
+              <li><strong>{{ statCount('favorites') }}</strong><span>{{ text('Favorites', 'Favoris') }}</span></li>
+              <li><strong>{{ statCount('downloads') }}</strong><span>{{ text('Downloads', 'Téléchargements') }}</span></li>
+              <li><strong>{{ statCount('playlists') }}</strong><span>{{ text('Playlists', 'Playlists') }}</span></li>
+            </ul>
+          } @else {
+            @if (libraryEpisodes().length === 0) {
+              <p class="empty">{{ text('Nothing here', 'Rien ici') }}</p>
+            } @else {
+              <ul class="library-list">
+                @for (episode of libraryEpisodes(); track episode.id) {
+                  <li>
+                    <button type="button" class="episode" [class.current]="playing()?.id === episode.id" (click)="play(episode, false)">
+                      <strong>{{ episode.title }}</strong>
+                      <span>{{ episode.podcastTitle }} · {{ formatWhen(episode.publishedAt) }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          }
+        </section>
+      } @else if (opened(); as current) {
         <div class="landscape">
           <div class="cover-col">
             @if (current.imageUrl) {
