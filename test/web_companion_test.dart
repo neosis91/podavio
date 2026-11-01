@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:podavio/ui/browser_logo.dart';
 import 'package:podavio/web_companion/web_companion_crypto.dart';
 import 'package:podavio/web_companion/web_companion_snapshot.dart';
 
@@ -135,6 +136,27 @@ void main() {
       }),
       isNull,
     );
+  });
+
+  test('a client message keeps a known browser and system', () {
+    final client = WebClient.parse({
+      'type': 'client',
+      'browser': 'chrome',
+      'os': 'linux',
+    });
+    expect(client?.browser, 'chrome');
+    expect(client?.os, 'linux');
+    expect(
+      WebClient.parse({
+        'type': 'client',
+        'browser': 'not-a-browser',
+        'os': 'linux',
+      })?.browser,
+      isNull,
+    );
+    expect(WebClient.parse({'type': 'progress', 'episodeId': 4}), isNull);
+    expect(linkedDeviceLabel('chrome', 'linux'), 'Google Chrome (Linux)');
+    expect(linkedDeviceLabel(null, null), isNull);
   });
 
   test('a progress message rejects a negative position', () {

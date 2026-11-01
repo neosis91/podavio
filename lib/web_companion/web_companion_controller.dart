@@ -24,6 +24,8 @@ class WebCompanionState {
     this.socketOpen = false,
     this.browserOnline = false,
     this.fingerprint,
+    this.browser,
+    this.os,
     this.error,
   });
 
@@ -31,6 +33,8 @@ class WebCompanionState {
   final bool socketOpen;
   final bool browserOnline;
   final String? fingerprint;
+  final String? browser;
+  final String? os;
   final String? error;
 
   WebCompanionState copyWith({
@@ -38,6 +42,8 @@ class WebCompanionState {
     bool? socketOpen,
     bool? browserOnline,
     String? fingerprint,
+    String? browser,
+    String? os,
     String? error,
     bool clearError = false,
   }) {
@@ -46,6 +52,8 @@ class WebCompanionState {
       socketOpen: socketOpen ?? this.socketOpen,
       browserOnline: browserOnline ?? this.browserOnline,
       fingerprint: fingerprint ?? this.fingerprint,
+      browser: browser ?? this.browser,
+      os: os ?? this.os,
       error: clearError ? null : error ?? this.error,
     );
   }
@@ -59,6 +67,7 @@ final webCompanionProvider =
 class WebCompanionController extends Notifier<WebCompanionState> {
   final _store = WebCompanionStore();
   WebCompanionLink? _link;
+  WebCompanionSession? _session;
   Timer? _pushTimer;
   var _pushing = false;
   var _pushAgain = false;
@@ -126,6 +135,7 @@ class WebCompanionController extends Notifier<WebCompanionState> {
     ref.read(playerProvider.notifier).setWebRemote(false);
     final link = _link;
     _link = null;
+    _session = null;
     if (notifyPeer) {
       await link?.unlink();
     } else {
@@ -143,15 +153,27 @@ class WebCompanionController extends Notifier<WebCompanionState> {
     state = state.copyWith(
       linked: true,
       fingerprint: session.fingerprint,
+      browser: session.browser,
+      os: session.os,
       clearError: true,
     );
     await _open(session, generation);
   }
 
   Future<void> _open(WebCompanionSession session, int generation) async {
+    _session = session;
     await startWebCompanionKeepAlive(_keepAliveTitle());
     final link = WebCompanionLink(
       session: session,
+      onClient: (client) {
+        if (generation != _generation) return;
+        final current = _session;
+        if (current == null) return;
+        final next = current.copyWith(browser: client.browser, os: client.os);
+        _session = next;
+        unawaited(_store.write(next));
+        state = state.copyWith(browser: next.browser, os: next.os);
+      },
       onBrowser: (online) {
         if (generation != _generation) return;
         state = state.copyWith(browserOnline: online, socketOpen: true);

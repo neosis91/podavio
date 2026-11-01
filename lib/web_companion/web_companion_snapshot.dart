@@ -93,6 +93,47 @@ class WebProgress {
   }
 }
 
+const webClientBrowsers = {
+  'chrome',
+  'chromium',
+  'firefox',
+  'safari',
+  'edge',
+  'opera',
+  'brave',
+  'samsung',
+  'vivaldi',
+};
+
+const webClientSystems = {
+  'linux',
+  'windows',
+  'macos',
+  'android',
+  'ios',
+  'chromeos',
+};
+
+class WebClient {
+  const WebClient({this.browser, this.os});
+
+  final String? browser;
+  final String? os;
+
+  static WebClient? parse(Object? raw) {
+    if (raw is! Map || raw['type'] != 'client') return null;
+    final browser = raw['browser'];
+    final os = raw['os'];
+    final knownBrowser =
+        browser is String && webClientBrowsers.contains(browser)
+        ? browser
+        : null;
+    final knownOs = os is String && webClientSystems.contains(os) ? os : null;
+    if (knownBrowser == null && knownOs == null) return null;
+    return WebClient(browser: knownBrowser, os: knownOs);
+  }
+}
+
 enum WebLibraryKind {
   favorite,
   download,

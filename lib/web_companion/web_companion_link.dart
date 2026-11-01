@@ -14,6 +14,8 @@ class WebCompanionSession {
     required this.phonePub,
     required this.key,
     required this.fingerprint,
+    this.browser,
+    this.os,
   });
 
   final String relay;
@@ -22,6 +24,21 @@ class WebCompanionSession {
   final List<int> phonePub;
   final List<int> key;
   final String fingerprint;
+  final String? browser;
+  final String? os;
+
+  WebCompanionSession copyWith({String? browser, String? os}) {
+    return WebCompanionSession(
+      relay: relay,
+      session: session,
+      pwaPub: pwaPub,
+      phonePub: phonePub,
+      key: key,
+      fingerprint: fingerprint,
+      browser: browser ?? this.browser,
+      os: os ?? this.os,
+    );
+  }
 
   Map<String, Object?> toJson() {
     return {
@@ -31,6 +48,8 @@ class WebCompanionSession {
       'phonePub': webCompanionB64(phonePub),
       'key': webCompanionB64(key),
       'fingerprint': fingerprint,
+      if (browser != null) 'browser': browser,
+      if (os != null) 'os': os,
     };
   }
 
@@ -49,6 +68,8 @@ class WebCompanionSession {
       if (relay is! String || session is! String || fingerprint is! String) {
         return null;
       }
+      final browser = parsed['browser'];
+      final os = parsed['os'];
       return WebCompanionSession(
         relay: relay,
         session: session,
@@ -56,6 +77,10 @@ class WebCompanionSession {
         phonePub: webCompanionB64Decode(parsed['phonePub'] as String),
         key: webCompanionB64Decode(parsed['key'] as String),
         fingerprint: fingerprint,
+        browser: browser is String && webClientBrowsers.contains(browser)
+            ? browser
+            : null,
+        os: os is String && webClientSystems.contains(os) ? os : null,
       );
     } catch (_) {
       return null;
@@ -68,6 +93,7 @@ class WebCompanionLink {
     required this.session,
     required this.onProgress,
     required this.onLibrary,
+    required this.onClient,
     required this.onBrowser,
     required this.onUnlink,
   });
@@ -75,6 +101,7 @@ class WebCompanionLink {
   final WebCompanionSession session;
   final void Function(WebProgress progress) onProgress;
   final void Function(WebLibraryAction action) onLibrary;
+  final void Function(WebClient client) onClient;
   final void Function(bool online) onBrowser;
   final void Function() onUnlink;
   final _random = Random.secure();
@@ -249,6 +276,11 @@ class WebCompanionLink {
     try {
       decoded = jsonDecode(utf8.decode(plain));
     } catch (_) {
+      return;
+    }
+    final client = WebClient.parse(decoded);
+    if (client != null) {
+      onClient(client);
       return;
     }
     final action = WebLibraryAction.parse(decoded);

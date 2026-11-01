@@ -144,6 +144,8 @@ flutter:
     - assets/brand/keyboard_double_arrow_down.svg
     - assets/brand/delete.svg
     - assets/brand/history.svg
+    - assets/brand/browsers/
+    - assets/brand/os/
     - assets/flags/
 
   # An image asset can refer to one or more resolution-specific "variants", see

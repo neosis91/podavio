@@ -852,6 +852,16 @@ export class AppComponent implements OnDestroy {
     this.fingerprint.set(stored.fingerprint);
     localStorage.setItem(storageKey, JSON.stringify(stored));
     this.status.set(this.text('Phone linked. Waiting for the library…', 'Téléphone associé. En attente de la bibliothèque…'));
+    await this.sendClient();
+  }
+
+  private async sendClient(): Promise<void> {
+    const identity = clientIdentity();
+    const payload: Record<string, string> = { type: 'client' };
+    if (identity.browser) payload['browser'] = identity.browser;
+    if (identity.os) payload['os'] = identity.os;
+    if (!identity.browser && !identity.os) return;
+    await this.send(payload);
   }
 
   private applySnapshot(podcasts: Podcast[], playlists: Playlist[]): void {
@@ -1001,6 +1011,35 @@ export class AppComponent implements OnDestroy {
     );
     socket.send(JSON.stringify({ type: 'blob', n: this.sendN, iv: sealed.iv, ct: sealed.ct }));
   }
+}
+
+function clientIdentity(): { browser: string; os: string } {
+  const hints = (navigator as Navigator & {
+    userAgentData?: { brands?: { brand: string }[]; platform?: string };
+  }).userAgentData;
+  const brands = (hints?.brands ?? []).map((item) => item.brand.toLowerCase());
+  const ua = navigator.userAgent;
+  const hay = `${brands.join(' ')} ${ua}`.toLowerCase();
+  let browser = '';
+  if (brands.some((brand) => brand.includes('edge')) || /edg\/|edgios/.test(hay)) browser = 'edge';
+  else if (brands.some((brand) => brand.includes('opera')) || hay.includes('opr/')) browser = 'opera';
+  else if (hay.includes('samsungbrowser') || hay.includes('samsung internet')) browser = 'samsung';
+  else if (hay.includes('vivaldi')) browser = 'vivaldi';
+  else if (brands.some((brand) => brand.includes('brave'))) browser = 'brave';
+  else if (hay.includes('firefox') || hay.includes('fxios')) browser = 'firefox';
+  else if (brands.some((brand) => brand.includes('chrome')) || /chrome|crios/.test(hay)) browser = 'chrome';
+  else if (hay.includes('safari')) browser = 'safari';
+  else if (brands.some((brand) => brand.includes('chromium')) || hay.includes('chromium')) browser = 'chromium';
+
+  const source = `${(hints?.platform ?? '').toLowerCase()} ${ua.toLowerCase()}`;
+  let os = '';
+  if (source.includes('android')) os = 'android';
+  else if (/iphone|ipad|ipod|ios/.test(source)) os = 'ios';
+  else if (source.includes('cros') || source.includes('chromeos') || source.includes('chrome os')) os = 'chromeos';
+  else if (source.includes('mac')) os = 'macos';
+  else if (source.includes('win')) os = 'windows';
+  else if (source.includes('linux')) os = 'linux';
+  return { browser, os };
 }
 
 function locationPathOf(url: string): string {
