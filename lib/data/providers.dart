@@ -23,9 +23,41 @@ Future<void> closeAppDatabase(AppDatabase database) {
   return _databaseClose[database] ??= database.close();
 }
 
+/// `false` pendant un import : `close()` attend les watch Drift encore
+/// ouverts, donc l’import les coupe d’abord et ferme lui-même l’ancienne base.
+bool _closeDatabaseOnDispose = true;
+
+enum DatabasePhase { open, replacing }
+
+class DatabasePhaseNotifier extends Notifier<DatabasePhase> {
+  @override
+  DatabasePhase build() => DatabasePhase.open;
+
+  void beginReplacement() {
+    _closeDatabaseOnDispose = false;
+    state = DatabasePhase.replacing;
+  }
+
+  void finishReplacement() {
+    _closeDatabaseOnDispose = true;
+    state = DatabasePhase.open;
+  }
+}
+
+final databasePhaseProvider =
+    NotifierProvider<DatabasePhaseNotifier, DatabasePhase>(
+      DatabasePhaseNotifier.new,
+    );
+
 final databaseProvider = Provider<AppDatabase>((ref) {
+  // Tant que le fichier est remplacé, les lecteurs se désabonnent sans
+  // qu’une nouvelle connexion s’ouvre sur l’ancien ou le nouveau fichier.
+  if (ref.watch(databasePhaseProvider) != DatabasePhase.open) {
+    throw StateError('Database is being replaced.');
+  }
   final database = AppDatabase.defaults();
   ref.onDispose(() {
+    if (!_closeDatabaseOnDispose) return;
     unawaited(closeAppDatabase(database));
   });
   return database;

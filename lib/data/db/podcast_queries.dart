@@ -466,6 +466,28 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     );
   }
 
+  Future<List<({int id, String path})>> podcastImageFiles() async {
+    final query = selectOnly(podcasts)
+      ..addColumns([podcasts.id, podcasts.imagePath])
+      ..where(podcasts.imagePath.isNotNull());
+    final rows = await query.get();
+    return [
+      for (final row in rows)
+        if (row.read(podcasts.imagePath) case final path?)
+          (id: row.read(podcasts.id)!, path: path),
+    ];
+  }
+
+  Future<void> clearPodcastImagePaths(List<int> ids) async {
+    const size = 400;
+    for (var start = 0; start < ids.length; start += size) {
+      final end = start + size < ids.length ? start + size : ids.length;
+      await (update(podcasts)
+            ..where((table) => table.id.isIn(ids.sublist(start, end))))
+          .write(const PodcastsCompanion(imagePath: Value(null)));
+    }
+  }
+
   Future<void> setPodcastImagePaths(List<({int id, String path})> updates) {
     if (updates.isEmpty) return Future.value();
     return batch((statement) {

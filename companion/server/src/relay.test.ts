@@ -57,6 +57,19 @@ test('hello and blob are forwarded without extra fields', () => {
   });
 });
 
+test('unlink is forwarded and a later bye is a separate message', () => {
+  const hub = new RelayHub();
+  const browser = capture();
+  const phone = capture();
+  hub.join('session', 'browser', 'b', browser.peer);
+  hub.join('session', 'phone', 'p', phone.peer);
+  browser.messages.length = 0;
+  hub.forward('session', 'phone', { type: 'unlink' });
+  assert.deepEqual(browser.messages.at(-1), { type: 'unlink', role: 'phone' });
+  hub.leave('session', 'phone', phone.peer);
+  assert.deepEqual(browser.messages.at(-1), { type: 'bye', role: 'phone' });
+});
+
 test('a replaced socket stops receiving and the room closes', () => {
   const hub = new RelayHub();
   const browser = capture();

@@ -247,84 +247,84 @@ _HomeShelf? _homeShelf(
     'fresh' when fresh.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
         title: context.tr("What's new"),
-        height: _episodeRowHeight,
-        itemCount: fresh.length,
-        onMore: () => context.push(AppRoutes.episodes),
-        itemBuilder: (context, index) => _EpisodeCard(
-          key: ValueKey(fresh[index].episode.id),
-          entry: fresh[index],
+          height: _episodeRowHeight,
+          itemCount: fresh.length,
+          onMore: () => context.push(AppRoutes.episodes),
+          itemBuilder: (context, index) => _EpisodeCard(
+            key: ValueKey(fresh[index].episode.id),
+            entry: fresh[index],
+          ),
         ),
-      ),
       entry: fresh.first,
     ),
     'favorites' when favorites.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
-        title: context.tr('Favorites'),
-        height: _episodeRowHeight,
-        itemCount: favorites.length,
-        onMore: () => context.push(AppRoutes.favorites),
-        itemBuilder: (context, index) => _EpisodeCard(
-          key: ValueKey(favorites[index].episode.id),
-          entry: favorites[index],
+          title: context.tr('Favorites'),
+          height: _episodeRowHeight,
+          itemCount: favorites.length,
+          onMore: () => context.push(AppRoutes.favorites),
+          itemBuilder: (context, index) => _EpisodeCard(
+            key: ValueKey(favorites[index].episode.id),
+            entry: favorites[index],
+          ),
         ),
-      ),
       entry: favorites.first,
     ),
     'recent' when played.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
-        title: context.tr('Recent plays'),
-        height: _episodeRowHeight,
-        itemCount: played.length,
-        onMore: () => context.push(AppRoutes.history),
-        itemBuilder: (context, index) => _EpisodeCard(
-          key: ValueKey(played[index].episode.id),
-          entry: played[index],
+          title: context.tr('Recent plays'),
+          height: _episodeRowHeight,
+          itemCount: played.length,
+          onMore: () => context.push(AppRoutes.history),
+          itemBuilder: (context, index) => _EpisodeCard(
+            key: ValueKey(played[index].episode.id),
+            entry: played[index],
+          ),
         ),
-      ),
       entry: played.first,
     ),
     'random' when random.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
         title: context.tr('Random'),
-        height: _episodeRowHeight,
-        itemCount: random.length,
-        action: IconButton(
-          tooltip: 'Autres épisodes',
-          onPressed: () =>
-              ref.read(randomEpisodesProvider.notifier).reshuffle(),
-          icon: const Icon(Icons.shuffle),
+          height: _episodeRowHeight,
+          itemCount: random.length,
+          action: IconButton(
+            tooltip: 'Autres épisodes',
+            onPressed: () =>
+                ref.read(randomEpisodesProvider.notifier).reshuffle(),
+            icon: const Icon(Icons.shuffle),
+          ),
+          itemBuilder: (context, index) => _EpisodeCard(
+            key: ValueKey(random[index].episode.id),
+            entry: random[index],
+          ),
         ),
-        itemBuilder: (context, index) => _EpisodeCard(
-          key: ValueKey(random[index].episode.id),
-          entry: random[index],
-        ),
-      ),
       entry: random.first,
     ),
     'preferred' when subscriptions.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
         title: context.tr('Preferred subscriptions'),
-        height: _podcastRowHeight,
-        itemCount: subscriptions.length,
-        onMore: () => context.go(AppRoutes.podcasts),
-        itemBuilder: (context, index) => _PodcastCard(
-          key: ValueKey(subscriptions[index].id),
-          podcast: subscriptions[index],
+          height: _podcastRowHeight,
+          itemCount: subscriptions.length,
+          onMore: () => context.go(AppRoutes.podcasts),
+          itemBuilder: (context, index) => _PodcastCard(
+            key: ValueKey(subscriptions[index].id),
+            podcast: subscriptions[index],
+          ),
         ),
-      ),
       podcast: subscriptions.first,
     ),
     'downloads' when downloads.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
         title: context.tr('Recent downloads'),
-        height: _episodeRowHeight,
-        itemCount: downloads.length,
-        onMore: () => context.push(AppRoutes.downloads),
-        itemBuilder: (context, index) => _EpisodeCard(
-          key: ValueKey(downloads[index].episode.id),
-          entry: downloads[index],
+          height: _episodeRowHeight,
+          itemCount: downloads.length,
+          onMore: () => context.push(AppRoutes.downloads),
+          itemBuilder: (context, index) => _EpisodeCard(
+            key: ValueKey(downloads[index].episode.id),
+            entry: downloads[index],
+          ),
         ),
-      ),
       entry: downloads.first,
     ),
     _ => null,
@@ -351,10 +351,10 @@ class _HomeHeaderOverlay extends StatelessWidget {
     return SizedBox(
       height: top + _headerToolbar,
       child: Stack(
-        fit: StackFit.expand,
-        children: [
+            fit: StackFit.expand,
+            children: [
           FrostedHeaderBackdrop(scrolled: scrolled),
-          Padding(
+              Padding(
             padding: EdgeInsets.only(top: top),
             child: Column(
               children: [
@@ -362,28 +362,28 @@ class _HomeHeaderOverlay extends StatelessWidget {
                   height: _headerBrand,
                   child: Padding(
                     padding: const EdgeInsets.only(left: 16, right: 4),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const PodavioLogo(width: 118),
-                              const SizedBox(height: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const PodavioLogo(width: 118),
+                  const SizedBox(height: 4),
                               Text(
                                 _homeGreeting(context),
                                 style: theme.textTheme.bodySmall,
                               ),
-                            ],
-                          ),
-                        ),
+                ],
+              ),
+            ),
                         const _EcoButton(),
-                        const HistoryButton(),
+            const HistoryButton(),
                         const _WebButton(),
-                        const PreferencesButton(),
-                      ],
-                    ),
+            const PreferencesButton(),
+          ],
+        ),
                   ),
                 ),
                 SizedBox(
@@ -750,8 +750,8 @@ class _ContinueShelf extends ConsumerWidget {
               final overflow = entries.length > rows * columns;
               final itemWidth = columns == 1
                   ? (constraints.maxWidth - 30).clamp(
-                      220.0,
-                      constraints.maxWidth,
+                220.0,
+                constraints.maxWidth,
                     )
                   : (constraints.maxWidth - 12 - (overflow ? 28 : 0)) / 2;
               return GridView.builder(
@@ -981,17 +981,17 @@ class _HomePageWashState extends ConsumerState<_HomePageWash> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 500),
           curve: Curves.easeOutCubic,
-          decoration: BoxDecoration(
-            gradient: tint == null
-                ? null
+      decoration: BoxDecoration(
+        gradient: tint == null
+            ? null
                 : RadialGradient(
                     center: Alignment.topLeft,
                     radius: 1.45,
-                    colors: [
+                colors: [
                       tint.withValues(alpha: 0.55),
                       tint.withValues(alpha: 0.2),
-                      surface.withValues(alpha: 0),
-                    ],
+                  surface.withValues(alpha: 0),
+                ],
                     stops: const [0, 0.36, 0.72],
                   ),
           ),

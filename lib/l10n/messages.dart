@@ -307,6 +307,22 @@ const _fr = <String, String>{
   'On iOS, keep Podavio open. On Android, a notification keeps the link.': 'Sur iOS, laissez Podavio ouvert. Sur Android, une notification maintient le lien.',
   'Disconnect': 'Dissocier',
   'This code cannot be used': 'Ce code ne peut pas être utilisé',
+  'Linked devices': 'Appareils connectés',
+  'Use Podavio on another screen': 'Utilisez Podavio sur un autre écran',
+  'You can connect a browser to this phone. The library stays here, encrypted end to end.':
+      'Vous pouvez connecter un navigateur à ce téléphone. La bibliothèque reste ici, chiffrée de bout en bout.',
+  'Connect a device': 'Connecter un appareil',
+  'Device status': 'Statut de l’appareil',
+  'Tap a device to view it or disconnect it.':
+      'Appuyez sur un appareil pour le voir ou le dissocier.',
+  'Your library stays encrypted end to end.':
+      'Votre bibliothèque reste chiffrée de bout en bout.',
+  'Scan the QR code': 'Scanner le code QR',
+  'Open web.podavio.com on a computer, then scan the code.':
+      'Ouvrez web.podavio.com sur un ordinateur, puis scannez le code.',
+  'Browser': 'Navigateur',
+  'If you do not recognize this browser, disconnect it.':
+      'Si vous ne reconnaissez pas ce navigateur, dissociez-le.',
   'Choose synchronization provider':
       'Choisir un fournisseur de synchronisation',
   'Devices need a central server to share subscriptions and listening progress. Podavio does not host that server. Connect one of the services below. Others can be added later.': 'Les appareils ont besoin d’un serveur pour partager les abonnements et la progression d’écoute. Podavio n’héberge pas ce serveur. Reliez l’un des services ci-dessous. D’autres pourront s’ajouter.',

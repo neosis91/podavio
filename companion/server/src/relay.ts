@@ -79,6 +79,10 @@ export class RelayHub {
       target.send({ type: 'hello', pub, iv, ct });
       return;
     }
+    if (message.type === 'unlink') {
+      target.send({ type: 'unlink', role: from });
+      return;
+    }
     if (message.type === 'blob') {
       const n = message.n;
       const iv = shortText(message.iv);
