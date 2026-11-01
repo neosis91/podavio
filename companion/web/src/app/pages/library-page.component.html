@@ -1,0 +1,53 @@
+<section class="library">
+  <div class="library-tiles">
+    <a class="library-tile favorites" routerLink="/library/favorites">
+      <mat-icon>favorite</mat-icon>
+      <span class="tile-name">{{ session.text('Favorites', 'Favoris') }}</span>
+    </a>
+    <a class="library-tile episodes" routerLink="/library/episodes">
+      <mat-icon>grid_view</mat-icon>
+      <span class="tile-name">{{ session.text('Episodes', 'Épisodes') }}</span>
+    </a>
+    <a class="library-tile downloads" routerLink="/library/downloads">
+      <mat-icon>download</mat-icon>
+      <span class="tile-name">{{ session.text('Downloads', 'Téléchargements') }}</span>
+    </a>
+    <a class="library-tile playlists" routerLink="/library/playlists">
+      <mat-icon>queue_music</mat-icon>
+      <span class="tile-name">{{ session.text('Playlists', 'Playlists') }}</span>
+    </a>
+    <a class="library-tile statistics" routerLink="/library/statistics">
+      <mat-icon>trending_up</mat-icon>
+      <span class="tile-name">{{ session.text('Statistics', 'Statistiques') }}</span>
+    </a>
+  </div>
+  <h2 class="recent">{{ session.text('Recent plays', 'Lectures récentes') }}</h2>
+  @if (session.recentEpisodes().length === 0) {
+    <p class="empty">{{ session.text('No recent plays', 'Aucune lecture récente') }}</p>
+  } @else {
+    <ul class="library-list">
+      @for (episode of session.recentEpisodes(); track episode.id) {
+        <li class="episode-line">
+          <button
+            type="button"
+            class="episode"
+            [class.current]="session.playing()?.id === episode.id"
+            (click)="session.play(episode, false)"
+          >
+            <strong>{{ episode.title }}</strong>
+            <span>{{ episode.podcastTitle }}</span>
+          </button>
+          <button
+            mat-icon-button
+            type="button"
+            class="row-more"
+            [attr.aria-label]="session.text('Actions', 'Actions')"
+            (click)="session.openActions(episode)"
+          >
+            <mat-icon>more_vert</mat-icon>
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</section>

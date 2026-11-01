@@ -1,0 +1,107 @@
+<section class="home">
+  @if (session.washUrl(); as url) {
+    <img class="wash" [src]="url" alt="" />
+  }
+  <p class="greeting">{{ session.greeting() }}</p>
+  @if (session.homeShelves().length === 0) {
+    <p class="home-empty">{{ session.text('Nothing to play right now', 'Rien à écouter pour le moment') }}</p>
+    <p class="home-empty note">{{ session.text('Add a subscription to fill the home screen.', 'Ajoutez un abonnement pour remplir l’accueil.') }}</p>
+  } @else {
+    @for (shelf of session.homeShelves(); track shelf.id) {
+      <header class="shelf-head">
+        <h2>{{ session.shelfTitle(shelf.id) }}</h2>
+        @if (shelf.id === 'random') {
+          <button
+            mat-icon-button
+            type="button"
+            class="more"
+            [attr.aria-label]="session.text('Other episodes', 'Autres épisodes')"
+            (click)="session.reshuffle()"
+          >
+            <mat-icon>refresh</mat-icon>
+          </button>
+        } @else if (shelf.id !== 'continue') {
+          <a mat-button class="more" [routerLink]="session.shelfLink(shelf.id)">{{ session.text('More', 'Plus') }}</a>
+        }
+      </header>
+      @if (shelf.id === 'continue') {
+        <div
+          class="continue"
+          [class.rows-1]="session.continueRows(shelf.episodes.length) === 1"
+          [class.rows-2]="session.continueRows(shelf.episodes.length) === 2"
+        >
+          @for (episode of shelf.episodes; track episode.id) {
+            <div class="continue-row" [class.current]="session.playing()?.id === episode.id">
+              <button type="button" class="continue-open" (click)="session.play(episode, false)">
+                @if (session.coverOf(episode); as cover) {
+                  <img [src]="cover" alt="" />
+                } @else {
+                  <span class="fallback">{{ session.initial(episode.title) }}</span>
+                }
+                <span class="copy">
+                  <strong>{{ episode.title }}</strong>
+                  <span class="meta">{{ session.meta(episode) }}</span>
+                  @if (session.progress(episode); as fraction) {
+                    <mat-progress-bar class="bar" mode="determinate" [value]="fraction * 100" />
+                  }
+                </span>
+              </button>
+              <button
+                mat-icon-button
+                type="button"
+                class="row-more"
+                [attr.aria-label]="session.text('Actions', 'Actions')"
+                (click)="session.openActions(episode)"
+              >
+                <mat-icon>more_vert</mat-icon>
+              </button>
+            </div>
+          }
+        </div>
+      } @else if (shelf.id === 'preferred') {
+        <div class="shelf-row">
+          @for (podcast of shelf.podcasts; track podcast.id) {
+            <a class="cover-card" [routerLink]="['/subscriptions', podcast.id]">
+              <span class="art">
+                @if (podcast.imageUrl) {
+                  <img [src]="podcast.imageUrl" alt="" />
+                } @else {
+                  <span class="fallback">{{ session.initial(podcast.title) }}</span>
+                }
+                @if (podcast.preferred) {
+                  <span class="star" aria-hidden="true">★</span>
+                }
+              </span>
+              <strong>{{ podcast.title }}</strong>
+            </a>
+          }
+        </div>
+      } @else {
+        <div class="shelf-row">
+          @for (episode of shelf.episodes; track episode.id) {
+            <div class="cover-card" [class.current]="session.playing()?.id === episode.id">
+              <button type="button" class="cover-open" (click)="session.play(episode, false)">
+                @if (session.coverOf(episode); as cover) {
+                  <img [src]="cover" alt="" />
+                } @else {
+                  <span class="fallback">{{ session.initial(episode.title) }}</span>
+                }
+                <strong>{{ episode.title }}</strong>
+                <span class="show">{{ episode.podcastTitle }}</span>
+              </button>
+              <button
+                mat-icon-button
+                type="button"
+                class="row-more on-art"
+                [attr.aria-label]="session.text('Actions', 'Actions')"
+                (click)="session.openActions(episode)"
+              >
+                <mat-icon>more_vert</mat-icon>
+              </button>
+            </div>
+          }
+        </div>
+      }
+    }
+  }
+</section>

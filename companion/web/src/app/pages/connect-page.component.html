@@ -1,0 +1,47 @@
+<mat-toolbar class="site">
+  @if (session.podcasts().length > 0) {
+    <a class="wordmark-link" routerLink="/home">
+      <img class="wordmark" src="brand/logo.svg?v=3" alt="Podavio Web" />
+    </a>
+  } @else {
+    <img class="wordmark" src="brand/logo.svg?v=3" alt="Podavio Web" />
+  }
+</mat-toolbar>
+
+<section class="hero">
+  <div class="pair">
+    <div class="copy">
+      <h1>{{ session.text('Scan to connect', 'Scannez pour vous connecter') }}</h1>
+      <p class="lead">{{ session.text('Open Podavio on your phone, then Podavio Web, and scan this code. The link is encrypted end to end.', 'Ouvrez Podavio sur votre téléphone, puis Podavio Web, et scannez ce code. Le lien est chiffré de bout en bout.') }}</p>
+      <ol>
+        <li>{{ session.text('Open Podavio on your phone', 'Ouvrez Podavio sur votre téléphone') }}</li>
+        <li>{{ session.text('Open Podavio Web from More', 'Ouvrez Podavio Web dans Plus') }}</li>
+        <li>{{ session.text('Scan this code to link this browser', 'Scannez ce code pour associer ce navigateur') }}</li>
+      </ol>
+      @if (session.fingerprint()) {
+        <p class="label">{{ session.text('Safety number', 'Empreinte de sécurité') }}</p>
+        <p class="number">{{ session.fingerprint() }}</p>
+      }
+      @if (session.status()) {
+        <p class="status">{{ session.status() }}</p>
+      }
+    </div>
+    <div class="qr">
+      @if (!session.fingerprint()) {
+        @if (session.qrPayload(); as payload) {
+          <qrcode
+            [qrdata]="payload"
+            [width]="264"
+            [margin]="1"
+            elementType="svg"
+            errorCorrectionLevel="M"
+            cssClass="qr-svg"
+            [ariaLabel]="session.text('Scan this code with Podavio on the phone.', 'Scannez ce code avec Podavio sur le téléphone.')"
+          />
+        }
+      } @else {
+        <img class="mark" src="brand/icon.svg" alt="" />
+      }
+    </div>
+  </div>
+</section>
