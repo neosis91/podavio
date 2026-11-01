@@ -6,12 +6,29 @@ class WebCompanionEpisodeRef {
     required this.publishedAt,
     required this.positionMs,
     required this.played,
+    this.favorite = false,
+    this.downloaded = false,
+    this.pinned = false,
+    this.lastPlayedAt,
   });
 
   final int id;
   final DateTime? publishedAt;
   final int positionMs;
   final bool played;
+  final bool favorite;
+  final bool downloaded;
+
+  /// Dans une playlist ou la file : à garder même hors du plafond récent.
+  final bool pinned;
+  final DateTime? lastPlayedAt;
+
+  bool get keptBeyondCap =>
+      (positionMs > 0 && !played) ||
+      favorite ||
+      downloaded ||
+      pinned ||
+      lastPlayedAt != null;
 }
 
 /// Épisodes récents, plus ceux déjà commencés s’ils sortent du plafond.
@@ -19,11 +36,12 @@ List<T> capWebCompanionEpisodes<T extends WebCompanionEpisodeRef>(
   List<T> episodes, {
   int cap = webCompanionEpisodeCap,
 }) {
-  final ordered = [...episodes]..sort((a, b) {
-    final left = a.publishedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-    final right = b.publishedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-    return right.compareTo(left);
-  });
+  final ordered = [...episodes]
+    ..sort((a, b) {
+      final left = a.publishedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final right = b.publishedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return right.compareTo(left);
+    });
   final picked = <T>[];
   final seen = <int>{};
   for (final episode in ordered) {
@@ -33,7 +51,7 @@ List<T> capWebCompanionEpisodes<T extends WebCompanionEpisodeRef>(
   }
   for (final episode in ordered) {
     if (seen.contains(episode.id)) continue;
-    if (episode.positionMs > 0 && !episode.played) picked.add(episode);
+    if (episode.keptBeyondCap) picked.add(episode);
   }
   return picked;
 }
@@ -72,5 +90,126 @@ class WebProgress {
       playing: raw['playing'] is bool ? raw['playing'] as bool : null,
       durationMs: durationMs is int && durationMs >= 0 ? durationMs : null,
     );
+  }
+}
+
+const webClientBrowsers = {
+  'chrome',
+  'chromium',
+  'firefox',
+  'safari',
+  'edge',
+  'opera',
+  'brave',
+  'samsung',
+  'vivaldi',
+};
+
+const webClientSystems = {
+  'linux',
+  'windows',
+  'macos',
+  'android',
+  'ios',
+  'chromeos',
+};
+
+class WebClient {
+  const WebClient({this.browser, this.os});
+
+  final String? browser;
+  final String? os;
+
+  static WebClient? parse(Object? raw) {
+    if (raw is! Map || raw['type'] != 'client') return null;
+    final browser = raw['browser'];
+    final os = raw['os'];
+    final knownBrowser =
+        browser is String && webClientBrowsers.contains(browser)
+        ? browser
+        : null;
+    final knownOs = os is String && webClientSystems.contains(os) ? os : null;
+    if (knownBrowser == null && knownOs == null) return null;
+    return WebClient(browser: knownBrowser, os: knownOs);
+  }
+}
+
+enum WebLibraryKind {
+  favorite,
+  download,
+  removeDownload,
+  playlist,
+  createPlaylist,
+}
+
+/// Action de bibliothèque demandée par le navigateur et exécutée sur le téléphone.
+class WebLibraryAction {
+  const WebLibraryAction({
+    required this.kind,
+    required this.episodeId,
+    this.favorite,
+    this.playlistId,
+    this.member,
+    this.name,
+  });
+
+  final WebLibraryKind kind;
+  final int episodeId;
+  final bool? favorite;
+  final int? playlistId;
+  final bool? member;
+  final String? name;
+
+  static const maxNameLength = 80;
+
+  static WebLibraryAction? parse(Object? raw) {
+    if (raw is! Map) return null;
+    if (raw['type'] != 'library') return null;
+    final episodeId = raw['episodeId'];
+    if (episodeId is! int || episodeId <= 0) return null;
+    switch (raw['action']) {
+      case 'favorite':
+        final favorite = raw['favorite'];
+        if (favorite is! bool) return null;
+        return WebLibraryAction(
+          kind: WebLibraryKind.favorite,
+          episodeId: episodeId,
+          favorite: favorite,
+        );
+      case 'download':
+        return WebLibraryAction(
+          kind: WebLibraryKind.download,
+          episodeId: episodeId,
+        );
+      case 'remove-download':
+        return WebLibraryAction(
+          kind: WebLibraryKind.removeDownload,
+          episodeId: episodeId,
+        );
+      case 'playlist':
+        final playlistId = raw['playlistId'];
+        final member = raw['member'];
+        if (playlistId is! int || playlistId <= 0 || member is! bool) {
+          return null;
+        }
+        return WebLibraryAction(
+          kind: WebLibraryKind.playlist,
+          episodeId: episodeId,
+          playlistId: playlistId,
+          member: member,
+        );
+      case 'create-playlist':
+        final name = raw['name'];
+        if (name is! String) return null;
+        final trimmed = name.trim();
+        if (trimmed.isEmpty || trimmed.length > maxNameLength) return null;
+        return WebLibraryAction(
+          kind: WebLibraryKind.createPlaylist,
+          episodeId: episodeId,
+          name: trimmed,
+        );
+      default:
+        return null;
+    }
   }
 }

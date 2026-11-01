@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:cast/device.dart';
@@ -10,6 +9,7 @@ import 'package:just_audio/just_audio.dart';
 import '../data/app_database.dart';
 import '../data/download_controller.dart';
 import '../data/download_policy.dart';
+import '../data/playback_file.dart';
 import '../data/feed_service.dart';
 import '../data/http_auth.dart';
 import '../data/online_status.dart';
@@ -961,18 +961,40 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         clearStreamQuality: true,
       ),
     );
-    final sourceUri = _sourceUri(episode);
-    if (_isRemote(sourceUri) && !settings.allowMobileStreaming) {
-      final onMobile = await ref.read(mobileDataProbeProvider)();
+    final storedDownload = episode.downloadPath?.trim();
+    final downloaded = storedDownload != null && storedDownload.isNotEmpty;
+    // Un fichier téléchargé se lit toujours en local. Le Wi-Fi, les données
+    // mobiles et l’absence d’internet ne s’appliquent qu’au flux distant.
+    final Uri sourceUri;
+    if (downloaded) {
+      final path = await ref
+          .read(downloadServiceProvider)
+          .readablePlaybackPath(storedDownload);
       if (!ref.mounted || _disposed) return;
-      if (onMobile) {
+      if (path == null || path.isEmpty) {
         _emit(
           _ui.copyWith(
             playing: false,
-            error: 'Le streaming est limité au Wi-Fi.',
+            error: 'Impossible de lire ce fichier.',
           ),
         );
         return;
+      }
+      sourceUri = Uri.file(path);
+    } else {
+      sourceUri = Uri.parse(episode.audioUrl);
+      if (_isRemote(sourceUri) && !settings.allowMobileStreaming) {
+        final onMobile = await ref.read(mobileDataProbeProvider)();
+        if (!ref.mounted || _disposed) return;
+        if (onMobile) {
+          _emit(
+            _ui.copyWith(
+              playing: false,
+              error: 'Le streaming est limité au Wi-Fi.',
+            ),
+          );
+          return;
+        }
       }
     }
     unawaited(
@@ -1013,18 +1035,15 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       }
       await _prepareSession();
       if (!ref.mounted || _disposed) return;
-      final uri = sourceUri;
-      await _player.setAudioSource(
-        AudioSource.uri(
-          uri,
-          headers: uri.scheme == 'http' || uri.scheme == 'https'
-              ? podcastRequestHeaders(
-                  userAgent: podavioUserAgent,
-                  username: podcast.authUsername,
-                  password: podcast.authPassword,
-                )
-              : null,
-        ),
+      await _setEpisodeAudio(
+        sourceUri,
+        headers: downloaded
+            ? null
+            : podcastRequestHeaders(
+                userAgent: podavioUserAgent,
+                username: podcast.authUsername,
+                password: podcast.authPassword,
+              ),
       );
       await _player.setSpeed(_ui.speed);
       await _player.setVolume(_ui.volume);
@@ -1039,10 +1058,39 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       } else if (autoplay) {
         await _player.play();
       }
-    } catch (_) {
+    } catch (error, stack) {
+      debugPrint('Lecture impossible: $error\n$stack');
       _emit(
-        _ui.copyWith(playing: false, error: 'Impossible de lire cet épisode.'),
+        _ui.copyWith(
+          playing: false,
+          error: downloaded
+              ? 'Impossible de lire ce fichier.'
+              : 'Impossible de lire cet épisode.',
+        ),
       );
+    }
+  }
+
+  /// Ouvre [uri]. Un fichier local est réessayé via une copie au nom simple
+  /// si le décodeur refuse le chemin d’origine. Jamais de repli réseau.
+  Future<void> _setEpisodeAudio(
+    Uri uri, {
+    required Map<String, String>? headers,
+  }) async {
+    try {
+      await _player.setAudioSource(AudioSource.uri(uri, headers: headers));
+    } catch (error, stack) {
+      final path = uri.scheme == 'file' ? uri.toFilePath() : null;
+      if (path == null || isPlaybackCacheFile(path)) {
+        debugPrint('Lecture impossible: $error\n$stack');
+        rethrow;
+      }
+      debugPrint('Lecture du fichier, nouvel essai: $error\n$stack');
+      final copy = await ref
+          .read(downloadServiceProvider)
+          .copyLocalFileForPlayback(path);
+      if (!ref.mounted || _disposed || copy == null) rethrow;
+      await _player.setAudioSource(AudioSource.file(copy));
     }
   }
 
@@ -1180,14 +1228,6 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   }
 
   bool _isRemote(Uri uri) => uri.scheme == 'http' || uri.scheme == 'https';
-
-  Uri _sourceUri(Episode episode) {
-    final path = episode.downloadPath;
-    if (path == null) return Uri.parse(episode.audioUrl);
-    if (path.startsWith('content://')) return Uri.parse(path);
-    if (File(path).existsSync()) return Uri.file(path);
-    return Uri.parse(episode.audioUrl);
-  }
 
   static double _normalizeSpeed(double speed) {
     final stepped = (speed * 10).round() / 10;

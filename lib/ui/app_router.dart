@@ -216,6 +216,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const WebCompanionPage(),
           ),
           GoRoute(
+            path: AppRoutes.webCompanionScan,
+            builder: (context, state) => const WebCompanionScanPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.webCompanionDevice,
+            builder: (context, state) => const WebCompanionDevicePage(),
+          ),
+          GoRoute(
             path: AppRoutes.backupRestore,
             builder: (context, state) => const BackupRestorePage(),
           ),

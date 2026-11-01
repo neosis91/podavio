@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:saf_stream/saf_stream.dart';
@@ -44,7 +45,10 @@ String databaseBackupFileName([DateTime? when]) {
 Future<Uint8List> exportDatabaseBytes(AppDatabase database) async {
   final tempDir = await getTemporaryDirectory();
   final temp = File(
-    p.join(tempDir.path, 'podavio-export-${DateTime.now().microsecondsSinceEpoch}.sqlite'),
+    p.join(
+      tempDir.path,
+      'podavio-export-${DateTime.now().microsecondsSinceEpoch}.sqlite',
+    ),
   );
   if (await temp.exists()) await temp.delete();
   final escaped = temp.path.replaceAll("'", "''");
@@ -60,7 +64,7 @@ Future<Uint8List> exportDatabaseBytes(AppDatabase database) async {
   }
 }
 
-/// Remplace la base ouverte par [bytes], puis invalide les providers Drift.
+/// Remplace la base ouverte par [bytes], puis rouvre les providers Drift.
 Future<void> importDatabaseBytes(
   ProviderContainer container,
   Uint8List bytes,
@@ -77,22 +81,85 @@ Future<void> importDatabaseBytes(
 
   final live = await podavioDatabaseFile();
   final database = container.read(databaseProvider);
-  // Pas de wal_checkpoint ici : le parcours d’accueil garde un watch ouvert,
-  // et TRUNCATE attendrait ce lecteur sans jamais finir.
-  await closeAppDatabase(database);
+  // Le routeur et le compagnon web gardent des watch ouverts. `close()`
+  // attend ces lectures, comme `wal_checkpoint(TRUNCATE)`. On les coupe
+  // avant de fermer, puis seulement on remplace le fichier.
+  container.read(databasePhaseProvider.notifier).beginReplacement();
+  try {
+    try {
+      container.read(databaseProvider);
+      throw StateError('Database stayed open during replacement.');
+    } on ProviderException catch (error) {
+      // Les watch se désabonnent dans cette lecture.
+      final cause = error.exception;
+      if (cause is! StateError ||
+          cause.message != 'Database is being replaced.') {
+        rethrow;
+      }
+    }
+    await closeAppDatabase(database);
 
-  await live.writeAsBytes(bytes, flush: true);
-  for (final suffix in ['-wal', '-shm', '-journal']) {
-    final side = File('${live.path}$suffix');
-    if (await side.exists()) await side.delete();
+    await live.writeAsBytes(bytes, flush: true);
+    for (final suffix in ['-wal', '-shm', '-journal']) {
+      final side = File('${live.path}$suffix');
+      if (await side.exists()) await side.delete();
+    }
+
+    final fresh = AppDatabase.defaults();
+    try {
+      await forgetMissingLocalFiles(fresh);
+    } finally {
+      await closeAppDatabase(fresh);
+    }
+  } finally {
+    container.read(databasePhaseProvider.notifier).finishReplacement();
+    container.read(databaseProvider);
   }
-
-  container.invalidate(databaseProvider);
-  // Recreate immediately so dependents reopen a live connection.
-  container.read(databaseProvider);
 }
 
-Future<void> writeBackupBytes(String folder, Uint8List bytes, String name) async {
+/// Oublie les fichiers locaux absents. Un chemin encore présent est conservé.
+/// Un `content://` qu’on ne peut pas vérifier est conservé.
+Future<void> forgetMissingLocalFiles(AppDatabase database) async {
+  final missingDownloads = <int>[];
+  for (final file in await database.episodeDownloadFiles()) {
+    if (!await storedFileExists(file.path)) missingDownloads.add(file.id);
+  }
+  await database.clearEpisodeDownloads(missingDownloads);
+
+  final missingEpisodeImages = <int>[];
+  for (final file in await database.episodeImageFiles()) {
+    if (!await storedFileExists(file.path)) {
+      missingEpisodeImages.add(file.id);
+    }
+  }
+  await database.clearEpisodeImagePaths(missingEpisodeImages);
+
+  final missingCovers = <int>[];
+  for (final file in await database.podcastImageFiles()) {
+    if (!await storedFileExists(file.path)) missingCovers.add(file.id);
+  }
+  await database.clearPodcastImagePaths(missingCovers);
+}
+
+Future<bool> storedFileExists(String path) async {
+  final trimmed = path.trim();
+  if (trimmed.isEmpty) return false;
+  if (isContentUri(trimmed)) {
+    if (!Platform.isAndroid) return true;
+    try {
+      return await SafUtil().exists(trimmed, false);
+    } catch (_) {
+      return true;
+    }
+  }
+  return File(trimmed).exists();
+}
+
+Future<void> writeBackupBytes(
+  String folder,
+  Uint8List bytes,
+  String name,
+) async {
   if (isContentUri(folder)) {
     await SafStream().writeFileBytes(
       folder,

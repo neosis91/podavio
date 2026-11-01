@@ -9,7 +9,8 @@
 # Prérequis : flutter, glab (connecté), android/key.properties + keystore.
 # Le dépôt du site (../podavio-site, ou PODAVIO_SITE_DIR) est mis à jour
 # depuis origin/main, même si la copie locale a des modifications.
-# Les binaires y sont commités puis poussés avant le tag. La CI du site
+# Les binaires déjà présents dans releases/ sont retirés, puis ceux de
+# cette version y sont commités et poussés avant le tag. La CI du site
 # les copie sur le VPS. Le binaire Windows n'est pas produit ici.
 set -eu
 
@@ -294,8 +295,12 @@ publish_site() {
   trap remove_site_worktree EXIT
   git -C "${site}" worktree add --detach "${site_work}" origin/main
 
+  # Seule la compilation en cours reste. La CI du site efface le reste
+  # sur le serveur parce que ces suppressions sont dans le commit.
+  if [ -d "${site_work}/releases" ]; then
+    find "${site_work}/releases" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  fi
   dest="${site_work}/releases/${VERSION}"
-  rm -rf "${dest}"
   mkdir -p "${dest}"
   for name in \
     "podavio-${VERSION}-android-universal.apk" \
@@ -313,7 +318,7 @@ publish_site() {
     --date "$(date -u +%F)" \
     --site "${site_work}"
 
-  git -C "${site_work}" add latest.json changelog.json journal/index.html "releases/${VERSION}"
+  git -C "${site_work}" add -A -- releases latest.json changelog.json journal/index.html
   if git -C "${site_work}" diff --cached --quiet; then
     echo "Le site contient déjà les fichiers ${VERSION}."
   else
