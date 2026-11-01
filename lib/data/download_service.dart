@@ -12,6 +12,7 @@ import '../sync/sync_hooks.dart';
 import 'app_database.dart';
 import 'feed_service.dart';
 import 'http_auth.dart';
+import 'playback_file.dart';
 
 class DownloadCancelled implements Exception {
   const DownloadCancelled();
@@ -242,10 +243,76 @@ class DownloadService {
   Future<void> deleteStored(String path) async {
     if (isContentUri(path)) {
       await _deleteContent(path);
-      return;
+    } else {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
     }
-    final file = File(path);
-    if (await file.exists()) await file.delete();
+    await _deletePlaybackCache(path);
+  }
+
+  /// Fichier que le lecteur peut ouvrir sans réseau ni Wi-Fi.
+  ///
+  /// Un chemin disque est renvoyé tel quel, même si un contrôle d’existence
+  /// échouerait. Un `content://` est copié dans le cache de l’application :
+  /// le lecteur ne sait pas relire ces URI de façon fiable, et les réécrire
+  /// en `Uri` peut les casser.
+  Future<String?> readablePlaybackPath(String downloadPath) async {
+    final direct = filesystemPlaybackPath(downloadPath);
+    if (direct != null) return direct;
+    final uri = downloadPath.trim();
+    if (!isContentUri(uri)) return null;
+    try {
+      final cache = await _playbackCacheDirectory();
+      return await cachedPlaybackFile(
+        source: uri,
+        cacheDirectory: cache,
+        copy: (source, dest) => _saf.copyToLocalFile(source, dest),
+        sourceLength: _contentLength,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Deuxième essai : copie vers un nom simple quand le chemin d’origine
+  /// est refusé par le décodeur (espaces, crochets, accents).
+  Future<String?> copyLocalFileForPlayback(String sourcePath) async {
+    if (isPlaybackCacheFile(sourcePath)) return null;
+    final source = File(sourcePath);
+    if (!await source.exists()) return null;
+    try {
+      final cache = await _playbackCacheDirectory();
+      return await cachedPlaybackFile(
+        source: sourcePath,
+        cacheDirectory: cache,
+        copy: (from, dest) async {
+          await File(from).copy(dest);
+        },
+        sourceLength: (from) => File(from).length(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Directory> _playbackCacheDirectory() async {
+    final root = await getTemporaryDirectory();
+    return Directory(p.join(root.path, playbackCacheFolder));
+  }
+
+  Future<void> _deletePlaybackCache(String source) async {
+    try {
+      final cache = await _playbackCacheDirectory();
+      final file = File(p.join(cache.path, playbackCacheName(source)));
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+  }
+
+  Future<int?> _contentLength(String uri) async {
+    final document = await _documents.documentFileFromUri(uri, false);
+    final length = document?.length ?? -1;
+    if (length <= 0) return null;
+    return length;
   }
 
   Future<String?> _moveStoredFile(

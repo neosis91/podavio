@@ -9,7 +9,10 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import QRCode from 'qrcode';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { QRCodeComponent } from 'angularx-qrcode';
+import { filter } from 'rxjs';
 
 import {
   aad,
@@ -33,15 +36,47 @@ interface Episode {
   durationMs: number | null;
   positionMs: number;
   publishedAt: string | null;
+  favorite: boolean;
+  downloaded: boolean;
+  played: boolean;
+  lastPlayedAt: string | null;
+  downloadedAt: string | null;
 }
+
+interface LibraryEpisode extends Episode {
+  podcastId: number;
+  podcastTitle: string;
+}
+
+interface Playlist {
+  id: number;
+  name: string;
+  isDefault: boolean;
+  episodeIds: number[];
+}
+
+type LibraryView =
+  | 'hub'
+  | 'favorites'
+  | 'episodes'
+  | 'downloads'
+  | 'playlists'
+  | 'playlist'
+  | 'stats';
 
 interface Podcast {
   id: number;
   title: string;
   author: string;
   imageUrl: string | null;
+  preferred: boolean;
   episodes: Episode[];
 }
+
+type HomeShelf =
+  | { id: 'continue'; episodes: LibraryEpisode[] }
+  | { id: 'fresh' | 'favorites' | 'recent' | 'random' | 'downloads'; episodes: LibraryEpisode[] }
+  | { id: 'preferred'; podcasts: Podcast[] };
 
 interface StoredSession {
   relay: string;
@@ -56,22 +91,32 @@ const storageKey = 'podavio-web-session';
 
 @Component({
   selector: 'app-root',
+  imports: [QRCodeComponent, RouterLink, RouterLinkActive, RouterOutlet],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppComponent implements OnDestroy {
   private readonly injector = inject(Injector);
-  readonly qrCanvas = viewChild<ElementRef<HTMLCanvasElement>>('qr');
+  private readonly router = inject(Router);
   readonly audio = viewChild<ElementRef<HTMLAudioElement>>('audio');
 
   readonly french = navigator.language.toLowerCase().startsWith('fr');
   readonly fingerprint = signal('');
   readonly status = signal('');
   readonly podcasts = signal<Podcast[]>([]);
-  readonly opened = signal<Podcast | null>(null);
+  readonly playlists = signal<Playlist[]>([]);
+  readonly path = signal(this.router.url);
+  readonly randomSeed = signal(1);
   readonly playing = signal<Episode | null>(null);
+  readonly playbackOn = signal(false);
+  readonly playbackMs = signal(0);
+  readonly playbackDurationMs = signal(0);
+  readonly actionsEpisode = signal<Episode | null>(null);
+  readonly playlistDraft = signal('');
+  readonly pendingDownloads = signal<number[]>([]);
   readonly error = signal('');
+  private readonly qrPayload = signal<string | null>(null);
   private socket?: WebSocket;
   private stored?: StoredSession;
   private privateKey?: CryptoKey;
@@ -82,8 +127,13 @@ export class AppComponent implements OnDestroy {
   private recvN = 0;
   private pendingHello: { pub: string; iv: string; ct: string } | null = null;
   private lastSent = 0;
+  private entered = false;
 
   constructor() {
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      takeUntilDestroyed(),
+    ).subscribe((event) => this.path.set(event.urlAfterRedirects));
     afterNextRender(() => {
       void this.start();
     });
@@ -114,22 +164,301 @@ export class AppComponent implements OnDestroy {
   }
 
   async disconnect(): Promise<void> {
+    await this.forget(true);
+  }
+
+  private async forget(notify: boolean): Promise<void> {
+    const socket = this.socket;
+    this.socket = undefined;
+    if (notify && socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'unlink' }));
+    }
+    socket?.close();
     localStorage.removeItem(storageKey);
-    this.socket?.close();
+    this.stored = undefined;
+    this.qrPayload.set(null);
     this.podcasts.set([]);
-    this.opened.set(null);
+    this.playlists.set([]);
+    this.entered = false;
     this.playing.set(null);
+    this.playbackOn.set(false);
     this.fingerprint.set('');
     this.sessionKey = undefined;
+    this.peerConn = '';
+    this.pendingHello = null;
+    await this.router.navigateByUrl('/');
     await this.start();
   }
 
-  openPodcast(podcast: Podcast): void {
-    this.opened.set(podcast);
+  private locationPath(): string {
+    return locationPathOf(this.path());
   }
 
-  closePodcast(): void {
-    this.opened.set(null);
+  private followLibrary(podcasts: Podcast[], playlists: Playlist[]): void {
+    if (podcasts.length === 0) {
+      this.entered = false;
+      return;
+    }
+    const path = this.locationPath();
+    if (!this.entered && path === '/') {
+      this.entered = true;
+      void this.router.navigateByUrl('/home');
+      return;
+    }
+    this.entered = true;
+    const podcastId = /^\/subscriptions\/(\d+)$/.exec(path);
+    if (podcastId && !podcasts.some((podcast) => podcast.id === Number(podcastId[1]))) {
+      void this.router.navigateByUrl('/subscriptions');
+    }
+    const playlistId = /^\/library\/playlists\/(\d+)$/.exec(path);
+    if (playlistId && !playlists.some((playlist) => playlist.id === Number(playlistId[1]))) {
+      void this.router.navigateByUrl('/library/playlists');
+    }
+  }
+
+  section(): 'connect' | 'home' | 'subscriptions' | 'library' {
+    const path = this.locationPath();
+    if (path.startsWith('/home')) return 'home';
+    if (path.startsWith('/subscriptions')) return 'subscriptions';
+    if (path.startsWith('/library')) return 'library';
+    return 'connect';
+  }
+
+  libraryView(): LibraryView {
+    const path = this.locationPath();
+    if (path.startsWith('/library/playlists/')) return 'playlist';
+    if (path === '/library/playlists') return 'playlists';
+    if (path === '/library/favorites') return 'favorites';
+    if (path === '/library/episodes') return 'episodes';
+    if (path === '/library/downloads') return 'downloads';
+    if (path === '/library/statistics') return 'stats';
+    return 'hub';
+  }
+
+  opened(): Podcast | null {
+    const match = /^\/subscriptions\/(\d+)$/.exec(this.locationPath());
+    if (!match) return null;
+    return this.podcasts().find((podcast) => podcast.id === Number(match[1])) ?? null;
+  }
+
+  openedPlaylist(): Playlist | null {
+    const match = /^\/library\/playlists\/(\d+)$/.exec(this.locationPath());
+    if (!match) return null;
+    return this.playlists().find((playlist) => playlist.id === Number(match[1])) ?? null;
+  }
+
+  shelfLink(id: HomeShelf['id']): string {
+    switch (id) {
+      case 'fresh':
+        return '/library/episodes';
+      case 'favorites':
+        return '/library/favorites';
+      case 'recent':
+        return '/library';
+      case 'downloads':
+        return '/library/downloads';
+      default:
+        return '/subscriptions';
+    }
+  }
+
+  libraryTitle(): string {
+    switch (this.libraryView()) {
+      case 'favorites':
+        return this.text('Favorites', 'Favoris');
+      case 'episodes':
+        return this.text('Episodes', 'Épisodes');
+      case 'downloads':
+        return this.text('Downloads', 'Téléchargements');
+      case 'playlists':
+        return this.text('Playlists', 'Playlists');
+      case 'playlist':
+        return this.openedPlaylist()?.name ?? this.text('Playlists', 'Playlists');
+      case 'stats':
+        return this.text('Statistics', 'Statistiques');
+      case 'hub':
+        return this.text('Library', 'Bibliothèque');
+    }
+  }
+
+  flatEpisodes(): LibraryEpisode[] {
+    return this.podcasts().flatMap((podcast) =>
+      podcast.episodes.map((episode) => ({
+        ...episode,
+        podcastId: podcast.id,
+        podcastTitle: podcast.title,
+      })),
+    );
+  }
+
+  recentEpisodes(): LibraryEpisode[] {
+    return this.flatEpisodes()
+      .filter((episode) => episode.lastPlayedAt)
+      .sort((a, b) => (b.lastPlayedAt ?? '').localeCompare(a.lastPlayedAt ?? ''));
+  }
+
+  libraryEpisodes(): LibraryEpisode[] {
+    const view = this.libraryView();
+    const episodes = this.flatEpisodes();
+    if (view === 'favorites') return episodes.filter((episode) => episode.favorite);
+    if (view === 'downloads') return episodes.filter((episode) => episode.downloaded);
+    if (view === 'episodes') {
+      return [...episodes].sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
+    }
+    if (view === 'playlist') {
+      const playlist = this.openedPlaylist();
+      if (!playlist) return [];
+      const byId = new Map(episodes.map((episode) => [episode.id, episode]));
+      return playlist.episodeIds.flatMap((id) => {
+        const episode = byId.get(id);
+        return episode ? [episode] : [];
+      });
+    }
+    return [];
+  }
+
+  statCount(kind: 'podcasts' | 'episodes' | 'favorites' | 'downloads' | 'playlists'): number {
+    if (kind === 'podcasts') return this.podcasts().length;
+    if (kind === 'playlists') return this.playlists().length;
+    if (kind === 'favorites') return this.flatEpisodes().filter((episode) => episode.favorite).length;
+    if (kind === 'downloads') return this.flatEpisodes().filter((episode) => episode.downloaded).length;
+    return this.flatEpisodes().length;
+  }
+
+  greeting(): string {
+    const hour = new Date().getHours();
+    if (hour >= 6 && hour <= 12) return this.text('Good morning', 'Bonjour');
+    if (hour >= 13 && hour <= 17) return this.text('Good afternoon', 'Bon après-midi');
+    if (hour >= 18 && hour <= 23) return this.text('Good evening', 'Bonsoir');
+    return this.text('Good night', 'Bonne nuit');
+  }
+
+  homeShelves(): HomeShelf[] {
+    const shelves: HomeShelf[] = [];
+    for (const id of ['continue', 'fresh', 'favorites', 'recent', 'random', 'preferred', 'downloads'] as const) {
+      const shelf = this.homeShelf(id);
+      if (shelf) shelves.push(shelf);
+    }
+    return shelves;
+  }
+
+  shelfTitle(id: HomeShelf['id']): string {
+    switch (id) {
+      case 'continue':
+        return this.text('Continue listening', 'Continuer d’écouter');
+      case 'fresh':
+        return this.text("What's new", 'Les nouveautés');
+      case 'favorites':
+        return this.text('Favorites', 'Favoris');
+      case 'recent':
+        return this.text('Recent plays', 'Lectures récentes');
+      case 'random':
+        return this.text('Random', 'Aléatoire');
+      case 'preferred':
+        return this.text('Preferred subscriptions', 'Abonnements préférés');
+      case 'downloads':
+        return this.text('Recent downloads', 'Derniers téléchargements');
+    }
+  }
+
+  reshuffle(): void {
+    this.randomSeed.update((seed) => seed + 1);
+  }
+
+  washUrl(): string | null {
+    const first = this.homeShelves()[0];
+    if (!first) return null;
+    if (first.id === 'preferred') return first.podcasts[0]?.imageUrl ?? null;
+    return this.coverOf(first.episodes[0]);
+  }
+
+  coverOf(episode: LibraryEpisode): string | null {
+    if (episode.imageUrl) return episode.imageUrl;
+    return this.podcasts().find((podcast) => podcast.id === episode.podcastId)?.imageUrl ?? null;
+  }
+
+  progress(episode: Episode): number | null {
+    const duration = episode.durationMs;
+    if (!duration || duration <= 0 || episode.positionMs <= 0) return null;
+    return Math.min(1, episode.positionMs / duration);
+  }
+
+  meta(episode: LibraryEpisode): string {
+    return [episode.podcastTitle, this.formatWhen(episode.publishedAt), this.formatDuration(episode.durationMs)]
+      .filter((part) => part.length > 0)
+      .join(' · ');
+  }
+
+  formatDuration(ms: number | null): string {
+    if (ms == null || ms <= 0) return '';
+    const total = Math.floor(ms / 1000);
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const seconds = total % 60;
+    const padded = String(seconds).padStart(2, '0');
+    if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${padded}`;
+    return `${minutes}:${padded}`;
+  }
+
+  continueRows(count: number): number {
+    return Math.min(3, Math.max(1, count));
+  }
+
+  private homeShelf(id: HomeShelf['id']): HomeShelf | null {
+    const episodes = this.flatEpisodes();
+    if (id === 'continue') {
+      const rows = episodes
+        .filter((episode) => !episode.played && episode.positionMs > 0)
+        .sort((a, b) => (b.lastPlayedAt ?? '').localeCompare(a.lastPlayedAt ?? ''))
+        .slice(0, 15);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    if (id === 'fresh') {
+      const rows = episodes
+        .filter((episode) => !episode.played && episode.positionMs === 0)
+        .sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''))
+        .slice(0, 16);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    if (id === 'favorites') {
+      const rows = episodes
+        .filter((episode) => episode.favorite)
+        .sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''))
+        .slice(0, 16);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    if (id === 'recent') {
+      const playing = new Set(
+        episodes.filter((episode) => !episode.played && episode.positionMs > 0).map((episode) => episode.id),
+      );
+      const rows = episodes
+        .filter((episode) => episode.lastPlayedAt && !playing.has(episode.id))
+        .sort((a, b) => (b.lastPlayedAt ?? '').localeCompare(a.lastPlayedAt ?? ''))
+        .slice(0, 12);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    if (id === 'random') {
+      const rows = shuffled(
+        episodes.filter((episode) => !episode.played),
+        this.randomSeed(),
+      ).slice(0, 12);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    if (id === 'downloads') {
+      const rows = episodes
+        .filter((episode) => episode.downloaded)
+        .sort((a, b) => {
+          const byDownload = (b.downloadedAt ?? '').localeCompare(a.downloadedAt ?? '');
+          return byDownload || (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '');
+        })
+        .slice(0, 12);
+      return rows.length ? { id, episodes: rows } : null;
+    }
+    const podcasts = [...this.podcasts()].sort((a, b) => {
+      if (a.preferred !== b.preferred) return a.preferred ? -1 : 1;
+      return unfinishedListen(b, episodes) - unfinishedListen(a, episodes) || a.title.localeCompare(b.title);
+    });
+    return podcasts.length ? { id: 'preferred', podcasts } : null;
   }
 
   episodeCount(podcast: Podcast): string {
@@ -148,16 +477,151 @@ export class AppComponent implements OnDestroy {
     this.play(current);
   }
 
-  play(episode: Episode): void {
-    this.prepare(episode, true);
+  openPlaying(): void {
+    const episode = this.playing();
+    if (!episode) return;
+    const podcast = this.podcasts().find((item) => item.episodes.some((entry) => entry.id === episode.id));
+    if (podcast) void this.router.navigate(['/subscriptions', podcast.id]);
   }
 
-  prepare(episode: Episode, autoplay: boolean): void {
+  playingShow(): string {
+    const episode = this.playing();
+    if (!episode) return '';
+    return this.podcasts().find((item) => item.episodes.some((entry) => entry.id === episode.id))?.title ?? '';
+  }
+
+  playingCover(): string | null {
+    const episode = this.playing();
+    if (!episode) return null;
+    if (episode.imageUrl) return episode.imageUrl;
+    return this.podcasts().find((item) => item.episodes.some((entry) => entry.id === episode.id))?.imageUrl ?? null;
+  }
+
+  ringDash(): string {
+    const circ = 2 * Math.PI * 17;
+    const total = this.playbackDurationMs() || this.playing()?.durationMs || 0;
+    const progress = total <= 0 ? 0 : Math.min(1, this.playbackMs() / total);
+    return `${circ * progress} ${circ}`;
+  }
+
+  togglePlayback(): void {
+    const player = this.audio()?.nativeElement;
+    if (!player) return;
+    if (player.paused) void player.play().catch(() => undefined);
+    else player.pause();
+  }
+
+  openActions(episode: Episode): void {
+    this.playlistDraft.set('');
+    this.actionsEpisode.set(episode);
+  }
+
+  closeActions(): void {
+    this.actionsEpisode.set(null);
+  }
+
+  downloading(episodeId: number): boolean {
+    return this.pendingDownloads().includes(episodeId);
+  }
+
+  inPlaylist(episode: Episode, playlist: Playlist): boolean {
+    return playlist.episodeIds.includes(episode.id);
+  }
+
+  toggleFavorite(episode: Episode | null = null): void {
+    const target = episode ?? this.playing();
+    if (!target) return;
+    const favorite = !target.favorite;
+    this.patchEpisode(target.id, { favorite });
+    void this.send({
+      type: 'library',
+      action: 'favorite',
+      episodeId: target.id,
+      favorite,
+    });
+  }
+
+  toggleDownload(episode: Episode): void {
+    if (this.downloading(episode.id)) return;
+    if (episode.downloaded) {
+      this.patchEpisode(episode.id, { downloaded: false, downloadedAt: null });
+      void this.send({
+        type: 'library',
+        action: 'remove-download',
+        episodeId: episode.id,
+      });
+      return;
+    }
+    this.pendingDownloads.update((ids) => [...ids, episode.id]);
+    void this.send({
+      type: 'library',
+      action: 'download',
+      episodeId: episode.id,
+    });
+  }
+
+  togglePlaylist(episode: Episode, playlist: Playlist): void {
+    const member = !playlist.episodeIds.includes(episode.id);
+    this.playlists.update((list) =>
+      list.map((item) => {
+        if (item.id !== playlist.id) return item;
+        const episodeIds = member
+          ? [...item.episodeIds, episode.id]
+          : item.episodeIds.filter((id) => id !== episode.id);
+        return { ...item, episodeIds };
+      }),
+    );
+    void this.send({
+      type: 'library',
+      action: 'playlist',
+      episodeId: episode.id,
+      playlistId: playlist.id,
+      member,
+    });
+  }
+
+  createPlaylist(episode: Episode, event: Event): void {
+    event.preventDefault();
+    const name = this.playlistDraft().trim();
+    if (!name || name.length > 80) return;
+    this.playlistDraft.set('');
+    void this.send({
+      type: 'library',
+      action: 'create-playlist',
+      episodeId: episode.id,
+      name,
+    });
+  }
+
+  private patchEpisode(id: number, change: Partial<Episode>): void {
+    const apply = (episode: Episode): Episode => (episode.id === id ? { ...episode, ...change } : episode);
+    this.podcasts.update((list) =>
+      list.map((podcast) => ({
+        ...podcast,
+        episodes: podcast.episodes.map(apply),
+      })),
+    );
+    const playing = this.playing();
+    if (playing?.id === id) this.playing.set(apply(playing));
+    const open = this.actionsEpisode();
+    if (open?.id === id) this.actionsEpisode.set(apply(open));
+  }
+
+  play(episode: Episode, openShow = true): void {
+    this.prepare(episode, true, openShow);
+  }
+
+  prepare(episode: Episode, autoplay: boolean, openShow = true): void {
     const current = this.audio()?.nativeElement;
     const same = this.playing()?.id === episode.id && !!current && current.src === episode.audioUrl;
     this.playing.set(episode);
+    this.playbackMs.set(episode.positionMs);
+    this.playbackDurationMs.set(episode.durationMs ?? 0);
+    this.playbackOn.set(autoplay);
     const podcast = this.podcasts().find((item) => item.episodes.some((entry) => entry.id === episode.id));
-    if (podcast) this.opened.set(podcast);
+    if (openShow && podcast) {
+      void this.router.navigate(['/subscriptions', podcast.id]);
+    }
     afterNextRender(() => {
       const player = this.audio()?.nativeElement;
       if (!player) return;
@@ -171,10 +635,24 @@ export class AppComponent implements OnDestroy {
   }
 
   onTime(): void {
+    this.syncPlayback();
     const now = Date.now();
     if (now - this.lastSent < 1000) return;
     this.lastSent = now;
     void this.sendProgress();
+  }
+
+  onPlayback(): void {
+    this.syncPlayback();
+    void this.sendProgress();
+  }
+
+  private syncPlayback(): void {
+    const player = this.audio()?.nativeElement;
+    if (!player) return;
+    this.playbackOn.set(!player.paused && !player.ended);
+    if (Number.isFinite(player.currentTime)) this.playbackMs.set(Math.floor(player.currentTime * 1000));
+    if (Number.isFinite(player.duration)) this.playbackDurationMs.set(Math.floor(player.duration * 1000));
   }
 
   async sendProgress(): Promise<void> {
@@ -248,7 +726,7 @@ export class AppComponent implements OnDestroy {
         this.sessionKey = await deriveSessionKey(this.privateKey, base64ToBytes(this.stored.phonePub));
       }
       this.connect();
-      if (!this.stored.phonePub) await this.drawQr();
+      if (!this.stored.phonePub) this.drawQr();
     } catch {
       this.error.set(this.text(
         'This browser cannot start the encrypted link.',
@@ -272,17 +750,18 @@ export class AppComponent implements OnDestroy {
     return created;
   }
 
-  private async drawQr(): Promise<void> {
+  private drawQr(): void {
     const stored = this.stored;
-    const canvas = this.qrCanvas()?.nativeElement;
-    if (!stored || !canvas) return;
-    const payload = JSON.stringify({
+    if (!stored || stored.phonePub) {
+      this.qrPayload.set(null);
+      return;
+    }
+    this.qrPayload.set(JSON.stringify({
       v: 1,
       relay: stored.relay,
       session: stored.session,
       pub: stored.pwaPub,
-    });
-    await QRCode.toCanvas(canvas, payload, { margin: 1, width: 264 });
+    }));
     this.status.set(this.text(
       'Scan this code with Podavio on the phone.',
       'Scannez ce code avec Podavio sur le téléphone.',
@@ -305,9 +784,12 @@ export class AppComponent implements OnDestroy {
         role: 'browser',
         conn: this.conn,
       }));
-      this.status.set(this.text('Waiting for the phone…', 'En attente du téléphone…'));
+      if (stored.phonePub) {
+        this.status.set(this.text('Waiting for the phone…', 'En attente du téléphone…'));
+      }
     });
     socket.addEventListener('message', (event) => {
+      if (this.socket !== socket) return;
       void this.onMessage(String(event.data));
     });
     socket.addEventListener('close', () => {
@@ -327,6 +809,10 @@ export class AppComponent implements OnDestroy {
         this.pendingHello = null;
       }
       void this.sendProgress();
+      return;
+    }
+    if (message['type'] === 'unlink') {
+      await this.forget(false);
       return;
     }
     if (message['type'] === 'bye') {
@@ -366,17 +852,33 @@ export class AppComponent implements OnDestroy {
     this.fingerprint.set(stored.fingerprint);
     localStorage.setItem(storageKey, JSON.stringify(stored));
     this.status.set(this.text('Phone linked. Waiting for the library…', 'Téléphone associé. En attente de la bibliothèque…'));
+    await this.sendClient();
   }
 
-  private applySnapshot(podcasts: Podcast[]): void {
+  private async sendClient(): Promise<void> {
+    const identity = clientIdentity();
+    const payload: Record<string, string> = { type: 'client' };
+    if (identity.browser) payload['browser'] = identity.browser;
+    if (identity.os) payload['os'] = identity.os;
+    if (!identity.browser && !identity.os) return;
+    await this.send(payload);
+  }
+
+  private applySnapshot(podcasts: Podcast[], playlists: Playlist[]): void {
     const playing = this.playing();
     const audio = this.audio()?.nativeElement;
     const locallyPlaying = !!playing && !!audio && !audio.paused && !audio.ended;
     this.podcasts.set(podcasts);
-    const opened = this.opened();
-    if (opened) {
-      this.opened.set(podcasts.find((podcast) => podcast.id === opened.id) ?? null);
+    this.playlists.set(playlists);
+    this.pendingDownloads.update((ids) =>
+      ids.filter((id) => !podcasts.some((podcast) => podcast.episodes.some((episode) => episode.id === id && episode.downloaded))),
+    );
+    const open = this.actionsEpisode();
+    if (open) {
+      const next = podcasts.flatMap((podcast) => podcast.episodes).find((episode) => episode.id === open.id);
+      this.actionsEpisode.set(next ?? null);
     }
+    this.followLibrary(podcasts, playlists);
     if (playing) {
       const next = podcasts
         .flatMap((podcast) => podcast.episodes)
@@ -407,14 +909,94 @@ export class AppComponent implements OnDestroy {
     this.recvN = n;
     const clear = await open(key, iv, ct, aad('phone', this.peerConn, n));
     if (!clear) return;
-    const payload = JSON.parse(new TextDecoder().decode(clear)) as { type?: string; podcasts?: Podcast[] };
+    const payload = JSON.parse(new TextDecoder().decode(clear)) as {
+      type?: string;
+      podcasts?: unknown;
+      playlists?: unknown;
+    };
+    if (payload.type === 'library-result') {
+      this.applyLibraryResult(payload as { action?: string; episodeId?: number; ok?: boolean });
+      return;
+    }
     if (payload.type === 'command') {
       this.handleCommand(payload as { action?: string; episodeId?: number; positionMs?: number; seconds?: number });
       return;
     }
     if (payload.type === 'snapshot' && Array.isArray(payload.podcasts)) {
-      this.applySnapshot(payload.podcasts);
+      this.applySnapshot(this.readPodcasts(payload.podcasts), this.readPlaylists(payload.playlists));
     }
+  }
+
+  private applyLibraryResult(payload: { action?: string; episodeId?: number; ok?: boolean }): void {
+    if (payload.action !== 'download' || typeof payload.episodeId !== 'number') return;
+    const episodeId = payload.episodeId;
+    this.pendingDownloads.update((ids) => ids.filter((id) => id !== episodeId));
+    if (payload.ok === true) this.patchEpisode(episodeId, { downloaded: true });
+  }
+
+  private readPodcasts(raw: unknown[]): Podcast[] {
+    const podcasts: Podcast[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const podcast = item as Record<string, unknown>;
+      if (typeof podcast['id'] !== 'number' || typeof podcast['title'] !== 'string') continue;
+      const episodes = Array.isArray(podcast['episodes'])
+        ? podcast['episodes'].flatMap((entry) => {
+            const episode = this.readEpisode(entry);
+            return episode ? [episode] : [];
+          })
+        : [];
+      podcasts.push({
+        id: podcast['id'],
+        title: podcast['title'],
+        author: typeof podcast['author'] === 'string' ? podcast['author'] : '',
+        imageUrl: typeof podcast['imageUrl'] === 'string' ? podcast['imageUrl'] : null,
+        preferred: podcast['preferred'] === true,
+        episodes,
+      });
+    }
+    return podcasts;
+  }
+
+  private readEpisode(raw: unknown): Episode | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const episode = raw as Record<string, unknown>;
+    if (typeof episode['id'] !== 'number' || typeof episode['title'] !== 'string') return null;
+    if (typeof episode['audioUrl'] !== 'string') return null;
+    return {
+      id: episode['id'],
+      title: episode['title'],
+      audioUrl: episode['audioUrl'],
+      imageUrl: typeof episode['imageUrl'] === 'string' ? episode['imageUrl'] : null,
+      durationMs: typeof episode['durationMs'] === 'number' ? episode['durationMs'] : null,
+      positionMs: typeof episode['positionMs'] === 'number' ? episode['positionMs'] : 0,
+      publishedAt: typeof episode['publishedAt'] === 'string' ? episode['publishedAt'] : null,
+      favorite: episode['favorite'] === true,
+      downloaded: episode['downloaded'] === true,
+      played: episode['played'] === true,
+      lastPlayedAt: typeof episode['lastPlayedAt'] === 'string' ? episode['lastPlayedAt'] : null,
+      downloadedAt: typeof episode['downloadedAt'] === 'string' ? episode['downloadedAt'] : null,
+    };
+  }
+
+  private readPlaylists(raw: unknown): Playlist[] {
+    if (!Array.isArray(raw)) return [];
+    const playlists: Playlist[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const playlist = item as Record<string, unknown>;
+      if (typeof playlist['id'] !== 'number' || typeof playlist['name'] !== 'string') continue;
+      const episodeIds = Array.isArray(playlist['episodeIds'])
+        ? playlist['episodeIds'].filter((id): id is number => typeof id === 'number')
+        : [];
+      playlists.push({
+        id: playlist['id'],
+        name: playlist['name'],
+        isDefault: playlist['isDefault'] === true,
+        episodeIds,
+      });
+    }
+    return playlists;
   }
 
   private async send(payload: unknown): Promise<void> {
@@ -429,6 +1011,64 @@ export class AppComponent implements OnDestroy {
     );
     socket.send(JSON.stringify({ type: 'blob', n: this.sendN, iv: sealed.iv, ct: sealed.ct }));
   }
+}
+
+function clientIdentity(): { browser: string; os: string } {
+  const hints = (navigator as Navigator & {
+    userAgentData?: { brands?: { brand: string }[]; platform?: string };
+  }).userAgentData;
+  const brands = (hints?.brands ?? []).map((item) => item.brand.toLowerCase());
+  const ua = navigator.userAgent;
+  const hay = `${brands.join(' ')} ${ua}`.toLowerCase();
+  let browser = '';
+  if (brands.some((brand) => brand.includes('edge')) || /edg\/|edgios/.test(hay)) browser = 'edge';
+  else if (brands.some((brand) => brand.includes('opera')) || hay.includes('opr/')) browser = 'opera';
+  else if (hay.includes('samsungbrowser') || hay.includes('samsung internet')) browser = 'samsung';
+  else if (hay.includes('vivaldi')) browser = 'vivaldi';
+  else if (brands.some((brand) => brand.includes('brave'))) browser = 'brave';
+  else if (hay.includes('firefox') || hay.includes('fxios')) browser = 'firefox';
+  else if (brands.some((brand) => brand.includes('chrome')) || /chrome|crios/.test(hay)) browser = 'chrome';
+  else if (hay.includes('safari')) browser = 'safari';
+  else if (brands.some((brand) => brand.includes('chromium')) || hay.includes('chromium')) browser = 'chromium';
+
+  const source = `${(hints?.platform ?? '').toLowerCase()} ${ua.toLowerCase()}`;
+  let os = '';
+  if (source.includes('android')) os = 'android';
+  else if (/iphone|ipad|ipod|ios/.test(source)) os = 'ios';
+  else if (source.includes('cros') || source.includes('chromeos') || source.includes('chrome os')) os = 'chromeos';
+  else if (source.includes('mac')) os = 'macos';
+  else if (source.includes('win')) os = 'windows';
+  else if (source.includes('linux')) os = 'linux';
+  return { browser, os };
+}
+
+function locationPathOf(url: string): string {
+  const path = url.split('?')[0].split('#')[0];
+  if (path.length > 1 && path.endsWith('/')) return path.slice(0, -1);
+  return path || '/';
+}
+
+function unfinishedListen(podcast: Podcast, episodes: LibraryEpisode[]): number {
+  let total = 0;
+  for (const episode of episodes) {
+    if (episode.podcastId === podcast.id && !episode.played && episode.positionMs > 0) {
+      total += episode.positionMs;
+    }
+  }
+  return total;
+}
+
+function shuffled<T>(items: T[], seed: number): T[] {
+  const copy = [...items];
+  let state = seed >>> 0 || 1;
+  for (let index = copy.length - 1; index > 0; index--) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const swap = copy[index];
+    const target = state % (index + 1);
+    copy[index] = copy[target];
+    copy[target] = swap;
+  }
+  return copy;
 }
 
 function randomId(): string {

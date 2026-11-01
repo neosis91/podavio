@@ -16,6 +16,34 @@ npm start
 
 Ouvrir http://127.0.0.1:8787. `npm install` n’est utile que la première fois. Après une modification de la page, relancer `npm run build` ici, puis `npm start` dans `companion/server`.
 
+## Déployer
+
+Le site public est https://web.podavio.com. La page est servie par le relais sur `ubuntu@51.91.250.233`, dans `/opt/podavio-web`. L’agent SSH de Bitwarden doit être actif (`SSH_AUTH_SOCK`).
+
+Depuis `companion/web`, après un changement de la page :
+
+```bash
+npm run build
+export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
+rsync -az --delete -e "ssh -o BatchMode=yes" \
+  dist/web/browser/ \
+  ubuntu@51.91.250.233:/opt/podavio-web/web/dist/web/browser/
+```
+
+Depuis `companion/server`, après un changement du relais :
+
+```bash
+npm run build
+export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
+rsync -az -e "ssh -o BatchMode=yes" \
+  dist/ \
+  ubuntu@51.91.250.233:/opt/podavio-web/server/dist/
+ssh -o BatchMode=yes ubuntu@51.91.250.233 \
+  'sudo systemctl restart podavio-web && systemctl is-active podavio-web'
+```
+
+`--delete` ne concerne que le dossier de la page. Ne pas l’utiliser sur `/var/www/podavio-site/`.
+
 ## Code scaffolding
 
 Angular CLI includes powerful code scaffolding tools. To generate a new component, run:

@@ -656,6 +656,58 @@ mixin _EpisodeQueries on _$AppDatabase {
     );
   }
 
+  Future<List<({int id, String path})>> episodeDownloadFiles() {
+    return _episodeFiles(episodes.downloadPath);
+  }
+
+  Future<List<({int id, String path})>> episodeImageFiles() {
+    return _episodeFiles(episodes.imagePath);
+  }
+
+  Future<List<({int id, String path})>> _episodeFiles(
+    GeneratedColumn<String> column,
+  ) async {
+    final query = selectOnly(episodes)
+      ..addColumns([episodes.id, column])
+      ..where(column.isNotNull());
+    final rows = await query.get();
+    return [
+      for (final row in rows)
+        if (row.read(column) case final path?)
+          (id: row.read(episodes.id)!, path: path),
+    ];
+  }
+
+  Future<void> clearEpisodeDownloads(List<int> ids) {
+    return _updateEpisodeIds(
+      ids,
+      const EpisodesCompanion(
+        downloadPath: Value(null),
+        downloadedAt: Value(null),
+      ),
+    );
+  }
+
+  Future<void> clearEpisodeImagePaths(List<int> ids) {
+    return _updateEpisodeIds(
+      ids,
+      const EpisodesCompanion(imagePath: Value(null)),
+    );
+  }
+
+  Future<void> _updateEpisodeIds(
+    List<int> ids,
+    EpisodesCompanion values,
+  ) async {
+    const size = 400;
+    for (var start = 0; start < ids.length; start += size) {
+      final end = start + size < ids.length ? start + size : ids.length;
+      await (update(episodes)
+            ..where((table) => table.id.isIn(ids.sublist(start, end))))
+          .write(values);
+    }
+  }
+
   Future<void> addToQueue(int episodeId) async {
     final episode = await (select(
       episodes,

@@ -4,6 +4,17 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.11.0
+
+- A downloaded episode plays from the file on the phone. Wi-Fi limits, mobile data, and a missing connection apply only to a remote stream. If the player cannot open the file directly, it uses a local copy.
+- In the big player, the queue can scroll up into Previous episodes when Up next is short and Previous is long. The list stops growing once it no longer gets taller.
+- Importing a library backup drops the open library reads before replacing the database, so the progress indicator can finish. Download and cover paths whose files are gone are cleared. Paths that are still on the device stay, and listening progress is kept. Missing covers can be fetched again.
+- Scanning the Podavio Web code opens the camera in the compiled release.
+- Podavio Web on the phone separates linked devices from scanning. The linked device shows the browser, the operating system, and their logos. The scan page fills the screen under the instruction, with a light shade and a clear square in the center.
+- Disconnecting from the phone or the browser ends the link. Closing the browser or losing the connection marks the browser offline and keeps the link.
+- Podavio Web is split into pages that share one header. The QR code is the page at https://web.podavio.com. Home, subscriptions, and the library (Favorites, Episodes, Downloads, Playlists, Statistics) have their own addresses. The code is drawn as an SVG and appears again after the browser is unlinked.
+- The browser mini player matches the phone mini player. A favorite, a playlist change, or a download started in the browser runs on the phone.
+
 ## 2026.10.24
 
 - First-time setup ends with Eco mode. Turning it on skips new cover downloads and keeps the dark theme and pure black on. It can stay off, and Settings can change it later.

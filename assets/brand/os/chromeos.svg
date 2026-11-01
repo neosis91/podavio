@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14.50789 14.50789">
+  <defs>
+    <linearGradient id="a_chromeos" x1="3.2172999" x2="44.7812" y1="15" y2="15" gradientTransform="matrix(.30224767 0 0 .29980472 -.00000428 .05863408)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d93025"/>
+      <stop offset="1" stop-color="#ea4335"/>
+    </linearGradient>
+    <linearGradient id="b_chromeos" x1="20.721901" x2="41.503899" y1="47.6791" y2="11.6837" gradientTransform="matrix(.30224767 0 0 .29980472 -.00000428 .05863408)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fcc934"/>
+      <stop offset="1" stop-color="#fbbc04"/>
+    </linearGradient>
+    <linearGradient id="c_chromeos" x1="26.598101" x2="5.8161001" y1="46.501499" y2="10.506" gradientTransform="matrix(.30224767 0 0 .29980472 -.00000428 .05863408)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1e8e3e"/>
+      <stop offset="1" stop-color="#34a853"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="7.2539372" cy="7.2523561" rx="3.626972" ry="3.5976567" style="fill:#fff;stroke-width:.301024"/>
+  <path d="M.97184572 10.851604A7.2539441 7.1953133 0 1 0 3.6269658 1.0226241 7.2539441 7.1953133 0 0 0 .97184572 10.851604Zm9.42314028-5.39649a3.626972 3.5976566 0 1 1-4.9545302-1.31683 3.626972 3.5976566 0 0 1 4.9545302 1.31683z" style="fill:none;stroke-width:.301024"/>
+  <path d="M7.2539358 3.656294h6.2810702a7.2521004 7.1934845 0 0 0-12.56259028.00087l3.14054008 5.39561.003-.00072a3.6224988 3.5932195 0 0 1 3.13817-5.39576z" style="fill:url(#a_chromeos);stroke-width:.301024"/>
+  <ellipse cx="7.2539372" cy="7.253943" rx="2.8713529" ry="2.8481448" style="fill:#1a73e8;stroke-width:.301024"/>
+  <path d="M10.394686 9.0536441 7.2541558 14.449264A7.2521306 7.1935145 0 0 0 13.534646 3.6572241H7.2536058l-.00075.003a3.6224383 3.5931596 0 0 1 3.1418302 5.39364z" style="fill:url(#b_chromeos);stroke-width:.301024"/>
+  <path d="M4.1131658 9.053704.97262572 3.658094a7.2521306 7.1935145 0 0 0 6.28207008 10.79117l3.1405302-5.39562-.002-.002a3.6224988 3.5932195 0 0 1-6.2800402.002z" style="fill:url(#c_chromeos);stroke-width:.301024"/>
+</svg>

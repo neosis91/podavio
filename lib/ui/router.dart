@@ -12,6 +12,8 @@ class AppRoutes {
   static const preferences = '/preferences';
   static const sync = '/preferences/sync';
   static const webCompanion = '/preferences/web';
+  static const webCompanionScan = '/preferences/web/scan';
+  static const webCompanionDevice = '/preferences/web/device';
   static const favorites = '/favorites';
   static const history = '/history';
   static const downloads = '/downloads';

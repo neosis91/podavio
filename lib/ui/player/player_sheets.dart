@@ -61,6 +61,7 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
   var _queueReady = false;
   var _revealed = false;
   var _revealScheduled = false;
+  var _revealExtent = -1.0;
   var _loadingEarlier = false;
 
   @override
@@ -85,29 +86,30 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
       _scheduleReveal();
       return;
     }
-    final count = _previousCount;
-    if (count <= 0) {
-      _revealed = true;
-      return;
-    }
-    final wide = _queueWide(context);
-    final rowHeight = wide ? 84.0 : 60.0;
-    const titleHeight = 36.0;
-    final target = titleHeight + count * rowHeight;
     final position = _scroll.position;
-    const nowPlayingHeight = 80.0;
-    if (target + nowPlayingHeight <= position.viewportDimension) {
-      _revealed = true;
-      return;
-    }
-    final max = position.maxScrollExtent;
-    if (max + 1 < target) {
-      position.jumpTo(max);
+    final update = advanceQueueReveal(
+      state: QueueRevealState(
+        revealed: _revealed,
+        extent: _revealExtent,
+        offset: position.pixels,
+      ),
+      maxExtent: position.maxScrollExtent,
+      target: queueRevealTarget(
+        previousCount: _previousCount,
+        rowHeight: _queueWide(context) ? 84 : 60,
+      ),
+      viewport: position.viewportDimension,
+      previousCount: _previousCount,
+    );
+    _revealed = update.state.revealed;
+    _revealExtent = update.state.extent;
+    final jump = update.jumpTo;
+    if (jump != null) position.jumpTo(jump);
+    if (update.reschedule) {
       _scheduleReveal();
       return;
     }
-    position.jumpTo(target.clamp(0.0, max));
-    _revealed = true;
+    if (jump == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final targetContext = _nowPlayingKey.currentContext;
       if (targetContext == null || !mounted) return;
@@ -446,6 +448,143 @@ class _QueueSectionTitle extends StatelessWidget {
 
 bool _queueWide(BuildContext context) {
   return MediaQuery.sizeOf(context).width >= 840;
+}
+
+/// Où en est le placement de l’épisode en cours dans la file.
+enum QueueReveal {
+  /// L’étendue du scroll grandit encore.
+  wait,
+
+  /// Assez de contenu en dessous pour le mettre en haut.
+  pin,
+
+  /// « À suivre » est trop court : laisser scroller vers « Précédents ».
+  settle,
+}
+
+/// Hauteur estimée du titre de section et de l’épisode en cours.
+const queueSectionTitleHeight = 36.0;
+const queueNowPlayingRevealHeight = 80.0;
+
+/// Décalage pour coller l’épisode en cours en haut de la file.
+double queueRevealTarget({
+  required int previousCount,
+  required double rowHeight,
+}) {
+  return queueSectionTitleHeight + previousCount * rowHeight;
+}
+
+/// État du placement, d’une image à l’autre.
+class QueueRevealState {
+  const QueueRevealState({
+    this.revealed = false,
+    this.extent = -1,
+    this.offset = 0,
+  });
+
+  final bool revealed;
+
+  /// Dernière étendue mesurée. `-1` avant la première.
+  final double extent;
+  final double offset;
+}
+
+/// Résultat d’une image. [jumpTo] absent : ne pas toucher au scroll.
+class QueueRevealUpdate {
+  const QueueRevealUpdate({
+    required this.state,
+    required this.jumpTo,
+    required this.reschedule,
+  });
+
+  final QueueRevealState state;
+  final double? jumpTo;
+  final bool reschedule;
+}
+
+/// Une image du placement. C’est cette fonction que la file appelle :
+/// un « À suivre » trop court doit finir en [QueueReveal.settle], sans
+/// ramener le décalage en bas aux images suivantes.
+QueueRevealUpdate advanceQueueReveal({
+  required QueueRevealState state,
+  required double maxExtent,
+  required double target,
+  required double viewport,
+  required int previousCount,
+}) {
+  if (state.revealed || previousCount <= 0) {
+    return QueueRevealUpdate(
+      state: QueueRevealState(
+        revealed: true,
+        extent: state.extent,
+        offset: state.offset,
+      ),
+      jumpTo: null,
+      reschedule: false,
+    );
+  }
+  if (target + queueNowPlayingRevealHeight <= viewport) {
+    return QueueRevealUpdate(
+      state: QueueRevealState(
+        revealed: true,
+        extent: state.extent,
+        offset: state.offset,
+      ),
+      jumpTo: null,
+      reschedule: false,
+    );
+  }
+  final step = queueRevealStep(
+    maxExtent: maxExtent,
+    target: target,
+    previousExtent: state.extent,
+  );
+  switch (step) {
+    case QueueReveal.wait:
+      return QueueRevealUpdate(
+        state: QueueRevealState(
+          revealed: false,
+          extent: maxExtent,
+          offset: maxExtent,
+        ),
+        jumpTo: maxExtent,
+        reschedule: true,
+      );
+    case QueueReveal.settle:
+      return QueueRevealUpdate(
+        state: QueueRevealState(
+          revealed: true,
+          extent: state.extent,
+          offset: state.offset,
+        ),
+        jumpTo: null,
+        reschedule: false,
+      );
+    case QueueReveal.pin:
+      final pinned = target.clamp(0.0, maxExtent);
+      return QueueRevealUpdate(
+        state: QueueRevealState(
+          revealed: true,
+          extent: state.extent,
+          offset: pinned,
+        ),
+        jumpTo: pinned,
+        reschedule: false,
+      );
+  }
+}
+
+/// [previousExtent] vaut `-1` avant la première mesure.
+QueueReveal queueRevealStep({
+  required double maxExtent,
+  required double target,
+  required double previousExtent,
+}) {
+  if (maxExtent + 1 < target) {
+    if (maxExtent > previousExtent + 0.5) return QueueReveal.wait;
+    return QueueReveal.settle;
+  }
+  return QueueReveal.pin;
 }
 
 class _QueueHold {
