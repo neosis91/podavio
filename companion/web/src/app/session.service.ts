@@ -56,6 +56,7 @@ export type LibraryView =
   | 'favorites'
   | 'episodes'
   | 'downloads'
+  | 'cache'
   | 'playlists'
   | 'playlist'
   | 'stats';
@@ -229,6 +230,7 @@ export class PodavioSession implements OnDestroy {
     if (path === '/library/favorites') return 'favorites';
     if (path === '/library/episodes') return 'episodes';
     if (path === '/library/downloads') return 'downloads';
+    if (path === '/library/cache') return 'cache';
     if (path === '/library/statistics') return 'stats';
     return 'hub';
   }
@@ -268,6 +270,8 @@ export class PodavioSession implements OnDestroy {
         return this.text('Episodes', 'Épisodes');
       case 'downloads':
         return this.text('Downloads', 'Téléchargements');
+      case 'cache':
+        return this.text('Episode cache', 'Cache d’épisodes');
       case 'playlists':
         return this.text('Playlists', 'Playlists');
       case 'playlist':
@@ -299,7 +303,9 @@ export class PodavioSession implements OnDestroy {
     const view = this.libraryView();
     const episodes = this.flatEpisodes();
     if (view === 'favorites') return episodes.filter((episode) => episode.favorite);
-    if (view === 'downloads') return episodes.filter((episode) => episode.downloaded);
+    if (view === 'downloads' || view === 'cache') {
+      return episodes.filter((episode) => episode.downloaded);
+    }
     if (view === 'episodes') {
       return [...episodes].sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
     }

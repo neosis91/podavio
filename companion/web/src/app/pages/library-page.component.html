@@ -12,6 +12,10 @@
       <mat-icon>download</mat-icon>
       <span class="tile-name">{{ session.text('Downloads', 'Téléchargements') }}</span>
     </a>
+    <a class="library-tile cache" routerLink="/library/cache">
+      <mat-icon>folder</mat-icon>
+      <span class="tile-name">{{ session.text('Episode cache', 'Cache d’épisodes') }}</span>
+    </a>
     <a class="library-tile playlists" routerLink="/library/playlists">
       <mat-icon>queue_music</mat-icon>
       <span class="tile-name">{{ session.text('Playlists', 'Playlists') }}</span>

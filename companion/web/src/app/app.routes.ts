@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 
+import { CachePage } from './pages/cache-page.component';
 import { ConnectPage } from './pages/connect-page.component';
 import { DownloadsPage } from './pages/downloads-page.component';
 import { EpisodesPage } from './pages/episodes-page.component';
@@ -21,6 +22,7 @@ export const routes: Routes = [
   { path: 'library/favorites', component: FavoritesPage },
   { path: 'library/episodes', component: EpisodesPage },
   { path: 'library/downloads', component: DownloadsPage },
+  { path: 'library/cache', component: CachePage },
   { path: 'library/playlists', component: PlaylistsPage },
   { path: 'library/playlists/:playlistId', component: PlaylistPage },
   { path: 'library/statistics', component: StatisticsPage },

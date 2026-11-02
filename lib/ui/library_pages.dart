@@ -19,8 +19,9 @@ class FavoritesPage extends ConsumerWidget {
       actions: const [ListPlayButton(query: query)],
       query: query,
       queueStyle: true,
-      onRemove: (entry) =>
-          ref.read(databaseProvider).setFavorite(entry.episode.id, favorite: false),
+      onRemove: (entry) => ref
+          .read(databaseProvider)
+          .setFavorite(entry.episode.id, favorite: false),
       bulkActions: EpisodeBulkActions(
         download: true,
         removeLabel: 'Retirer des favoris',
@@ -39,6 +40,38 @@ class FavoritesPage extends ConsumerWidget {
   }
 }
 
+class CachePage extends ConsumerWidget {
+  const CachePage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const query = EpisodeQuery(downloadsOnly: true);
+    return EpisodeListScaffold(
+      title: Text(context.tr('Episode cache')),
+      actions: const [ListPlayButton(query: query)],
+      query: query,
+      queueStyle: true,
+      onRemove: (entry) => ref
+          .read(downloadProgressProvider.notifier)
+          .deleteDownload(entry.episode),
+      bulkActions: EpisodeBulkActions(
+        favorite: true,
+        removeLabel: 'Retirer du cache',
+        onRemove: (entries) async {
+          final downloads = ref.read(downloadProgressProvider.notifier);
+          for (final entry in entries) {
+            await downloads.deleteDownload(entry.episode);
+          }
+        },
+      ),
+      empty: const EmptyState(
+        title: 'Aucun fichier en cache',
+        message: 'Les épisodes gardés sur le téléphone apparaissent ici.',
+      ),
+    );
+  }
+}
+
 class DownloadsPage extends ConsumerWidget {
   const DownloadsPage({super.key});
 
@@ -50,8 +83,9 @@ class DownloadsPage extends ConsumerWidget {
       actions: const [ListPlayButton(query: query)],
       query: query,
       queueStyle: true,
-      onRemove: (entry) =>
-          ref.read(downloadProgressProvider.notifier).deleteDownload(entry.episode),
+      onRemove: (entry) => ref
+          .read(downloadProgressProvider.notifier)
+          .deleteDownload(entry.episode),
       bulkActions: EpisodeBulkActions(
         favorite: true,
         removeLabel: 'Supprimer les téléchargements',

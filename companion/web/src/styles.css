@@ -565,8 +565,9 @@ li {
 .library-tile.favorites { background: #ff99ae; }
 .library-tile.episodes { background: #00bcd4; }
 .library-tile.downloads { background: #4caf50; }
+.library-tile.cache { background: #ff9800; }
 .library-tile.playlists { background: #ffeb3b; }
-.library-tile.statistics { background: #ce93d8; grid-column: 1; }
+.library-tile.statistics { background: #ce93d8; }
 
 .library h2 {
   margin: 22px 0 8px;

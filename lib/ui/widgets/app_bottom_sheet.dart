@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 /// [showModalBottomSheet] avec fermeture au clic en dehors, pour toutes les feuilles.
+///
+/// Le navigateur racine place la feuille au-dessus du menu et du mini-lecteur.
 Future<T?> showAppModalBottomSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   Color? backgroundColor,
   bool isScrollControlled = false,
-  bool useRootNavigator = false,
+  bool useRootNavigator = true,
   bool showDragHandle = false,
   bool enableDrag = true,
   bool isDismissible = true,

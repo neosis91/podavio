@@ -17,6 +17,7 @@ class AppRoutes {
   static const favorites = '/favorites';
   static const history = '/history';
   static const downloads = '/downloads';
+  static const cache = '/cache';
   static const appearance = '/appearance';
   static const languages = '/languages';
   static const interfaceLanguage = '/appearance/language';

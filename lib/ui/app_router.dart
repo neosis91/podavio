@@ -158,6 +158,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const DownloadsPage(),
           ),
           GoRoute(
+            path: AppRoutes.cache,
+            builder: (context, state) => const CachePage(),
+          ),
+          GoRoute(
             path: AppRoutes.discoverLanguages,
             builder: (context, state) => const DiscoverLanguagesPage(),
           ),
