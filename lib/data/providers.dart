@@ -124,6 +124,9 @@ final podcastsProvider = StreamProvider<List<Podcast>>((ref) {
 
 /// Télécharge automatiquement les jaquettes de podcasts manquantes.
 final coverPrefetchProvider = Provider<void>((ref) {
+  // Le shell l’écoute en permanence. Pendant un import, la base refuse les
+  // lectures : on se retire sans propager l’erreur jusqu’au widget.
+  if (ref.watch(databasePhaseProvider) != DatabasePhase.open) return;
   final eco = ref.watch(
     settingsProvider.select((settings) => settings.ecoMode),
   );

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'catalog_categories.dart';
 import 'discover_hit.dart';
 import 'discover_languages.dart';
 import 'feed_service.dart';
@@ -128,15 +129,23 @@ class FyydSearch {
     final podcasts = data['podcasts'];
     if (podcasts is! List) return const [];
 
-    return _hitsFromList(podcasts, languages);
+    return _hitsFromList(podcasts, languages, history: categoryId == 129);
   }
 
-  List<DiscoverHit> _hitsFromList(List<dynamic> data, List<String> languages) {
+  List<DiscoverHit> _hitsFromList(
+    List<dynamic> data,
+    List<String> languages, {
+    bool history = false,
+  }) {
     final hits = <DiscoverHit>[];
     for (final raw in data) {
       if (raw is! Map) continue;
       final map = Map<String, dynamic>.from(raw);
       if (!discoverLanguageMatches(map['language'] as String?, languages)) {
+        continue;
+      }
+      if (history &&
+          !fyydHistoryCategoriesStay(_fyydCategoryIds(map['categories']))) {
         continue;
       }
       final hit = _hitFromMap(map);
@@ -169,6 +178,22 @@ class FyydSearch {
         map['lastpub'] ?? map['last_pub'] ?? map['lastPublication'],
       ),
     );
+  }
+
+  static List<int> _fyydCategoryIds(Object? raw) {
+    if (raw is! List) return const [];
+    final ids = <int>[];
+    for (final item in raw) {
+      final id = switch (item) {
+        final int value => value,
+        final num value => value.toInt(),
+        final String value => int.tryParse(value.trim()),
+        final Map value => int.tryParse('${value['id']}'),
+        _ => null,
+      };
+      if (id != null) ids.add(id);
+    }
+    return ids;
   }
 
   static int? _positiveInt(Object? value) {

@@ -290,6 +290,57 @@ final displayedHomeCategoriesProvider = Provider<HomeCategories>((ref) {
   return HomeCategories.fromPlayRanks(ranks);
 });
 
+const categorySubjectsKey = 'categorySubjects';
+
+/// Sujets choisis par catégorie d’accueil. Absent : le regroupement par défaut.
+final categorySubjectsProvider =
+    NotifierProvider<CategorySubjectsNotifier, Map<String, List<String>>>(
+      CategorySubjectsNotifier.new,
+    );
+
+class CategorySubjectsNotifier extends Notifier<Map<String, List<String>>> {
+  @override
+  Map<String, List<String>> build() {
+    return _decode(
+      ref.watch(sharedPreferencesProvider).getStringList(categorySubjectsKey),
+    );
+  }
+
+  /// Remplace les sujets d’une catégorie. Une liste vide est ignorée.
+  Future<void> setEnabled(String categoryId, Set<String> genres) async {
+    if (catalogCategoryById(categoryId) == null) return;
+    final enabled = [
+      for (final member in allCatalogMembers)
+        if (genres.contains(member.genre)) member.genre,
+    ];
+    if (enabled.isEmpty) return;
+    final next = {...state, categoryId: enabled};
+    state = next;
+    await ref.read(sharedPreferencesProvider).setStringList(
+      categorySubjectsKey,
+      [
+        for (final entry in next.entries)
+          for (final genre in entry.value) '${entry.key}\u0001$genre',
+      ],
+    );
+  }
+
+  static Map<String, List<String>> _decode(List<String>? raw) {
+    final out = <String, List<String>>{};
+    if (raw == null) return out;
+    for (final line in raw) {
+      final split = line.split('\u0001');
+      if (split.length != 2) continue;
+      final id = split[0];
+      final genre = split[1];
+      if (catalogCategoryById(id) == null) continue;
+      if (catalogMemberByGenre(genre) == null) continue;
+      (out[id] ??= []).add(genre);
+    }
+    return out;
+  }
+}
+
 /// Podcasts d’une catégorie d’accueil (liste plate paginée, hors abonnements).
 final homeCategoryHitsProvider = AsyncNotifierProvider.autoDispose
     .family<HomeCategoryHitsNotifier, DiscoverCharts, String>(
@@ -318,6 +369,14 @@ class HomeCategoryHitsNotifier extends AsyncNotifier<DiscoverCharts> {
       ),
     );
     ref.watch(podcastsProvider.select(_subscribedFeedsKey));
+    ref.watch(
+      categorySubjectsProvider.select(
+        (stored) => enabledSubjects(
+          categoryId,
+          stored[categoryId],
+        ).map((member) => member.genre).join('\u0001'),
+      ),
+    );
     ref.listen(onlineStatusProvider, (previous, next) {
       if (previous == false && next == true) unawaited(reload());
     });
@@ -363,9 +422,11 @@ class HomeCategoryHitsNotifier extends AsyncNotifier<DiscoverCharts> {
     try {
       // Une page peut ne renvoyer que des doublons déjà vus : on enchaîne
       // sur d’autres membres du regroupement avant d’abandonner.
-      final members =
-          catalogCategoryById(categoryId)?.regroupGenres.length ?? 1;
-      final maxAttempts = (members * 2).clamp(2, 16);
+      final members = enabledSubjects(
+        categoryId,
+        ref.read(categorySubjectsProvider)[categoryId],
+      );
+      final maxAttempts = (members.length * 2).clamp(2, 16);
       var fresh = <DiscoverHit>[];
       for (var i = 0; i < maxAttempts && _page < _maxPages; i++) {
         fresh = await _fetchFresh();
@@ -416,6 +477,10 @@ class HomeCategoryHitsNotifier extends AsyncNotifier<DiscoverCharts> {
     final gen = _generation;
     final page = _page;
     final languages = ref.read(settingsProvider).discoverLanguages;
+    final subjects = enabledSubjects(
+      categoryId,
+      ref.read(categorySubjectsProvider)[categoryId],
+    );
     final merged = await ref
         .read(feedServiceProvider)
         .categoryHitsPage(
@@ -423,6 +488,7 @@ class HomeCategoryHitsNotifier extends AsyncNotifier<DiscoverCharts> {
           page: page,
           pageSize: pageSize,
           languages: languages,
+          subjects: subjects,
         );
     if (gen != _generation) return const [];
     _page = page + 1;

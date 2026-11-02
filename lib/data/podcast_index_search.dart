@@ -101,6 +101,10 @@ class PodcastIndexSearch {
       if (!discoverLanguageMatches(map['language'] as String?, languages)) {
         continue;
       }
+      if (query['cat'] == 'History' &&
+          !podcastIndexHistoryCategoriesStay(_categoryNames(map))) {
+        continue;
+      }
       final title = (map['title'] as String?)?.trim();
       hits.add(
         DiscoverHit(
@@ -160,6 +164,15 @@ class PodcastIndexSearch {
     return [
       for (final raw in feeds)
         if (raw is Map) Map<String, dynamic>.from(raw),
+    ];
+  }
+
+  static List<String> _categoryNames(Map<String, dynamic> map) {
+    final categories = map['categories'];
+    if (categories is! Map) return const [];
+    return [
+      for (final value in categories.values)
+        if (value is String && value.trim().isNotEmpty) value.trim(),
     ];
   }
 

@@ -400,16 +400,17 @@ class FeedService {
     ];
   }
 
-  /// Une page de podcasts pour un regroupement de catégories.
+  /// Une page de podcasts pour les sujets choisis d’une catégorie.
   ///
-  /// Page 0 : parent seul (Apple + PI + fyyd). Pages suivantes : un membre
-  /// du regroupement à la fois (parent puis sous-genres), pour que le scroll
-  /// apporte encore des podcasts nouveaux.
+  /// Page 0 : le premier sujet (Apple + PI + fyyd). Pages suivantes : un
+  /// sujet à la fois, pour que le scroll apporte encore des podcasts nouveaux.
+  /// [subjects] vide ou absent : le regroupement par défaut.
   Future<List<DiscoverHit>> categoryHitsPage({
     required String id,
     required int page,
     int pageSize = 20,
     List<String> languages = const [discoverLanguagesAll],
+    List<CatalogMember>? subjects,
   }) async {
     final category = catalogCategoryById(id);
     if (category == null) return const [];
@@ -422,30 +423,32 @@ class FeedService {
       }
     }
 
-    final genres = category.regroupGenres;
-    final fyydIds = category.regroupFyydIds;
+    final members = (subjects == null || subjects.isEmpty)
+        ? category.regroupMembers
+        : subjects;
     final piles = <List<DiscoverHit>?>[];
     final weights = <double>[];
 
     if (page == 0) {
+      final first = members.first;
       final results = await Future.wait([
         safe(
           _appleChartHits(
             languages: languages,
             limit: pageSize,
-            genre: category.genre,
+            genre: first.genre,
           ),
         ),
         safe(
           _podcastIndex.trending(
             languages: languages,
             max: pageSize,
-            category: category.genre,
+            category: first.genre,
           ),
         ),
         safe(
           _fyyd.category(
-            category.fyydId,
+            first.fyydId,
             count: pageSize,
             page: 0,
             languages: languages,
@@ -455,21 +458,22 @@ class FeedService {
       piles.addAll(results);
       weights.addAll(const [1.0, 1.0, 0.8]);
     } else {
-      final index = (page - 1) % genres.length;
-      final deep = (page - 1) ~/ genres.length;
+      final index = (page - 1) % members.length;
+      final deep = (page - 1) ~/ members.length;
+      final member = members[index];
       final pair = await Future.wait([
         safe(
           _podcastIndex.trending(
             languages: languages,
             max: (deep + 2) * pageSize,
-            category: genres[index],
+            category: member.genre,
           ),
         ),
         safe(
           _fyyd.category(
-            fyydIds[index],
+            member.fyydId,
             count: pageSize,
-            page: deep + (fyydIds[index] == category.fyydId ? 1 : 0),
+            page: deep + (index == 0 ? 1 : 0),
             languages: languages,
           ),
         ),

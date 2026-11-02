@@ -442,6 +442,10 @@ class HomeCategories {
     'religion',
     'fiction',
     'government',
+    'food',
+    'games',
+    'nature',
+    'travel',
   ];
 
   /// Celles que la plupart des gens gardent au départ.
