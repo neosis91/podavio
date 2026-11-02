@@ -90,6 +90,18 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     );
   }
 
+  /// Mémorise les genres seulement si le flux n’a pas encore été classé.
+  Future<void> setPodcastCategoriesIfMissing(int id, List<String> genres) {
+    return (update(podcasts)..where(
+          (table) => table.id.equals(id) & table.categoriesJson.isNull(),
+        ))
+        .write(
+          PodcastsCompanion(
+            categoriesJson: Value(encodePodcastCategories(genres)),
+          ),
+        );
+  }
+
   Future<void> setPodcastSubscribed(int id, {required bool subscribed}) {
     return (update(podcasts)..where((table) => table.id.equals(id))).write(
       PodcastsCompanion(
@@ -198,6 +210,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
             link: Value(draft.link),
             personsJson: Value(encodePodcastPersons(draft.persons)),
             fundingJson: Value(encodePodcastFunding(draft.funding)),
+            categoriesJson: Value(encodePodcastCategories(draft.categories)),
             subscribedAt: DateTime.now(),
             refreshedAt: Value(DateTime.now()),
             subscribed: Value(subscribed ?? true),
@@ -220,6 +233,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
             link: Value(draft.link),
             personsJson: Value(encodePodcastPersons(draft.persons)),
             fundingJson: Value(encodePodcastFunding(draft.funding)),
+            categoriesJson: Value(encodePodcastCategories(draft.categories)),
             refreshedAt: Value(DateTime.now()),
             subscribed: subscribed == null
                 ? const Value.absent()

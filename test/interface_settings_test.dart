@@ -125,6 +125,37 @@ void main() {
     expect(genres.toSet(), hasLength(genres.length));
   });
 
+  test('a subscription matches only the subjects kept in its category', () {
+    expect(
+      podcastGenresMatchCategory(const ['News', 'Politics'], 'news', null),
+      isTrue,
+    );
+    expect(
+      podcastGenresMatchCategory(const ['Tech News'], 'news', null),
+      isFalse,
+    );
+    expect(
+      podcastGenresMatchCategory(const ['Tech News'], 'technology', null),
+      isTrue,
+    );
+    expect(
+      podcastGenresMatchCategory(const ['News'], 'news', const ['Politics']),
+      isFalse,
+    );
+    expect(
+      podcastGenresMatchCategory(
+        const ['Politics'],
+        'news',
+        const ['Politics'],
+      ),
+      isTrue,
+    );
+    expect(
+      podcastGenresMatchCategory(const ['Society & Culture'], 'society', null),
+      isTrue,
+    );
+  });
+
   test('interface setting strings exist in every language', () {
     const keys = [
       'Cover tint',

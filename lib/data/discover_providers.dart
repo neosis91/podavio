@@ -6,6 +6,7 @@ import '../settings/settings_controller.dart';
 import 'app_database.dart';
 import 'catalog_categories.dart';
 import 'discover_hit.dart';
+import 'models.dart';
 import 'online_status.dart';
 import 'feed_service.dart';
 import 'providers.dart';
@@ -340,6 +341,40 @@ class CategorySubjectsNotifier extends Notifier<Map<String, List<String>>> {
     return out;
   }
 }
+
+/// Abonnements regroupés par catégorie d’accueil. Une catégorie sans podcast
+/// n’apparaît pas.
+final homeCategoryPodcastsProvider = Provider<Map<String, List<Podcast>>>((
+  ref,
+) {
+  final podcasts =
+      ref.watch(podcastsProvider).asData?.value ?? const <Podcast>[];
+  final categories = ref.watch(displayedHomeCategoriesProvider);
+  final subjects = ref.watch(categorySubjectsProvider);
+  final grouped = <String, List<Podcast>>{};
+  for (final id in categories.visible) {
+    final matches = [
+      for (final podcast in podcasts)
+        if (podcastGenresMatchCategory(
+          decodePodcastCategories(podcast.categoriesJson) ?? const [],
+          id,
+          subjects[id],
+        ))
+          podcast,
+    ];
+    if (matches.isNotEmpty) grouped[id] = matches;
+  }
+  return grouped;
+});
+
+/// Complète les genres manquants des abonnements, pour classer l’accueil.
+final podcastCategoryBackfillProvider = Provider<void>((ref) {
+  if (ref.watch(databasePhaseProvider) != DatabasePhase.open) return;
+  if (ref.watch(onlineStatusProvider) == false) return;
+  final podcasts = ref.watch(podcastsProvider).asData?.value;
+  if (podcasts == null) return;
+  ref.watch(feedServiceProvider).backfillPodcastCategories(podcasts);
+});
 
 /// Podcasts d’une catégorie d’accueil (liste plate paginée, hors abonnements).
 final homeCategoryHitsProvider = AsyncNotifierProvider.autoDispose

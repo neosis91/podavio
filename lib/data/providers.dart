@@ -233,6 +233,7 @@ class EpisodesNotifier extends Notifier<AsyncValue<EpisodeWindow>> {
           unreadOnly: query.unreadOnly,
           favoritesOnly: query.favoritesOnly,
           downloadsOnly: query.downloadsOnly,
+          cacheOnly: query.cacheOnly,
           queuedOnly: query.queuedOnly,
           historyOnly: query.historyOnly,
           inProgressOnly: query.inProgressOnly,
@@ -263,6 +264,7 @@ class EpisodeQuery {
     this.unreadOnly = false,
     this.favoritesOnly = false,
     this.downloadsOnly = false,
+    this.cacheOnly = false,
     this.queuedOnly = false,
     this.historyOnly = false,
     this.inProgressOnly = false,
@@ -275,6 +277,7 @@ class EpisodeQuery {
   final bool unreadOnly;
   final bool favoritesOnly;
   final bool downloadsOnly;
+  final bool cacheOnly;
   final bool queuedOnly;
   final bool historyOnly;
   final bool inProgressOnly;
@@ -289,6 +292,7 @@ class EpisodeQuery {
         other.unreadOnly == unreadOnly &&
         other.favoritesOnly == favoritesOnly &&
         other.downloadsOnly == downloadsOnly &&
+        other.cacheOnly == cacheOnly &&
         other.queuedOnly == queuedOnly &&
         other.historyOnly == historyOnly &&
         other.inProgressOnly == inProgressOnly &&
@@ -303,6 +307,7 @@ class EpisodeQuery {
     unreadOnly,
     favoritesOnly,
     downloadsOnly,
+    cacheOnly,
     queuedOnly,
     historyOnly,
     inProgressOnly,

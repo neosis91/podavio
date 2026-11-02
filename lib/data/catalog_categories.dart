@@ -694,6 +694,23 @@ List<CatalogMember> enabledSubjects(
   return [CatalogMember(genre: category.genre, fyydId: category.fyydId)];
 }
 
+/// Vrai si un genre du flux fait partie des sujets gardés pour cette catégorie.
+bool podcastGenresMatchCategory(
+  Iterable<String> genres,
+  String categoryId,
+  List<String>? chosenGenres,
+) {
+  final wanted = {
+    for (final member in enabledSubjects(categoryId, chosenGenres))
+      member.genre.toLowerCase(),
+  };
+  for (final genre in genres) {
+    final name = genre.trim().toLowerCase();
+    if (name.isNotEmpty && wanted.contains(name)) return true;
+  }
+  return false;
+}
+
 /// Étiquettes fyyd qui sortent un podcast du sujet Histoire,
 /// même quand 129 est aussi présent.
 const historyExcludedFyydIds = <int>{

@@ -272,6 +272,17 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
+  static const VerificationMeta _categoriesJsonMeta = const VerificationMeta(
+    'categoriesJson',
+  );
+  @override
+  late final GeneratedColumn<String> categoriesJson = GeneratedColumn<String>(
+    'categories_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -296,6 +307,7 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     authPassword,
     personsJson,
     fundingJson,
+    categoriesJson,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -483,6 +495,15 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         ),
       );
     }
+    if (data.containsKey('categories_json')) {
+      context.handle(
+        _categoriesJsonMeta,
+        categoriesJson.isAcceptableOrUnknown(
+          data['categories_json']!,
+          _categoriesJsonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -580,6 +601,10 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         DriftSqlType.string,
         data['${effectivePrefix}funding_json'],
       )!,
+      categoriesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}categories_json'],
+      ),
     );
   }
 
@@ -630,6 +655,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
 
   /// Liens de financement (`podcast:funding`), JSON.
   final String fundingJson;
+
+  /// Genres du flux (`itunes:category`, `podcast:category`). `null` : pas encore lus.
+  final String? categoriesJson;
   const Podcast({
     required this.id,
     required this.feedUrl,
@@ -653,6 +681,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     this.authPassword,
     required this.personsJson,
     required this.fundingJson,
+    this.categoriesJson,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -693,6 +722,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     }
     map['persons_json'] = Variable<String>(personsJson);
     map['funding_json'] = Variable<String>(fundingJson);
+    if (!nullToAbsent || categoriesJson != null) {
+      map['categories_json'] = Variable<String>(categoriesJson);
+    }
     return map;
   }
 
@@ -732,6 +764,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           : Value(authPassword),
       personsJson: Value(personsJson),
       fundingJson: Value(fundingJson),
+      categoriesJson: categoriesJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(categoriesJson),
     );
   }
 
@@ -765,6 +800,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       authPassword: serializer.fromJson<String?>(json['authPassword']),
       personsJson: serializer.fromJson<String>(json['personsJson']),
       fundingJson: serializer.fromJson<String>(json['fundingJson']),
+      categoriesJson: serializer.fromJson<String?>(json['categoriesJson']),
     );
   }
   @override
@@ -793,6 +829,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       'authPassword': serializer.toJson<String?>(authPassword),
       'personsJson': serializer.toJson<String>(personsJson),
       'fundingJson': serializer.toJson<String>(fundingJson),
+      'categoriesJson': serializer.toJson<String?>(categoriesJson),
     };
   }
 
@@ -819,6 +856,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     Value<String?> authPassword = const Value.absent(),
     String? personsJson,
     String? fundingJson,
+    Value<String?> categoriesJson = const Value.absent(),
   }) => Podcast(
     id: id ?? this.id,
     feedUrl: feedUrl ?? this.feedUrl,
@@ -844,6 +882,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     authPassword: authPassword.present ? authPassword.value : this.authPassword,
     personsJson: personsJson ?? this.personsJson,
     fundingJson: fundingJson ?? this.fundingJson,
+    categoriesJson: categoriesJson.present
+        ? categoriesJson.value
+        : this.categoriesJson,
   );
   Podcast copyWithCompanion(PodcastsCompanion data) {
     return Podcast(
@@ -897,6 +938,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       fundingJson: data.fundingJson.present
           ? data.fundingJson.value
           : this.fundingJson,
+      categoriesJson: data.categoriesJson.present
+          ? data.categoriesJson.value
+          : this.categoriesJson,
     );
   }
 
@@ -924,7 +968,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           ..write('authUsername: $authUsername, ')
           ..write('authPassword: $authPassword, ')
           ..write('personsJson: $personsJson, ')
-          ..write('fundingJson: $fundingJson')
+          ..write('fundingJson: $fundingJson, ')
+          ..write('categoriesJson: $categoriesJson')
           ..write(')'))
         .toString();
   }
@@ -953,6 +998,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     authPassword,
     personsJson,
     fundingJson,
+    categoriesJson,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -979,7 +1025,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           other.authUsername == this.authUsername &&
           other.authPassword == this.authPassword &&
           other.personsJson == this.personsJson &&
-          other.fundingJson == this.fundingJson);
+          other.fundingJson == this.fundingJson &&
+          other.categoriesJson == this.categoriesJson);
 }
 
 class PodcastsCompanion extends UpdateCompanion<Podcast> {
@@ -1005,6 +1052,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
   final Value<String?> authPassword;
   final Value<String> personsJson;
   final Value<String> fundingJson;
+  final Value<String?> categoriesJson;
   const PodcastsCompanion({
     this.id = const Value.absent(),
     this.feedUrl = const Value.absent(),
@@ -1028,6 +1076,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.authPassword = const Value.absent(),
     this.personsJson = const Value.absent(),
     this.fundingJson = const Value.absent(),
+    this.categoriesJson = const Value.absent(),
   });
   PodcastsCompanion.insert({
     this.id = const Value.absent(),
@@ -1052,6 +1101,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.authPassword = const Value.absent(),
     this.personsJson = const Value.absent(),
     this.fundingJson = const Value.absent(),
+    this.categoriesJson = const Value.absent(),
   }) : feedUrl = Value(feedUrl),
        title = Value(title),
        subscribedAt = Value(subscribedAt);
@@ -1078,6 +1128,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Expression<String>? authPassword,
     Expression<String>? personsJson,
     Expression<String>? fundingJson,
+    Expression<String>? categoriesJson,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1103,6 +1154,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       if (authPassword != null) 'auth_password': authPassword,
       if (personsJson != null) 'persons_json': personsJson,
       if (fundingJson != null) 'funding_json': fundingJson,
+      if (categoriesJson != null) 'categories_json': categoriesJson,
     });
   }
 
@@ -1129,6 +1181,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Value<String?>? authPassword,
     Value<String>? personsJson,
     Value<String>? fundingJson,
+    Value<String?>? categoriesJson,
   }) {
     return PodcastsCompanion(
       id: id ?? this.id,
@@ -1153,6 +1206,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       authPassword: authPassword ?? this.authPassword,
       personsJson: personsJson ?? this.personsJson,
       fundingJson: fundingJson ?? this.fundingJson,
+      categoriesJson: categoriesJson ?? this.categoriesJson,
     );
   }
 
@@ -1225,6 +1279,9 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     if (fundingJson.present) {
       map['funding_json'] = Variable<String>(fundingJson.value);
     }
+    if (categoriesJson.present) {
+      map['categories_json'] = Variable<String>(categoriesJson.value);
+    }
     return map;
   }
 
@@ -1252,7 +1309,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
           ..write('authUsername: $authUsername, ')
           ..write('authPassword: $authPassword, ')
           ..write('personsJson: $personsJson, ')
-          ..write('fundingJson: $fundingJson')
+          ..write('fundingJson: $fundingJson, ')
+          ..write('categoriesJson: $categoriesJson')
           ..write(')'))
         .toString();
   }
@@ -1437,6 +1495,17 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _cachePathMeta = const VerificationMeta(
+    'cachePath',
+  );
+  @override
+  late final GeneratedColumn<String> cachePath = GeneratedColumn<String>(
+    'cache_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _queueIndexMeta = const VerificationMeta(
     'queueIndex',
   );
@@ -1513,6 +1582,7 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
     played,
     favorite,
     downloadPath,
+    cachePath,
     queueIndex,
     lastPlayedAt,
     downloadedAt,
@@ -1638,6 +1708,12 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
         ),
       );
     }
+    if (data.containsKey('cache_path')) {
+      context.handle(
+        _cachePathMeta,
+        cachePath.isAcceptableOrUnknown(data['cache_path']!, _cachePathMeta),
+      );
+    }
     if (data.containsKey('queue_index')) {
       context.handle(
         _queueIndexMeta,
@@ -1753,6 +1829,10 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
         DriftSqlType.string,
         data['${effectivePrefix}download_path'],
       ),
+      cachePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cache_path'],
+      ),
       queueIndex: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}queue_index'],
@@ -1798,6 +1878,9 @@ class Episode extends DataClass implements Insertable<Episode> {
   final bool played;
   final bool favorite;
   final String? downloadPath;
+
+  /// Fichier gardé pendant une lecture en streaming. Distinct d’un téléchargement.
+  final String? cachePath;
   final int? queueIndex;
   final DateTime? lastPlayedAt;
   final DateTime? downloadedAt;
@@ -1819,6 +1902,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     required this.played,
     required this.favorite,
     this.downloadPath,
+    this.cachePath,
     this.queueIndex,
     this.lastPlayedAt,
     this.downloadedAt,
@@ -1854,6 +1938,9 @@ class Episode extends DataClass implements Insertable<Episode> {
     map['favorite'] = Variable<bool>(favorite);
     if (!nullToAbsent || downloadPath != null) {
       map['download_path'] = Variable<String>(downloadPath);
+    }
+    if (!nullToAbsent || cachePath != null) {
+      map['cache_path'] = Variable<String>(cachePath);
     }
     if (!nullToAbsent || queueIndex != null) {
       map['queue_index'] = Variable<int>(queueIndex);
@@ -1900,6 +1987,9 @@ class Episode extends DataClass implements Insertable<Episode> {
       downloadPath: downloadPath == null && nullToAbsent
           ? const Value.absent()
           : Value(downloadPath),
+      cachePath: cachePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cachePath),
       queueIndex: queueIndex == null && nullToAbsent
           ? const Value.absent()
           : Value(queueIndex),
@@ -1937,6 +2027,7 @@ class Episode extends DataClass implements Insertable<Episode> {
       played: serializer.fromJson<bool>(json['played']),
       favorite: serializer.fromJson<bool>(json['favorite']),
       downloadPath: serializer.fromJson<String?>(json['downloadPath']),
+      cachePath: serializer.fromJson<String?>(json['cachePath']),
       queueIndex: serializer.fromJson<int?>(json['queueIndex']),
       lastPlayedAt: serializer.fromJson<DateTime?>(json['lastPlayedAt']),
       downloadedAt: serializer.fromJson<DateTime?>(json['downloadedAt']),
@@ -1963,6 +2054,7 @@ class Episode extends DataClass implements Insertable<Episode> {
       'played': serializer.toJson<bool>(played),
       'favorite': serializer.toJson<bool>(favorite),
       'downloadPath': serializer.toJson<String?>(downloadPath),
+      'cachePath': serializer.toJson<String?>(cachePath),
       'queueIndex': serializer.toJson<int?>(queueIndex),
       'lastPlayedAt': serializer.toJson<DateTime?>(lastPlayedAt),
       'downloadedAt': serializer.toJson<DateTime?>(downloadedAt),
@@ -1987,6 +2079,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     bool? played,
     bool? favorite,
     Value<String?> downloadPath = const Value.absent(),
+    Value<String?> cachePath = const Value.absent(),
     Value<int?> queueIndex = const Value.absent(),
     Value<DateTime?> lastPlayedAt = const Value.absent(),
     Value<DateTime?> downloadedAt = const Value.absent(),
@@ -2010,6 +2103,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     played: played ?? this.played,
     favorite: favorite ?? this.favorite,
     downloadPath: downloadPath.present ? downloadPath.value : this.downloadPath,
+    cachePath: cachePath.present ? cachePath.value : this.cachePath,
     queueIndex: queueIndex.present ? queueIndex.value : this.queueIndex,
     lastPlayedAt: lastPlayedAt.present ? lastPlayedAt.value : this.lastPlayedAt,
     downloadedAt: downloadedAt.present ? downloadedAt.value : this.downloadedAt,
@@ -2043,6 +2137,7 @@ class Episode extends DataClass implements Insertable<Episode> {
       downloadPath: data.downloadPath.present
           ? data.downloadPath.value
           : this.downloadPath,
+      cachePath: data.cachePath.present ? data.cachePath.value : this.cachePath,
       queueIndex: data.queueIndex.present
           ? data.queueIndex.value
           : this.queueIndex,
@@ -2079,6 +2174,7 @@ class Episode extends DataClass implements Insertable<Episode> {
           ..write('played: $played, ')
           ..write('favorite: $favorite, ')
           ..write('downloadPath: $downloadPath, ')
+          ..write('cachePath: $cachePath, ')
           ..write('queueIndex: $queueIndex, ')
           ..write('lastPlayedAt: $lastPlayedAt, ')
           ..write('downloadedAt: $downloadedAt, ')
@@ -2089,7 +2185,7 @@ class Episode extends DataClass implements Insertable<Episode> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     podcastId,
     guid,
@@ -2105,12 +2201,13 @@ class Episode extends DataClass implements Insertable<Episode> {
     played,
     favorite,
     downloadPath,
+    cachePath,
     queueIndex,
     lastPlayedAt,
     downloadedAt,
     chaptersUrl,
     chaptersFetched,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2130,6 +2227,7 @@ class Episode extends DataClass implements Insertable<Episode> {
           other.played == this.played &&
           other.favorite == this.favorite &&
           other.downloadPath == this.downloadPath &&
+          other.cachePath == this.cachePath &&
           other.queueIndex == this.queueIndex &&
           other.lastPlayedAt == this.lastPlayedAt &&
           other.downloadedAt == this.downloadedAt &&
@@ -2153,6 +2251,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
   final Value<bool> played;
   final Value<bool> favorite;
   final Value<String?> downloadPath;
+  final Value<String?> cachePath;
   final Value<int?> queueIndex;
   final Value<DateTime?> lastPlayedAt;
   final Value<DateTime?> downloadedAt;
@@ -2174,6 +2273,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     this.played = const Value.absent(),
     this.favorite = const Value.absent(),
     this.downloadPath = const Value.absent(),
+    this.cachePath = const Value.absent(),
     this.queueIndex = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
     this.downloadedAt = const Value.absent(),
@@ -2196,6 +2296,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     this.played = const Value.absent(),
     this.favorite = const Value.absent(),
     this.downloadPath = const Value.absent(),
+    this.cachePath = const Value.absent(),
     this.queueIndex = const Value.absent(),
     this.lastPlayedAt = const Value.absent(),
     this.downloadedAt = const Value.absent(),
@@ -2221,6 +2322,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     Expression<bool>? played,
     Expression<bool>? favorite,
     Expression<String>? downloadPath,
+    Expression<String>? cachePath,
     Expression<int>? queueIndex,
     Expression<DateTime>? lastPlayedAt,
     Expression<DateTime>? downloadedAt,
@@ -2243,6 +2345,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
       if (played != null) 'played': played,
       if (favorite != null) 'favorite': favorite,
       if (downloadPath != null) 'download_path': downloadPath,
+      if (cachePath != null) 'cache_path': cachePath,
       if (queueIndex != null) 'queue_index': queueIndex,
       if (lastPlayedAt != null) 'last_played_at': lastPlayedAt,
       if (downloadedAt != null) 'downloaded_at': downloadedAt,
@@ -2267,6 +2370,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     Value<bool>? played,
     Value<bool>? favorite,
     Value<String?>? downloadPath,
+    Value<String?>? cachePath,
     Value<int?>? queueIndex,
     Value<DateTime?>? lastPlayedAt,
     Value<DateTime?>? downloadedAt,
@@ -2289,6 +2393,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
       played: played ?? this.played,
       favorite: favorite ?? this.favorite,
       downloadPath: downloadPath ?? this.downloadPath,
+      cachePath: cachePath ?? this.cachePath,
       queueIndex: queueIndex ?? this.queueIndex,
       lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
       downloadedAt: downloadedAt ?? this.downloadedAt,
@@ -2345,6 +2450,9 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     if (downloadPath.present) {
       map['download_path'] = Variable<String>(downloadPath.value);
     }
+    if (cachePath.present) {
+      map['cache_path'] = Variable<String>(cachePath.value);
+    }
     if (queueIndex.present) {
       map['queue_index'] = Variable<int>(queueIndex.value);
     }
@@ -2381,6 +2489,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
           ..write('played: $played, ')
           ..write('favorite: $favorite, ')
           ..write('downloadPath: $downloadPath, ')
+          ..write('cachePath: $cachePath, ')
           ..write('queueIndex: $queueIndex, ')
           ..write('lastPlayedAt: $lastPlayedAt, ')
           ..write('downloadedAt: $downloadedAt, ')
@@ -3742,6 +3851,7 @@ typedef $$PodcastsTableCreateCompanionBuilder = PodcastsCompanion Function({
   Value<String?> authPassword,
   Value<String> personsJson,
   Value<String> fundingJson,
+  Value<String?> categoriesJson,
 });
 typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<int> id,
@@ -3766,6 +3876,7 @@ typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<String?> authPassword,
   Value<String> personsJson,
   Value<String> fundingJson,
+  Value<String?> categoriesJson,
 });
 
 final class $$PodcastsTableReferences
@@ -3908,6 +4019,11 @@ class $$PodcastsTableFilterComposer
 
   ColumnFilters<String> get fundingJson => $composableBuilder(
     column: $table.fundingJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get categoriesJson => $composableBuilder(
+    column: $table.categoriesJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4055,6 +4171,11 @@ class $$PodcastsTableOrderingComposer
     column: $table.fundingJson,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get categoriesJson => $composableBuilder(
+    column: $table.categoriesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PodcastsTableAnnotationComposer
@@ -4160,6 +4281,11 @@ class $$PodcastsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get categoriesJson => $composableBuilder(
+    column: $table.categoriesJson,
+    builder: (column) => column,
+  );
+
   Expression<T> episodesRefs<T extends Object>(
     Expression<T> Function($$EpisodesTableAnnotationComposer a) f,
   ) {
@@ -4236,6 +4362,7 @@ class $$PodcastsTableTableManager
                 Value<String?> authPassword = const Value.absent(),
                 Value<String> personsJson = const Value.absent(),
                 Value<String> fundingJson = const Value.absent(),
+                Value<String?> categoriesJson = const Value.absent(),
               }) => PodcastsCompanion(
                 id: id,
                 feedUrl: feedUrl,
@@ -4259,6 +4386,7 @@ class $$PodcastsTableTableManager
                 authPassword: authPassword,
                 personsJson: personsJson,
                 fundingJson: fundingJson,
+                categoriesJson: categoriesJson,
               ),
           createCompanionCallback:
               ({
@@ -4284,6 +4412,7 @@ class $$PodcastsTableTableManager
                 Value<String?> authPassword = const Value.absent(),
                 Value<String> personsJson = const Value.absent(),
                 Value<String> fundingJson = const Value.absent(),
+                Value<String?> categoriesJson = const Value.absent(),
               }) => PodcastsCompanion.insert(
                 id: id,
                 feedUrl: feedUrl,
@@ -4307,6 +4436,7 @@ class $$PodcastsTableTableManager
                 authPassword: authPassword,
                 personsJson: personsJson,
                 fundingJson: fundingJson,
+                categoriesJson: categoriesJson,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -4372,6 +4502,7 @@ typedef $$EpisodesTableCreateCompanionBuilder = EpisodesCompanion Function({
   Value<bool> played,
   Value<bool> favorite,
   Value<String?> downloadPath,
+  Value<String?> cachePath,
   Value<int?> queueIndex,
   Value<DateTime?> lastPlayedAt,
   Value<DateTime?> downloadedAt,
@@ -4394,6 +4525,7 @@ typedef $$EpisodesTableUpdateCompanionBuilder = EpisodesCompanion Function({
   Value<bool> played,
   Value<bool> favorite,
   Value<String?> downloadPath,
+  Value<String?> cachePath,
   Value<int?> queueIndex,
   Value<DateTime?> lastPlayedAt,
   Value<DateTime?> downloadedAt,
@@ -4560,6 +4692,11 @@ class $$EpisodesTableFilterComposer
 
   ColumnFilters<String> get downloadPath => $composableBuilder(
     column: $table.downloadPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cachePath => $composableBuilder(
+    column: $table.cachePath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4766,6 +4903,11 @@ class $$EpisodesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get cachePath => $composableBuilder(
+    column: $table.cachePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get queueIndex => $composableBuilder(
     column: $table.queueIndex,
     builder: (column) => ColumnOrderings(column),
@@ -4875,6 +5017,9 @@ class $$EpisodesTableAnnotationComposer
     column: $table.downloadPath,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get cachePath =>
+      $composableBuilder(column: $table.cachePath, builder: (column) => column);
 
   GeneratedColumn<int> get queueIndex => $composableBuilder(
     column: $table.queueIndex,
@@ -5049,6 +5194,7 @@ class $$EpisodesTableTableManager
                 Value<bool> played = const Value.absent(),
                 Value<bool> favorite = const Value.absent(),
                 Value<String?> downloadPath = const Value.absent(),
+                Value<String?> cachePath = const Value.absent(),
                 Value<int?> queueIndex = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
                 Value<DateTime?> downloadedAt = const Value.absent(),
@@ -5070,6 +5216,7 @@ class $$EpisodesTableTableManager
                 played: played,
                 favorite: favorite,
                 downloadPath: downloadPath,
+                cachePath: cachePath,
                 queueIndex: queueIndex,
                 lastPlayedAt: lastPlayedAt,
                 downloadedAt: downloadedAt,
@@ -5093,6 +5240,7 @@ class $$EpisodesTableTableManager
                 Value<bool> played = const Value.absent(),
                 Value<bool> favorite = const Value.absent(),
                 Value<String?> downloadPath = const Value.absent(),
+                Value<String?> cachePath = const Value.absent(),
                 Value<int?> queueIndex = const Value.absent(),
                 Value<DateTime?> lastPlayedAt = const Value.absent(),
                 Value<DateTime?> downloadedAt = const Value.absent(),
@@ -5114,6 +5262,7 @@ class $$EpisodesTableTableManager
                 played: played,
                 favorite: favorite,
                 downloadPath: downloadPath,
+                cachePath: cachePath,
                 queueIndex: queueIndex,
                 lastPlayedAt: lastPlayedAt,
                 downloadedAt: downloadedAt,

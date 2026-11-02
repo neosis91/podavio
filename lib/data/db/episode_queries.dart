@@ -203,6 +203,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool unreadOnly = false,
     bool favoritesOnly = false,
     bool downloadsOnly = false,
+    bool cacheOnly = false,
     bool queuedOnly = false,
     bool historyOnly = false,
     bool inProgressOnly = false,
@@ -219,6 +220,7 @@ mixin _EpisodeQueries on _$AppDatabase {
       unreadOnly: unreadOnly,
       favoritesOnly: favoritesOnly,
       downloadsOnly: downloadsOnly,
+      cacheOnly: cacheOnly,
       queuedOnly: queuedOnly,
       historyOnly: historyOnly,
       inProgressOnly: inProgressOnly,
@@ -242,6 +244,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool unreadOnly = false,
     bool favoritesOnly = false,
     bool downloadsOnly = false,
+    bool cacheOnly = false,
     bool queuedOnly = false,
     bool historyOnly = false,
     bool inProgressOnly = false,
@@ -315,6 +318,11 @@ mixin _EpisodeQueries on _$AppDatabase {
     if (unreadOnly) query.where(episodes.played.equals(false));
     if (favoritesOnly) query.where(episodes.favorite.equals(true));
     if (downloadsOnly) query.where(episodes.downloadPath.isNotNull());
+    if (cacheOnly) {
+      query.where(
+        episodes.cachePath.isNotNull() & episodes.downloadPath.isNull(),
+      );
+    }
     if (queuedOnly) query.where(episodes.queueIndex.isNotNull());
     if (historyOnly) query.where(episodes.lastPlayedAt.isNotNull());
     if (inProgressOnly) {
@@ -656,6 +664,16 @@ mixin _EpisodeQueries on _$AppDatabase {
     );
   }
 
+  /// Mémorise ou retire le fichier gardé pendant le streaming.
+  Future<void> setCachePath(int id, String? path) {
+    final stored = path?.trim();
+    return (update(episodes)..where((table) => table.id.equals(id))).write(
+      EpisodesCompanion(
+        cachePath: Value(stored == null || stored.isEmpty ? null : stored),
+      ),
+    );
+  }
+
   Future<List<({int id, String path})>> episodeDownloadFiles() {
     return _episodeFiles(episodes.downloadPath);
   }
@@ -761,6 +779,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool unreadOnly = false,
     bool favoritesOnly = false,
     bool downloadsOnly = false,
+    bool cacheOnly = false,
     bool queuedOnly = false,
     bool historyOnly = false,
     bool inProgressOnly = false,
@@ -778,6 +797,7 @@ mixin _EpisodeQueries on _$AppDatabase {
       unreadOnly: unreadOnly,
       favoritesOnly: favoritesOnly,
       downloadsOnly: downloadsOnly,
+      cacheOnly: cacheOnly,
       queuedOnly: queuedOnly,
       historyOnly: historyOnly,
       inProgressOnly: inProgressOnly,

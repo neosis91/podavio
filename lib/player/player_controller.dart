@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:cast/device.dart';
@@ -184,6 +185,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   StreamSubscription<Duration?>? _durationSub;
   StreamSubscription<PlayerState>? _stateSub;
   StreamSubscription<CastPlaybackUpdate>? _castSub;
+  StreamSubscription<double>? _cacheProgress;
   CastPlayback? _cast;
 
   @override
@@ -268,7 +270,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       final entry = await ref.read(databaseProvider).getEpisode(episodeId);
       if (_disposed || !ref.mounted || entry == null || !_remote) return;
       final settings = ref.read(settingsProvider);
-      final cover = EpisodeEntry(episode: entry.episode, podcast: entry.podcast);
+      final cover = EpisodeEntry(
+        episode: entry.episode,
+        podcast: entry.podcast,
+      );
       final seconds = entry.episode.durationSeconds;
       _emit(
         _ui.copyWith(
@@ -284,7 +289,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
           ),
           updateImage: true,
           position: position,
-          duration: duration ??
+          duration:
+              duration ??
               (seconds == null ? Duration.zero : Duration(seconds: seconds)),
           playing: playing ?? false,
           clearError: true,
@@ -292,11 +298,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       );
     } else {
       _emit(
-        _ui.copyWith(
-          position: position,
-          playing: playing,
-          duration: duration,
-        ),
+        _ui.copyWith(position: position, playing: playing, duration: duration),
       );
     }
     if (!wasRemote || changed) {
@@ -387,6 +389,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
           unreadOnly: query.unreadOnly,
           favoritesOnly: query.favoritesOnly,
           downloadsOnly: query.downloadsOnly,
+          cacheOnly: query.cacheOnly,
           queuedOnly: query.queuedOnly,
           historyOnly: query.historyOnly,
           inProgressOnly: query.inProgressOnly,
@@ -973,10 +976,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       if (!ref.mounted || _disposed) return;
       if (path == null || path.isEmpty) {
         _emit(
-          _ui.copyWith(
-            playing: false,
-            error: 'Impossible de lire ce fichier.',
-          ),
+          _ui.copyWith(playing: false, error: 'Impossible de lire ce fichier.'),
         );
         return;
       }
@@ -1077,6 +1077,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     Uri uri, {
     required Map<String, String>? headers,
   }) async {
+    final remote = uri.scheme == 'http' || uri.scheme == 'https';
+    if (remote) {
+      await _setRemoteAudio(uri, headers: headers);
+      return;
+    }
     try {
       await _player.setAudioSource(AudioSource.uri(uri, headers: headers));
     } catch (error, stack) {
@@ -1397,18 +1402,71 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
     if (_disposed || !ref.mounted || _ui.episodeId != episode.id) return;
     try {
-      await _player.setAudioSource(
-        AudioSource.uri(
-          uri,
-          headers: podcastRequestHeaders(
-            userAgent: podavioUserAgent,
-            username: podcast.authUsername,
-            password: podcast.authPassword,
-          ),
+      await _setRemoteAudio(
+        uri,
+        headers: podcastRequestHeaders(
+          userAgent: podavioUserAgent,
+          username: podcast.authUsername,
+          password: podcast.authPassword,
         ),
       );
     } catch (error, stack) {
       debugPrint('Flux après suppression: $error\n$stack');
+    }
+  }
+
+  Future<void> _rememberStreamCache(int episodeId, File file) async {
+    for (var attempt = 0; attempt < 10; attempt++) {
+      if (_disposed || !ref.mounted || _ui.episodeId != episodeId) return;
+      if (await file.exists() && await file.length() > 0) {
+        await ref
+            .read(downloadServiceProvider)
+            .rememberStreamCache(episodeId, file.path);
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
+  /// Joue le flux et garde le fichier une fois qu’il est complet.
+  /// Un échec du cache revient au streaming simple.
+  Future<void> _setRemoteAudio(
+    Uri uri, {
+    required Map<String, String>? headers,
+  }) async {
+    await _cacheProgress?.cancel();
+    _cacheProgress = null;
+    final episodeId = _ui.episodeId;
+    if (episodeId == null) {
+      await _player.setAudioSource(AudioSource.uri(uri, headers: headers));
+      return;
+    }
+    try {
+      final downloads = ref.read(downloadServiceProvider);
+      final file = await downloads.streamCacheFileFor(
+        episodeId,
+        uri.toString(),
+      );
+      if (await file.exists() && await file.length() > 0) {
+        await downloads.rememberStreamCache(episodeId, file.path);
+      }
+      if (_disposed || !ref.mounted || _ui.episodeId != episodeId) return;
+      // Le cache de flux est encore marqué expérimental par just_audio.
+      // ignore: experimental_member_use
+      final source = LockCachingAudioSource(
+        uri,
+        headers: headers,
+        cacheFile: file,
+      );
+      _cacheProgress = source.downloadProgressStream.listen((progress) {
+        if (progress < 1) return;
+        unawaited(_rememberStreamCache(episodeId, file));
+      });
+      await _player.setAudioSource(source);
+    } catch (error, stack) {
+      debugPrint('Cache de lecture indisponible: $error\n$stack');
+      if (_disposed || !ref.mounted) return;
+      await _player.setAudioSource(AudioSource.uri(uri, headers: headers));
     }
   }
 
@@ -1429,6 +1487,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     final cast = _cast;
     _cast = null;
     await _castSub?.cancel();
+    await _cacheProgress?.cancel();
     await cast?.close();
     await _positionSub?.cancel();
     await _durationSub?.cancel();

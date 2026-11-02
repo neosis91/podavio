@@ -45,28 +45,27 @@ class CachePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const query = EpisodeQuery(downloadsOnly: true);
+    const query = EpisodeQuery(cacheOnly: true);
     return EpisodeListScaffold(
       title: Text(context.tr('Episode cache')),
       actions: const [ListPlayButton(query: query)],
       query: query,
       queueStyle: true,
-      onRemove: (entry) => ref
-          .read(downloadProgressProvider.notifier)
-          .deleteDownload(entry.episode),
+      onRemove: (entry) =>
+          ref.read(downloadServiceProvider).forgetStreamCache(entry.episode.id),
       bulkActions: EpisodeBulkActions(
         favorite: true,
         removeLabel: 'Retirer du cache',
         onRemove: (entries) async {
-          final downloads = ref.read(downloadProgressProvider.notifier);
+          final downloads = ref.read(downloadServiceProvider);
           for (final entry in entries) {
-            await downloads.deleteDownload(entry.episode);
+            await downloads.forgetStreamCache(entry.episode.id);
           }
         },
       ),
       empty: const EmptyState(
         title: 'Aucun fichier en cache',
-        message: 'Les épisodes gardés sur le téléphone apparaissent ici.',
+        message: 'Les épisodes gardés pendant la lecture apparaissent ici.',
       ),
     );
   }

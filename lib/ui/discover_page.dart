@@ -3,48 +3,32 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/catalog_categories.dart';
 import '../data/discover_hit.dart';
 import '../data/online_status.dart';
 import '../l10n/l10n.dart';
 import '../data/discover_providers.dart';
 import '../data/feed_service.dart';
+import '../settings/settings_controller.dart';
+import 'category_subjects_sheet.dart';
 import 'discover/discover_hit_actions.dart';
 import 'discover/discover_search_host.dart';
 import 'more_page.dart';
 import 'podcasts_page.dart';
 import 'router.dart';
+import 'widgets/app_bottom_sheet.dart';
 import 'widgets/brand.dart';
 import 'widgets/cover.dart';
+import 'widgets/discover_category_tile.dart';
 import 'widgets/frosted_header.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/highlighted_text.dart';
 import 'widgets/messages.dart';
+import 'widgets/selection_chip.dart';
 
 export '../data/discover_providers.dart';
 
-const _suggestionRows = 4;
 const _tabletBreakpoint = 600.0;
-const _coverGap = 8.0;
-const _minCover = 76.0;
-
-/// Colonnes pour que chaque jaquette reste lisible, quelle que soit la largeur.
-int _coverColumns(double gridWidth) {
-  if (!gridWidth.isFinite || gridWidth <= 0) return 4;
-  final columns = ((gridWidth + _coverGap) / (_minCover + _coverGap)).floor();
-  if (columns < 2) return 2;
-  if (columns > 12) return 12;
-  return columns;
-}
-
-/// Quatre rangées pleines. Le nombre de colonnes suit la largeur.
-({int columns, int count}) _suggestionGrid(int available, double gridWidth) {
-  final columns = _coverColumns(gridWidth);
-  if (available <= 0) return (columns: columns, count: 0);
-  final rows = available ~/ columns;
-  if (rows == 0) return (columns: available, count: available);
-  final shown = rows < _suggestionRows ? rows : _suggestionRows;
-  return (columns: columns, count: columns * shown);
-}
 
 class DiscoverPage extends ConsumerStatefulWidget {
   const DiscoverPage({super.key});
@@ -55,6 +39,7 @@ class DiscoverPage extends ConsumerStatefulWidget {
 
 class _DiscoverPageState extends ConsumerState<DiscoverPage>
     with DiscoverSearchHost, DiscoverHitActions {
+  String? _category;
   @override
   void dispose() {
     disposeSearchHost();
@@ -78,6 +63,8 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
   Widget build(BuildContext context) {
     final search = ref.watch(discoverSearchProvider);
     final offline = ref.watch(onlineStatusProvider) == false;
+    final categories = ref.watch(displayedHomeCategoriesProvider);
+    final category = categories.isOn(_category ?? '') ? _category : null;
     final showingResults =
         !offline &&
         (search.isLoading || (search.hasValue && search.value != null));
@@ -111,6 +98,12 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
         actions: [
           if (!searching)
             IconButton(
+              tooltip: 'Ajouter un podcast',
+              onPressed: () => _showAddSheet(context),
+              icon: const Icon(Icons.add),
+            ),
+          if (!searching)
+            IconButton(
               tooltip: context.tr('Listening language'),
               onPressed: () => context.push(AppRoutes.discoverLanguages),
               icon: const TranslateIcon(),
@@ -141,24 +134,74 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage>
               onSubscribe: subscribeHit,
             )
           : _DiscoverHomeBody(
-              opening: busyHits,
-              onOpen: openHit,
-              onScopedSearch: (scope) {
-                final q = query.trim().isNotEmpty
-                    ? query.trim()
-                    : searchController.text.trim();
-                openSearch(scope: scope);
-                if (q.isNotEmpty) {
-                  searchController.text = q;
-                  setState(() => query = q);
-                  cancelDebounce();
-                  runDiscoverSearch(q);
-                }
-              },
-              onAddByUrl: () => _showAddByUrlDialog(context),
-              onImportOpml: () => importOpmlFile(context, ref),
+              categories: categories,
+              category: category,
+              onCategory: (id) => setState(() => _category = id),
             ),
     );
+  }
+
+  void _showAddSheet(BuildContext context) {
+    showAppModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        void choose(VoidCallback action) {
+          Navigator.pop(sheetContext);
+          action();
+        }
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ActionRow(
+                icon: Icons.rss_feed_outlined,
+                label: 'Ajouter via une adresse RSS',
+                onTap: () => choose(() => _showAddByUrlDialog(context)),
+              ),
+              _ActionRow(
+                icon: Icons.search,
+                label: 'Rechercher sur Apple Podcasts',
+                onTap: () =>
+                    choose(() => _openScopedSearch(DiscoverSearchScope.apple)),
+              ),
+              _ActionRow(
+                icon: Icons.search,
+                label: 'Rechercher sur Podcast Index',
+                onTap: () => choose(
+                  () => _openScopedSearch(DiscoverSearchScope.podcastIndex),
+                ),
+              ),
+              _ActionRow(
+                icon: Icons.search,
+                label: 'Rechercher sur fyyd',
+                onTap: () =>
+                    choose(() => _openScopedSearch(DiscoverSearchScope.fyyd)),
+              ),
+              _ActionRow(
+                icon: Icons.file_upload_outlined,
+                label: 'Importer une liste de podcasts (OPML)',
+                onTap: () => choose(() => importOpmlFile(context, ref)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _openScopedSearch(DiscoverSearchScope scope) {
+    final q = query.trim().isNotEmpty
+        ? query.trim()
+        : searchController.text.trim();
+    openSearch(scope: scope);
+    if (q.isNotEmpty) {
+      searchController.text = q;
+      setState(() => query = q);
+      cancelDebounce();
+      runDiscoverSearch(q);
+    }
   }
 
   Future<void> _showAddByUrlDialog(BuildContext context) async {
@@ -450,123 +493,333 @@ class _DiscoverMorePageState extends ConsumerState<DiscoverMorePage>
   }
 }
 
-class _DiscoverHomeBody extends ConsumerWidget {
+class _DiscoverHomeBody extends ConsumerStatefulWidget {
   const _DiscoverHomeBody({
-    required this.opening,
-    required this.onOpen,
-    required this.onScopedSearch,
-    required this.onAddByUrl,
-    required this.onImportOpml,
+    required this.categories,
+    required this.category,
+    required this.onCategory,
   });
 
-  final Set<String> opening;
-  final Future<void> Function(DiscoverHit hit, String key) onOpen;
-  final ValueChanged<DiscoverSearchScope> onScopedSearch;
-  final VoidCallback onAddByUrl;
-  final VoidCallback onImportOpml;
+  final HomeCategories categories;
+  final String? category;
+  final ValueChanged<String?> onCategory;
+
+  @override
+  ConsumerState<_DiscoverHomeBody> createState() => _DiscoverHomeBodyState();
+}
+
+class _DiscoverHomeBodyState extends ConsumerState<_DiscoverHomeBody> {
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DiscoverHomeBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.category == widget.category) return;
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fillIfShort());
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients || _scroll.position.extentAfter >= 800) return;
+    _requestMore();
+  }
+
+  void _requestMore() {
+    final category = widget.category;
+    if (category == null) {
+      ref.read(discoverChartsProvider.notifier).loadMore();
+    } else {
+      ref.read(homeCategoryHitsProvider(category).notifier).loadMore();
+    }
+  }
+
+  void _fillIfShort() {
+    if (!mounted || !_scroll.hasClients) return;
+    if (_scroll.position.maxScrollExtent < 800) _requestMore();
+  }
+
+  void _keepFilling(
+    AsyncValue<DiscoverCharts>? previous,
+    AsyncValue<DiscoverCharts> next,
+  ) {
+    final hits = next.asData?.value;
+    if (hits == null || !hits.hasMore || hits.loadingMore) return;
+    final previousCount = previous?.asData?.value.hits.length ?? 0;
+    if (hits.hits.length > previousCount || previous?.isLoading == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fillIfShort());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final category = widget.category;
+    if (category == null) {
+      ref.listen(discoverChartsProvider, _keepFilling);
+    } else {
+      ref.listen(homeCategoryHitsProvider(category), _keepFilling);
+    }
+
+    return ListView(
+      controller: _scroll,
+      padding: belowFrostedBar(context, const EdgeInsets.only(bottom: 24)),
+      children: [
+        SizedBox(
+          height: 48,
+          child: _ExploreCategoryChips(
+            categories: widget.categories,
+            selected: category,
+            onSelected: widget.onCategory,
+          ),
+        ),
+        if (category != null)
+          _ExploreCategoryList(categoryId: category)
+        else
+          const _ExploreSuggestions(),
+      ],
+    );
+  }
+}
+
+class _ExploreSuggestions extends ConsumerWidget {
+  const _ExploreSuggestions();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final charts = ref.watch(discoverChartsProvider);
-    final theme = Theme.of(context);
+    final async = ref.watch(discoverChartsProvider);
+    final charts = async.value;
+    final list = charts?.hits ?? const <DiscoverHit>[];
+    final loadingMore = charts?.loadingMore ?? false;
+    final hasMore = charts?.hasMore ?? false;
+    final showStatus =
+        (async.isLoading && list.isEmpty) ||
+        (async.hasError && list.isEmpty) ||
+        (!async.isLoading && list.isEmpty && !async.hasError);
 
-    return ListView(
-      padding: belowFrostedBar(context, const EdgeInsets.only(bottom: 24)),
+    if (showStatus) {
+      if (async.isLoading && list.isEmpty) {
+        return const Padding(
+          padding: EdgeInsets.only(top: 48),
+          child: Center(child: CircularProgressIndicator()),
+        );
+      }
+      if (async.hasError && list.isEmpty) {
+        return EmptyState(
+          title: 'Suggestions',
+          message: context.tr('The search failed.'),
+          action: FilledButton(
+            onPressed: () => ref.read(discoverChartsProvider.notifier).reload(),
+            child: Text(context.tr('Retry')),
+          ),
+        );
+      }
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Text('Aucune suggestion pour le moment.'),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final entry in list.indexed) ...[
+          if (entry.$1 > 0)
+            Divider(
+              height: 1,
+              thickness: 1,
+              indent: 16,
+              endIndent: 16,
+              color: Theme.of(context).colorScheme.outlineVariant
+                  .withValues(alpha: 0.5),
+            ),
+          DiscoverCategoryTile(rank: entry.$1 + 1, hit: entry.$2),
+        ],
+        if (hasMore || loadingMore)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 28),
+            child: Center(
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ExploreCategoryChips extends StatelessWidget {
+  const _ExploreCategoryChips({
+    required this.categories,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final HomeCategories categories;
+  final String? selected;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final ids = categories.visible;
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      itemCount: ids.length + 1,
+      separatorBuilder: (_, _) => const SizedBox(width: 4),
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return SelectionChip(
+            label: context.tr('All'),
+            selected: selected == null,
+            onSelected: () => onSelected(null),
+          );
+        }
+        final id = ids[index - 1];
+        return SelectionChip(
+          label: context.tr(homeCategoryTitle(id)),
+          selected: selected == id,
+          onSelected: () => onSelected(id),
+        );
+      },
+    );
+  }
+}
+
+class _ExploreCategoryList extends ConsumerWidget {
+  const _ExploreCategoryList({required this.categoryId});
+
+  final String categoryId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(homeCategoryHitsProvider(categoryId));
+    final charts = async.value;
+    final list = charts?.hits ?? const <DiscoverHit>[];
+    final title = context.tr(homeCategoryTitle(categoryId));
+    final loadingMore = charts?.loadingMore ?? false;
+    final hasMore = charts?.hasMore ?? false;
+    final showStatus =
+        (async.isLoading && list.isEmpty) ||
+        (async.hasError && list.isEmpty) ||
+        (!async.isLoading && list.isEmpty && !async.hasError);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = _coverColumns(constraints.maxWidth);
-              final grid = _suggestionGrid(
-                charts.asData?.value.hits.length ?? columns * _suggestionRows,
-                constraints.maxWidth,
-              );
-              return charts.when(
-                loading: () => _ChartsPlaceholderGrid(
-                  columns: grid.columns,
-                  count: grid.count,
+          padding: const EdgeInsets.fromLTRB(16, 4, 4, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
-                error: (error, _) => _ChartsError(
-                  message: errorText(error),
-                  onRetry: () =>
-                      ref.read(discoverChartsProvider.notifier).reload(),
+              ),
+              TextButton(
+                onPressed: () =>
+                    showCategorySubjectsSheet(context, ref, categoryId),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.onSurface,
+                  visualDensity: VisualDensity.compact,
+                  textStyle: Theme.of(context).textTheme.bodySmall,
                 ),
-                data: (charts) {
-                  final items = charts.hits;
-                  if (items.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text('Aucune suggestion pour le moment.'),
-                    );
-                  }
-                  final layout = _suggestionGrid(
-                    items.length,
-                    constraints.maxWidth,
-                  );
-                  final visible = items.take(layout.count).toList();
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _CoverGrid(
-                        items: visible,
-                        columns: layout.columns,
-                        opening: opening,
-                        onOpen: onOpen,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Suggestions · Apple, Podcast Index, fyyd',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                          if (visible.length < items.length || charts.hasMore)
-                            TextButton(
-                              onPressed: () =>
-                                  context.push(AppRoutes.discoverMore),
-                              child: const Text('Découvrir plus »'),
-                            ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              );
-            },
+                child: Text(context.tr('Subjects')),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        _ActionRow(
-          icon: Icons.rss_feed_outlined,
-          label: 'Ajouter via une adresse RSS',
-          onTap: onAddByUrl,
-        ),
-        _ActionRow(
-          icon: Icons.search,
-          label: 'Rechercher sur Apple Podcasts',
-          onTap: () => onScopedSearch(DiscoverSearchScope.apple),
-        ),
-        _ActionRow(
-          icon: Icons.search,
-          label: 'Rechercher sur Podcast Index',
-          onTap: () => onScopedSearch(DiscoverSearchScope.podcastIndex),
-        ),
-        _ActionRow(
-          icon: Icons.search,
-          label: 'Rechercher sur fyyd',
-          onTap: () => onScopedSearch(DiscoverSearchScope.fyyd),
-        ),
-        _ActionRow(
-          icon: Icons.file_upload_outlined,
-          label: 'Importer une liste de podcasts (OPML)',
-          onTap: onImportOpml,
-        ),
+        CategorySubjectChips(categoryId: categoryId),
+        if (showStatus)
+          _ExploreCategoryStatus(
+            title: title,
+            loading: async.isLoading && list.isEmpty,
+            failed: async.hasError && list.isEmpty,
+            onRetry: () => ref
+                .read(homeCategoryHitsProvider(categoryId).notifier)
+                .reload(),
+          )
+        else ...[
+          for (final entry in list.indexed) ...[
+            if (entry.$1 > 0)
+              Divider(
+                height: 1,
+                thickness: 1,
+                indent: 16,
+                endIndent: 16,
+                color: Theme.of(context).colorScheme.outlineVariant
+                    .withValues(alpha: 0.5),
+              ),
+            DiscoverCategoryTile(rank: entry.$1 + 1, hit: entry.$2),
+          ],
+          if (hasMore || loadingMore)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 28),
+              child: Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+              ),
+            ),
+        ],
       ],
+    );
+  }
+}
+
+class _ExploreCategoryStatus extends StatelessWidget {
+  const _ExploreCategoryStatus({
+    required this.title,
+    required this.loading,
+    required this.failed,
+    required this.onRetry,
+  });
+
+  final String title;
+  final bool loading;
+  final bool failed;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 48),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (failed) {
+      return EmptyState(
+        title: title,
+        message: context.tr('The search failed.'),
+        action: FilledButton(
+          onPressed: onRetry,
+          child: Text(context.tr('Retry')),
+        ),
+      );
+    }
+    return EmptyState(
+      title: context.tr('Nothing new in this category'),
+      message: context.tr('You already follow the podcasts found here.'),
     );
   }
 }
@@ -589,43 +842,6 @@ class _ActionRow extends StatelessWidget {
       title: Text(label),
       minVerticalPadding: 12,
       onTap: onTap,
-    );
-  }
-}
-
-class _CoverGrid extends StatelessWidget {
-  const _CoverGrid({
-    required this.items,
-    required this.columns,
-    required this.opening,
-    required this.onOpen,
-  });
-
-  final List<DiscoverHit> items;
-  final int columns;
-  final Set<String> opening;
-  final Future<void> Function(DiscoverHit hit, String key) onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      itemCount: items.length,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemBuilder: (context, index) {
-        final hit = items[index];
-        return _DiscoverCover(
-          hit: hit,
-          busy: opening.contains(hit.dedupeKey),
-          onOpen: onOpen,
-        );
-      },
     );
   }
 }
@@ -676,56 +892,6 @@ class _DiscoverCover extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ChartsPlaceholderGrid extends StatelessWidget {
-  const _ChartsPlaceholderGrid({required this.columns, required this.count});
-
-  final int columns;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.surfaceContainerHighest;
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      itemCount: count,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemBuilder: (_, _) => DecoratedBox(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-    );
-  }
-}
-
-class _ChartsError extends StatelessWidget {
-  const _ChartsError({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
-      child: Column(
-        children: [
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          FilledButton(onPressed: onRetry, child: const Text('Réessayer')),
-        ],
       ),
     );
   }

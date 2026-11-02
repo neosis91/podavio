@@ -523,6 +523,49 @@ bool _covers(String language, String code) {
   return false;
 }
 
+/// Genres `itunes:category` et `podcast:category` du `<channel>`, avant le
+/// premier épisode. Les entités XML sont décodées.
+List<String> rssChannelCategories(String xml) {
+  final lower = xml.toLowerCase();
+  final itemAt = lower.indexOf('<item');
+  final head = itemAt < 0 ? xml : xml.substring(0, itemAt);
+  final seen = <String>{};
+  final genres = <String>[];
+  final tags = RegExp(
+    '<(?:[a-z0-9]+:)?category\\b([^>]*)>',
+    caseSensitive: false,
+  );
+  final textAttr = RegExp(
+    '\\btext\\s*=\\s*(["\'])(.*?)\\1',
+    caseSensitive: false,
+  );
+  for (final match in tags.allMatches(head)) {
+    final raw = textAttr.firstMatch(match.group(1) ?? '')?.group(2);
+    if (raw == null) continue;
+    final genre = _decodeXmlText(raw).trim();
+    if (genre.isEmpty || !seen.add(genre.toLowerCase())) continue;
+    genres.add(genre);
+  }
+  return genres;
+}
+
+String _decodeXmlText(String value) {
+  return value
+      .replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (match) {
+        final code = int.tryParse(match.group(1)!, radix: 16);
+        return code == null ? match.group(0)! : String.fromCharCode(code);
+      })
+      .replaceAllMapped(RegExp(r'&#(\d+);'), (match) {
+        final code = int.tryParse(match.group(1)!);
+        return code == null ? match.group(0)! : String.fromCharCode(code);
+      })
+      .replaceAll('&quot;', '"')
+      .replaceAll('&apos;', "'")
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&amp;', '&');
+}
+
 /// Langue déclarée dans le `<channel>`, avant le premier épisode.
 String? rssChannelLanguage(String xml) {
   final lower = xml.toLowerCase();

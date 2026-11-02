@@ -55,6 +55,9 @@ class Podcasts extends Table {
 
   /// Liens de financement (`podcast:funding`), JSON.
   TextColumn get fundingJson => text().withDefault(const Constant('[]'))();
+
+  /// Genres du flux (`itunes:category`, `podcast:category`). `null` : pas encore lus.
+  TextColumn get categoriesJson => text().nullable()();
 }
 
 @TableIndex(name: 'episodes_podcast_id', columns: {#podcastId})
@@ -81,6 +84,9 @@ class Episodes extends Table {
   BoolColumn get played => boolean().withDefault(const Constant(false))();
   BoolColumn get favorite => boolean().withDefault(const Constant(false))();
   TextColumn get downloadPath => text().nullable()();
+
+  /// Fichier gardé pendant une lecture en streaming. Distinct d’un téléchargement.
+  TextColumn get cachePath => text().nullable()();
   IntColumn get queueIndex => integer().nullable()();
   DateTimeColumn get lastPlayedAt => dateTime().nullable()();
   DateTimeColumn get downloadedAt => dateTime().nullable()();
@@ -196,7 +202,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -261,6 +267,12 @@ class AppDatabase extends _$AppDatabase
       if (from < 15) {
         await migrator.addColumn(podcasts, podcasts.personsJson);
         await migrator.addColumn(podcasts, podcasts.fundingJson);
+      }
+      if (from < 16) {
+        await migrator.addColumn(podcasts, podcasts.categoriesJson);
+      }
+      if (from < 17) {
+        await migrator.addColumn(episodes, episodes.cachePath);
       }
     },
     beforeOpen: (details) async {

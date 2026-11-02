@@ -150,6 +150,7 @@ class DownloadService {
       }
       if (_cancelled.contains(episode.id)) throw const DownloadCancelled();
       await _database.setDownloadPath(episode.id, contentUri ?? file!.path);
+      await forgetStreamCache(episode.id);
       if (podcast != null) {
         SyncHooks.reportEpisode(
           SyncEpisodeReport(
@@ -293,6 +294,47 @@ class DownloadService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Emplacement du fichier gardé pendant le streaming de [episodeId].
+  Future<File> streamCacheFileFor(int episodeId, String audioUrl) async {
+    final support = await getApplicationSupportDirectory();
+    final file = streamCacheFile(support, episodeId, audioUrl);
+    await file.parent.create(recursive: true);
+    return file;
+  }
+
+  /// Retient le fichier s’il est complet et que l’épisode n’est pas téléchargé.
+  Future<void> rememberStreamCache(int episodeId, String path) async {
+    final episode = await _database.episodeById(episodeId);
+    if (episode == null) return;
+    final download = episode.downloadPath?.trim() ?? '';
+    if (download.isNotEmpty) return;
+    if (episode.cachePath == path) return;
+    final file = File(path);
+    if (!await file.exists() || await file.length() == 0) return;
+    await _database.setCachePath(episodeId, path);
+  }
+
+  /// Efface le fichier de streaming et l’oublie. Un téléchargement n’est pas touché.
+  Future<void> forgetStreamCache(int episodeId) async {
+    final episode = await _database.episodeById(episodeId);
+    final path = episode?.cachePath?.trim() ?? '';
+    if (path.isNotEmpty) {
+      final file = File(path);
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
+      final mime = File('$path.mime');
+      if (await mime.exists()) {
+        try {
+          await mime.delete();
+        } catch (_) {}
+      }
+    }
+    if (episode != null) await _database.setCachePath(episodeId, null);
   }
 
   Future<Directory> _playbackCacheDirectory() async {

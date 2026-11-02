@@ -34,6 +34,7 @@ export interface Episode {
   publishedAt: string | null;
   favorite: boolean;
   downloaded: boolean;
+  cached: boolean;
   played: boolean;
   lastPlayedAt: string | null;
   downloadedAt: string | null;
@@ -303,8 +304,11 @@ export class PodavioSession implements OnDestroy {
     const view = this.libraryView();
     const episodes = this.flatEpisodes();
     if (view === 'favorites') return episodes.filter((episode) => episode.favorite);
-    if (view === 'downloads' || view === 'cache') {
+    if (view === 'downloads') {
       return episodes.filter((episode) => episode.downloaded);
+    }
+    if (view === 'cache') {
+      return episodes.filter((episode) => episode.cached && !episode.downloaded);
     }
     if (view === 'episodes') {
       return [...episodes].sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
@@ -987,6 +991,7 @@ export class PodavioSession implements OnDestroy {
       publishedAt: typeof episode['publishedAt'] === 'string' ? episode['publishedAt'] : null,
       favorite: episode['favorite'] === true,
       downloaded: episode['downloaded'] === true,
+      cached: episode['cached'] === true,
       played: episode['played'] === true,
       lastPlayedAt: typeof episode['lastPlayedAt'] === 'string' ? episode['lastPlayedAt'] : null,
       downloadedAt: typeof episode['downloadedAt'] === 'string' ? episode['downloadedAt'] : null,

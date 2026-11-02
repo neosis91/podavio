@@ -78,12 +78,16 @@ class _CategorySubjectsSheet extends ConsumerWidget {
     ).map((member) => member.genre).toSet();
     final theme = Theme.of(context);
     final title = context.tr(homeCategoryTitle(categoryId));
+    final members =
+        catalogCategoryById(categoryId)?.regroupMembers ??
+        const <CatalogMember>[];
     final maxHeight = MediaQuery.sizeOf(context).height * 0.9;
 
     return SafeArea(
-      child: SizedBox(
-        height: maxHeight,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
@@ -99,35 +103,27 @@ class _CategorySubjectsSheet extends ConsumerWidget {
                 ),
               ),
             ),
-            Expanded(
+            Flexible(
               child: ListView(
+                shrinkWrap: true,
                 children: [
-                  for (final category in catalogCategories) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-                      child: Text(
-                        context.tr(category.title),
-                        style: theme.textTheme.titleSmall,
-                      ),
+                  for (final member in members)
+                    CheckboxListTile(
+                      value: enabled.contains(member.genre),
+                      title: Text(context.tr(member.genre)),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      onChanged: (value) {
+                        final next = {...enabled};
+                        if (value ?? false) {
+                          next.add(member.genre);
+                        } else {
+                          next.remove(member.genre);
+                        }
+                        ref
+                            .read(categorySubjectsProvider.notifier)
+                            .setEnabled(categoryId, next);
+                      },
                     ),
-                    for (final member in category.regroupMembers)
-                      CheckboxListTile(
-                        value: enabled.contains(member.genre),
-                        title: Text(context.tr(member.genre)),
-                        controlAffinity: ListTileControlAffinity.leading,
-                        onChanged: (value) {
-                          final next = {...enabled};
-                          if (value ?? false) {
-                            next.add(member.genre);
-                          } else {
-                            next.remove(member.genre);
-                          }
-                          ref
-                              .read(categorySubjectsProvider.notifier)
-                              .setEnabled(categoryId, next);
-                        },
-                      ),
-                  ],
                 ],
               ),
             ),
