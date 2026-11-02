@@ -147,13 +147,18 @@ bool appUpdateWasChecked(AppUpdateLookup lookup) {
       lookup is AppUpdateUnversioned;
 }
 
+/// Lecture de podavio.com. Les tests peuvent la remplacer.
+final appUpdateCheckerProvider = Provider<Future<AppUpdateLookup> Function()>(
+  (ref) => lookupAppUpdate,
+);
+
 /// Publication plus récente sur podavio.com, ou rien.
 ///
 /// Les lancements locaux n’ont pas `PODAVIO_VERSION` : on ne les prévient pas,
 /// sinon `0.1.0` serait toujours en retard sur le site. L’heure est quand même
 /// retenue quand le site a répondu.
 final appUpdateProvider = FutureProvider<AppRelease?>((ref) async {
-  final lookup = await lookupAppUpdate();
+  final lookup = await ref.read(appUpdateCheckerProvider)();
   if (appUpdateWasChecked(lookup)) {
     await ref.read(appUpdateCheckedAtProvider.notifier).mark(DateTime.now());
   }
