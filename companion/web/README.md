@@ -18,17 +18,13 @@ Ouvrir http://127.0.0.1:8787. `npm install` n’est utile que la première fois.
 
 ## Déployer
 
-Le site public est https://web.podavio.com. La page est servie par le relais sur `ubuntu@51.91.250.233`, dans `/opt/podavio-web`. L’agent SSH de Bitwarden doit être actif (`SSH_AUTH_SOCK`).
-
-Depuis `companion/web`, après un changement de la page :
+Le site public est https://web.podavio.com. La page est servie par le relais sur `ubuntu@51.91.250.233`, dans `/opt/podavio-web`. Depuis la racine du dépôt :
 
 ```bash
-npm run build
-export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
-rsync -az --delete -e "ssh -o BatchMode=yes" \
-  dist/web/browser/ \
-  ubuntu@51.91.250.233:/opt/podavio-web/web/dist/web/browser/
+tool/deploy_web.sh
 ```
+
+Le script compile la page, puis l’envoie. L’agent SSH de Bitwarden est utilisé si `SSH_AUTH_SOCK` n’est pas déjà défini. `--delete` ne concerne que le dossier de la page. Le relais n’est pas redémarré.
 
 Depuis `companion/server`, après un changement du relais :
 

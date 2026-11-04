@@ -83,6 +83,12 @@ final navPages = <NavPage>[
     _material(Icons.download),
   ),
   NavPage(
+    AppRoutes.cache,
+    'Episode cache',
+    _material(Icons.folder_outlined),
+    _material(Icons.folder),
+  ),
+  NavPage(
     AppRoutes.stats,
     'Statistics',
     _material(Icons.insights_outlined),

@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:xml/xml.dart';
 
+import 'feed_text.dart';
+
 class ChapterDraft {
   const ChapterDraft({
     required this.startMs,
@@ -31,7 +33,7 @@ List<ChapterDraft> parseChaptersJson(String body) {
     chapters.add(
       ChapterDraft(
         startMs: (start * 1000).round(),
-        title: '${item['title'] ?? ''}'.trim(),
+        title: repairMojibake('${item['title'] ?? ''}'.trim()),
         link: _blankToNull('${item['url'] ?? ''}'),
         toc: toc,
       ),
@@ -68,7 +70,7 @@ List<ChapterDraft> _pscChaptersIn(XmlElement item) {
       chapters.add(
         ChapterDraft(
           startMs: start,
-          title: (node.getAttribute('title') ?? '').trim(),
+          title: repairMojibake((node.getAttribute('title') ?? '').trim()),
           link: _blankToNull(node.getAttribute('href')),
         ),
       );
@@ -89,8 +91,7 @@ Iterable<String> _itemKeys(XmlElement item) sync* {
 
 bool _isPsc(XmlElement el) {
   final uri = el.namespaceUri ?? '';
-  return uri.contains('podlove.org/simple-chapters') ||
-      el.name.prefix == 'psc';
+  return uri.contains('podlove.org/simple-chapters') || el.name.prefix == 'psc';
 }
 
 String _local(XmlElement el) => el.name.local.toLowerCase();

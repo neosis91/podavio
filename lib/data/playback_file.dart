@@ -8,6 +8,9 @@ import '../core/format.dart';
 /// directement (URI `content://`, ou chemin refusé par le décodeur).
 const playbackCacheFolder = 'podavio-playback';
 
+/// Fichiers audio gardés pendant une lecture en streaming.
+const streamCacheFolder = 'podavio-stream-cache';
+
 /// Chemin disque d’un téléchargement, ou `null` pour un URI `content://`
 /// ou une valeur vide. Ne teste pas l’existence du fichier : un contrôle
 /// qui échoue ne doit pas renvoyer la lecture vers internet.
@@ -22,6 +25,21 @@ String? filesystemPlaybackPath(String? downloadPath) {
 
 bool isPlaybackCacheFile(String path) {
   return p.split(path).contains(playbackCacheFolder);
+}
+
+bool isStreamCacheFile(String path) {
+  return p.split(path).contains(streamCacheFolder);
+}
+
+/// Fichier stable d’un épisode streamé, sous [root].
+File streamCacheFile(Directory root, int episodeId, String audioUrl) {
+  return File(
+    p.join(
+      root.path,
+      streamCacheFolder,
+      '$episodeId${audioExtension(null, audioUrl)}',
+    ),
+  );
 }
 
 /// Nom stable, sans caractères spéciaux, pour une copie lisible hors ligne.

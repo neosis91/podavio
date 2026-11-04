@@ -10,6 +10,16 @@ class CatalogSubcategory {
   final int fyydId;
 }
 
+/// Un sujet interrogeable : genre parent ou sous-genre.
+class CatalogMember {
+  const CatalogMember({required this.genre, required this.fyydId});
+
+  /// Nom transmis à Apple (`genre`) et à Podcast Index (`cat`).
+  final String genre;
+
+  final int fyydId;
+}
+
 /// Genre commun aux catalogues (Apple Podcasts, Podcast Index, fyyd).
 class CatalogCategory {
   const CatalogCategory({
@@ -30,19 +40,24 @@ class CatalogCategory {
 
   final int fyydId;
 
-  /// Sous-genres du regroupement (affichage plat, sans pastilles).
+  /// Sous-genres proposés avec le parent. L’accueil laisse les choisir.
   final List<CatalogSubcategory> subcategories;
 
   /// Genres PI / Apple : parent puis sous-genres.
   List<String> get regroupGenres => [
-    genre,
-    for (final sub in subcategories) sub.genre,
+    for (final member in regroupMembers) member.genre,
   ];
 
   /// Identifiants fyyd : parent puis sous-genres.
   List<int> get regroupFyydIds => [
-    fyydId,
-    for (final sub in subcategories) sub.fyydId,
+    for (final member in regroupMembers) member.fyydId,
+  ];
+
+  /// Parent puis sous-genres, dans l’ordre du catalogue.
+  List<CatalogMember> get regroupMembers => [
+    CatalogMember(genre: genre, fyydId: fyydId),
+    for (final sub in subcategories)
+      CatalogMember(genre: sub.genre, fyydId: sub.fyydId),
   ];
 }
 
@@ -71,8 +86,6 @@ const catalogCategories = <CatalogCategory>[
       CatalogSubcategory(genre: 'Entertainment News', fyydId: 158),
       CatalogSubcategory(genre: 'News Commentary', fyydId: 159),
       CatalogSubcategory(genre: 'Politics', fyydId: 160),
-      CatalogSubcategory(genre: 'Sports News', fyydId: 161),
-      CatalogSubcategory(genre: 'Tech News', fyydId: 162),
     ],
   ),
   CatalogCategory(
@@ -84,8 +97,8 @@ const catalogCategories = <CatalogCategory>[
       CatalogSubcategory(genre: 'Documentary', fyydId: 182),
       CatalogSubcategory(genre: 'Personal Journals', fyydId: 183),
       CatalogSubcategory(genre: 'Philosophy', fyydId: 184),
-      CatalogSubcategory(genre: 'Places & Travel', fyydId: 185),
       CatalogSubcategory(genre: 'Relationships', fyydId: 186),
+      CatalogSubcategory(genre: 'Social Sciences', fyydId: 180),
     ],
   ),
   CatalogCategory(
@@ -111,6 +124,7 @@ const catalogCategories = <CatalogCategory>[
     title: 'Technology',
     genre: 'Technology',
     fyydId: 203,
+    subcategories: [CatalogSubcategory(genre: 'Tech News', fyydId: 162)],
   ),
   CatalogCategory(
     id: 'business',
@@ -158,9 +172,7 @@ const catalogCategories = <CatalogCategory>[
       CatalogSubcategory(genre: 'Life Sciences', fyydId: 175),
       CatalogSubcategory(genre: 'Mathematics', fyydId: 176),
       CatalogSubcategory(genre: 'Natural Sciences', fyydId: 177),
-      CatalogSubcategory(genre: 'Nature', fyydId: 178),
       CatalogSubcategory(genre: 'Physics', fyydId: 179),
-      CatalogSubcategory(genre: 'Social Sciences', fyydId: 180),
     ],
   ),
   CatalogCategory(
@@ -181,8 +193,8 @@ const catalogCategories = <CatalogCategory>[
       CatalogSubcategory(genre: 'Soccer', fyydId: 197),
       CatalogSubcategory(genre: 'Swimming', fyydId: 198),
       CatalogSubcategory(genre: 'Tennis', fyydId: 199),
+      CatalogSubcategory(genre: 'Sports News', fyydId: 161),
       CatalogSubcategory(genre: 'Volleyball', fyydId: 200),
-      CatalogSubcategory(genre: 'Wilderness', fyydId: 201),
       CatalogSubcategory(genre: 'Wrestling', fyydId: 202),
     ],
   ),
@@ -206,6 +218,7 @@ const catalogCategories = <CatalogCategory>[
       CatalogSubcategory(genre: 'After Shows', fyydId: 206),
       CatalogSubcategory(genre: 'Film History', fyydId: 207),
       CatalogSubcategory(genre: 'Film Interviews', fyydId: 208),
+      CatalogSubcategory(genre: 'Animation & Manga', fyydId: 143),
       CatalogSubcategory(genre: 'Film Reviews', fyydId: 209),
       CatalogSubcategory(genre: 'TV Reviews', fyydId: 210),
     ],
@@ -219,7 +232,6 @@ const catalogCategories = <CatalogCategory>[
       CatalogSubcategory(genre: 'Books', fyydId: 102),
       CatalogSubcategory(genre: 'Design', fyydId: 103),
       CatalogSubcategory(genre: 'Fashion & Beauty', fyydId: 104),
-      CatalogSubcategory(genre: 'Food', fyydId: 105),
       CatalogSubcategory(genre: 'Performing Arts', fyydId: 106),
       CatalogSubcategory(genre: 'Visual Arts', fyydId: 107),
     ],
@@ -232,7 +244,6 @@ const catalogCategories = <CatalogCategory>[
     subcategories: [
       CatalogSubcategory(genre: 'Education for Kids', fyydId: 138),
       CatalogSubcategory(genre: 'Parenting', fyydId: 139),
-      CatalogSubcategory(genre: 'Pets & Animals', fyydId: 140),
       CatalogSubcategory(genre: 'Stories for Kids', fyydId: 141),
     ],
   ),
@@ -242,14 +253,12 @@ const catalogCategories = <CatalogCategory>[
     genre: 'Leisure',
     fyydId: 142,
     subcategories: [
-      CatalogSubcategory(genre: 'Animation & Manga', fyydId: 143),
       CatalogSubcategory(genre: 'Automotive', fyydId: 144),
       CatalogSubcategory(genre: 'Aviation', fyydId: 145),
       CatalogSubcategory(genre: 'Crafts', fyydId: 146),
-      CatalogSubcategory(genre: 'Games', fyydId: 147),
       CatalogSubcategory(genre: 'Hobbies', fyydId: 148),
       CatalogSubcategory(genre: 'Home & Garden', fyydId: 149),
-      CatalogSubcategory(genre: 'Video Games', fyydId: 150),
+      CatalogSubcategory(genre: 'Wilderness', fyydId: 201),
     ],
   ),
   CatalogCategory(
@@ -284,6 +293,27 @@ const catalogCategories = <CatalogCategory>[
     genre: 'Government',
     fyydId: 128,
   ),
+  CatalogCategory(id: 'food', title: 'Food', genre: 'Food', fyydId: 105),
+  CatalogCategory(
+    id: 'games',
+    title: 'Games',
+    genre: 'Games',
+    fyydId: 147,
+    subcategories: [CatalogSubcategory(genre: 'Video Games', fyydId: 150)],
+  ),
+  CatalogCategory(
+    id: 'nature',
+    title: 'Nature',
+    genre: 'Nature',
+    fyydId: 178,
+    subcategories: [CatalogSubcategory(genre: 'Pets & Animals', fyydId: 140)],
+  ),
+  CatalogCategory(
+    id: 'travel',
+    title: 'Places & Travel',
+    genre: 'Places & Travel',
+    fyydId: 185,
+  ),
 ];
 
 CatalogCategory? catalogCategoryById(String id) {
@@ -311,12 +341,12 @@ const appleGenreCatalogIds = <int, String>{
   1303: 'comedy',
   1304: 'education',
   1305: 'kids',
-  1306: 'arts',
+  1306: 'food',
   1309: 'tvFilm',
   1310: 'music',
   1314: 'religion',
   1318: 'technology',
-  1320: 'society',
+  1320: 'travel',
   1321: 'business',
   1324: 'society',
   1402: 'arts',
@@ -353,14 +383,14 @@ const appleGenreCatalogIds = <int, String>{
   1500: 'education',
   1501: 'education',
   1502: 'leisure',
-  1503: 'leisure',
+  1503: 'tvFilm',
   1504: 'leisure',
   1505: 'leisure',
   1506: 'leisure',
-  1507: 'leisure',
+  1507: 'games',
   1508: 'leisure',
   1509: 'leisure',
-  1510: 'leisure',
+  1510: 'games',
   1511: 'government',
   1512: 'health',
   1513: 'health',
@@ -371,7 +401,7 @@ const appleGenreCatalogIds = <int, String>{
   1518: 'health',
   1519: 'kids',
   1520: 'kids',
-  1521: 'kids',
+  1521: 'nature',
   1522: 'kids',
   1523: 'music',
   1524: 'music',
@@ -380,8 +410,8 @@ const appleGenreCatalogIds = <int, String>{
   1527: 'news',
   1528: 'news',
   1529: 'news',
-  1530: 'news',
-  1531: 'news',
+  1530: 'sports',
+  1531: 'technology',
   1532: 'religion',
   1533: 'science',
   1534: 'science',
@@ -390,9 +420,9 @@ const appleGenreCatalogIds = <int, String>{
   1537: 'science',
   1538: 'science',
   1539: 'science',
-  1540: 'science',
+  1540: 'nature',
   1541: 'science',
-  1542: 'science',
+  1542: 'society',
   1543: 'society',
   1544: 'society',
   1545: 'sports',
@@ -409,7 +439,7 @@ const appleGenreCatalogIds = <int, String>{
   1556: 'sports',
   1557: 'sports',
   1558: 'sports',
-  1559: 'sports',
+  1559: 'leisure',
   1560: 'sports',
   1561: 'tvFilm',
   1562: 'tvFilm',
@@ -422,7 +452,7 @@ const appleGenreCatalogIds = <int, String>{
 const genreNameCatalogIds = <String, String>{
   'After Shows': 'tvFilm',
   'Alternative Health': 'health',
-  'Animation & Manga': 'leisure',
+  'Animation & Manga': 'tvFilm',
   'Arts': 'arts',
   'Astronomy': 'science',
   'Automotive': 'leisure',
@@ -458,9 +488,9 @@ const genreNameCatalogIds = <String, String>{
   'Film Interviews': 'tvFilm',
   'Film Reviews': 'tvFilm',
   'Fitness': 'health',
-  'Food': 'arts',
+  'Food': 'food',
   'Football': 'sports',
-  'Games': 'leisure',
+  'Games': 'games',
   'Golf': 'sports',
   'Government': 'government',
   'Health & Fitness': 'health',
@@ -488,7 +518,7 @@ const genreNameCatalogIds = <String, String>{
   'Music History': 'music',
   'Music Interviews': 'music',
   'Natural Sciences': 'science',
-  'Nature': 'science',
+  'Nature': 'nature',
   'News': 'news',
   'News Commentary': 'news',
   'Non-Profit': 'business',
@@ -496,10 +526,10 @@ const genreNameCatalogIds = <String, String>{
   'Parenting': 'kids',
   'Performing Arts': 'arts',
   'Personal Journals': 'society',
-  'Pets & Animals': 'kids',
+  'Pets & Animals': 'nature',
   'Philosophy': 'society',
   'Physics': 'science',
-  'Places & Travel': 'society',
+  'Places & Travel': 'travel',
   'Politics': 'news',
   'Relationships': 'society',
   'Religion': 'religion',
@@ -511,24 +541,24 @@ const genreNameCatalogIds = <String, String>{
   'Self-Improvement': 'education',
   'Sexuality': 'health',
   'Soccer': 'sports',
-  'Social Sciences': 'science',
+  'Social Sciences': 'society',
   'Society & Culture': 'society',
   'Spirituality': 'religion',
   'Sports': 'sports',
-  'Sports News': 'news',
+  'Sports News': 'sports',
   'Stand-Up': 'comedy',
   'Stories for Kids': 'kids',
   'Swimming': 'sports',
   'TV & Film': 'tvFilm',
   'TV Reviews': 'tvFilm',
-  'Tech News': 'news',
+  'Tech News': 'technology',
   'Technology': 'technology',
   'Tennis': 'sports',
   'True Crime': 'trueCrime',
-  'Video Games': 'leisure',
+  'Video Games': 'games',
   'Visual Arts': 'arts',
   'Volleyball': 'sports',
-  'Wilderness': 'sports',
+  'Wilderness': 'leisure',
   'Wrestling': 'sports',
 };
 
@@ -631,4 +661,158 @@ String writeMonthlyCategoryRanks({
       if (catalogCategoryById(id) != null) id,
   ];
   return '${monthlyCategoryRankStamp(languages, now)}|${ids.join(',')}';
+}
+
+/// Tous les sujets, parents puis sous-genres, dans l’ordre du catalogue.
+List<CatalogMember> get allCatalogMembers => [
+  for (final category in catalogCategories) ...category.regroupMembers,
+];
+
+CatalogMember? catalogMemberByGenre(String genre) {
+  for (final member in allCatalogMembers) {
+    if (member.genre == genre) return member;
+  }
+  return null;
+}
+
+/// Sujets affichés pour une catégorie. [chosenGenres] absent : le regroupement.
+/// Un choix enregistré ne garde que des genres encore connus, dans l’ordre
+/// du catalogue. S’il ne reste rien, le genre parent.
+List<CatalogMember> enabledSubjects(
+  String categoryId,
+  List<String>? chosenGenres,
+) {
+  final category = catalogCategoryById(categoryId);
+  if (category == null) return const [];
+  if (chosenGenres == null) return category.regroupMembers;
+  final wanted = chosenGenres.toSet();
+  final picked = [
+    for (final member in allCatalogMembers)
+      if (wanted.contains(member.genre)) member,
+  ];
+  if (picked.isNotEmpty) return picked;
+  return [CatalogMember(genre: category.genre, fyydId: category.fyydId)];
+}
+
+/// Vrai si un genre du flux fait partie des sujets gardés pour cette catégorie.
+bool podcastGenresMatchCategory(
+  Iterable<String> genres,
+  String categoryId,
+  List<String>? chosenGenres,
+) {
+  final wanted = {
+    for (final member in enabledSubjects(categoryId, chosenGenres))
+      member.genre.toLowerCase(),
+  };
+  for (final genre in genres) {
+    final name = genre.trim().toLowerCase();
+    if (name.isNotEmpty && wanted.contains(name)) return true;
+  }
+  return false;
+}
+
+/// Étiquettes fyyd qui sortent un podcast du sujet Histoire,
+/// même quand 129 est aussi présent.
+const historyExcludedFyydIds = <int>{
+  102, // Books
+  103, // Design
+  104, // Fashion & Beauty
+  105, // Food
+  106, // Performing Arts
+  107, // Visual Arts
+  108, 109, 110, 111, 112, 113, 114, // Business
+  115, 116, 117, 118, // Comedy
+  124, 125, 126, 127, // Fiction
+  130, 131, 132, 133, 134, 135, 136, // Health
+  137, 138, 139, 140, 141, // Kids & Family
+  142, 143, 144, 145, 146, 147, 148, 149, 150, // Leisure, games
+  151, 152, 153, 154, // Music
+  183, // Personal Journals
+  185, // Places & Travel
+  186, // Relationships
+  187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201,
+  202, // Sports
+  204, // True Crime
+  205, 206, 207, 208, 209, 210, // TV & Film
+};
+
+/// Un podcast de la catégorie fyyd Histoire (129).
+///
+/// 129 doit être le premier identifiant : un magazine scientifique qui
+/// mentionne aussi l’histoire ne compte pas. Les étiquettes d’un autre
+/// domaine (enfants, fiction, musique, sport, loisirs…) l’écartent.
+bool fyydHistoryCategoriesStay(List<int> ids) {
+  if (ids.isEmpty) return true;
+  if (ids.first != 129) return false;
+  for (final id in ids) {
+    if (historyExcludedFyydIds.contains(id)) return false;
+  }
+  return true;
+}
+
+/// Noms Podcast Index, en minuscules, qui ne sont pas des sujets historiques.
+const historyExcludedPodcastIndexNames = <String>{
+  'kids',
+  'kids & family',
+  'family',
+  'stories',
+  'stories for kids',
+  'fiction',
+  'comedy',
+  'comedy fiction',
+  'drama',
+  'science fiction',
+  'true crime',
+  'music',
+  'music commentary',
+  'music history',
+  'music interviews',
+  'leisure',
+  'hobbies',
+  'games',
+  'video games',
+  'animation & manga',
+  'sports',
+  'arts',
+  'books',
+  'design',
+  'fashion & beauty',
+  'food',
+  'performing arts',
+  'visual arts',
+  'technology',
+  'tech news',
+  'health & fitness',
+  'health',
+  'fitness',
+  'medicine',
+  'business',
+  'tv & film',
+  'film',
+  'personal journals',
+  'places & travel',
+  'relationships',
+  'automotive',
+  'aviation',
+  'crafts',
+  'home & garden',
+  'wilderness',
+};
+
+/// Un podcast tendance Podcast Index demandé pour History.
+///
+/// Sans catégories, on le garde : le filtre `cat` a déjà choisi History.
+/// Sinon History doit figurer, sans une étiquette d’un autre domaine
+/// (histoires pour enfants, musique, true crime, livres audio…).
+bool podcastIndexHistoryCategoriesStay(Iterable<String> names) {
+  final lower = <String>{
+    for (final name in names)
+      if (name.trim().isNotEmpty) name.trim().toLowerCase(),
+  };
+  if (lower.isEmpty) return true;
+  if (!lower.contains('history')) return false;
+  for (final name in lower) {
+    if (historyExcludedPodcastIndexNames.contains(name)) return false;
+  }
+  return true;
 }

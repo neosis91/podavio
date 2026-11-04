@@ -64,6 +64,98 @@ void main() {
     expect(hidden.toIds(), contains('-continue'));
   });
 
+  test('history keeps historical subjects and a category can be chosen', () {
+    expect(fyydHistoryCategoriesStay(const [129]), isTrue);
+    expect(fyydHistoryCategoriesStay(const [129, 119, 181]), isTrue);
+    expect(fyydHistoryCategoriesStay(const [129, 100, 203]), isTrue);
+    expect(fyydHistoryCategoriesStay(const [171, 177, 181, 182, 129]), isFalse);
+    expect(fyydHistoryCategoriesStay(const [129, 137, 141]), isFalse);
+    expect(fyydHistoryCategoriesStay(const [129, 185, 183]), isFalse);
+    expect(fyydHistoryCategoriesStay(const []), isTrue);
+
+    expect(podcastIndexHistoryCategoriesStay(const ['History']), isTrue);
+    expect(
+      podcastIndexHistoryCategoriesStay(const ['History', 'Education']),
+      isTrue,
+    );
+    expect(
+      podcastIndexHistoryCategoriesStay(const [
+        'History',
+        'Society',
+        'Culture',
+        'Documentary',
+      ]),
+      isTrue,
+    );
+    expect(
+      podcastIndexHistoryCategoriesStay(const ['History', 'Kids', 'Stories']),
+      isFalse,
+    );
+    expect(
+      podcastIndexHistoryCategoriesStay(const ['Music', 'History']),
+      isFalse,
+    );
+    expect(
+      podcastIndexHistoryCategoriesStay(const [
+        'Arts',
+        'Books',
+        'History',
+        'Leisure',
+      ]),
+      isFalse,
+    );
+    expect(podcastIndexHistoryCategoriesStay(const []), isTrue);
+
+    expect(enabledSubjects('history', null).map((member) => member.genre), [
+      'History',
+    ]);
+    expect(
+      enabledSubjects('history', const [
+        'Music History',
+        'History',
+        'nope',
+      ]).map((member) => member.genre),
+      ['History', 'Music History'],
+    );
+    expect(
+      enabledSubjects('history', const ['nope']).map((member) => member.genre),
+      ['History'],
+    );
+    final genres = [for (final member in allCatalogMembers) member.genre];
+    expect(genres.toSet(), hasLength(genres.length));
+  });
+
+  test('a subscription matches only the subjects kept in its category', () {
+    expect(
+      podcastGenresMatchCategory(const ['News', 'Politics'], 'news', null),
+      isTrue,
+    );
+    expect(
+      podcastGenresMatchCategory(const ['Tech News'], 'news', null),
+      isFalse,
+    );
+    expect(
+      podcastGenresMatchCategory(const ['Tech News'], 'technology', null),
+      isTrue,
+    );
+    expect(
+      podcastGenresMatchCategory(const ['News'], 'news', const ['Politics']),
+      isFalse,
+    );
+    expect(
+      podcastGenresMatchCategory(
+        const ['Politics'],
+        'news',
+        const ['Politics'],
+      ),
+      isTrue,
+    );
+    expect(
+      podcastGenresMatchCategory(const ['Society & Culture'], 'society', null),
+      isTrue,
+    );
+  });
+
   test('interface setting strings exist in every language', () {
     const keys = [
       'Cover tint',
@@ -94,12 +186,18 @@ void main() {
       'Arts',
       'Kids & Family',
       'Leisure',
+      'Food',
+      'Games',
+      'Nature',
+      'Places & Travel',
       'Religion & Spirituality',
       'Fiction',
       'Government',
       'Categories',
       'Choose the categories on the home screen',
       'Until you choose, the home follows the most played categories this month.',
+      'Subjects',
+      'Choose the subjects in this category',
       'Podcasts to discover',
       'Nothing new in this category',
       'You already follow the podcasts found here.',
@@ -107,8 +205,14 @@ void main() {
       'The search failed.',
     ];
     expect(interfaceMessages, hasLength(15));
+    final genres = [
+      for (final category in catalogCategories) ...[
+        category.genre,
+        for (final sub in category.subcategories) sub.genre,
+      ],
+    ];
     for (final entry in interfaceMessages.entries) {
-      for (final key in keys) {
+      for (final key in [...keys, ...genres]) {
         expect(
           entry.value.containsKey(key),
           isTrue,
@@ -263,7 +367,7 @@ void main() {
           ],
         },
       }),
-      ['news', 'history'],
+      ['technology', 'history'],
     );
     expect(catalogIdFromGenreName('Music History'), 'music');
     expect(catalogIdFromGenreName('History'), 'history');

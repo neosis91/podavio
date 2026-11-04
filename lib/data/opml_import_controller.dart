@@ -50,12 +50,18 @@ final opmlImportProvider =
     );
 
 class OpmlImportNotifier extends Notifier<OpmlImportState> {
+  Timer? _dismissTimer;
+
   @override
-  OpmlImportState build() => const OpmlImportState();
+  OpmlImportState build() {
+    ref.onDispose(() => _dismissTimer?.cancel());
+    return const OpmlImportState();
+  }
 
   /// Lance l'import en arrière-plan. Retourne false si un import tourne déjà.
   bool start(List<OpmlEntry> entries) {
     if (entries.isEmpty || state.isRunning) return false;
+    _dismissTimer?.cancel();
     state = OpmlImportState(
       phase: OpmlImportPhase.running,
       total: entries.length,
@@ -66,6 +72,7 @@ class OpmlImportNotifier extends Notifier<OpmlImportState> {
 
   void dismiss() {
     if (state.isRunning) return;
+    _dismissTimer?.cancel();
     state = const OpmlImportState();
   }
 
@@ -91,7 +98,19 @@ class OpmlImportNotifier extends Notifier<OpmlImportState> {
       total: report.total,
       failures: _mapFailures(report.failures, titles),
     );
+    _scheduleDismiss();
     if (ref.mounted) unawaited(runAutomaticDownloads(ref));
+  }
+
+  /// Un import réussi s’efface tout seul, comme l’ancien bandeau.
+  /// Les échecs restent jusqu’à fermeture, pour être lus dans la feuille.
+  void _scheduleDismiss() {
+    _dismissTimer?.cancel();
+    if (state.failures.isNotEmpty || state.isRunning) return;
+    _dismissTimer = Timer(const Duration(seconds: 5), () {
+      if (!ref.mounted || state.isRunning || state.failures.isNotEmpty) return;
+      state = const OpmlImportState();
+    });
   }
 
   List<OpmlImportFailure> _mapFailures(

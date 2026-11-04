@@ -203,6 +203,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool unreadOnly = false,
     bool favoritesOnly = false,
     bool downloadsOnly = false,
+    bool cacheOnly = false,
     bool queuedOnly = false,
     bool historyOnly = false,
     bool inProgressOnly = false,
@@ -219,6 +220,7 @@ mixin _EpisodeQueries on _$AppDatabase {
       unreadOnly: unreadOnly,
       favoritesOnly: favoritesOnly,
       downloadsOnly: downloadsOnly,
+      cacheOnly: cacheOnly,
       queuedOnly: queuedOnly,
       historyOnly: historyOnly,
       inProgressOnly: inProgressOnly,
@@ -242,6 +244,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool unreadOnly = false,
     bool favoritesOnly = false,
     bool downloadsOnly = false,
+    bool cacheOnly = false,
     bool queuedOnly = false,
     bool historyOnly = false,
     bool inProgressOnly = false,
@@ -315,6 +318,11 @@ mixin _EpisodeQueries on _$AppDatabase {
     if (unreadOnly) query.where(episodes.played.equals(false));
     if (favoritesOnly) query.where(episodes.favorite.equals(true));
     if (downloadsOnly) query.where(episodes.downloadPath.isNotNull());
+    if (cacheOnly) {
+      query.where(
+        episodes.cachePath.isNotNull() & episodes.downloadPath.isNull(),
+      );
+    }
     if (queuedOnly) query.where(episodes.queueIndex.isNotNull());
     if (historyOnly) query.where(episodes.lastPlayedAt.isNotNull());
     if (inProgressOnly) {
@@ -590,10 +598,18 @@ mixin _EpisodeQueries on _$AppDatabase {
     )..where((table) => table.downloadPath.isNotNull())).get();
   }
 
-  /// Épisodes non lus, pas encore téléchargés, d’un podcast inclus.
+  /// Épisodes non lus ou en cours, pas encore téléchargés, d’un podcast inclus.
+  ///
+  /// « En cours » est un épisode commencé (`position` > 0) et pas marqué lu.
+  /// Un épisode terminé ne revient jamais dans cette liste.
   Future<List<DownloadCandidate>> automaticDownloadCandidates() async {
     final query = selectOnly(episodes)
-      ..addColumns([episodes.id, episodes.podcastId, episodes.publishedAt])
+      ..addColumns([
+        episodes.id,
+        episodes.podcastId,
+        episodes.publishedAt,
+        podcasts.autoDownloadLimit,
+      ])
       ..join([innerJoin(podcasts, podcasts.id.equalsExp(episodes.podcastId))])
       ..where(
         podcasts.autoDownload.equals(true) &
@@ -610,6 +626,7 @@ mixin _EpisodeQueries on _$AppDatabase {
           played: false,
           downloaded: false,
           publishedAt: row.read(episodes.publishedAt),
+          limit: podcastAutoDownloadLimit(row.read(podcasts.autoDownloadLimit)),
         ),
     ];
   }
@@ -652,6 +669,16 @@ mixin _EpisodeQueries on _$AppDatabase {
       EpisodesCompanion(
         downloadPath: Value(path),
         downloadedAt: Value(path == null ? null : DateTime.now()),
+      ),
+    );
+  }
+
+  /// Mémorise ou retire le fichier gardé pendant le streaming.
+  Future<void> setCachePath(int id, String? path) {
+    final stored = path?.trim();
+    return (update(episodes)..where((table) => table.id.equals(id))).write(
+      EpisodesCompanion(
+        cachePath: Value(stored == null || stored.isEmpty ? null : stored),
       ),
     );
   }
@@ -761,6 +788,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool unreadOnly = false,
     bool favoritesOnly = false,
     bool downloadsOnly = false,
+    bool cacheOnly = false,
     bool queuedOnly = false,
     bool historyOnly = false,
     bool inProgressOnly = false,
@@ -778,6 +806,7 @@ mixin _EpisodeQueries on _$AppDatabase {
       unreadOnly: unreadOnly,
       favoritesOnly: favoritesOnly,
       downloadsOnly: downloadsOnly,
+      cacheOnly: cacheOnly,
       queuedOnly: queuedOnly,
       historyOnly: historyOnly,
       inProgressOnly: inProgressOnly,

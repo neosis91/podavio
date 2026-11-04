@@ -7,13 +7,12 @@ import '../core/theme.dart';
 import '../l10n/l10n.dart';
 import '../data/app_database.dart';
 import '../data/catalog_categories.dart';
-import '../data/discover_hit.dart';
 import '../data/discover_providers.dart';
 import '../data/feed_service.dart';
-import '../data/online_status.dart';
 import '../data/providers.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
+import 'category_subjects_sheet.dart';
 import 'library_hub_page.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
@@ -21,7 +20,7 @@ import 'widgets/frosted_header.dart';
 import 'widgets/cover.dart';
 import 'widgets/playing_cover.dart';
 import 'widgets/episode_tile.dart';
-import 'widgets/discover_category_tile.dart';
+import 'podcasts/podcasts_tiles.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/list_metrics.dart';
 import 'widgets/marquee_text.dart';
@@ -72,11 +71,6 @@ class _HomePageState extends ConsumerState<HomePage> {
   void _onScroll() {
     final scrolled = _scroll.offset > 0;
     if (scrolled != _scrolled) setState(() => _scrolled = scrolled);
-    final category = _category;
-    if (category == null || !_scroll.hasClients) return;
-    if (_scroll.position.extentAfter < 800) {
-      ref.read(homeCategoryHitsProvider(category).notifier).loadMore();
-    }
   }
 
   @override
@@ -92,7 +86,16 @@ class _HomePageState extends ConsumerState<HomePage> {
     final waiting = podcasts.isLoading && podcasts.value == null;
 
     final headerTop = MediaQuery.paddingOf(context).top + _headerToolbar;
-    final categories = ref.watch(displayedHomeCategoriesProvider);
+    ref.watch(podcastCategoryBackfillProvider);
+    final chosen = ref.watch(displayedHomeCategoriesProvider);
+    final grouped = ref.watch(homeCategoryPodcastsProvider);
+    final categories = HomeCategories(
+      order: chosen.order,
+      enabled: {
+        for (final id in chosen.enabled)
+          if (grouped.containsKey(id)) id,
+      },
+    );
     final category = categories.isOn(_category ?? '') ? _category : null;
     final shelfOrder = ref.watch(
       settingsProvider.select((settings) => settings.homeShelves),
@@ -122,9 +125,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         downloads.isNotEmpty;
     final categoryCover = category == null
         ? null
-        : _firstCategoryCover(
-            ref.watch(homeCategoryHitsProvider(category)).value?.hits,
-          );
+        : _firstPodcastCover(grouped[category]);
     return Scaffold(
       body: Stack(
         children: [
@@ -202,10 +203,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
-String? _firstCategoryCover(List<DiscoverHit>? hits) {
-  if (hits == null) return null;
-  for (final hit in hits) {
-    final url = hit.imageUrl?.trim();
+String? _firstPodcastCover(List<Podcast>? podcasts) {
+  if (podcasts == null) return null;
+  for (final podcast in podcasts) {
+    final url = podcast.imageUrl?.trim();
     if (url != null && url.isNotEmpty) return url;
   }
   return null;
@@ -247,84 +248,84 @@ _HomeShelf? _homeShelf(
     'fresh' when fresh.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
         title: context.tr("What's new"),
-          height: _episodeRowHeight,
-          itemCount: fresh.length,
-          onMore: () => context.push(AppRoutes.episodes),
-          itemBuilder: (context, index) => _EpisodeCard(
-            key: ValueKey(fresh[index].episode.id),
-            entry: fresh[index],
-          ),
+        height: _episodeRowHeight,
+        itemCount: fresh.length,
+        onMore: () => context.push(AppRoutes.episodes),
+        itemBuilder: (context, index) => _EpisodeCard(
+          key: ValueKey(fresh[index].episode.id),
+          entry: fresh[index],
         ),
+      ),
       entry: fresh.first,
     ),
     'favorites' when favorites.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
-          title: context.tr('Favorites'),
-          height: _episodeRowHeight,
-          itemCount: favorites.length,
-          onMore: () => context.push(AppRoutes.favorites),
-          itemBuilder: (context, index) => _EpisodeCard(
-            key: ValueKey(favorites[index].episode.id),
-            entry: favorites[index],
-          ),
+        title: context.tr('Favorites'),
+        height: _episodeRowHeight,
+        itemCount: favorites.length,
+        onMore: () => context.push(AppRoutes.favorites),
+        itemBuilder: (context, index) => _EpisodeCard(
+          key: ValueKey(favorites[index].episode.id),
+          entry: favorites[index],
         ),
+      ),
       entry: favorites.first,
     ),
     'recent' when played.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
-          title: context.tr('Recent plays'),
-          height: _episodeRowHeight,
-          itemCount: played.length,
-          onMore: () => context.push(AppRoutes.history),
-          itemBuilder: (context, index) => _EpisodeCard(
-            key: ValueKey(played[index].episode.id),
-            entry: played[index],
-          ),
+        title: context.tr('Recent plays'),
+        height: _episodeRowHeight,
+        itemCount: played.length,
+        onMore: () => context.push(AppRoutes.history),
+        itemBuilder: (context, index) => _EpisodeCard(
+          key: ValueKey(played[index].episode.id),
+          entry: played[index],
         ),
+      ),
       entry: played.first,
     ),
     'random' when random.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
         title: context.tr('Random'),
-          height: _episodeRowHeight,
-          itemCount: random.length,
-          action: IconButton(
-            tooltip: 'Autres épisodes',
-            onPressed: () =>
-                ref.read(randomEpisodesProvider.notifier).reshuffle(),
-            icon: const Icon(Icons.shuffle),
-          ),
-          itemBuilder: (context, index) => _EpisodeCard(
-            key: ValueKey(random[index].episode.id),
-            entry: random[index],
-          ),
+        height: _episodeRowHeight,
+        itemCount: random.length,
+        action: IconButton(
+          tooltip: 'Autres épisodes',
+          onPressed: () =>
+              ref.read(randomEpisodesProvider.notifier).reshuffle(),
+          icon: const Icon(Icons.shuffle),
         ),
+        itemBuilder: (context, index) => _EpisodeCard(
+          key: ValueKey(random[index].episode.id),
+          entry: random[index],
+        ),
+      ),
       entry: random.first,
     ),
     'preferred' when subscriptions.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
         title: context.tr('Preferred subscriptions'),
-          height: _podcastRowHeight,
-          itemCount: subscriptions.length,
-          onMore: () => context.go(AppRoutes.podcasts),
-          itemBuilder: (context, index) => _PodcastCard(
-            key: ValueKey(subscriptions[index].id),
-            podcast: subscriptions[index],
-          ),
+        height: _podcastRowHeight,
+        itemCount: subscriptions.length,
+        onMore: () => context.go(AppRoutes.podcasts),
+        itemBuilder: (context, index) => _PodcastCard(
+          key: ValueKey(subscriptions[index].id),
+          podcast: subscriptions[index],
         ),
+      ),
       podcast: subscriptions.first,
     ),
     'downloads' when downloads.isNotEmpty => _HomeShelf(
       shelf: _InlineSection(
         title: context.tr('Recent downloads'),
-          height: _episodeRowHeight,
-          itemCount: downloads.length,
-          onMore: () => context.push(AppRoutes.downloads),
-          itemBuilder: (context, index) => _EpisodeCard(
-            key: ValueKey(downloads[index].episode.id),
-            entry: downloads[index],
-          ),
+        height: _episodeRowHeight,
+        itemCount: downloads.length,
+        onMore: () => context.push(AppRoutes.downloads),
+        itemBuilder: (context, index) => _EpisodeCard(
+          key: ValueKey(downloads[index].episode.id),
+          entry: downloads[index],
         ),
+      ),
       entry: downloads.first,
     ),
     _ => null,
@@ -351,10 +352,10 @@ class _HomeHeaderOverlay extends StatelessWidget {
     return SizedBox(
       height: top + _headerToolbar,
       child: Stack(
-            fit: StackFit.expand,
-            children: [
+        fit: StackFit.expand,
+        children: [
           FrostedHeaderBackdrop(scrolled: scrolled),
-              Padding(
+          Padding(
             padding: EdgeInsets.only(top: top),
             child: Column(
               children: [
@@ -362,28 +363,28 @@ class _HomeHeaderOverlay extends StatelessWidget {
                   height: _headerBrand,
                   child: Padding(
                     padding: const EdgeInsets.only(left: 16, right: 4),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const PodavioLogo(width: 118),
-                  const SizedBox(height: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const PodavioLogo(width: 118),
+                              const SizedBox(height: 4),
                               Text(
                                 _homeGreeting(context),
                                 style: theme.textTheme.bodySmall,
                               ),
-                ],
-              ),
-            ),
+                            ],
+                          ),
+                        ),
                         const _EcoButton(),
-            const HistoryButton(),
+                        const HistoryButton(),
                         const _WebButton(),
-            const PreferencesButton(),
-          ],
-        ),
+                        const PreferencesButton(),
+                      ],
+                    ),
                   ),
                 ),
                 SizedBox(
@@ -458,7 +459,7 @@ class _HomeChips extends StatelessWidget {
   }
 }
 
-class _CategoryHome extends ConsumerStatefulWidget {
+class _CategoryHome extends ConsumerWidget {
   const _CategoryHome({
     required this.scroll,
     required this.headerTop,
@@ -470,165 +471,60 @@ class _CategoryHome extends ConsumerStatefulWidget {
   final String categoryId;
 
   @override
-  ConsumerState<_CategoryHome> createState() => _CategoryHomeState();
-}
-
-class _CategoryHomeState extends ConsumerState<_CategoryHome> {
-  @override
-  void didUpdateWidget(covariant _CategoryHome oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.categoryId != widget.categoryId) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _fillIfShort());
-    }
-  }
-
-  void _requestMore() {
-    ref.read(homeCategoryHitsProvider(widget.categoryId).notifier).loadMore();
-  }
-
-  void _fillIfShort() {
-    if (!mounted || !widget.scroll.hasClients) return;
-    if (widget.scroll.position.maxScrollExtent < 800) _requestMore();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final offline = ref.watch(onlineStatusProvider) == false;
-    final async = ref.watch(homeCategoryHitsProvider(widget.categoryId));
-    final charts = async.value;
-    final title = context.tr(homeCategoryTitle(widget.categoryId));
-    final list = charts?.hits ?? const <DiscoverHit>[];
-    final loadingMore = charts?.loadingMore ?? false;
-    final hasMore = charts?.hasMore ?? false;
-    final showStatus =
-        offline ||
-        (async.isLoading && list.isEmpty) ||
-        (async.hasError && list.isEmpty) ||
-        (!async.isLoading && list.isEmpty && !async.hasError);
-    final showFooter = !showStatus && (hasMore || loadingMore);
-    final itemCount = showStatus ? 2 : 1 + list.length + (showFooter ? 1 : 0);
-
-    ref.listen(homeCategoryHitsProvider(widget.categoryId), (previous, next) {
-      final prevHits = previous?.asData?.value.hits.length ?? 0;
-      final nextHits = next.asData?.value.hits.length ?? 0;
-      final nextHasMore = next.asData?.value.hasMore ?? false;
-      final loading = next.asData?.value.loadingMore ?? false;
-      if (nextHits > prevHits ||
-          (previous?.isLoading == true && !loading && nextHasMore)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _fillIfShort());
-      }
-    });
-
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification is! ScrollUpdateNotification &&
-            notification is! OverscrollNotification) {
-          return false;
-        }
-        final metrics = notification.metrics;
-        if (metrics.extentAfter < 800) _requestMore();
-        return false;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final title = context.tr(homeCategoryTitle(categoryId));
+    final podcasts =
+        ref.watch(homeCategoryPodcastsProvider)[categoryId] ??
+        const <Podcast>[];
+    final counts = ref.watch(unreadCountsByPodcastProvider).value ?? const {};
+    return ListView.separated(
+      controller: scroll,
+      padding: underChrome(context, const EdgeInsets.only(bottom: 24)),
+      itemCount: podcasts.length + 1,
+      separatorBuilder: (context, index) {
+        if (index == 0) return const SizedBox.shrink();
+        return Divider(
+          height: 1,
+          thickness: 1,
+          indent: 16,
+          endIndent: 16,
+          color: Theme.of(context).colorScheme.outlineVariant
+              .withValues(alpha: 0.5),
+        );
       },
-      child: ListView.separated(
-        controller: widget.scroll,
-        padding: underChrome(context, const EdgeInsets.only(bottom: 24)),
-        itemCount: itemCount,
-        separatorBuilder: (context, index) {
-          if (index == 0) return const SizedBox.shrink();
-          if (!showStatus && index >= list.length) {
-            return const SizedBox.shrink();
-          }
-          return Divider(
-            height: 1,
-            thickness: 1,
-            indent: 16,
-            endIndent: 16,
-            color: Theme.of(context).colorScheme.outlineVariant
-                .withValues(alpha: 0.5),
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: headerTop),
+              _ShelfHeader(
+                title: title,
+                action: TextButton(
+                  onPressed: () =>
+                      showCategorySubjectsSheet(context, ref, categoryId),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.onSurface,
+                    visualDensity: VisualDensity.compact,
+                    textStyle: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  child: Text(context.tr('Subjects')),
+                ),
+              ),
+              CategorySubjectChips(categoryId: categoryId),
+              const SizedBox(height: 4),
+            ],
           );
-        },
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(height: widget.headerTop),
-                _ShelfHeader(title: title),
-                const SizedBox(height: 4),
-              ],
-            );
-          }
-          if (offline) {
-            return EmptyState(
-              title: context.tr('No internet connection'),
-              message: context.tr('Explore needs an internet connection.'),
-            );
-          }
-          if (async.isLoading && list.isEmpty) {
-            return const Padding(
-              padding: EdgeInsets.only(top: 48),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-          if (async.hasError && list.isEmpty) {
-            return EmptyState(
-              title: title,
-              message: context.tr('The search failed.'),
-              action: FilledButton(
-                onPressed: () => ref
-                    .read(homeCategoryHitsProvider(widget.categoryId).notifier)
-                    .reload(),
-                child: Text(context.tr('Retry')),
-              ),
-            );
-          }
-          if (list.isEmpty) {
-            return EmptyState(
-              title: context.tr('Nothing new in this category'),
-              message: context.tr(
-                'You already follow the podcasts found here.',
-              ),
-            );
-          }
-          if (index == list.length + 1) {
-            if (hasMore && !loadingMore) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) _requestMore();
-              });
-            }
-            return const _CategoryLoadMoreFooter();
-          }
-          final hit = list[index - 1];
-          return DiscoverCategoryTile(rank: index, hit: hit);
-        },
-      ),
-    );
-  }
-}
-
-class _CategoryLoadMoreFooter extends StatelessWidget {
-  const _CategoryLoadMoreFooter();
-
-  @override
-  Widget build(BuildContext context) {
-    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 28),
-      child: Column(
-        children: [
-          const SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(strokeWidth: 2.5),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Chargement…',
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: muted),
-          ),
-        ],
-      ),
+        }
+        final podcast = podcasts[index - 1];
+        return PodcastListTile(
+          key: ValueKey(podcast.id),
+          podcast: podcast,
+          showName: true,
+          highlightQuery: '',
+          count: counts[podcast.id] ?? 0,
+        );
+      },
     );
   }
 }
@@ -750,8 +646,8 @@ class _ContinueShelf extends ConsumerWidget {
               final overflow = entries.length > rows * columns;
               final itemWidth = columns == 1
                   ? (constraints.maxWidth - 30).clamp(
-                220.0,
-                constraints.maxWidth,
+                      220.0,
+                      constraints.maxWidth,
                     )
                   : (constraints.maxWidth - 12 - (overflow ? 28 : 0)) / 2;
               return GridView.builder(
@@ -981,17 +877,17 @@ class _HomePageWashState extends ConsumerState<_HomePageWash> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 500),
           curve: Curves.easeOutCubic,
-      decoration: BoxDecoration(
-        gradient: tint == null
-            ? null
+          decoration: BoxDecoration(
+            gradient: tint == null
+                ? null
                 : RadialGradient(
                     center: Alignment.topLeft,
                     radius: 1.45,
-                colors: [
+                    colors: [
                       tint.withValues(alpha: 0.55),
                       tint.withValues(alpha: 0.2),
-                  surface.withValues(alpha: 0),
-                ],
+                      surface.withValues(alpha: 0),
+                    ],
                     stops: const [0, 0.36, 0.72],
                   ),
           ),

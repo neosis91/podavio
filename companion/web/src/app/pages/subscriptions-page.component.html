@@ -1,0 +1,14 @@
+<ul class="grid">
+  @for (podcast of session.podcasts(); track podcast.id) {
+    <li>
+      <a class="tile" [routerLink]="['/subscriptions', podcast.id]">
+        @if (podcast.imageUrl) {
+          <img [src]="podcast.imageUrl" alt="" />
+        } @else {
+          <span class="fallback">{{ session.initial(podcast.title) }}</span>
+        }
+        <span class="tile-title">{{ podcast.title }}</span>
+      </a>
+    </li>
+  }
+</ul>

@@ -1,3 +1,15 @@
+/// Plafonds proposés pour un podcast. Une valeur absente est illimitée.
+const automaticDownloadLimits = <int>[1, 2, 3, 4, 5, 10, 20, 50, 100, 200, 500];
+
+/// Plafond enregistré pour un podcast.
+///
+/// `null` = illimité. Une valeur inconnue retombe sur 1, le défaut.
+int? podcastAutoDownloadLimit(int? stored) {
+  if (stored == null) return null;
+  if (!automaticDownloadLimits.contains(stored)) return 1;
+  return stored;
+}
+
 /// Libère des fichiers avant un téléchargement automatique, seulement si le
 /// cache est plein. Un favori n’est jamais concerné.
 enum EpisodeCacheCleanup {
@@ -60,6 +72,7 @@ class DownloadCandidate {
     required this.downloaded,
     this.podcastId = 0,
     this.publishedAt,
+    this.limit,
   });
 
   final int id;
@@ -75,6 +88,9 @@ class DownloadCandidate {
 
   /// Date de publication. Sert à prendre les plus récents d’abord.
   final DateTime? publishedAt;
+
+  /// Plafond de ce podcast. `null` = illimité.
+  final int? limit;
 }
 
 /// Fichier local qui occupe une place du cache.
@@ -126,15 +142,17 @@ class AutomaticDownloadDecision {
 ///
 /// Le mécanisme est arrêté quand [enabled] est faux : rien n’est téléchargé
 /// ni effacé. Un cache illimité ([cacheSize] nul) télécharge les épisodes
-/// inclus, non lus et pas déjà là, sans rien effacer.
+/// inclus, non lus ou en cours, et pas déjà là, sans rien effacer.
+/// Un épisode terminé est ignoré.
 ///
 /// Sinon, on ne dépasse pas le cache. S’il est plein, [cleanup] libère juste
 /// assez de places pour les nouveautés qui rentrent encore. Un favori n’est
 /// jamais effacé. Une bibliothèque déjà au-dessus du cache n’est pas vidée :
 /// on retire au plus un ancien fichier par nouveauté.
 ///
-/// [perPodcastLimit] borne, pour chaque podcast, les non lus déjà là plus
-/// les nouveautés. `null` ne borne pas. Les plus récents passent d’abord.
+/// Le plafond vient de chaque candidat ([DownloadCandidate.limit]). `null`
+/// ne borne pas ce podcast. Les non lus déjà là comptent dans le plafond.
+/// Les plus récents passent d’abord.
 AutomaticDownloadDecision decideAutomaticDownloads({
   required bool enabled,
   required int? cacheSize,
@@ -142,7 +160,6 @@ AutomaticDownloadDecision decideAutomaticDownloads({
   required List<DownloadCandidate> incoming,
   required List<LocalDownload> cached,
   required DateTime now,
-  int? perPodcastLimit,
 }) {
   if (!enabled) {
     return const AutomaticDownloadDecision(downloadIds: [], deleteIds: []);
@@ -162,8 +179,7 @@ AutomaticDownloadDecision decideAutomaticDownloads({
     eligible.add(episode);
   }
   eligible.sort(_newerFirst);
-  final capped = _withinPodcastLimit(eligible, onDisk, perPodcastLimit);
-
+  final capped = _withinPodcastLimit(eligible, onDisk);
   if (cacheSize == null) {
     return AutomaticDownloadDecision(
       downloadIds: [for (final episode in capped) episode.id],
@@ -186,21 +202,18 @@ AutomaticDownloadDecision decideAutomaticDownloads({
   final deleteCount = deficit < 0 ? 0 : deficit;
 
   return AutomaticDownloadDecision(
-    downloadIds: [
-      for (final episode in capped.take(downloadCount)) episode.id,
-    ],
+    downloadIds: [for (final episode in capped.take(downloadCount)) episode.id],
     deleteIds: [for (final episode in victims.take(deleteCount)) episode.id],
   );
 }
 
 /// Garde les plus récents tant que les non lus déjà téléchargés plus les
-/// nouveautés ne dépassent pas [limit] pour ce podcast.
+/// nouveautés ne dépassent pas le plafond de ce podcast.
+/// Un plafond absent ne borne pas.
 List<DownloadCandidate> _withinPodcastLimit(
   List<DownloadCandidate> eligible,
   Map<int, LocalDownload> onDisk,
-  int? limit,
 ) {
-  if (limit == null) return eligible;
   final used = <int, int>{};
   for (final episode in onDisk.values) {
     if (episode.played) continue;
@@ -209,7 +222,8 @@ List<DownloadCandidate> _withinPodcastLimit(
   final kept = <DownloadCandidate>[];
   for (final episode in eligible) {
     final count = used[episode.podcastId] ?? 0;
-    if (count >= limit) continue;
+    final limit = episode.limit;
+    if (limit != null && count >= limit) continue;
     used[episode.podcastId] = count + 1;
     kept.add(episode);
   }

@@ -8,6 +8,7 @@ class WebCompanionEpisodeRef {
     required this.played,
     this.favorite = false,
     this.downloaded = false,
+    this.cached = false,
     this.pinned = false,
     this.lastPlayedAt,
   });
@@ -19,6 +20,9 @@ class WebCompanionEpisodeRef {
   final bool favorite;
   final bool downloaded;
 
+  /// Fichier gardé pendant le streaming, sans téléchargement.
+  final bool cached;
+
   /// Dans une playlist ou la file : à garder même hors du plafond récent.
   final bool pinned;
   final DateTime? lastPlayedAt;
@@ -27,6 +31,7 @@ class WebCompanionEpisodeRef {
       (positionMs > 0 && !played) ||
       favorite ||
       downloaded ||
+      cached ||
       pinned ||
       lastPlayedAt != null;
 }

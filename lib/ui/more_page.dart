@@ -226,7 +226,7 @@ class _CheckUpdateTileState extends ConsumerState<_CheckUpdateTile> {
   Future<void> _check() async {
     setState(() => _busy = true);
     try {
-      final lookup = await lookupAppUpdate();
+      final lookup = await ref.read(appUpdateCheckerProvider)();
       if (appUpdateWasChecked(lookup)) {
         await ref
             .read(appUpdateCheckedAtProvider.notifier)

@@ -13,6 +13,7 @@ import '../player/player_controller.dart';
 import '../player/player_sheet_controller.dart';
 import '../settings/settings_controller.dart';
 import '../web_companion/web_companion_controller.dart';
+import 'automatic_downloads_page.dart';
 import 'discover_languages_page.dart';
 import 'discover_page.dart';
 import 'episode_page.dart';
@@ -158,6 +159,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const DownloadsPage(),
           ),
           GoRoute(
+            path: AppRoutes.cache,
+            builder: (context, state) => const CachePage(),
+          ),
+          GoRoute(
             path: AppRoutes.discoverLanguages,
             builder: (context, state) => const DiscoverLanguagesPage(),
           ),
@@ -182,6 +187,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.downloadSettings,
             builder: (context, state) => const DownloadSettingsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.automaticDownloads,
+            builder: (context, state) => const AutomaticDownloadsPage(),
           ),
           GoRoute(
             path: AppRoutes.network,
