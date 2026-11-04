@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -63,6 +64,9 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
   var _revealScheduled = false;
   var _revealExtent = -1.0;
   var _loadingEarlier = false;
+  var _pulling = false;
+  var _pull = 0.0;
+  var _jumping = false;
 
   @override
   void dispose() {
@@ -250,6 +254,85 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
     );
   }
 
+  /// En haut de la liste, glisser vers le bas ramène au grand lecteur.
+  /// Le panneau suit le doigt, comme le lecteur lui-même.
+  bool _onQueueScroll(ScrollNotification notification) {
+    if (_jumping || notification.depth != 0) return false;
+    if (notification is OverscrollNotification) {
+      final details = notification.dragDetails;
+      final atTop =
+          notification.metrics.pixels <= notification.metrics.minScrollExtent;
+      if (details != null && atTop && notification.overscroll < 0) {
+        _followSheet(details, -notification.overscroll);
+      }
+    } else if (notification is ScrollUpdateNotification &&
+        _pulling &&
+        notification.dragDetails != null) {
+      final details = notification.dragDetails!;
+      final dy = details.primaryDelta ?? 0;
+      if (dy < 0 && _pull > 0) {
+        final back = math.min(_pull, -dy);
+        _followSheet(details, -back);
+        final pixels = notification.metrics.pixels;
+        if (back > 0 && _scroll.hasClients) {
+          final target = (pixels - back).clamp(
+            0.0,
+            _scroll.position.maxScrollExtent,
+          );
+          if (target != pixels) {
+            _jumping = true;
+            _scroll.jumpTo(target);
+            _jumping = false;
+          }
+        }
+      }
+    } else if (notification is ScrollEndNotification && _pulling) {
+      final end = notification.dragDetails;
+      _pulling = false;
+      _pull = 0;
+      widget.onDragEnd(
+        end ?? DragEndDetails(primaryVelocity: 0, velocity: Velocity.zero),
+      );
+    }
+    if (notification is! ScrollUpdateNotification &&
+        notification is! ScrollEndNotification) {
+      return false;
+    }
+    if (!_revealed) return false;
+    final metrics = notification.metrics;
+    if (metrics.extentBefore < 480) {
+      _loadEarlier(metrics.pixels);
+    }
+    if (metrics.extentAfter < 480) {
+      ref.read(playerProvider.notifier).extendQueue();
+    }
+    return false;
+  }
+
+  void _followSheet(DragUpdateDetails details, double dy) {
+    if (!_pulling) {
+      _pulling = true;
+      _pull = 0;
+      widget.onDragStart(
+        DragStartDetails(
+          sourceTimeStamp: details.sourceTimeStamp,
+          globalPosition: details.globalPosition,
+          localPosition: details.localPosition,
+        ),
+      );
+    }
+    _pull = math.max(0, _pull + dy);
+    widget.onDragUpdate(
+      DragUpdateDetails(
+        sourceTimeStamp: details.sourceTimeStamp,
+        delta: Offset(0, dy),
+        primaryDelta: dy,
+        globalPosition: details.globalPosition,
+        localPosition: details.localPosition,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final source = ref.watch(
@@ -303,21 +386,7 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
         ),
         Expanded(
           child: NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              if (notification is! ScrollUpdateNotification &&
-                  notification is! ScrollEndNotification) {
-                return false;
-              }
-              if (!_revealed) return false;
-              final metrics = notification.metrics;
-              if (metrics.extentBefore < 480) {
-                _loadEarlier(metrics.pixels);
-              }
-              if (metrics.extentAfter < 480) {
-                ref.read(playerProvider.notifier).extendQueue();
-              }
-              return false;
-            },
+            onNotification: _onQueueScroll,
             child: CustomScrollView(
               controller: _scroll,
               slivers: [

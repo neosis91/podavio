@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/activity_messages.dart';
 import '../../l10n/l10n.dart';
 import '../../player/player_controller.dart';
 import '../widgets/app_bottom_sheet.dart';
@@ -222,15 +223,18 @@ class _AudioOutputSheetState extends ConsumerState<_AudioOutputSheet> {
                   onTap: device.name == castName
                       ? null
                       : () async {
-                          final messenger = ScaffoldMessenger.of(context);
+                          final container = ProviderScope.containerOf(
+                            context,
+                            listen: false,
+                          );
                           Navigator.pop(context);
                           final error = await ref
                               .read(playerProvider.notifier)
                               .castTo(device);
                           if (error != null) {
-                            messenger.showSnackBar(
-                              SnackBar(content: Text(error)),
-                            );
+                            container
+                                .read(activityMessagesProvider.notifier)
+                                .add(error);
                           }
                         },
                 ),

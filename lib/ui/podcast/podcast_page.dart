@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/platform.dart';
+import '../../data/activity_gate.dart';
 import '../../data/automatic_downloads.dart';
+import '../../data/download_controller.dart';
 import '../../data/app_database.dart';
 import '../../data/models.dart';
 import '../../data/providers.dart';
@@ -630,6 +632,14 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     String feedUrl,
   ) async {
     try {
+      await waitUntilDownloadsIdle(
+        busy: () => downloadsAreBusy(
+          running: ref.read(downloadProgressProvider).length,
+          waiting: ref.read(downloadWaitingCountProvider),
+        ),
+        alive: () => context.mounted,
+      );
+      if (!context.mounted) return;
       final saved = await ref.read(feedServiceProvider).refresh(feedUrl);
       final podcast = await ref
           .read(databaseProvider)

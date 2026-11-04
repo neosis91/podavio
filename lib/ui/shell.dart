@@ -4,23 +4,16 @@ import 'package:go_router/go_router.dart';
 
 import '../core/theme.dart';
 import '../data/database_backup.dart';
-import '../data/download_controller.dart';
-import '../data/feed_refresh_controller.dart';
-import '../data/online_status.dart';
-import '../data/opml_import_controller.dart';
 import '../data/providers.dart';
 import '../sync/sync_controller.dart';
 import '../l10n/l10n.dart';
 import '../player/player_controller.dart';
 import '../player/player_sheet_controller.dart';
+import 'activity_notices.dart';
 import 'nav_catalog.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
-import 'widgets/download_banner.dart';
 import 'widgets/expandable_player.dart';
-import 'widgets/feed_refresh_banner.dart';
-import 'widgets/offline_banner.dart';
-import 'widgets/opml_import_banner.dart';
 import 'widgets/update_prompt.dart';
 
 /// Capsule Accueil / Abonnements / Bibliothèque, loupe à part pour Explorer.
@@ -103,7 +96,7 @@ class AppShell extends ConsumerWidget {
       windowColor: desktop ? _desktopWindow(context) : null,
     );
 
-    final page = _UnderChrome(child: child);
+    final page = child;
 
     if (!wide) {
       return Stack(
@@ -188,38 +181,6 @@ Color _desktopWindow(BuildContext context) {
   return Theme.of(context).brightness == Brightness.dark
       ? Colors.black
       : Colors.white;
-}
-
-class _UnderChrome extends ConsumerWidget {
-  const _UnderChrome({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final offline = ref.watch(onlineStatusProvider) == false;
-    final refreshing = ref.watch(feedRefreshProvider).isVisible;
-    final importing = ref.watch(opmlImportProvider).isVisible;
-    final downloading =
-        ref.watch(downloadProgressProvider).isNotEmpty ||
-        ref.watch(downloadWaitingCountProvider) > 0;
-    final page = offline || refreshing || importing || downloading
-        ? MediaQuery.removePadding(
-            context: context,
-            removeTop: true,
-            child: child,
-          )
-        : child;
-    return Column(
-      children: [
-        if (offline) const OfflineBanner(),
-        const DownloadBanner(),
-        const FeedRefreshBanner(),
-        const OpmlImportBanner(),
-        Expanded(child: page),
-      ],
-    );
-  }
 }
 
 const _barHeight = 64.0;
@@ -339,7 +300,10 @@ class _AppRail extends StatelessWidget {
           child: Center(child: PodavioIcon(size: 32)),
         ),
       ),
-      trailing: const SizedBox(height: 32),
+      trailing: const Padding(
+        padding: EdgeInsets.only(bottom: 16),
+        child: ActivityButton(size: 48),
+      ),
       destinations: [
         for (final page in pages)
           NavigationRailDestination(
@@ -382,10 +346,13 @@ class _OpenBar extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final available = constraints.maxWidth - _indicatorSize - _searchGap;
+          final side = _indicatorSize + _searchGap;
+          final available = constraints.maxWidth - side * 2;
           return Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              const ActivityButton(size: _indicatorSize),
+              const SizedBox(width: _searchGap),
               _TabCapsule(
                 selectedIndex: selectedIndex,
                 availableWidth: available,

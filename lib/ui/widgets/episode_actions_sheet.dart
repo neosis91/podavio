@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
+import '../../data/activity_messages.dart';
 import '../../data/app_database.dart';
 import '../../data/download_controller.dart';
 import '../../data/download_service.dart';
@@ -299,18 +300,16 @@ class _EpisodeActionsSheet extends ConsumerWidget {
           icon: const LinkIcon(),
           label: context.tr('Open website'),
           onTap: () async {
-            final messenger = ScaffoldMessenger.of(context);
+            final container = ProviderScope.containerOf(context, listen: false);
             Navigator.pop(context);
             final opened = await launchUrl(
               website,
               mode: LaunchMode.externalApplication,
             );
             if (!opened) {
-              messenger.showSnackBar(
-                const SnackBar(
-                  content: Text('Impossible d’ouvrir le site web'),
-                ),
-              );
+              container
+                  .read(activityMessagesProvider.notifier)
+                  .add('Impossible d’ouvrir le site web');
             }
           },
         ),

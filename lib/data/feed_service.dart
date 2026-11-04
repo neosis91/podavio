@@ -160,6 +160,7 @@ class FeedService {
   Future<RefreshReport> refreshAll({
     int concurrency = 2,
     bool notifyNewEpisodes = false,
+    Future<void> Function()? beforeEach,
     void Function(int done, int total, List<SubscribeFailure> failures)?
     onProgress,
   }) async {
@@ -176,6 +177,7 @@ class FeedService {
 
     Future<void> worker() async {
       while (true) {
+        if (beforeEach != null) await beforeEach();
         final index = next;
         if (index >= total) return;
         next = index + 1;

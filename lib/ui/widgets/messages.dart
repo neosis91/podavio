@@ -1,7 +1,14 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/activity_messages.dart';
+
+/// Envoie un message dans la feuille de notifications.
 void showMessage(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(activityMessagesProvider.notifier).add(message);
 }
 
 String errorText(Object error) {
