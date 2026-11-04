@@ -521,4 +521,101 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
         ))
         .get();
   }
+
+  /// Répare les titres lus en Latin-1 (« é » stocké « Ã© »).
+  Future<void> repairMojibakeText() async {
+    final broken = const ['%Ã%', '%Â%'];
+    final podcastRows =
+        await (select(podcasts)..where(
+              (table) =>
+                  table.title.like(broken[0]) |
+                  table.title.like(broken[1]) |
+                  table.author.like(broken[0]) |
+                  table.author.like(broken[1]) |
+                  table.description.like(broken[0]) |
+                  table.description.like(broken[1]),
+            ))
+            .get();
+    if (podcastRows.isNotEmpty) {
+      await batch((statement) {
+        for (final row in podcastRows) {
+          final title = repairMojibake(row.title);
+          final author = repairMojibake(row.author);
+          final description = repairMojibake(row.description);
+          if (title == row.title &&
+              author == row.author &&
+              description == row.description) {
+            continue;
+          }
+          statement.update(
+            podcasts,
+            PodcastsCompanion(
+              title: Value(title),
+              author: Value(author),
+              description: Value(description),
+            ),
+            where: (table) => table.id.equals(row.id),
+          );
+        }
+      });
+    }
+
+    final episodeRows =
+        await (selectOnly(episodes)
+              ..addColumns([episodes.id, episodes.title, episodes.description])
+              ..where(
+                episodes.title.like(broken[0]) |
+                    episodes.title.like(broken[1]) |
+                    episodes.description.like(broken[0]) |
+                    episodes.description.like(broken[1]),
+              ))
+            .get();
+    if (episodeRows.isNotEmpty) {
+      await batch((statement) {
+        for (final row in episodeRows) {
+          final id = row.read(episodes.id);
+          if (id == null) continue;
+          final title = repairMojibake(row.read(episodes.title) ?? '');
+          final description = repairMojibake(
+            row.read(episodes.description) ?? '',
+          );
+          if (title == (row.read(episodes.title) ?? '') &&
+              description == (row.read(episodes.description) ?? '')) {
+            continue;
+          }
+          statement.update(
+            episodes,
+            EpisodesCompanion(
+              title: Value(title),
+              description: Value(description),
+            ),
+            where: (table) => table.id.equals(id),
+          );
+        }
+      });
+    }
+
+    final chapterRows =
+        await (selectOnly(episodeChapters)
+              ..addColumns([episodeChapters.id, episodeChapters.title])
+              ..where(
+                episodeChapters.title.like(broken[0]) |
+                    episodeChapters.title.like(broken[1]),
+              ))
+            .get();
+    if (chapterRows.isEmpty) return;
+    await batch((statement) {
+      for (final row in chapterRows) {
+        final id = row.read(episodeChapters.id);
+        if (id == null) continue;
+        final title = repairMojibake(row.read(episodeChapters.title) ?? '');
+        if (title == (row.read(episodeChapters.title) ?? '')) continue;
+        statement.update(
+          episodeChapters,
+          EpisodeChaptersCompanion(title: Value(title)),
+          where: (table) => table.id.equals(id),
+        );
+      }
+    });
+  }
 }

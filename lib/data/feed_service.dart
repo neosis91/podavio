@@ -13,6 +13,7 @@ import 'chapters_parser.dart';
 import 'catalog_categories.dart';
 import 'discover_hit.dart';
 import 'discover_languages.dart';
+import 'feed_text.dart';
 import 'fyyd_search.dart';
 import 'models.dart';
 import 'podcast_index_search.dart';
@@ -798,15 +799,19 @@ class FeedService {
         hadCredentials: headers.containsKey('Authorization'),
       );
     }
-    if (response.statusCode != 200 || response.body.isEmpty) {
+    if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
       throw Exception('Erreur HTTP ${response.statusCode}');
     }
 
-    final categories = rssChannelCategories(response.body);
+    final document = decodeFeedDocument(
+      response.bodyBytes,
+      contentType: response.headers['content-type'],
+    );
+    final categories = rssChannelCategories(document);
     final directory = await Directory.systemTemp.createTemp('podavio-feed-');
     try {
       final file = File('${directory.path}/feed.xml');
-      await file.writeAsString(response.body);
+      await file.writeAsString(document);
       final podcast = await remote.Feed.loadFeedFile(file: file.path);
       return (podcast: podcast, categories: categories);
     } finally {
@@ -936,10 +941,15 @@ class FeedService {
           : await http
                 .get(Uri.parse(url), headers: headers)
                 .timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200 || response.body.isEmpty) {
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
         return const {};
       }
-      return parsePscChaptersByItem(response.body);
+      return parsePscChaptersByItem(
+        decodeFeedDocument(
+          response.bodyBytes,
+          contentType: response.headers['content-type'],
+        ),
+      );
     } catch (_) {
       return const {};
     }
@@ -964,8 +974,8 @@ class FeedService {
           guid: guid,
           title: episode.title.trim().isEmpty
               ? 'Sans titre'
-              : episode.title.trim(),
-          description: _bounded(notes),
+              : repairMojibake(episode.title.trim()),
+          description: repairMojibake(_bounded(notes)),
           audioUrl: audioUrl,
           mimeType: episode.mimeType,
           durationSeconds: episode.duration?.inSeconds,
@@ -1004,9 +1014,9 @@ class FeedService {
 
     return FeedDraft(
       feedUrl: url,
-      title: _blankToNull(podcast.title) ?? url,
-      author: author,
-      description: _bounded(podcast.description?.trim() ?? ''),
+      title: repairMojibake(_blankToNull(podcast.title) ?? url),
+      author: repairMojibake(author),
+      description: repairMojibake(_bounded(podcast.description?.trim() ?? '')),
       imageUrl: _blankToNull(podcast.image),
       link: _blankToNull(podcast.link),
       persons: persons,

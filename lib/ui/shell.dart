@@ -77,6 +77,7 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(coverPrefetchProvider);
+    ref.watch(mojibakeRepairProvider);
     ref.watch(automaticDatabaseBackupProvider);
     ref.watch(syncStatusProvider);
     final path = GoRouterState.of(context).uri.path;

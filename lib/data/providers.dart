@@ -49,6 +49,15 @@ final databasePhaseProvider =
       DatabasePhaseNotifier.new,
     );
 
+final _mojibakeRepairs = Expando<Future<void>>();
+
+/// Une fois par base : remet les accents des titres mal décodés.
+final mojibakeRepairProvider = Provider<void>((ref) {
+  if (ref.watch(databasePhaseProvider) != DatabasePhase.open) return;
+  final database = ref.watch(databaseProvider);
+  unawaited(_mojibakeRepairs[database] ??= database.repairMojibakeText());
+});
+
 final databaseProvider = Provider<AppDatabase>((ref) {
   // Tant que le fichier est remplacé, les lecteurs se désabonnent sans
   // qu’une nouvelle connexion s’ouvre sur l’ancien ou le nouveau fichier.

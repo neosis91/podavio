@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import '../core/search.dart';
+import 'feed_text.dart';
 import '../sync/sync_hooks.dart';
 import 'download_policy.dart';
 import 'models.dart';
