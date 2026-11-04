@@ -195,6 +195,7 @@ class PlayerPage extends ConsumerWidget {
                 ),
               ),
               body: _PageCollapseDrag(
+                immediate: true,
                 onDragStart: onHeaderDragStart,
                 onDragUpdate: onHeaderDragUpdate,
                 onDragEnd: onHeaderDragEnd,
@@ -461,10 +462,13 @@ class _PlaylistOverlay extends StatelessWidget {
   }
 }
 
-/// Appui long, puis glisser : même réduction que depuis la barre du haut.
+/// Glisser vers le bas réduit le lecteur en suivant le doigt.
+/// Dans la file, l’appui long sert à réordonner : le swipe vers le bas
+/// est géré par la liste, une fois arrivée en haut.
 class _PageCollapseDrag extends StatefulWidget {
   const _PageCollapseDrag({
     required this.child,
+    this.immediate = false,
     this.onDragStart,
     this.onDragUpdate,
     this.onDragEnd,
@@ -472,6 +476,9 @@ class _PageCollapseDrag extends StatefulWidget {
   });
 
   final Widget child;
+
+  /// Vrai sur le grand lecteur : le swipe vers le bas suffit.
+  final bool immediate;
   final GestureDragStartCallback? onDragStart;
   final GestureDragUpdateCallback? onDragUpdate;
   final GestureDragEndCallback? onDragEnd;
@@ -497,59 +504,71 @@ class _PageCollapseDragState extends State<_PageCollapseDrag> {
     if (widget.onDragUpdate == null) return widget.child;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPressStart: (details) {
-        Feedback.forLongPress(context);
-        _last = details.globalPosition;
-        _claimed = false;
-        _collapsing = false;
-      },
-      onLongPressMoveUpdate: (details) {
-        if (!_claimed) {
-          final delta = details.offsetFromOrigin;
-          if (delta.distance < kTouchSlop) return;
-          _claimed = true;
-          // Vers le bas : réduire. Ailleurs : laisser réordonner la file.
-          if (delta.dy <= delta.dx.abs()) {
-            startQueueReorder();
-            return;
-          }
-          _collapsing = true;
-          widget.onDragStart?.call(
-            DragStartDetails(
-              globalPosition: details.globalPosition,
-              localPosition: details.localPosition,
-            ),
-          );
-        }
-        if (!_collapsing) return;
-        final last = _last ?? details.globalPosition;
-        final dy = details.globalPosition.dy - last.dy;
-        _last = details.globalPosition;
-        widget.onDragUpdate?.call(
-          DragUpdateDetails(
-            globalPosition: details.globalPosition,
-            localPosition: details.localPosition,
-            delta: Offset(0, dy),
-            primaryDelta: dy,
-          ),
-        );
-      },
-      onLongPressEnd: (details) {
-        final collapsing = _collapsing;
-        _reset();
-        if (!collapsing) return;
-        widget.onDragEnd?.call(
-          DragEndDetails(
-            velocity: details.velocity,
-            primaryVelocity: details.velocity.pixelsPerSecond.dy,
-          ),
-        );
-      },
-      onLongPressCancel: () {
-        final collapsing = _collapsing;
-        _reset();
-        if (collapsing) widget.onDragCancel?.call();
-      },
+      onVerticalDragStart: widget.immediate ? widget.onDragStart : null,
+      onVerticalDragUpdate: widget.immediate ? widget.onDragUpdate : null,
+      onVerticalDragEnd: widget.immediate ? widget.onDragEnd : null,
+      onVerticalDragCancel: widget.immediate ? widget.onDragCancel : null,
+      onLongPressStart: widget.immediate
+          ? null
+          : (details) {
+              Feedback.forLongPress(context);
+              _last = details.globalPosition;
+              _claimed = false;
+              _collapsing = false;
+            },
+      onLongPressMoveUpdate: widget.immediate
+          ? null
+          : (details) {
+              if (!_claimed) {
+                final delta = details.offsetFromOrigin;
+                if (delta.distance < kTouchSlop) return;
+                _claimed = true;
+                // Vers le bas : réduire. Ailleurs : laisser réordonner la file.
+                if (delta.dy <= delta.dx.abs()) {
+                  startQueueReorder();
+                  return;
+                }
+                _collapsing = true;
+                widget.onDragStart?.call(
+                  DragStartDetails(
+                    globalPosition: details.globalPosition,
+                    localPosition: details.localPosition,
+                  ),
+                );
+              }
+              if (!_collapsing) return;
+              final last = _last ?? details.globalPosition;
+              final dy = details.globalPosition.dy - last.dy;
+              _last = details.globalPosition;
+              widget.onDragUpdate?.call(
+                DragUpdateDetails(
+                  globalPosition: details.globalPosition,
+                  localPosition: details.localPosition,
+                  delta: Offset(0, dy),
+                  primaryDelta: dy,
+                ),
+              );
+            },
+      onLongPressEnd: widget.immediate
+          ? null
+          : (details) {
+              final collapsing = _collapsing;
+              _reset();
+              if (!collapsing) return;
+              widget.onDragEnd?.call(
+                DragEndDetails(
+                  velocity: details.velocity,
+                  primaryVelocity: details.velocity.pixelsPerSecond.dy,
+                ),
+              );
+            },
+      onLongPressCancel: widget.immediate
+          ? null
+          : () {
+              final collapsing = _collapsing;
+              _reset();
+              if (collapsing) widget.onDragCancel?.call();
+            },
       child: widget.child,
     );
   }

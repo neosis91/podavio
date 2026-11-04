@@ -10,6 +10,7 @@ class _EpisodeRef extends WebCompanionEpisodeRef {
         played: episode.played,
         favorite: episode.favorite,
         downloaded: _downloaded(episode),
+        cached: _cached(episode),
         lastPlayedAt: episode.lastPlayedAt,
       );
 
@@ -17,6 +18,12 @@ class _EpisodeRef extends WebCompanionEpisodeRef {
 
   static bool _downloaded(Episode episode) {
     final path = episode.downloadPath?.trim();
+    return path != null && path.isNotEmpty;
+  }
+
+  static bool _cached(Episode episode) {
+    if (_downloaded(episode)) return false;
+    final path = episode.cachePath?.trim();
     return path != null && path.isNotEmpty;
   }
 }
@@ -52,9 +59,12 @@ Future<Map<String, Object?>> buildWebCompanionSnapshot(AppDatabase db) async {
             'publishedAt': item.episode.publishedAt?.toUtc().toIso8601String(),
             'favorite': item.favorite,
             'downloaded': item.downloaded,
+            'cached': item.cached,
             'played': item.played,
             'lastPlayedAt': item.lastPlayedAt?.toUtc().toIso8601String(),
-            'downloadedAt': item.episode.downloadedAt?.toUtc().toIso8601String(),
+            'downloadedAt': item.episode.downloadedAt
+                ?.toUtc()
+                .toIso8601String(),
           },
       ],
     });

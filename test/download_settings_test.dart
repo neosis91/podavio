@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:podavio/data/app_database.dart';
-import 'package:podavio/data/models.dart';
 import 'package:podavio/data/providers.dart';
 import 'package:podavio/l10n/messages.dart';
 import 'package:podavio/settings/settings_controller.dart';
@@ -37,6 +36,10 @@ void main() {
   test('download setting strings exist in every language', () {
     const keys = [
       'Automatic download',
+      'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.',
+      'Choose which subscriptions download new episodes, and how many.',
+      'No subscribed podcasts',
+      'Select all',
       'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.',
       'Episode cache',
       'Unlimited',
@@ -136,16 +139,6 @@ void main() {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
 
-    final included = await _podcast(database, 'https://example.com/a.xml', 'A');
-    final excluded = await _podcast(database, 'https://example.com/b.xml', 'B');
-    final preview = await _podcast(
-      database,
-      'https://example.com/c.xml',
-      'C',
-      subscribed: false,
-    );
-    await database.setPodcastAutoDownload(excluded, autoDownload: false);
-
     await tester.binding.setSurfaceSize(const Size(800, 2400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -166,38 +159,14 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(DownloadSettingsPage)),
     );
-    expect(container.read(settingsProvider).automaticDownload, isFalse);
-    expect(container.read(settingsProvider).allowMobileData, isFalse);
-    expect(container.read(settingsProvider).episodeCacheSize, isNull);
-    expect(container.read(settingsProvider).deleteAfterPlayback, isFalse);
     expect(
-      container.read(settingsProvider).episodeCacheCleanup,
-      EpisodeCacheCleanup.never,
+      find.text(
+        'Choisir quels abonnements téléchargent les nouveaux épisodes, et combien.',
+      ),
+      findsOneWidget,
     );
-    expect(find.text('Illimité'), findsOneWidget);
-    expect(find.textContaining('Jamais'), findsOneWidget);
-
-    await _tapTile(tester, 'Téléchargement automatique');
-    expect(preferences.getBool('automaticDownload'), isTrue);
-    expect(await _autoDownload(database, included), isTrue);
-    expect(await _autoDownload(database, excluded), isTrue);
-    expect(await _autoDownload(database, preview), isFalse);
-
-    await database.setPodcastAutoDownload(excluded, autoDownload: false);
-    await _tapTile(tester, 'Téléchargement automatique');
-    expect(preferences.getBool('automaticDownload'), isFalse);
-    expect(await _autoDownload(database, included), isTrue);
-    expect(await _autoDownload(database, excluded), isFalse);
-
-    await _tapTile(tester, 'Téléchargement automatique');
-    expect(await _autoDownload(database, excluded), isTrue);
-    expect(await _autoDownload(database, preview), isFalse);
-
-    await _tapTile(tester, 'Données mobiles');
-    expect(container.read(settingsProvider).allowMobileData, isTrue);
-    expect(preferences.getBool('allowMobileData'), isTrue);
-    await _tapTile(tester, 'Données mobiles');
-    expect(container.read(settingsProvider).allowMobileData, isFalse);
+    expect(container.read(settingsProvider).automaticDownload, isFalse);
+    expect(find.byType(SwitchListTile), findsNWidgets(2));
 
     await _openChoice(tester, 'Cache d’épisodes');
     await tester.tap(find.text('20 épisodes'));
@@ -223,46 +192,7 @@ void main() {
       EpisodeCacheCleanup.notInPlaylist,
     );
     expect(preferences.getString('episodeCacheCleanup'), 'notInPlaylist');
-
-    await _openChoice(tester, 'Libérer de la place');
-    await tester.tap(find.text('14 jours après l’écoute'));
-    await _frames(tester);
-    expect(
-      container.read(settingsProvider).episodeCacheCleanup.daysAfterListening,
-      14,
-    );
   });
-}
-
-Future<int> _podcast(
-  AppDatabase database,
-  String url,
-  String title, {
-  bool subscribed = true,
-}) async {
-  final saved = await database.saveFeed(
-    FeedDraft(
-      feedUrl: url,
-      title: title,
-      author: 'Auteur',
-      description: 'Description',
-      episodes: [
-        EpisodeDraft(
-          guid: '$title-1',
-          title: 'Épisode',
-          description: 'Notes',
-          audioUrl: '$url/1.mp3',
-        ),
-      ],
-    ),
-    subscribed: subscribed,
-  );
-  return saved.podcastId;
-}
-
-Future<bool> _autoDownload(AppDatabase database, int id) async {
-  final podcast = await database.getPodcast(id);
-  return podcast!.autoDownload;
 }
 
 Future<void> _frames(WidgetTester tester) async {

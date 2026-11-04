@@ -48,6 +48,25 @@ void main() {
     );
   });
 
+  test('reads channel categories and ignores episode categories', () {
+    expect(
+      rssChannelCategories('''
+<rss><channel>
+  <itunes:category text="Society &amp; Culture">
+    <itunes:category text="Documentary"/>
+  </itunes:category>
+  <podcast:category text="History"/>
+  <item><itunes:category text="Music"/></item>
+</channel></rss>
+'''),
+      ['Society & Culture', 'Documentary', 'History'],
+    );
+    expect(
+      rssChannelCategories('<rss><channel><item></item></channel></rss>'),
+      isEmpty,
+    );
+  });
+
   test('groups regional variants under the base language', () {
     final english = discoverLanguageGroups.firstWhere(
       (group) => group.language.code == 'en',

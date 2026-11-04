@@ -6,14 +6,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/platform.dart';
+import '../../data/activity_gate.dart';
 import '../../data/automatic_downloads.dart';
+import '../../data/download_controller.dart';
 import '../../data/app_database.dart';
 import '../../data/models.dart';
 import '../../data/providers.dart';
 import '../../data/status_notifications.dart';
 import '../../player/playback_source.dart';
 import '../../player/player_controller.dart';
+import '../../l10n/l10n.dart';
 import '../../settings/settings_controller.dart';
+import '../automatic_downloads_page.dart';
 import '../router.dart';
 import '../widgets/app_bottom_sheet.dart';
 import '../widgets/brand.dart';
@@ -176,9 +180,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         final playingHere = ref.watch(
           playerProvider.select(
             (state) =>
-                state.podcastId == item.id &&
-                state.hasEpisode &&
-                state.playing,
+                state.podcastId == item.id && state.hasEpisode && state.playing,
           ),
         );
         final loadedHere = ref.watch(
@@ -265,7 +267,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                   if (!didPop && _selecting) _exitSelection();
                 },
                 child: supportsPullToRefresh
-                    ? RefreshIndicator(
+                    ? FrostedRefreshIndicator(
                         color: Colors.white,
                         backgroundColor: background,
                         onRefresh: () => _refresh(context, ref, item.feedUrl),
@@ -353,36 +355,6 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
               if (item.subscribed)
                 ListTile(
                   leading: Icon(
-                    item.autoDownload
-                        ? Icons.download_done
-                        : Icons.download_outlined,
-                  ),
-                  title: Text(
-                    item.autoDownload
-                        ? 'Désactiver les téléchargements automatiques'
-                        : 'Activer les téléchargements automatiques',
-                  ),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    final enable = !item.autoDownload;
-                    unawaited(() async {
-                      await ref
-                          .read(databaseProvider)
-                          .setPodcastAutoDownload(
-                            item.id,
-                            autoDownload: enable,
-                          );
-                      if (enable) {
-                        await ref
-                            .read(automaticDownloadRunProvider.notifier)
-                            .run();
-                      }
-                    }());
-                  },
-                ),
-              if (item.subscribed)
-                ListTile(
-                  leading: Icon(
                     item.keepUpdated ? Icons.sync_disabled : Icons.sync,
                   ),
                   title: Text(
@@ -398,6 +370,15 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                           item.id,
                           keepUpdated: !item.keepUpdated,
                         );
+                  },
+                ),
+              if (item.subscribed)
+                ListTile(
+                  leading: const Icon(Icons.downloading),
+                  title: Text(context.tr('Automatic download')),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showAutoDownload(item);
                   },
                 ),
               ListTile(
@@ -417,6 +398,30 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
             ],
           ),
         );
+      },
+    );
+  }
+
+  Future<void> _showAutoDownload(Podcast item) async {
+    await showAutomaticDownloadSheet(
+      context,
+      enabled: item.autoDownload,
+      selected: podcastAutoDownloadLimit(item.autoDownloadLimit) ?? 0,
+      onEnabled: (enabled) async {
+        if (!mounted) return;
+        await ref
+            .read(databaseProvider)
+            .setPodcastAutoDownload(item.id, autoDownload: enabled);
+        if (!mounted || !enabled) return;
+        unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
+      },
+      onLimit: (choice) async {
+        if (!mounted) return;
+        await ref.read(databaseProvider).setPodcastsAutoDownloadLimit([
+          item.id,
+        ], choice == 0 ? null : choice);
+        if (!mounted) return;
+        unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
       },
     );
   }
@@ -627,6 +632,14 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     String feedUrl,
   ) async {
     try {
+      await waitUntilDownloadsIdle(
+        busy: () => downloadsAreBusy(
+          running: ref.read(downloadProgressProvider).length,
+          waiting: ref.read(downloadWaitingCountProvider),
+        ),
+        alive: () => context.mounted,
+      );
+      if (!context.mounted) return;
       final saved = await ref.read(feedServiceProvider).refresh(feedUrl);
       final podcast = await ref
           .read(databaseProvider)

@@ -59,6 +59,8 @@ npm start
 
 Puis ouvrir http://127.0.0.1:8787. `npm install` n’est utile que la première fois, ou après un changement de dépendances. Pour revoir la page après une modification, relancer `npm run build` dans `companion/web`, puis redémarrer `npm start`.
 
+La page publique se déploie avec `tool/deploy_web.sh`. Le script compile `companion/web` et envoie le résultat sur https://web.podavio.com. Il ne redémarre pas le relais et ne touche pas au site des binaires.
+
 ## Compiler
 
 Linux :

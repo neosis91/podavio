@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
+import '../../data/activity_messages.dart';
 import '../../data/app_database.dart';
 import '../../data/download_controller.dart';
 import '../../data/download_service.dart';
@@ -299,18 +300,16 @@ class _EpisodeActionsSheet extends ConsumerWidget {
           icon: const LinkIcon(),
           label: context.tr('Open website'),
           onTap: () async {
-            final messenger = ScaffoldMessenger.of(context);
+            final container = ProviderScope.containerOf(context, listen: false);
             Navigator.pop(context);
             final opened = await launchUrl(
               website,
               mode: LaunchMode.externalApplication,
             );
             if (!opened) {
-              messenger.showSnackBar(
-                const SnackBar(
-                  content: Text('Impossible d’ouvrir le site web'),
-                ),
-              );
+              container
+                  .read(activityMessagesProvider.notifier)
+                  .add('Impossible d’ouvrir le site web');
             }
           },
         ),
@@ -331,13 +330,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
           ),
           children: [
             const SizedBox(height: 8),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(50),
-              ),
-              child: const SizedBox(width: 32, height: 4),
-            ),
+            const SheetDragHandle(),
             const SizedBox(height: 6),
             InkWell(
               onTap: onOpenEpisode,

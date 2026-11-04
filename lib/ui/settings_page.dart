@@ -15,7 +15,6 @@ import '../l10n/l10n.dart';
 import '../data/discover_languages.dart';
 import '../data/download_controller.dart';
 import '../data/download_service.dart';
-import '../data/automatic_downloads.dart';
 import '../data/providers.dart';
 import '../data/catalog_categories.dart';
 import '../data/discover_providers.dart';
@@ -421,25 +420,15 @@ class DownloadSettingsPage extends ConsumerWidget {
               onTap: () => _relocateDownloads(context, ref, null),
             ),
           const _SectionTitle('Automatisation'),
-          SwitchListTile(
+          ListTile(
             title: Text(context.tr('Automatic download')),
             subtitle: Text(
               context.tr(
-                'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.',
+                'Choose which subscriptions download new episodes, and how many.',
               ),
             ),
-            value: settings.automaticDownload,
-            onChanged: (enabled) =>
-                _setAutomaticDownload(context, ref, enabled),
-          ),
-          ListTile(
-            title: Text(context.tr('Download limit')),
-            subtitle: Text(
-              '${context.tr('Maximum number of episodes to download per podcast during an automatic download.')}\n'
-              '${context.tr(automaticDownloadLimitLabel(settings.automaticDownloadLimit))}',
-            ),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => _pickAutomaticDownloadLimit(context, ref),
+            onTap: () => context.push(AppRoutes.automaticDownloads),
           ),
           ListTile(
             title: Text(context.tr('Parallel downloads')),
@@ -520,46 +509,6 @@ Future<void> _setNotifyNewEpisodes(
     }
   }
   await ref.read(settingsProvider.notifier).setNotifyNewEpisodes(enabled);
-}
-
-Future<void> _setAutomaticDownload(
-  BuildContext context,
-  WidgetRef ref,
-  bool enabled,
-) async {
-  if (enabled) {
-    try {
-      await ref.read(databaseProvider).enableAutoDownloadForSubscriptions();
-    } catch (error) {
-      if (context.mounted) showMessage(context, errorText(error));
-      return;
-    }
-  }
-  await ref.read(settingsProvider.notifier).setAutomaticDownload(enabled);
-  if (enabled) {
-    unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
-  }
-}
-
-Future<void> _pickAutomaticDownloadLimit(
-  BuildContext context,
-  WidgetRef ref,
-) async {
-  final current = ref.read(settingsProvider).automaticDownloadLimit;
-  final choice = await showRadioChoiceDialog<int>(
-    context,
-    title: 'Download limit',
-    selected: current ?? 0,
-    options: [
-      (value: 0, label: automaticDownloadLimitLabel(null)),
-      for (final limit in automaticDownloadLimits)
-        (value: limit, label: automaticDownloadLimitLabel(limit)),
-    ],
-  );
-  if (choice == null) return;
-  await ref
-      .read(settingsProvider.notifier)
-      .setAutomaticDownloadLimit(choice == 0 ? null : choice);
 }
 
 Future<void> _pickSimultaneousDownloads(

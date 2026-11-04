@@ -1,0 +1,48 @@
+@if (session.opened(); as current) {
+  <div class="landscape">
+    <div class="cover-col">
+      @if (current.imageUrl) {
+        <img class="cover" [src]="current.imageUrl" [alt]="current.title" />
+      } @else {
+        <span class="cover fallback">{{ session.initial(current.title) }}</span>
+      }
+      <div class="under">
+        <span>{{ session.episodeCount(current) }}</span>
+        <button
+          mat-mini-fab
+          type="button"
+          class="play"
+          [disabled]="current.episodes.length === 0"
+          [attr.aria-label]="session.text('Play', 'Lire')"
+          (click)="session.playOpened()"
+        >
+          <mat-icon>play_arrow</mat-icon>
+        </button>
+      </div>
+    </div>
+    <ul class="episodes">
+      @for (episode of current.episodes; track episode.id) {
+        <li class="episode-line">
+          <button
+            type="button"
+            class="episode"
+            [class.current]="session.playing()?.id === episode.id"
+            (click)="session.play(episode)"
+          >
+            <strong>{{ episode.title }}</strong>
+            <span>{{ session.formatWhen(episode.publishedAt) }}</span>
+          </button>
+          <button
+            mat-icon-button
+            type="button"
+            class="row-more"
+            [attr.aria-label]="session.text('Actions', 'Actions')"
+            (click)="session.openActions(episode)"
+          >
+            <mat-icon>more_vert</mat-icon>
+          </button>
+        </li>
+      }
+    </ul>
+  </div>
+}

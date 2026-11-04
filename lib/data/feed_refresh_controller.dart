@@ -1,8 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../settings/settings_controller.dart';
+import 'activity_gate.dart';
 import 'app_database.dart';
-import 'automatic_downloads.dart';
+import 'download_controller.dart';
 import 'models.dart';
 import 'online_status.dart';
 import 'providers.dart';
@@ -148,6 +149,13 @@ class FeedRefreshNotifier extends Notifier<FeedRefreshState> {
         .read(feedServiceProvider)
         .refreshAll(
           notifyNewEpisodes: ref.read(settingsProvider).notifyNewEpisodes,
+          beforeEach: () => waitUntilDownloadsIdle(
+            busy: () => downloadsAreBusy(
+              running: ref.read(downloadProgressProvider).length,
+              waiting: ref.read(downloadWaitingCountProvider),
+            ),
+            alive: () => ref.mounted,
+          ),
           onProgress: (done, total, failures) {
             if (!state.isRunning) return;
             final now = DateTime.now();

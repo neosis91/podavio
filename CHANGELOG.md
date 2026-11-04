@@ -4,6 +4,21 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.11.1
+
+- Automatic download is off for every podcast, including ones that had it on. A page lists the current subscriptions in alphabetical order. Under the name, the row shows the episode limit, and a download icon when automatic download is on. The row, its menu, and the podcast page open one sheet: a switch, a short explanation, and the limit. The default limit is 1 episode. Only the newest unplayed or in-progress episodes are downloaded, up to that limit. Finished episodes are skipped, and turning it off keeps files already on the device.
+- A notifications button sits to the left of the tab bar, the same size and gap as search, and on the desktop rail. It replaces the banners for no connection, downloads, refresh, and OPML import. The sheet uses that banner’s color and shows the text. No connection comes first. A download in progress comes before a refresh. On the button, download and refresh draw a progress ring on the edge, with the remaining episode count or the remaining podcast count under the icon. Messages that used to appear at the bottom of the screen are listed there and can be closed. A successful OPML import disappears after a few seconds. Errors stay until they are closed.
+- A refresh waits while downloads are running, so the two do not use the network together. Downloads are not paused for a refresh.
+- Pull to refresh on a podcast page, the subscriptions page, and episode lists starts below the frosted bar, including the filter chips.
+- Swiping down in the big player shrinks it with the finger. Swiping down in the queue does the same once the list is at the top, and returns to the big player. A short swipe leaves it open. If the queue is scrolled, the swipe scrolls the list first.
+- Previous and next in the big player use the filled skip icons.
+- Episode lists filter with chips under the title: Unplayed, Downloaded, and In progress. The filter dialog is gone. The menu can still mark every episode as played. While selecting, the menu can mark the selection played or unplayed.
+- The library has an Episode cache, on the phone and in Podavio Web. From that list, cached episodes can be downloaded or added to favorites. Downloading an episode that is only cached keeps the cached file instead of fetching it again.
+- On Home, a category can keep only some of its subjects. Chips show the ones that stay. A tap removes a subject. With one subject left, a tap opens the sheet to add more. The list uses the genres stored from each feed.
+- Titles, authors, descriptions, and chapter names that were saved with the wrong encoding, so é appeared as Ã©, are repaired.
+- A debug or profile install is named Podavio debug and can stay installed next to the published app.
+- First-time setup no longer turns automatic download on for every subscription.
+
 ## 2026.11.0
 
 - A downloaded episode plays from the file on the phone. Wi-Fi limits, mobile data, and a missing connection apply only to a remote stream. If the player cannot open the file directly, it uses a local copy.

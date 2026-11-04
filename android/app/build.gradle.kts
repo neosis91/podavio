@@ -57,6 +57,7 @@ android {
         // versionCode = AAAAMMNN, identique sur chaque APK.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appName"] = "Podavio"
     }
 
     signingConfigs {
@@ -71,6 +72,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            // À côté de la version finale : flutter run n’écrase pas l’APK publié.
+            applicationIdSuffix = ".debug"
+            manifestPlaceholders["appName"] = "Podavio debug"
+        }
+        getByName("profile") {
+            applicationIdSuffix = ".debug"
+            manifestPlaceholders["appName"] = "Podavio debug"
+        }
         release {
             signingConfig = if (hasReleaseSigning) {
                 signingConfigs.getByName("release")

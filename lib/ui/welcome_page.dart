@@ -1,17 +1,12 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../data/automatic_downloads.dart';
-import '../data/providers.dart';
 import '../l10n/l10n.dart';
 import '../settings/settings_controller.dart';
 import 'more_page.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
-import 'widgets/messages.dart';
 
 /// Premier écran, quand la bibliothèque est encore vide.
 class WelcomePage extends ConsumerStatefulWidget {
@@ -39,30 +34,8 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
     if (mounted) context.go(AppRoutes.home);
   }
 
-  Future<void> _setAutomaticDownload(bool enabled) async {
-    if (enabled) {
-      try {
-        await ref.read(databaseProvider).enableAutoDownloadForSubscriptions();
-      } catch (error) {
-        if (mounted) showMessage(context, errorText(error));
-        return;
-      }
-    }
-    await ref.read(settingsProvider.notifier).setAutomaticDownload(enabled);
-    if (enabled) {
-      unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
-    }
-  }
-
-  Future<void> _chooseOffline(bool offline) async {
+  void _chooseOffline(bool offline) {
     setState(() => _offline = offline);
-    if (offline) {
-      if (!ref.read(settingsProvider).automaticDownload) {
-        await _setAutomaticDownload(true);
-      }
-    } else {
-      await _setAutomaticDownload(false);
-    }
   }
 
   @override
@@ -87,7 +60,6 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
         },
         onImport: () => importOpmlFile(context, ref),
         onOffline: _chooseOffline,
-        onAutomatic: _setAutomaticDownload,
       );
     }
     if (_restore) {
@@ -182,7 +154,6 @@ class _SetupFlow extends ConsumerWidget {
     required this.onNext,
     required this.onImport,
     required this.onOffline,
-    required this.onAutomatic,
   });
 
   final int step;
@@ -191,7 +162,6 @@ class _SetupFlow extends ConsumerWidget {
   final VoidCallback onNext;
   final VoidCallback onImport;
   final ValueChanged<bool> onOffline;
-  final ValueChanged<bool> onAutomatic;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -201,9 +171,7 @@ class _SetupFlow extends ConsumerWidget {
     final (heading, subtitle, body) = switch (step) {
       0 => (
         context.tr('Import your library'),
-        context.tr(
-          'Import an OPML file exported from another podcast app.',
-        ),
+        context.tr('Import an OPML file exported from another podcast app.'),
         SizedBox(
           width: double.infinity,
           child: FilledButton(
@@ -257,17 +225,6 @@ class _SetupFlow extends ConsumerWidget {
               selected: offline,
               onTap: () => onOffline(true),
             ),
-            if (offline) ...[
-              const SizedBox(height: 16),
-              _DownloadOptions(
-                automatic: settings.automaticDownload,
-                limit: settings.automaticDownloadLimit,
-                onAutomatic: onAutomatic,
-                onLimit: (limit) => ref
-                    .read(settingsProvider.notifier)
-                    .setAutomaticDownloadLimit(limit),
-              ),
-            ],
             const SizedBox(height: 28),
             const _ListenNotes(),
           ],
@@ -291,9 +248,7 @@ class _SetupFlow extends ConsumerWidget {
               context.tr(
                 'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.',
               ),
-              style: title.bodyMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
+              style: title.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ],
         ),
@@ -442,120 +397,10 @@ class _ListenChoice extends StatelessWidget {
           ),
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: const StadiumBorder(),
-          textStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
+          textStyle: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w800),
         ),
         child: Text(label),
-      ),
-    );
-  }
-}
-
-class _DownloadOptions extends StatelessWidget {
-  const _DownloadOptions({
-    required this.automatic,
-    required this.limit,
-    required this.onAutomatic,
-    required this.onLimit,
-  });
-
-  final bool automatic;
-  final int? limit;
-  final ValueChanged<bool> onAutomatic;
-  final ValueChanged<int?> onLimit;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final limits = <int>[
-      1,
-      2,
-      3,
-      4,
-      5,
-      10,
-      20,
-      50,
-      100,
-      if (limit != null &&
-          !const {1, 2, 3, 4, 5, 10, 20, 50, 100}.contains(limit))
-        limit!,
-    ];
-    final muted = scheme.onSurface.withValues(alpha: 0.38);
-    return Material(
-      color: scheme.primaryContainer.withValues(alpha: 0.45),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              context.tr('Download settings'),
-              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              context.tr(
-                'These global settings can be changed later and customized for each podcast.',
-              ),
-              style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(context.tr('Automatic download')),
-              value: automatic,
-              onChanged: onAutomatic,
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    context.tr('Keep at most'),
-                    style: text.bodyLarge?.copyWith(
-                      color: automatic ? scheme.onSurface : muted,
-                    ),
-                  ),
-                ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: scheme.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: automatic ? scheme.primary : scheme.outlineVariant,
-                    ),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<int>(
-                      value: limit ?? 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      borderRadius: BorderRadius.circular(12),
-                      style: text.bodyLarge?.copyWith(
-                        color: automatic ? scheme.onSurface : muted,
-                      ),
-                      onChanged: automatic
-                          ? (value) => onLimit(value == 0 ? null : value)
-                          : null,
-                      items: [
-                        DropdownMenuItem(
-                          value: 0,
-                          child: Text(context.tr('Unlimited')),
-                        ),
-                        for (final value in limits)
-                          DropdownMenuItem(
-                            value: value,
-                            child: Text('$value'),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -567,9 +412,8 @@ class _ListenNotes extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final style = Theme.of(context).textTheme.bodyMedium?.copyWith(
-      color: scheme.onSurfaceVariant,
-    );
+    final style = Theme.of(context).textTheme.bodyMedium
+        ?.copyWith(color: scheme.onSurfaceVariant);
     return Column(
       children: [
         Text(

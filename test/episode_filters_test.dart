@@ -40,7 +40,7 @@ void main() {
     });
   });
 
-  testWidgets('Episodes page uses filter dialog instead of segmented button', (
+  testWidgets('episode filters are chips under the title, not a menu', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -59,22 +59,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(SegmentedButton<bool>), findsNothing);
-    expect(find.text('Non lus'), findsOneWidget); // chip barre (défaut)
-
-    await tester.tap(find.byType(PopupMenuButton<String>));
-    await tester.pumpAndSettle();
-    expect(find.text('Filtrer'), findsOneWidget);
-
-    await tester.tap(find.text('Filtrer'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Filtrer'), findsWidgets);
+    expect(find.text('Non lus'), findsOneWidget);
     expect(find.text('Téléchargés'), findsOneWidget);
     expect(find.text('En cours'), findsOneWidget);
+    final title = tester.getTopLeft(find.text('Épisodes'));
+    final chip = tester.getTopLeft(find.text('Non lus'));
+    expect(chip.dy, greaterThan(title.dy));
+
+    expect(find.byType(PopupMenuButton<String>), findsNothing);
+    expect(find.text('Tout marquer comme lu'), findsNothing);
 
     await tester.tap(find.text('Téléchargés'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Appliquer'));
     await tester.pumpAndSettle();
 
     expect(find.text('Téléchargés'), findsOneWidget);
@@ -86,14 +81,19 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(EpisodesPage)),
     );
-    expect(container.read(settingsProvider).episodeFilters.downloadsOnly, isTrue);
+    expect(
+      container.read(settingsProvider).episodeFilters.downloadsOnly,
+      isTrue,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
     await database.close();
   });
 
-  testWidgets('clearing filters persists empty list (show all)', (tester) async {
+  testWidgets('clearing filters persists empty list (show all)', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final database = AppDatabase(NativeDatabase.memory());
@@ -109,10 +109,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Tout effacer'));
+    await tester.tap(find.text('Non lus'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Non lus'), findsNothing);
+    expect(find.text('Non lus'), findsOneWidget);
     expect(preferences.getStringList('episodeFilters'), isEmpty);
 
     final container = ProviderScope.containerOf(

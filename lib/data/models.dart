@@ -13,6 +13,7 @@ class FeedDraft {
     this.link,
     this.persons = const [],
     this.funding = const [],
+    this.categories = const [],
   });
 
   final String feedUrl;
@@ -23,6 +24,9 @@ class FeedDraft {
   final String? link;
   final List<PodcastPerson> persons;
   final List<PodcastFunding> funding;
+
+  /// Genres lus dans le flux. Une liste vide veut dire « lu, aucun genre ».
+  final List<String> categories;
   final List<EpisodeDraft> episodes;
 }
 
@@ -89,9 +93,36 @@ String encodePodcastPersons(List<PodcastPerson> persons) {
 }
 
 List<PodcastPerson> decodePodcastPersons(String raw) {
-  return _decodeList(raw, PodcastPerson.fromJson)
-      .where((person) => person.name.isNotEmpty)
-      .toList(growable: false);
+  return _decodeList(
+    raw,
+    PodcastPerson.fromJson,
+  ).where((person) => person.name.isNotEmpty).toList(growable: false);
+}
+
+String encodePodcastCategories(List<String> genres) {
+  final seen = <String>{};
+  return jsonEncode([
+    for (final genre in genres)
+      if (genre.trim().isNotEmpty && seen.add(genre.trim().toLowerCase()))
+        genre.trim(),
+  ]);
+}
+
+/// `null` : le flux n’a pas encore été lu. Une liste vide : lu, sans genre.
+List<String>? decodePodcastCategories(String? raw) {
+  if (raw == null) return null;
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty || trimmed == '[]') return const [];
+  try {
+    final decoded = jsonDecode(trimmed);
+    if (decoded is! List) return const [];
+    return [
+      for (final item in decoded)
+        if (item is String && item.trim().isNotEmpty) item.trim(),
+    ];
+  } catch (_) {
+    return const [];
+  }
 }
 
 String encodePodcastFunding(List<PodcastFunding> funding) {
@@ -102,9 +133,10 @@ String encodePodcastFunding(List<PodcastFunding> funding) {
 }
 
 List<PodcastFunding> decodePodcastFunding(String raw) {
-  return _decodeList(raw, PodcastFunding.fromJson)
-      .where((item) => item.url.isNotEmpty)
-      .toList(growable: false);
+  return _decodeList(
+    raw,
+    PodcastFunding.fromJson,
+  ).where((item) => item.url.isNotEmpty).toList(growable: false);
 }
 
 List<T> _decodeList<T>(
