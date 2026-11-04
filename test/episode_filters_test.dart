@@ -66,13 +66,9 @@ void main() {
     final chip = tester.getTopLeft(find.text('Non lus'));
     expect(chip.dy, greaterThan(title.dy));
 
-    await tester.tap(find.byType(PopupMenuButton<String>));
-    await tester.pumpAndSettle();
-    expect(find.text('Filtrer'), findsNothing);
-    expect(find.text('Tout marquer comme lu'), findsOneWidget);
+    expect(find.byType(PopupMenuButton<String>), findsNothing);
+    expect(find.text('Tout marquer comme lu'), findsNothing);
 
-    await tester.tapAt(const Offset(8, 8));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Téléchargés'));
     await tester.pumpAndSettle();
 

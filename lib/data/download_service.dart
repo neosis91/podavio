@@ -74,8 +74,21 @@ class DownloadService {
     String? directory,
     void Function(double progress)? onProgress,
   }) async {
+    if (_cancelled.contains(episode.id)) throw const DownloadCancelled();
     final location = await resolveDownloadDirectory(directory);
     final podcast = await _database.getPodcast(episode.podcastId);
+    final stored = await _database.episodeById(episode.id) ?? episode;
+    final cache = await _readyCacheFile(stored);
+    if (cache != null) {
+      await _promoteCache(
+        episode: stored,
+        podcast: podcast,
+        cache: cache,
+        location: location,
+        onProgress: onProgress,
+      );
+      return;
+    }
     final name = downloadFileName(
       podcastTitle: podcast?.title ?? '',
       episodeTitle: episode.title,
@@ -149,19 +162,11 @@ class DownloadService {
         }
       }
       if (_cancelled.contains(episode.id)) throw const DownloadCancelled();
-      await _database.setDownloadPath(episode.id, contentUri ?? file!.path);
-      await forgetStreamCache(episode.id);
-      if (podcast != null) {
-        SyncHooks.reportEpisode(
-          SyncEpisodeReport(
-            episodeId: episode.id,
-            feedUrl: podcast.feedUrl,
-            audioUrl: episode.audioUrl,
-            guid: episode.guid,
-            action: 'download',
-          ),
-        );
-      }
+      await _commitDownload(
+        episode: episode,
+        podcast: podcast,
+        path: contentUri ?? file!.path,
+      );
       file = null;
       contentUri = null;
     } catch (error) {
@@ -294,6 +299,85 @@ class DownloadService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Fichier de cache complet, s’il existe. Un `.part` ne compte pas.
+  Future<File?> _readyCacheFile(Episode episode) async {
+    final recorded = episode.cachePath?.trim() ?? '';
+    if (recorded.isNotEmpty && !recorded.endsWith('.part')) {
+      final file = File(recorded);
+      if (await file.exists() && await file.length() > 0) return file;
+    }
+    try {
+      final expected = await streamCacheFileFor(episode.id, episode.audioUrl);
+      if (await expected.exists() && await expected.length() > 0) {
+        return expected;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Copie le cache vers le dossier des téléchargements, sous le nom habituel,
+  /// puis l’oublie comme cache. Aucune requête vers l’épisode.
+  Future<void> _promoteCache({
+    required Episode episode,
+    required Podcast? podcast,
+    required File cache,
+    required String location,
+    void Function(double progress)? onProgress,
+  }) async {
+    if (_cancelled.contains(episode.id)) throw const DownloadCancelled();
+    final name = downloadFileName(
+      podcastTitle: podcast?.title ?? '',
+      episodeTitle: episode.title,
+      extension: audioExtension(episode.mimeType, episode.audioUrl),
+    );
+    final String storedPath;
+    if (isContentUri(location)) {
+      final created = await _saf.pasteLocalFile(
+        cache.path,
+        location,
+        name,
+        _mime(episode),
+        overwrite: true,
+      );
+      storedPath = created.uri.toString();
+    } else {
+      final folder = Directory(location);
+      await folder.create(recursive: true);
+      final dest = File(p.join(folder.path, name));
+      if (!sameDownloadLocation(cache.path, dest.path)) {
+        await _moveLocalFile(cache, dest);
+      }
+      storedPath = dest.path;
+    }
+    await _commitDownload(episode: episode, podcast: podcast, path: storedPath);
+    onProgress?.call(1);
+  }
+
+  Future<void> _commitDownload({
+    required Episode episode,
+    required Podcast? podcast,
+    required String path,
+  }) async {
+    await _database.setDownloadPath(episode.id, path);
+    final current = await _database.episodeById(episode.id);
+    final cachePath = current?.cachePath?.trim() ?? '';
+    if (cachePath.isNotEmpty && sameDownloadLocation(cachePath, path)) {
+      await _database.setCachePath(episode.id, null);
+    } else if (cachePath.isNotEmpty) {
+      await forgetStreamCache(episode.id);
+    }
+    if (podcast == null) return;
+    SyncHooks.reportEpisode(
+      SyncEpisodeReport(
+        episodeId: episode.id,
+        feedUrl: podcast.feedUrl,
+        audioUrl: episode.audioUrl,
+        guid: episode.guid,
+        action: 'download',
+      ),
+    );
   }
 
   /// Emplacement du fichier gardé pendant le streaming de [episodeId].

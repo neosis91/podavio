@@ -142,21 +142,6 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
                         : () => refreshSubscriptions(context, ref),
                     icon: const Icon(Icons.refresh),
                   ),
-                  PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      if (value != 'played') return;
-                      await ref.read(databaseProvider).markAllPlayed();
-                      if (context.mounted) {
-                        showMessage(context, 'Épisodes marqués comme lus');
-                      }
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: 'played',
-                        child: Text('Tout marquer comme lu'),
-                      ),
-                    ],
-                  ),
                 ],
               ],
             ),

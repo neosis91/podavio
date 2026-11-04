@@ -12,6 +12,7 @@ import 'package:podavio/settings/settings_controller.dart';
 import 'package:podavio/ui/widgets/brand.dart';
 import 'package:podavio/ui/widgets/episode_tile.dart';
 import 'package:podavio/ui/widgets/list_metrics.dart';
+import 'package:podavio/ui/widgets/playing_cover.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -161,6 +162,87 @@ void main() {
     }
   });
 
+  testWidgets(
+    'queue lists put the title above the cover and the progress under the meta',
+    (tester) async {
+      final harness = await _pumpTile(
+        tester,
+        width: 400,
+        queueStyle: true,
+        entry: _entry(
+          title: 'Titre de l’épisode',
+          podcastTitle: 'Nom du podcast',
+          positionMs: 60 * 1000,
+          durationSeconds: 10 * 60,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+
+      final title = tester.getTopLeft(find.text('Titre de l’épisode'));
+      final cover = tester.getRect(find.byType(PlayingEpisodeCover));
+      final podcast = tester.getTopLeft(find.text('Nom du podcast'));
+      final elapsed = tester.getRect(find.text('1:00'));
+      final remaining = tester.getRect(find.text('−9:00'));
+      final bar = tester.getRect(find.byType(LinearProgressIndicator));
+
+      expect(cover.width, 48);
+      expect(cover.height, 48);
+      expect(title.dy, lessThan(cover.top));
+      expect(podcast.dx, greaterThan(cover.right));
+      expect(podcast.dy, greaterThanOrEqualTo(cover.top - 1));
+      expect(podcast.dy, lessThan(cover.bottom));
+      expect(bar.top, greaterThan(podcast.dy));
+      final blockBottom = [
+        bar.bottom,
+        elapsed.bottom,
+        remaining.bottom,
+      ].reduce((a, b) => a > b ? a : b);
+      final blockCenter = (podcast.dy + blockBottom) / 2;
+      expect((blockCenter - cover.center.dy).abs(), lessThan(4));
+      expect(bar.left, greaterThan(cover.right - 1));
+      expect(bar.left, greaterThan(elapsed.right - 1));
+      expect(bar.right, lessThan(remaining.left + 1));
+      expect((bar.center.dy - elapsed.center.dy).abs(), lessThan(4));
+      expect(
+        tester
+            .widget<LinearProgressIndicator>(
+              find.byType(LinearProgressIndicator),
+            )
+            .value,
+        closeTo(0.1, 0.001),
+      );
+      expect(find.text('1:00'), findsOneWidget);
+      expect(find.text('−9:00'), findsOneWidget);
+
+      await harness.close(tester);
+    },
+  );
+
+  testWidgets('queue lists keep an empty progress bar before playback', (
+    tester,
+  ) async {
+    final harness = await _pumpTile(
+      tester,
+      width: 400,
+      queueStyle: true,
+      entry: _entry(
+        title: 'Pas commencé',
+        podcastTitle: 'Nom du podcast',
+        durationSeconds: 10 * 60,
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      0,
+    );
+    expect(find.text('0:00'), findsOneWidget);
+    expect(find.text('−10:00'), findsOneWidget);
+    await harness.close(tester);
+  });
+
   testWidgets('podcast page hides podcast name and reste when progressing', (
     tester,
   ) async {
@@ -295,6 +377,7 @@ Future<_Harness> _pumpTile(
   EpisodeListDensity density = EpisodeListDensity.comfortable,
   double textScale = 1,
   bool showPodcast = true,
+  bool queueStyle = false,
   int? reorderIndex,
   String highlightQuery = '',
   int? playingEpisodeId,
@@ -321,6 +404,7 @@ Future<_Harness> _pumpTile(
                     ? EpisodeTile(
                         entry: entry,
                         showPodcast: showPodcast,
+                        queueStyle: queueStyle,
                         highlightQuery: highlightQuery,
                       )
                     : ReorderableListView(

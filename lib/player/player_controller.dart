@@ -166,12 +166,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   var _started = false;
   var _disposed = false;
   var _advancing = false;
-  var _extendingQueue = false;
   var _sessionReady = false;
   var _remote = false;
-
-  /// Suite de la liste d’origine, chargée par pages dans la file.
-  _QueueFeed? _queueFeed;
 
   /// True une fois que l’utilisateur a vraiment lancé la lecture cette session.
   var _hasPlayedInSession = false;
@@ -329,153 +325,22 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       );
       return;
     }
-    if (source != null && !source.isQueue) {
-      await _seedQueue(source, entry);
-      source = PlaybackSource.queue;
-    } else if (source == null) {
-      _queueFeed = null;
-    }
     if (source != null) _emit(_ui.copyWith(playbackSource: source));
     return _play(entry.episode, entry.podcast, autoplay: autoplay);
   }
 
-  /// Met la prochaine page de la liste d’origine à la fin de la file.
-  Future<void> extendQueue() => _appendQueuePage();
+  /// La playlist n’est plus remplie par la lecture. Le lecteur conserve l’appel
+  /// au défilement, sans rien ajouter.
+  Future<void> extendQueue() async {}
 
-  /// Met la page précédente en tête. Renvoie le nombre d’épisodes ajoutés.
-  Future<int> prependQueue() => _prependQueuePage();
-
-  static const _queuePageSize = 40;
-  static const _queuePrefetch = 8;
-
-  Future<void> _seedQueue(PlaybackSource source, EpisodeEntry entry) async {
-    final earlier = await _readQueuePage(source, before: entry);
-    final later = await _readQueuePage(
-      source,
-      after: entry,
-      limit: _queuePageSize - 1,
-    );
-    // `earlier` = côté « avant » de la liste (plus récent si date DESC).
-    // `later` = côté « après » (plus ancien). Pour un podcast on écoute vers
-    // le plus récent : plus anciens → en cours → plus récents.
-    final towardNewer = source.playsTowardNewer;
-    final slice = towardNewer
-        ? [...later.entries.reversed, entry, ...earlier.entries.reversed]
-        : [...earlier.entries, entry, ...later.entries];
-    if (_disposed || !ref.mounted || slice.isEmpty) return;
-    await ref.read(databaseProvider).replaceQueue([
-      for (final item in slice) item.episode.id,
-    ]);
-    _queueFeed = _QueueFeed(
-      source: source,
-      head: slice.first,
-      cursor: slice.last,
-      towardNewer: towardNewer,
-      exhaustedBefore: towardNewer ? !later.mayHaveMore : !earlier.mayHaveMore,
-      exhausted: towardNewer ? !earlier.mayHaveMore : !later.mayHaveMore,
-    );
-  }
-
-  Future<({List<EpisodeEntry> entries, bool mayHaveMore})> _readQueuePage(
-    PlaybackSource source, {
-    EpisodeEntry? after,
-    EpisodeEntry? before,
-    int limit = _queuePageSize,
-  }) {
-    final query = source.query;
-    return ref
-        .read(databaseProvider)
-        .readPlaybackPage(
-          unreadOnly: query.unreadOnly,
-          favoritesOnly: query.favoritesOnly,
-          downloadsOnly: query.downloadsOnly,
-          cacheOnly: query.cacheOnly,
-          queuedOnly: query.queuedOnly,
-          historyOnly: query.historyOnly,
-          inProgressOnly: query.inProgressOnly,
-          podcastId: query.podcastId,
-          playlistId: query.playlistId,
-          search: query.search,
-          after: after,
-          before: before,
-          limit: limit,
-        );
-  }
-
-  Future<int> _prependQueuePage() async {
-    final feed = _queueFeed;
-    if (feed == null || feed.exhaustedBefore || _extendingQueue || _disposed) {
-      return 0;
-    }
-    _extendingQueue = true;
-    try {
-      // Vers le plus récent : la tête est le plus ancien → page « after ».
-      final page = feed.towardNewer
-          ? await _readQueuePage(feed.source, after: feed.head)
-          : await _readQueuePage(feed.source, before: feed.head);
-      if (_disposed || !ref.mounted) return 0;
-      if (page.entries.isEmpty) {
-        feed.exhaustedBefore = true;
-        return 0;
-      }
-      final ids = feed.towardNewer
-          ? [for (final item in page.entries.reversed) item.episode.id]
-          : [for (final item in page.entries) item.episode.id];
-      await ref.read(databaseProvider).prependToQueue(ids);
-      feed.head = feed.towardNewer ? page.entries.last : page.entries.first;
-      if (!page.mayHaveMore) feed.exhaustedBefore = true;
-      return page.entries.length;
-    } finally {
-      _extendingQueue = false;
-    }
-  }
-
-  Future<void> _appendQueuePage() async {
-    final feed = _queueFeed;
-    if (feed == null || feed.exhausted || _extendingQueue || _disposed) return;
-    _extendingQueue = true;
-    try {
-      // Vers le plus récent : le curseur est le plus récent → page « before ».
-      final page = feed.towardNewer
-          ? await _readQueuePage(feed.source, before: feed.cursor)
-          : await _readQueuePage(feed.source, after: feed.cursor);
-      if (_disposed || !ref.mounted) return;
-      if (page.entries.isEmpty) {
-        feed.exhausted = true;
-        return;
-      }
-      final ids = feed.towardNewer
-          ? [for (final item in page.entries.reversed) item.episode.id]
-          : [for (final item in page.entries) item.episode.id];
-      await ref.read(databaseProvider).appendToQueue(ids);
-      feed.cursor = feed.towardNewer ? page.entries.first : page.entries.last;
-      if (!page.mayHaveMore) feed.exhausted = true;
-    } finally {
-      _extendingQueue = false;
-    }
-  }
-
-  /// Charge la suite quand il reste peu d’épisodes après celui en cours.
-  Future<void> _prefetchQueue() async {
-    final feed = _queueFeed;
-    if (feed == null || feed.exhausted || _extendingQueue || _disposed) return;
-    final items = await PlaybackSource.queue
-        .watch(ref.read(databaseProvider))
-        .first;
-    if (_disposed) return;
-    final index = items.indexWhere(
-      (entry) => entry.episode.id == _ui.episodeId,
-    );
-    final remaining = index < 0 ? items.length : items.length - index - 1;
-    if (remaining > _queuePrefetch) return;
-    await _appendQueuePage();
-  }
+  /// Voir [extendQueue]. Renvoie toujours 0.
+  Future<int> prependQueue() async => 0;
 
   /// Lance l’épisode, ou bascule lecture / pause s’il est déjà chargé.
   ///
-  /// Une liste [source] remplace la file d’attente. Suivant et précédent
-  /// parcourent ensuite cette file. Un second appui sur l’épisode en cours
-  /// met seulement en pause.
+  /// Suivant et précédent parcourent la liste d’où la lecture a été lancée.
+  /// La playlist ne change que si l’épisode y est ajouté. Un second appui
+  /// sur l’épisode en cours met seulement en pause.
   Future<void> playOrPauseEntry(
     EpisodeEntry entry, {
     PlaybackSource? source,
@@ -675,7 +540,6 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (_disposed || !ref.mounted) return;
     final settings = ref.read(settingsProvider);
     _hasPlayedInSession = false;
-    _queueFeed = null;
     _emit(PlayerUiState(speed: settings.speed, volume: settings.volume));
     if (ref.mounted) {
       ref.read(playerSheetProvider.notifier).collapse();
@@ -685,7 +549,6 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   /// Voisin dans la liste d’origine. `1` = suivant, `-1` = précédent.
   /// Hors de la file de lecture, le suivant retombe sur le premier, comme avant.
   Future<EpisodeEntry?> _relativeEntry(int delta) async {
-    if (delta > 0) await _prefetchQueue();
     final source = _ui.playbackSource;
     final items = await source.watch(ref.read(databaseProvider)).first;
     if (_disposed || items.isEmpty) return null;
@@ -1494,25 +1357,4 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     await _stateSub?.cancel();
     await _player.dispose();
   }
-}
-
-/// Liste d’origine encore à verser dans la file, page par page.
-class _QueueFeed {
-  _QueueFeed({
-    required this.source,
-    required this.head,
-    required this.cursor,
-    required this.towardNewer,
-    required this.exhaustedBefore,
-    required this.exhausted,
-  });
-
-  final PlaybackSource source;
-  EpisodeEntry head;
-  EpisodeEntry cursor;
-
-  /// File ordonnée du plus ancien au plus récent (podcast, etc.).
-  final bool towardNewer;
-  bool exhaustedBefore;
-  bool exhausted;
 }

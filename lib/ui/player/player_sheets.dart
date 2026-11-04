@@ -852,18 +852,44 @@ Future<void> showNotesSheet({
 }) {
   return showAppModalBottomSheet<void>(
     context: context,
-    showDragHandle: true,
+    backgroundColor: Colors.transparent,
     isScrollControlled: true,
+    useSafeArea: false,
     builder: (context) {
+      final theme = Theme.of(context);
+      final scheme = theme.colorScheme;
       return DraggableScrollableSheet(
         expand: false,
-        initialChildSize: 0.62,
+        initialChildSize: 1,
         minChildSize: 0.35,
-        maxChildSize: 0.92,
+        maxChildSize: 1,
         builder: (context, scrollController) {
-          return _NotesSheet(
-            episodeId: episodeId,
-            scrollController: scrollController,
+          return Material(
+            color:
+                theme.bottomSheetTheme.backgroundColor ??
+                scheme.surfaceContainerLow,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                SizedBox(height: MediaQuery.paddingOf(context).top + 12),
+                Center(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                    child: const SizedBox(width: 32, height: 4),
+                  ),
+                ),
+                Expanded(
+                  child: _NotesSheet(
+                    episodeId: episodeId,
+                    scrollController: scrollController,
+                  ),
+                ),
+              ],
+            ),
           );
         },
       );
@@ -881,16 +907,21 @@ class _NotesSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final notes =
-        ref.watch(episodeProvider(episodeId)).value?.episode.description ?? '';
+    final notesAsync = ref.watch(episodeProvider(episodeId));
+    final notes = notesAsync.asData?.value?.episode.description ?? '';
     final hasNotes = plainText(notes).isNotEmpty;
     return ListView(
       controller: scrollController,
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
       children: [
         Text('Notes', style: theme.textTheme.titleMedium),
         const SizedBox(height: 12),
-        if (!hasNotes)
+        if (notesAsync.isLoading && !notesAsync.hasValue)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (!hasNotes)
           Text(
             'Aucune note pour cet épisode.',
             style: theme.textTheme.bodyMedium?.copyWith(

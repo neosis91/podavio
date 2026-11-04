@@ -124,6 +124,8 @@ class EpisodeSelectionAppBar extends ConsumerWidget
     final allDownloaded =
         actions.download &&
         selected.every((e) => e.episode.downloadPath != null);
+    final anyUnplayed = selected.any((e) => !e.episode.played);
+    final anyPlayed = selected.any((e) => e.episode.played);
     showAppModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -132,6 +134,24 @@ class EpisodeSelectionAppBar extends ConsumerWidget
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (anyUnplayed)
+                ListTile(
+                  leading: const Icon(Icons.done_all),
+                  title: const Text('Marquer comme lu'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _runBulkAction(context, ref, _BulkMenuAction.markPlayed);
+                  },
+                ),
+              if (anyPlayed)
+                ListTile(
+                  leading: const Icon(Icons.unpublished_outlined),
+                  title: const Text('Marquer comme non lu'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _runBulkAction(context, ref, _BulkMenuAction.markUnplayed);
+                  },
+                ),
               if (actions.favorite)
                 ListTile(
                   leading: Icon(
@@ -139,9 +159,7 @@ class EpisodeSelectionAppBar extends ConsumerWidget
                     color: allFavorite ? favoriteHeartColor : null,
                   ),
                   title: Text(
-                    allFavorite
-                        ? 'Retirer des favoris'
-                        : 'Ajouter aux favoris',
+                    allFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
                   ),
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -202,6 +220,20 @@ class EpisodeSelectionAppBar extends ConsumerWidget
     if (selected.isEmpty) return;
     try {
       switch (action) {
+        case _BulkMenuAction.markPlayed:
+          final database = ref.read(databaseProvider);
+          for (final entry in selected) {
+            if (!entry.episode.played) {
+              await database.setPlayed(entry.episode.id, played: true);
+            }
+          }
+        case _BulkMenuAction.markUnplayed:
+          final database = ref.read(databaseProvider);
+          for (final entry in selected) {
+            if (entry.episode.played) {
+              await database.setPlayed(entry.episode.id, played: false);
+            }
+          }
         case _BulkMenuAction.favorite:
           final database = ref.read(databaseProvider);
           for (final entry in selected) {
@@ -272,6 +304,8 @@ class EpisodeSelectionAppBar extends ConsumerWidget
 }
 
 enum _BulkMenuAction {
+  markPlayed,
+  markUnplayed,
   favorite,
   unfavorite,
   download,
@@ -610,10 +644,7 @@ class _EpisodeWindowList extends StatelessWidget {
     }
 
     final listPadding = queueStyle
-        ? belowFrostedBar(
-            context,
-            const EdgeInsets.only(top: 4, bottom: 24),
-          )
+        ? belowFrostedBar(context, const EdgeInsets.only(top: 4, bottom: 24))
         : null;
     final list = reorder == null
         ? (queueStyle
@@ -645,8 +676,7 @@ class _EpisodeWindowList extends StatelessWidget {
             itemCount: entries.length,
             onReorderItem: selecting
                 ? (oldIndex, newIndex) {}
-                : (oldIndex, newIndex) =>
-                      reorder!(entries, oldIndex, newIndex),
+                : (oldIndex, newIndex) => reorder!(entries, oldIndex, newIndex),
             itemBuilder: (context, index) {
               final entry = entries[index];
               final id = entry.episode.id;
@@ -667,7 +697,9 @@ class _EpisodeWindowList extends StatelessWidget {
                 onRemove: onRemove == null ? null : () => onRemove!(entry),
                 selecting: selecting,
                 selected: selectedIds.contains(id),
-                onLongPress: onLongPress == null ? null : () => onLongPress!(id),
+                onLongPress: onLongPress == null
+                    ? null
+                    : () => onLongPress!(id),
                 onToggleSelect: () => onToggleSelect(id),
               );
             },
