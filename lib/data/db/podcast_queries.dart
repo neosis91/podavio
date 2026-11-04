@@ -64,11 +64,25 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     );
   }
 
-  /// Inclut chaque abonnement dans le téléchargement automatique.
-  /// Un aperçu non suivi n’est pas modifié.
-  Future<void> enableAutoDownloadForSubscriptions() {
-    return (update(podcasts)..where((table) => table.subscribed.equals(true)))
-        .write(const PodcastsCompanion(autoDownload: Value(true)));
+  /// Les identifiants vides ne changent rien.
+  Future<void> setPodcastsAutoDownload(
+    Iterable<int> ids, {
+    required bool autoDownload,
+  }) {
+    final wanted = ids.toList();
+    if (wanted.isEmpty) return Future.value();
+    return (update(podcasts)..where((table) => table.id.isIn(wanted))).write(
+      PodcastsCompanion(autoDownload: Value(autoDownload)),
+    );
+  }
+
+  /// `null` = illimité. Les identifiants vides ne changent rien.
+  Future<void> setPodcastsAutoDownloadLimit(Iterable<int> ids, int? limit) {
+    final wanted = ids.toList();
+    if (wanted.isEmpty) return Future.value();
+    return (update(podcasts)..where((table) => table.id.isIn(wanted))).write(
+      PodcastsCompanion(autoDownloadLimit: Value(limit)),
+    );
   }
 
   /// Inclut chaque abonnement dans les alertes de nouveaux épisodes.
@@ -88,6 +102,18 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     return (update(podcasts)..where((table) => table.id.equals(id))).write(
       PodcastsCompanion(keepUpdated: Value(keepUpdated)),
     );
+  }
+
+  /// Mémorise les genres seulement si le flux n’a pas encore été classé.
+  Future<void> setPodcastCategoriesIfMissing(int id, List<String> genres) {
+    return (update(podcasts)..where(
+          (table) => table.id.equals(id) & table.categoriesJson.isNull(),
+        ))
+        .write(
+          PodcastsCompanion(
+            categoriesJson: Value(encodePodcastCategories(genres)),
+          ),
+        );
   }
 
   Future<void> setPodcastSubscribed(int id, {required bool subscribed}) {
@@ -198,6 +224,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
             link: Value(draft.link),
             personsJson: Value(encodePodcastPersons(draft.persons)),
             fundingJson: Value(encodePodcastFunding(draft.funding)),
+            categoriesJson: Value(encodePodcastCategories(draft.categories)),
             subscribedAt: DateTime.now(),
             refreshedAt: Value(DateTime.now()),
             subscribed: Value(subscribed ?? true),
@@ -220,6 +247,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
             link: Value(draft.link),
             personsJson: Value(encodePodcastPersons(draft.persons)),
             fundingJson: Value(encodePodcastFunding(draft.funding)),
+            categoriesJson: Value(encodePodcastCategories(draft.categories)),
             refreshedAt: Value(DateTime.now()),
             subscribed: subscribed == null
                 ? const Value.absent()
@@ -506,5 +534,102 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
           (table) => table.imageUrl.isNotNull() & table.imagePath.isNull(),
         ))
         .get();
+  }
+
+  /// Répare les titres lus en Latin-1 (« é » stocké « Ã© »).
+  Future<void> repairMojibakeText() async {
+    final broken = const ['%Ã%', '%Â%'];
+    final podcastRows =
+        await (select(podcasts)..where(
+              (table) =>
+                  table.title.like(broken[0]) |
+                  table.title.like(broken[1]) |
+                  table.author.like(broken[0]) |
+                  table.author.like(broken[1]) |
+                  table.description.like(broken[0]) |
+                  table.description.like(broken[1]),
+            ))
+            .get();
+    if (podcastRows.isNotEmpty) {
+      await batch((statement) {
+        for (final row in podcastRows) {
+          final title = repairMojibake(row.title);
+          final author = repairMojibake(row.author);
+          final description = repairMojibake(row.description);
+          if (title == row.title &&
+              author == row.author &&
+              description == row.description) {
+            continue;
+          }
+          statement.update(
+            podcasts,
+            PodcastsCompanion(
+              title: Value(title),
+              author: Value(author),
+              description: Value(description),
+            ),
+            where: (table) => table.id.equals(row.id),
+          );
+        }
+      });
+    }
+
+    final episodeRows =
+        await (selectOnly(episodes)
+              ..addColumns([episodes.id, episodes.title, episodes.description])
+              ..where(
+                episodes.title.like(broken[0]) |
+                    episodes.title.like(broken[1]) |
+                    episodes.description.like(broken[0]) |
+                    episodes.description.like(broken[1]),
+              ))
+            .get();
+    if (episodeRows.isNotEmpty) {
+      await batch((statement) {
+        for (final row in episodeRows) {
+          final id = row.read(episodes.id);
+          if (id == null) continue;
+          final title = repairMojibake(row.read(episodes.title) ?? '');
+          final description = repairMojibake(
+            row.read(episodes.description) ?? '',
+          );
+          if (title == (row.read(episodes.title) ?? '') &&
+              description == (row.read(episodes.description) ?? '')) {
+            continue;
+          }
+          statement.update(
+            episodes,
+            EpisodesCompanion(
+              title: Value(title),
+              description: Value(description),
+            ),
+            where: (table) => table.id.equals(id),
+          );
+        }
+      });
+    }
+
+    final chapterRows =
+        await (selectOnly(episodeChapters)
+              ..addColumns([episodeChapters.id, episodeChapters.title])
+              ..where(
+                episodeChapters.title.like(broken[0]) |
+                    episodeChapters.title.like(broken[1]),
+              ))
+            .get();
+    if (chapterRows.isEmpty) return;
+    await batch((statement) {
+      for (final row in chapterRows) {
+        final id = row.read(episodeChapters.id);
+        if (id == null) continue;
+        final title = repairMojibake(row.read(episodeChapters.title) ?? '');
+        if (title == (row.read(episodeChapters.title) ?? '')) continue;
+        statement.update(
+          episodeChapters,
+          EpisodeChaptersCompanion(title: Value(title)),
+          where: (table) => table.id.equals(id),
+        );
+      }
+    });
   }
 }

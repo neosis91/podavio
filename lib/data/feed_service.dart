@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -12,6 +13,7 @@ import 'chapters_parser.dart';
 import 'catalog_categories.dart';
 import 'discover_hit.dart';
 import 'discover_languages.dart';
+import 'feed_text.dart';
 import 'fyyd_search.dart';
 import 'models.dart';
 import 'podcast_index_search.dart';
@@ -59,7 +61,13 @@ class FeedService {
   final _chapterInflight = <int, Future<void>>{};
   final _chapterFailedAt = <int, DateTime>{};
   final _channelLanguages = <String, String?>{};
+  final _categoryQueue = <Podcast>[];
+  final _categoryInflight = <int>{};
+  final _categoryFailedAt = <int, DateTime>{};
+  var _categoryRunning = 0;
   static const _chapterRetryBackoff = Duration(minutes: 5);
+  static const _categoryRetryBackoff = Duration(minutes: 10);
+  static const _categoryConcurrency = 3;
 
   Future<SubscribeResult> subscribe(
     String rawUrl, {
@@ -152,6 +160,7 @@ class FeedService {
   Future<RefreshReport> refreshAll({
     int concurrency = 2,
     bool notifyNewEpisodes = false,
+    Future<void> Function()? beforeEach,
     void Function(int done, int total, List<SubscribeFailure> failures)?
     onProgress,
   }) async {
@@ -168,6 +177,7 @@ class FeedService {
 
     Future<void> worker() async {
       while (true) {
+        if (beforeEach != null) await beforeEach();
         final index = next;
         if (index >= total) return;
         next = index + 1;
@@ -400,16 +410,17 @@ class FeedService {
     ];
   }
 
-  /// Une page de podcasts pour un regroupement de catégories.
+  /// Une page de podcasts pour les sujets choisis d’une catégorie.
   ///
-  /// Page 0 : parent seul (Apple + PI + fyyd). Pages suivantes : un membre
-  /// du regroupement à la fois (parent puis sous-genres), pour que le scroll
-  /// apporte encore des podcasts nouveaux.
+  /// Page 0 : le premier sujet (Apple + PI + fyyd). Pages suivantes : un
+  /// sujet à la fois, pour que le scroll apporte encore des podcasts nouveaux.
+  /// [subjects] vide ou absent : le regroupement par défaut.
   Future<List<DiscoverHit>> categoryHitsPage({
     required String id,
     required int page,
     int pageSize = 20,
     List<String> languages = const [discoverLanguagesAll],
+    List<CatalogMember>? subjects,
   }) async {
     final category = catalogCategoryById(id);
     if (category == null) return const [];
@@ -422,30 +433,32 @@ class FeedService {
       }
     }
 
-    final genres = category.regroupGenres;
-    final fyydIds = category.regroupFyydIds;
+    final members = (subjects == null || subjects.isEmpty)
+        ? category.regroupMembers
+        : subjects;
     final piles = <List<DiscoverHit>?>[];
     final weights = <double>[];
 
     if (page == 0) {
+      final first = members.first;
       final results = await Future.wait([
         safe(
           _appleChartHits(
             languages: languages,
             limit: pageSize,
-            genre: category.genre,
+            genre: first.genre,
           ),
         ),
         safe(
           _podcastIndex.trending(
             languages: languages,
             max: pageSize,
-            category: category.genre,
+            category: first.genre,
           ),
         ),
         safe(
           _fyyd.category(
-            category.fyydId,
+            first.fyydId,
             count: pageSize,
             page: 0,
             languages: languages,
@@ -455,21 +468,22 @@ class FeedService {
       piles.addAll(results);
       weights.addAll(const [1.0, 1.0, 0.8]);
     } else {
-      final index = (page - 1) % genres.length;
-      final deep = (page - 1) ~/ genres.length;
+      final index = (page - 1) % members.length;
+      final deep = (page - 1) ~/ members.length;
+      final member = members[index];
       final pair = await Future.wait([
         safe(
           _podcastIndex.trending(
             languages: languages,
             max: (deep + 2) * pageSize,
-            category: genres[index],
+            category: member.genre,
           ),
         ),
         safe(
           _fyyd.category(
-            fyydIds[index],
+            member.fyydId,
             count: pageSize,
-            page: deep + (fyydIds[index] == category.fyydId ? 1 : 0),
+            page: deep + (index == 0 ? 1 : 0),
             languages: languages,
           ),
         ),
@@ -725,14 +739,19 @@ class FeedService {
     final pass = explicit
         ? ((password ?? '').isEmpty ? null : password)
         : existing?.authPassword;
-    final podcast = await _loadRemoteFeed(url, username: user, password: pass);
+    final loaded = await _loadRemoteFeed(url, username: user, password: pass);
     final pscByKey = await _loadPscChapters(
       url,
       username: user,
       password: pass,
     );
     final saved = await _database.saveFeed(
-      _draftFrom(url, podcast, pscByKey: pscByKey),
+      _draftFrom(
+        url,
+        loaded.podcast,
+        categories: loaded.categories,
+        pscByKey: pscByKey,
+      ),
       subscribed: subscribed,
       keepUpdated: keepUpdated,
     );
@@ -746,51 +765,165 @@ class FeedService {
     return saved;
   }
 
-  Future<remote.Podcast> _loadRemoteFeed(
+  Future<({remote.Podcast podcast, List<String> categories})> _loadRemoteFeed(
     String url, {
     String? username,
     String? password,
   }) async {
-    final authorization = basicAuthorization(username, password);
-    if (authorization == null) {
-      try {
-        return await remote.Feed.loadFeed(
-          url: url,
-          userAgent: podavioUserAgent,
-          timeout: const Duration(seconds: 30),
-        ).timeout(
-          const Duration(seconds: 40),
-          onTimeout: () {
-            throw Exception('Le flux met trop de temps à répondre.');
-          },
-        );
-      } on remote.PodcastFailedException catch (error) {
-        if (error.statusCode == 401) {
-          throw const FeedUnauthorizedException();
-        }
-        rethrow;
-      }
-    }
-
-    final response = await getKeepingAuthorization(
-      Uri.parse(url),
-      headers: {'User-Agent': podavioUserAgent, 'Authorization': authorization},
-      timeout: const Duration(seconds: 40),
+    final headers = podcastRequestHeaders(
+      userAgent: podavioUserAgent,
+      username: username,
+      password: password,
     );
-    if (response.statusCode == 401) {
-      throw const FeedUnauthorizedException(hadCredentials: true);
+    final http.Response response;
+    try {
+      response = headers.containsKey('Authorization')
+          ? await getKeepingAuthorization(
+              Uri.parse(url),
+              headers: headers,
+              timeout: const Duration(seconds: 40),
+            )
+          : await http
+                .get(Uri.parse(url), headers: headers)
+                .timeout(const Duration(seconds: 40));
+    } on remote.PodcastFailedException catch (error) {
+      if (error.statusCode == 401) {
+        throw FeedUnauthorizedException(
+          hadCredentials: headers.containsKey('Authorization'),
+        );
+      }
+      rethrow;
+    } on TimeoutException {
+      throw Exception('Le flux met trop de temps à répondre.');
     }
-    if (response.statusCode != 200 || response.body.isEmpty) {
+    if (response.statusCode == 401) {
+      throw FeedUnauthorizedException(
+        hadCredentials: headers.containsKey('Authorization'),
+      );
+    }
+    if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
       throw Exception('Erreur HTTP ${response.statusCode}');
     }
 
+    final document = decodeFeedDocument(
+      response.bodyBytes,
+      contentType: response.headers['content-type'],
+    );
+    final categories = rssChannelCategories(document);
     final directory = await Directory.systemTemp.createTemp('podavio-feed-');
     try {
       final file = File('${directory.path}/feed.xml');
-      await file.writeAsString(response.body);
-      return await remote.Feed.loadFeedFile(file: file.path);
+      await file.writeAsString(document);
+      final podcast = await remote.Feed.loadFeedFile(file: file.path);
+      return (podcast: podcast, categories: categories);
     } finally {
       await directory.delete(recursive: true);
+    }
+  }
+
+  /// Lit les genres des abonnements qui n’en ont pas encore. Un échec réseau
+  /// est retenté plus tard ; une lecture aboutie, même vide, est mémorisée.
+  void backfillPodcastCategories(List<Podcast> pending) {
+    final queued = {for (final podcast in _categoryQueue) podcast.id};
+    for (final podcast in pending) {
+      if (podcast.categoriesJson != null) continue;
+      if (queued.contains(podcast.id) ||
+          _categoryInflight.contains(podcast.id)) {
+        continue;
+      }
+      final failedAt = _categoryFailedAt[podcast.id];
+      if (failedAt != null &&
+          DateTime.now().difference(failedAt) < _categoryRetryBackoff) {
+        continue;
+      }
+      _categoryQueue.add(podcast);
+      queued.add(podcast.id);
+    }
+    _pumpCategoryQueue();
+  }
+
+  void _pumpCategoryQueue() {
+    while (_categoryRunning < _categoryConcurrency &&
+        _categoryQueue.isNotEmpty) {
+      final podcast = _categoryQueue.removeAt(0);
+      _categoryRunning++;
+      _categoryInflight.add(podcast.id);
+      unawaited(
+        _backfillCategory(podcast).whenComplete(() {
+          _categoryRunning--;
+          _categoryInflight.remove(podcast.id);
+          _pumpCategoryQueue();
+        }),
+      );
+    }
+  }
+
+  Future<void> _backfillCategory(Podcast podcast) async {
+    try {
+      final categories = await _fetchChannelCategories(
+        podcast.feedUrl,
+        username: podcast.authUsername,
+        password: podcast.authPassword,
+      );
+      if (categories == null) {
+        _categoryFailedAt[podcast.id] = DateTime.now();
+        return;
+      }
+      _categoryFailedAt.remove(podcast.id);
+      await _database.setPodcastCategoriesIfMissing(podcast.id, categories);
+    } catch (_) {
+      _categoryFailedAt[podcast.id] = DateTime.now();
+    }
+  }
+
+  /// `null` si le début du flux n’a pas pu être lu. Une liste vide : aucun genre.
+  Future<List<String>?> _fetchChannelCategories(
+    String url, {
+    String? username,
+    String? password,
+  }) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) return null;
+    final client = HttpClient();
+    try {
+      final request = await client
+          .getUrl(uri)
+          .timeout(const Duration(seconds: 8));
+      request.followRedirects = true;
+      request.headers.set(HttpHeaders.userAgentHeader, podavioUserAgent);
+      final authorization = basicAuthorization(username, password);
+      if (authorization != null) {
+        request.headers.set(HttpHeaders.authorizationHeader, authorization);
+      }
+      final response = await request.close().timeout(
+        const Duration(seconds: 12),
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        await response.drain<void>();
+        return null;
+      }
+      final buffer = StringBuffer();
+      var bytes = 0;
+      const maxBytes = 256 * 1024;
+      await for (final chunk in response.timeout(const Duration(seconds: 12))) {
+        bytes += chunk.length;
+        buffer.write(utf8.decode(chunk, allowMalformed: true));
+        final text = buffer.toString();
+        if (text.toLowerCase().contains('<item')) {
+          return rssChannelCategories(text);
+        }
+        if (bytes >= maxBytes) {
+          final found = rssChannelCategories(text);
+          return found.isEmpty ? null : found;
+        }
+      }
+      final text = buffer.toString();
+      if (text.trim().isEmpty) return null;
+      return rssChannelCategories(text);
+    } catch (_) {
+      return null;
+    } finally {
+      client.close(force: true);
     }
   }
 
@@ -810,10 +943,15 @@ class FeedService {
           : await http
                 .get(Uri.parse(url), headers: headers)
                 .timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200 || response.body.isEmpty) {
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
         return const {};
       }
-      return parsePscChaptersByItem(response.body);
+      return parsePscChaptersByItem(
+        decodeFeedDocument(
+          response.bodyBytes,
+          contentType: response.headers['content-type'],
+        ),
+      );
     } catch (_) {
       return const {};
     }
@@ -822,6 +960,7 @@ class FeedService {
   FeedDraft _draftFrom(
     String url,
     remote.Podcast podcast, {
+    List<String> categories = const [],
     Map<String, List<ChapterDraft>> pscByKey = const {},
   }) {
     final episodes = <EpisodeDraft>[];
@@ -837,8 +976,8 @@ class FeedService {
           guid: guid,
           title: episode.title.trim().isEmpty
               ? 'Sans titre'
-              : episode.title.trim(),
-          description: _bounded(notes),
+              : repairMojibake(episode.title.trim()),
+          description: repairMojibake(_bounded(notes)),
           audioUrl: audioUrl,
           mimeType: episode.mimeType,
           durationSeconds: episode.duration?.inSeconds,
@@ -877,13 +1016,14 @@ class FeedService {
 
     return FeedDraft(
       feedUrl: url,
-      title: _blankToNull(podcast.title) ?? url,
-      author: author,
-      description: _bounded(podcast.description?.trim() ?? ''),
+      title: repairMojibake(_blankToNull(podcast.title) ?? url),
+      author: repairMojibake(author),
+      description: repairMojibake(_bounded(podcast.description?.trim() ?? '')),
       imageUrl: _blankToNull(podcast.image),
       link: _blankToNull(podcast.link),
       persons: persons,
       funding: funding,
+      categories: categories,
       episodes: episodes,
     );
   }

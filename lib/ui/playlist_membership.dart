@@ -140,13 +140,7 @@ class _PlaylistMembershipSheet extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 8),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(50),
-                  ),
-                  child: const SizedBox(width: 32, height: 4),
-                ),
+                const SheetDragHandle(),
                 const SizedBox(height: 12),
                 Text(
                   'Playlists',

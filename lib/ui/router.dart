@@ -17,11 +17,13 @@ class AppRoutes {
   static const favorites = '/favorites';
   static const history = '/history';
   static const downloads = '/downloads';
+  static const cache = '/cache';
   static const appearance = '/appearance';
   static const languages = '/languages';
   static const interfaceLanguage = '/appearance/language';
   static const playback = '/playback';
   static const downloadSettings = '/download-settings';
+  static const automaticDownloads = '/download-settings/automatic';
   static const network = '/network';
   static const eco = '/eco';
   static const notifications = '/notifications';

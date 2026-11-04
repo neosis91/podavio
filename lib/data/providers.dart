@@ -49,6 +49,15 @@ final databasePhaseProvider =
       DatabasePhaseNotifier.new,
     );
 
+final _mojibakeRepairs = Expando<Future<void>>();
+
+/// Une fois par base : remet les accents des titres mal décodés.
+final mojibakeRepairProvider = Provider<void>((ref) {
+  if (ref.watch(databasePhaseProvider) != DatabasePhase.open) return;
+  final database = ref.watch(databaseProvider);
+  unawaited(_mojibakeRepairs[database] ??= database.repairMojibakeText());
+});
+
 final databaseProvider = Provider<AppDatabase>((ref) {
   // Tant que le fichier est remplacé, les lecteurs se désabonnent sans
   // qu’une nouvelle connexion s’ouvre sur l’ancien ou le nouveau fichier.
@@ -124,6 +133,9 @@ final podcastsProvider = StreamProvider<List<Podcast>>((ref) {
 
 /// Télécharge automatiquement les jaquettes de podcasts manquantes.
 final coverPrefetchProvider = Provider<void>((ref) {
+  // Le shell l’écoute en permanence. Pendant un import, la base refuse les
+  // lectures : on se retire sans propager l’erreur jusqu’au widget.
+  if (ref.watch(databasePhaseProvider) != DatabasePhase.open) return;
   final eco = ref.watch(
     settingsProvider.select((settings) => settings.ecoMode),
   );
@@ -230,6 +242,7 @@ class EpisodesNotifier extends Notifier<AsyncValue<EpisodeWindow>> {
           unreadOnly: query.unreadOnly,
           favoritesOnly: query.favoritesOnly,
           downloadsOnly: query.downloadsOnly,
+          cacheOnly: query.cacheOnly,
           queuedOnly: query.queuedOnly,
           historyOnly: query.historyOnly,
           inProgressOnly: query.inProgressOnly,
@@ -260,6 +273,7 @@ class EpisodeQuery {
     this.unreadOnly = false,
     this.favoritesOnly = false,
     this.downloadsOnly = false,
+    this.cacheOnly = false,
     this.queuedOnly = false,
     this.historyOnly = false,
     this.inProgressOnly = false,
@@ -272,6 +286,7 @@ class EpisodeQuery {
   final bool unreadOnly;
   final bool favoritesOnly;
   final bool downloadsOnly;
+  final bool cacheOnly;
   final bool queuedOnly;
   final bool historyOnly;
   final bool inProgressOnly;
@@ -286,6 +301,7 @@ class EpisodeQuery {
         other.unreadOnly == unreadOnly &&
         other.favoritesOnly == favoritesOnly &&
         other.downloadsOnly == downloadsOnly &&
+        other.cacheOnly == cacheOnly &&
         other.queuedOnly == queuedOnly &&
         other.historyOnly == historyOnly &&
         other.inProgressOnly == inProgressOnly &&
@@ -300,6 +316,7 @@ class EpisodeQuery {
     unreadOnly,
     favoritesOnly,
     downloadsOnly,
+    cacheOnly,
     queuedOnly,
     historyOnly,
     inProgressOnly,

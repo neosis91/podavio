@@ -32,6 +32,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     final favorites = navPageByPath(AppRoutes.favorites)!;
     final episodes = navPageByPath(AppRoutes.episodes)!;
     final downloads = navPageByPath(AppRoutes.downloads)!;
+    final cache = navPageByPath(AppRoutes.cache)!;
     final playlists = navPageByPath(AppRoutes.playlists)!;
     final stats = navPageByPath(AppRoutes.stats)!;
     const tiles = <_LibraryTileData>[
@@ -54,6 +55,12 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         iconColor: Colors.black,
       ),
       _LibraryTileData(
+        path: AppRoutes.cache,
+        background: Color(0xffff9800),
+        icon: Icons.folder,
+        iconColor: Colors.black,
+      ),
+      _LibraryTileData(
         path: AppRoutes.playlists,
         background: Color(0xffFFEB3B),
         icon: Icons.playlist_play,
@@ -70,6 +77,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       favorites.path: favorites,
       episodes.path: episodes,
       downloads.path: downloads,
+      cache.path: cache,
       playlists.path: playlists,
       stats.path: stats,
     };

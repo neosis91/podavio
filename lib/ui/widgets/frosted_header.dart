@@ -135,6 +135,10 @@ class _FrostedScaffoldState extends State<FrostedScaffold> {
 
   @override
   Widget build(BuildContext context) {
+    final bar = widget.appBar;
+    final extent = bar == null
+        ? 0.0
+        : MediaQuery.paddingOf(context).top + bar.preferredSize.height;
     return FrostedHeaderScroll(
       scrolled: _scrolled,
       child: Scaffold(
@@ -142,9 +146,59 @@ class _FrostedScaffoldState extends State<FrostedScaffold> {
         appBar: widget.appBar,
         body: NotificationListener<ScrollNotification>(
           onNotification: _onScroll,
-          child: widget.body,
+          child: FrostedBarInset(extent: extent, child: widget.body),
         ),
       ),
+    );
+  }
+}
+
+/// Hauteur couverte par la barre givrée, depuis le haut du corps.
+class FrostedBarInset extends InheritedWidget {
+  const FrostedBarInset({
+    super.key,
+    required this.extent,
+    required super.child,
+  });
+
+  final double extent;
+
+  static double of(BuildContext context) {
+    return context
+            .dependOnInheritedWidgetOfExactType<FrostedBarInset>()
+            ?.extent ??
+        0;
+  }
+
+  @override
+  bool updateShouldNotify(FrostedBarInset oldWidget) {
+    return extent != oldWidget.extent;
+  }
+}
+
+/// [RefreshIndicator] qui apparaît sous la barre, pas coincé derrière.
+class FrostedRefreshIndicator extends StatelessWidget {
+  const FrostedRefreshIndicator({
+    super.key,
+    required this.onRefresh,
+    required this.child,
+    this.color,
+    this.backgroundColor,
+  });
+
+  final RefreshCallback onRefresh;
+  final Widget child;
+  final Color? color;
+  final Color? backgroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      color: color,
+      backgroundColor: backgroundColor,
+      edgeOffset: FrostedBarInset.of(context),
+      child: child,
     );
   }
 }
