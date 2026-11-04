@@ -144,22 +144,14 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
                   ),
                   PopupMenuButton<String>(
                     onSelected: (value) async {
-                      switch (value) {
-                        case 'filter':
-                          await showEpisodeFilterDialog(context, ref);
-                        case 'played':
-                          await ref.read(databaseProvider).markAllPlayed();
-                          if (context.mounted) {
-                            showMessage(context, 'Épisodes marqués comme lus');
-                          }
+                      if (value != 'played') return;
+                      await ref.read(databaseProvider).markAllPlayed();
+                      if (context.mounted) {
+                        showMessage(context, 'Épisodes marqués comme lus');
                       }
                     },
-                    itemBuilder: (context) => [
+                    itemBuilder: (context) => const [
                       PopupMenuItem(
-                        value: 'filter',
-                        child: Text(context.tr('Filter')),
-                      ),
-                      const PopupMenuItem(
                         value: 'played',
                         child: Text('Tout marquer comme lu'),
                       ),

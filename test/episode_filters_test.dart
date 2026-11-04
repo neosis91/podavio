@@ -40,7 +40,7 @@ void main() {
     });
   });
 
-  testWidgets('Episodes page uses filter dialog instead of segmented button', (
+  testWidgets('episode filters are chips under the title, not a menu', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -68,18 +68,12 @@ void main() {
 
     await tester.tap(find.byType(PopupMenuButton<String>));
     await tester.pumpAndSettle();
-    expect(find.text('Filtrer'), findsOneWidget);
+    expect(find.text('Filtrer'), findsNothing);
+    expect(find.text('Tout marquer comme lu'), findsOneWidget);
 
-    await tester.tap(find.text('Filtrer'));
+    await tester.tapAt(const Offset(8, 8));
     await tester.pumpAndSettle();
-
-    expect(find.text('Filtrer'), findsWidgets);
-    expect(find.text('Téléchargés'), findsWidgets);
-    expect(find.text('En cours'), findsWidgets);
-
-    await tester.tap(find.widgetWithText(CheckboxListTile, 'Téléchargés'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Appliquer'));
+    await tester.tap(find.text('Téléchargés'));
     await tester.pumpAndSettle();
 
     expect(find.text('Téléchargés'), findsOneWidget);

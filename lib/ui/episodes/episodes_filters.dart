@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../settings/settings_controller.dart';
@@ -58,80 +57,4 @@ class EpisodeFilterChips extends StatelessWidget
       ),
     );
   }
-}
-
-Future<void> showEpisodeFilterDialog(
-  BuildContext context,
-  WidgetRef ref,
-) async {
-  var draft = ref.read(settingsProvider).episodeFilters;
-  final applied = await showDialog<EpisodeFilters>(
-    context: context,
-    builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: Text(context.tr('Filter')),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(context.tr('Unplayed')),
-                    value: draft.unreadOnly,
-                    onChanged: (value) {
-                      setState(() {
-                        draft = draft.copyWith(unreadOnly: value ?? false);
-                      });
-                    },
-                    controlAffinity: ListTileControlAffinity.leading,
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(context.tr('Downloaded')),
-                    value: draft.downloadsOnly,
-                    onChanged: (value) {
-                      setState(() {
-                        draft = draft.copyWith(downloadsOnly: value ?? false);
-                      });
-                    },
-                    controlAffinity: ListTileControlAffinity.leading,
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(context.tr('In progress')),
-                    subtitle: Text(context.tr('Started and not finished')),
-                    value: draft.inProgressOnly,
-                    onChanged: (value) {
-                      setState(() {
-                        draft = draft.copyWith(inProgressOnly: value ?? false);
-                      });
-                    },
-                    controlAffinity: ListTileControlAffinity.leading,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, EpisodeFilters.empty),
-                child: Text(context.tr('Clear')),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(context.tr('Cancel')),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, draft),
-                child: Text(context.tr('Apply')),
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
-  if (applied == null) return;
-  await ref.read(settingsProvider.notifier).setEpisodeFilters(applied);
 }
