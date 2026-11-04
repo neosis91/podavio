@@ -64,15 +64,7 @@ Future<T?> showAppModalBottomSheet<T>({
             children: [
               if (showDragHandle) ...[
                 const SizedBox(height: 12),
-                Center(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(50),
-                    ),
-                    child: const SizedBox(width: 32, height: 4),
-                  ),
-                ),
+                const SheetDragHandle(),
               ],
               sheet,
             ],
@@ -94,4 +86,28 @@ Future<T?> showAppModalBottomSheet<T>({
       );
     },
   );
+}
+
+/// Poignée Material, 32×4, même dans une liste qui étire ses enfants.
+class SheetDragHandle extends StatelessWidget {
+  const SheetDragHandle({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurfaceVariant
+        .withValues(alpha: 0.4);
+    return Align(
+      alignment: Alignment.center,
+      child: SizedBox(
+        width: 32,
+        height: 4,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      ),
+    );
+  }
 }

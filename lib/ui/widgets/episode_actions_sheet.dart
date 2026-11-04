@@ -331,13 +331,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
           ),
           children: [
             const SizedBox(height: 8),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(50),
-              ),
-              child: const SizedBox(width: 32, height: 4),
-            ),
+            const SheetDragHandle(),
             const SizedBox(height: 6),
             InkWell(
               onTap: onOpenEpisode,

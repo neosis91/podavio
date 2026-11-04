@@ -873,15 +873,7 @@ Future<void> showNotesSheet({
             child: Column(
               children: [
                 SizedBox(height: MediaQuery.paddingOf(context).top + 12),
-                Center(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(50),
-                    ),
-                    child: const SizedBox(width: 32, height: 4),
-                  ),
-                ),
+                const SheetDragHandle(),
                 Expanded(
                   child: _NotesSheet(
                     episodeId: episodeId,

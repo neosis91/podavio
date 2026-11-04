@@ -146,116 +146,104 @@ class _AudioOutputSheetState extends ConsumerState<_AudioOutputSheet> {
             bottom: MediaQuery.paddingOf(context).bottom,
           ),
           children: [
-                const SizedBox(height: 8),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(50),
-                  ),
-                  child: const SizedBox(width: 32, height: 4),
+            const SizedBox(height: 8),
+            const SheetDragHandle(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  context.tr('Audio output'),
+                  style: theme.textTheme.labelMedium,
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      context.tr('Audio output'),
-                      style: theme.textTheme.labelMedium,
+              ),
+            ),
+            _OutputRow(
+              icon: localIcon,
+              name: context.tr('System default'),
+              status: castName == null ? context.tr('Play here') : null,
+              selected: castName == null,
+              onTap: () async {
+                Navigator.pop(context);
+                await ref.read(playerProvider.notifier).playHere();
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+              child: Divider(height: 1, color: scheme.outlineVariant),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 4, 20, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Cast',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+            if (devices == null)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              )
+            else if (devices.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(32, 12, 20, 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _error == null
+                        ? context.tr('No Cast receiver')
+                        : context.tr('Cast search unavailable'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ),
+              )
+            else
+              for (final device in devices)
                 _OutputRow(
-                  icon: localIcon,
-                  name: context.tr('System default'),
-                  status: castName == null ? context.tr('Play here') : null,
-                  selected: castName == null,
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await ref.read(playerProvider.notifier).playHere();
-                  },
+                  icon: Icons.cast_connected,
+                  name: device.name,
+                  status: device.name == castName
+                      ? context.tr('Play here')
+                      : null,
+                  selected: device.name == castName,
+                  onTap: device.name == castName
+                      ? null
+                      : () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          Navigator.pop(context);
+                          final error = await ref
+                              .read(playerProvider.notifier)
+                              .castTo(device);
+                          if (error != null) {
+                            messenger.showSnackBar(
+                              SnackBar(content: Text(error)),
+                            );
+                          }
+                        },
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 6,
-                  ),
-                  child: Divider(height: 1, color: scheme.outlineVariant),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(32, 4, 20, 0),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Cast',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
-                if (devices == null)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(
-                      child: SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  )
-                else if (devices.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(32, 12, 20, 16),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        _error == null
-                            ? context.tr('No Cast receiver')
-                            : context.tr('Cast search unavailable'),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  for (final device in devices)
-                    _OutputRow(
-                      icon: Icons.cast_connected,
-                      name: device.name,
-                      status: device.name == castName
-                          ? context.tr('Play here')
-                          : null,
-                      selected: device.name == castName,
-                      onTap: device.name == castName
-                          ? null
-                          : () async {
-                              final messenger = ScaffoldMessenger.of(context);
-                              Navigator.pop(context);
-                              final error = await ref
-                                  .read(playerProvider.notifier)
-                                  .castTo(device);
-                              if (error != null) {
-                                messenger.showSnackBar(
-                                  SnackBar(content: Text(error)),
-                                );
-                              }
-                            },
-                    ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 6,
-                  ),
-                  child: Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: scheme.onSurface.withValues(alpha: 0.10),
-                  ),
-                ),
-                const _VolumeRow(),
-                const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+              child: Divider(
+                height: 1,
+                thickness: 1,
+                color: scheme.onSurface.withValues(alpha: 0.10),
+              ),
+            ),
+            const _VolumeRow(),
+            const SizedBox(height: 12),
           ],
         ),
       ),
