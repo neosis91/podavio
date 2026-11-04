@@ -3,59 +3,58 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../settings/settings_controller.dart';
+import '../widgets/selection_chip.dart';
 
-class ActiveEpisodeFiltersBar extends StatelessWidget {
-  const ActiveEpisodeFiltersBar({
+/// Rangée de filtres sous le titre, comme les abonnements.
+class EpisodeFilterChips extends StatelessWidget
+    implements PreferredSizeWidget {
+  const EpisodeFilterChips({
     super.key,
     required this.filters,
-    required this.onEdit,
     required this.onChanged,
   });
 
   final EpisodeFilters filters;
-  final VoidCallback onEdit;
   final ValueChanged<EpisodeFilters> onChanged;
 
   @override
+  Size get preferredSize => const Size.fromHeight(48);
+
+  @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final chips = <Widget>[
-      if (filters.unreadOnly)
-        InputChip(
-          label: Text(context.tr('Unplayed')),
-          onPressed: onEdit,
-          onDeleted: () => onChanged(filters.copyWith(unreadOnly: false)),
-        ),
-      if (filters.downloadsOnly)
-        InputChip(
-          label: Text(context.tr('Downloaded')),
-          onPressed: onEdit,
-          onDeleted: () => onChanged(filters.copyWith(downloadsOnly: false)),
-        ),
-      if (filters.inProgressOnly)
-        InputChip(
-          label: Text(context.tr('In progress')),
-          onPressed: onEdit,
-          onDeleted: () => onChanged(filters.copyWith(inProgressOnly: false)),
-        ),
-      ActionChip(
-        avatar: Icon(Icons.clear_all, size: 18, color: scheme.primary),
-        label: Text(context.tr('Clear all')),
-        onPressed: () => onChanged(EpisodeFilters.empty),
+    final chips = <(String, bool, EpisodeFilters)>[
+      (
+        context.tr('Unplayed'),
+        filters.unreadOnly,
+        filters.copyWith(unreadOnly: !filters.unreadOnly),
+      ),
+      (
+        context.tr('Downloaded'),
+        filters.downloadsOnly,
+        filters.copyWith(downloadsOnly: !filters.downloadsOnly),
+      ),
+      (
+        context.tr('In progress'),
+        filters.inProgressOnly,
+        filters.copyWith(inProgressOnly: !filters.inProgressOnly),
       ),
     ];
 
-    return Material(
-      color: scheme.surfaceContainerHighest.withValues(alpha: 0.65),
-      child: SizedBox(
-        height: 48,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          itemCount: chips.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 8),
-          itemBuilder: (context, index) => chips[index],
-        ),
+    return SizedBox(
+      height: preferredSize.height,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        itemCount: chips.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 4),
+        itemBuilder: (context, index) {
+          final (label, selected, next) = chips[index];
+          return SelectionChip(
+            label: label,
+            selected: selected,
+            onSelected: () => onChanged(next),
+          );
+        },
       ),
     );
   }

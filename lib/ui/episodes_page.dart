@@ -108,6 +108,11 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
                       icon: const Icon(Icons.arrow_back),
                     )
                   : null,
+              bottom: EpisodeFilterChips(
+                filters: filters,
+                onChanged: (next) =>
+                    ref.read(settingsProvider.notifier).setEpisodeFilters(next),
+              ),
               actions: [
                 ListPlayButton(query: query),
                 if (_searching)
@@ -163,72 +168,53 @@ class _EpisodesPageState extends ConsumerState<EpisodesPage> {
                 ],
               ],
             ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (hasFilters && _selection == null)
-            ActiveEpisodeFiltersBar(
-              filters: filters,
-              onEdit: () => showEpisodeFilterDialog(context, ref),
-              onChanged: (next) =>
-                  ref.read(settingsProvider.notifier).setEpisodeFilters(next),
-            ),
-          Expanded(
-            child: EpisodeListBody(
-              queueStyle: true,
-              query: query,
-              highlightQuery: _search,
-              bulkActions: const EpisodeBulkActions(
-                favorite: true,
-                download: true,
-              ),
-              onSelectionChanged: (session) {
-                if (!mounted) return;
-                setState(() => _selection = session);
-              },
-              onRefresh: refreshing
-                  ? null
-                  : () => refreshSubscriptions(context, ref),
-              empty: EmptyState(
-                title: hasSearch
-                    ? 'Aucun résultat'
-                    : showFilterEmpty
-                    ? 'Aucun épisode'
-                    : context.tr('No episodes to play'),
-                message: hasSearch && showFilterEmpty
-                    ? 'Essayez un autre mot, ou modifiez les filtres.'
-                    : hasSearch
-                    ? 'Essayez un autre mot, ou effacez la recherche.'
-                    : showFilterEmpty
-                    ? 'Aucun épisode ne correspond aux filtres choisis.'
-                    : 'Abonnez-vous à un podcast depuis Explorer, ou collez l’adresse d’un flux RSS.',
-                action: hasSearch && showFilterEmpty
-                    ? TextButton(
-                        onPressed: () => ref
-                            .read(settingsProvider.notifier)
-                            .setEpisodeFilters(EpisodeFilters.empty),
-                        child: const Text('Effacer les filtres'),
-                      )
-                    : hasSearch
-                    ? TextButton(
-                        onPressed: _closeSearch,
-                        child: const Text('Effacer la recherche'),
-                      )
-                    : showFilterEmpty
-                    ? TextButton(
-                        onPressed: () => ref
-                            .read(settingsProvider.notifier)
-                            .setEpisodeFilters(EpisodeFilters.empty),
-                        child: const Text('Effacer les filtres'),
-                      )
-                    : FilledButton(
-                        onPressed: () => context.go(AppRoutes.discover),
-                        child: Text(context.tr('Explore')),
-                      ),
-              ),
-            ),
-          ),
-        ],
+      body: EpisodeListBody(
+        queueStyle: true,
+        query: query,
+        highlightQuery: _search,
+        bulkActions: const EpisodeBulkActions(favorite: true, download: true),
+        onSelectionChanged: (session) {
+          if (!mounted) return;
+          setState(() => _selection = session);
+        },
+        onRefresh: refreshing ? null : () => refreshSubscriptions(context, ref),
+        empty: EmptyState(
+          title: hasSearch
+              ? 'Aucun résultat'
+              : showFilterEmpty
+              ? 'Aucun épisode'
+              : context.tr('No episodes to play'),
+          message: hasSearch && showFilterEmpty
+              ? 'Essayez un autre mot, ou modifiez les filtres.'
+              : hasSearch
+              ? 'Essayez un autre mot, ou effacez la recherche.'
+              : showFilterEmpty
+              ? 'Aucun épisode ne correspond aux filtres choisis.'
+              : 'Abonnez-vous à un podcast depuis Explorer, ou collez l’adresse d’un flux RSS.',
+          action: hasSearch && showFilterEmpty
+              ? TextButton(
+                  onPressed: () => ref
+                      .read(settingsProvider.notifier)
+                      .setEpisodeFilters(EpisodeFilters.empty),
+                  child: const Text('Effacer les filtres'),
+                )
+              : hasSearch
+              ? TextButton(
+                  onPressed: _closeSearch,
+                  child: const Text('Effacer la recherche'),
+                )
+              : showFilterEmpty
+              ? TextButton(
+                  onPressed: () => ref
+                      .read(settingsProvider.notifier)
+                      .setEpisodeFilters(EpisodeFilters.empty),
+                  child: const Text('Effacer les filtres'),
+                )
+              : FilledButton(
+                  onPressed: () => context.go(AppRoutes.discover),
+                  child: Text(context.tr('Explore')),
+                ),
+        ),
       ),
     );
   }
