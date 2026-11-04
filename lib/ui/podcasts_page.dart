@@ -303,7 +303,7 @@ class _PodcastsPageState extends ConsumerState<PodcastsPage> {
                   counts: showBadges ? counterCounts : const {},
                 );
           if (refreshing || !supportsPullToRefresh) return child;
-          return RefreshIndicator(
+          return FrostedRefreshIndicator(
             onRefresh: () => refreshSubscriptions(context, ref),
             child: child,
           );

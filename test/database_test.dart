@@ -351,11 +351,7 @@ void main() {
 
     // Préférés d’abord (Beta plus écouté que Zèbre), puis Alpha (écoute).
     final ordered = await database.watchPodcastsByPreference().first;
-    expect(ordered.map((podcast) => podcast.title), [
-      'Beta',
-      'Zèbre',
-      'Alpha',
-    ]);
+    expect(ordered.map((podcast) => podcast.title), ['Beta', 'Zèbre', 'Alpha']);
 
     final progress = await database.watchInProgress().first;
     expect(
@@ -369,10 +365,10 @@ void main() {
 
     await database.setPlayed(started.episode.id, played: true);
     final random = await database.randomEpisodes(limit: 10);
-    expect(
-      random.map((entry) => entry.episode.title).toSet(),
-      {'Tout neuf', 'À peine commencé'},
-    );
+    expect(random.map((entry) => entry.episode.title).toSet(), {
+      'Tout neuf',
+      'À peine commencé',
+    });
   });
 
   test('podcastStats and libraryStats use aggregates', () async {
@@ -799,10 +795,7 @@ void main() {
           PodcastPerson(name: 'Bob', role: 'guest'),
         ],
         funding: [
-          PodcastFunding(
-            url: 'https://donate.example',
-            label: 'Soutenir',
-          ),
+          PodcastFunding(url: 'https://donate.example', label: 'Soutenir'),
         ],
         episodes: [],
       ),
@@ -815,6 +808,58 @@ void main() {
     expect(podcast.fundingLinks, hasLength(1));
     expect(podcast.fundingLinks.single.label, 'Soutenir');
   });
+
+  test(
+    'automatic download keeps unplayed and in-progress episodes only',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final podcastId = (await database.saveFeed(
+        _feed('https://example.com/auto.xml', [
+          EpisodeDraft(
+            guid: 'unread',
+            title: 'Non lu',
+            description: '',
+            audioUrl: 'https://example.com/unread.mp3',
+            publishedAt: DateTime.utc(2026, 1, 1),
+          ),
+          EpisodeDraft(
+            guid: 'progress',
+            title: 'En cours',
+            description: '',
+            audioUrl: 'https://example.com/progress.mp3',
+            publishedAt: DateTime.utc(2026, 2, 1),
+          ),
+          EpisodeDraft(
+            guid: 'played',
+            title: 'Lu',
+            description: '',
+            audioUrl: 'https://example.com/played.mp3',
+            publishedAt: DateTime.utc(2026, 3, 1),
+          ),
+          EpisodeDraft(
+            guid: 'file',
+            title: 'Déjà là',
+            description: '',
+            audioUrl: 'https://example.com/file.mp3',
+            publishedAt: DateTime.utc(2026, 4, 1),
+          ),
+        ]),
+      )).podcastId;
+      await database.setPodcastAutoDownload(podcastId, autoDownload: true);
+      final episodes = await database.episodesForPodcast(podcastId);
+      final byGuid = {for (final episode in episodes) episode.guid: episode};
+      await database.setPosition(byGuid['progress']!.id, 12000);
+      await database.setPlayed(byGuid['played']!.id, played: true);
+      await database.setDownloadPath(byGuid['file']!.id, '/tmp/file.mp3');
+
+      final candidates = await database.automaticDownloadCandidates();
+      expect(candidates.map((episode) => episode.id).toSet(), {
+        byGuid['unread']!.id,
+        byGuid['progress']!.id,
+      });
+    },
+  );
 }
 
 FeedDraft _feed(String url, List<EpisodeDraft> episodes) {

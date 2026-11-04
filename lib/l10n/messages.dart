@@ -364,6 +364,10 @@ const _fr = <String, String>{
   'The synchronization server did not respond.':
       'Le serveur de synchronisation n’a pas répondu.',
   'Automatic download': 'Téléchargement automatique',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'Quand c’est activé, les épisodes non lus ou en cours les plus récents restent sur l’appareil, jusqu’à cette limite. Les épisodes déjà écoutés ne sont pas téléchargés.',
+  'Choose which subscriptions download new episodes, and how many.': 'Choisir quels abonnements téléchargent les nouveaux épisodes, et combien.',
+  'No subscribed podcasts': 'Aucun podcast abonné',
+  'Select all': 'Tout sélectionner',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'Inclut tous les abonnements. Chaque podcast peut être exclu depuis son menu. Le couper conserve ces choix.',
   'Episode cache': 'Cache d’épisodes',
   'Unlimited': 'Illimité',
@@ -870,6 +874,11 @@ const _de = <String, String>{
   'The synchronization server did not respond.':
       'Der Synchronisierungsserver hat nicht geantwortet.',
   'Automatic download': 'Automatischer Download',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'Ist das aktiv, bleiben die neuesten ungehörten oder laufenden Folgen auf dem Gerät, bis zu diesem Limit. Fertig gehörte Folgen werden nicht geladen.',
+  'Choose which subscriptions download new episodes, and how many.':
+      'Wählen, welche Abos neue Folgen laden und wie viele.',
+  'No subscribed podcasts': 'Keine abonnierten Podcasts',
+  'Select all': 'Alle auswählen',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'Schließt alle Abos ein. Jeder Podcast lässt sich im Menü ausschließen. Ausschalten behält diese Auswahl.',
   'Episode cache': 'Episodencache',
   'Unlimited': 'Unbegrenzt',
@@ -1374,6 +1383,11 @@ const _es = <String, String>{
   'The synchronization server did not respond.':
       'El servidor de sincronización no respondió.',
   'Automatic download': 'Descarga automática',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'Si está activado, los episodios no reproducidos o en curso más recientes permanecen en el dispositivo, hasta este límite. Los episodios ya escuchados no se descargan.',
+  'Choose which subscriptions download new episodes, and how many.':
+      'Elige qué suscripciones descargan los episodios nuevos y cuántos.',
+  'No subscribed podcasts': 'Ningún pódcast suscrito',
+  'Select all': 'Seleccionar todo',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'Incluye todas las suscripciones. Cada pódcast se puede excluir desde su menú. Al desactivarlo se conservan esas opciones.',
   'Episode cache': 'Caché de episodios',
   'Unlimited': 'Ilimitado',
@@ -1872,6 +1886,11 @@ const _it = <String, String>{
   'The synchronization server did not respond.':
       'Il server di sincronizzazione non ha risposto.',
   'Automatic download': 'Download automatico',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'Se è attivo, gli episodi non ascoltati o in corso più recenti restano sul dispositivo, fino a questo limite. Gli episodi già ascoltati non vengono scaricati.',
+  'Choose which subscriptions download new episodes, and how many.':
+      'Scegli quali iscrizioni scaricano i nuovi episodi e quanti.',
+  'No subscribed podcasts': 'Nessun podcast seguito',
+  'Select all': 'Seleziona tutto',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'Include tutti gli abbonamenti. Ogni podcast si può escludere dal suo menu. Disattivarlo conserva queste scelte.',
   'Episode cache': 'Cache degli episodi',
   'Unlimited': 'Illimitato',
@@ -2379,6 +2398,11 @@ const _pt = <String, String>{
   'The synchronization server did not respond.':
       'O servidor de sincronização não respondeu.',
   'Automatic download': 'Transferência automática',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'Quando está ativo, os episódios não ouvidos ou em curso mais recentes ficam no dispositivo, até este limite. Os episódios já ouvidos não são transferidos.',
+  'Choose which subscriptions download new episodes, and how many.':
+      'Escolha quais assinaturas transferem os episódios novos e quantos.',
+  'No subscribed podcasts': 'Nenhum podcast assinado',
+  'Select all': 'Selecionar tudo',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'Inclui todas as subscrições. Cada podcast pode ser excluído no seu menu. Desligar conserva essas escolhas.',
   'Episode cache': 'Cache de episódios',
   'Unlimited': 'Ilimitado',
@@ -2877,6 +2901,11 @@ const _nl = <String, String>{
   'The synchronization server did not respond.':
       'De synchronisatieserver heeft niet geantwoord.',
   'Automatic download': 'Automatisch downloaden',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'Als dit aan staat, blijven de nieuwste niet beluisterde of lopende afleveringen op het apparaat, tot deze limiet. Afgeluisterde afleveringen worden niet gedownload.',
+  'Choose which subscriptions download new episodes, and how many.':
+      'Kies welke abonnementen nieuwe afleveringen downloaden, en hoeveel.',
+  'No subscribed podcasts': 'Geen geabonneerde podcasts',
+  'Select all': 'Alles selecteren',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'Neemt alle abonnementen op. Elke podcast kan via het menu worden uitgesloten. Uitzetten bewaart die keuzes.',
   'Episode cache': 'Afleveringencache',
   'Unlimited': 'Onbeperkt',
@@ -3370,6 +3399,12 @@ const _zh = <String, String>{
   'Wrong username or password.': '用户名或密码不正确。',
   'The synchronization server did not respond.': '同步服务器没有响应。',
   'Automatic download': '自动下载',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.':
+      '开启后，最新的未听或进行中的单集会保留在设备上，不超过此上限。已听完的单集不会下载。',
+  'Choose which subscriptions download new episodes, and how many.':
+      '选择哪些订阅会自动下载新单集，以及下载多少。',
+  'No subscribed podcasts': '没有已订阅的播客',
+  'Select all': '全选',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.':
       '包含所有订阅。可在各播客的菜单中排除。关闭后仍保留这些选择。',
   'Episode cache': '单集缓存',
@@ -3862,6 +3897,11 @@ const _hi = <String, String>{
   'The synchronization server did not respond.':
       'समन्वयन सर्वर ने उत्तर नहीं दिया।',
   'Automatic download': 'स्वचालित डाउनलोड',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'चालू होने पर, सबसे नए न सुने या चल रहे एपिसोड इस सीमा तक डिवाइस पर रहते हैं। सुन चुके एपिसोड डाउनलोड नहीं होते।',
+  'Choose which subscriptions download new episodes, and how many.':
+      'चुनें कि कौन सी सदस्यताएँ नए एपिसोड डाउनलोड करें, और कितने।',
+  'No subscribed podcasts': 'कोई सब्सक्राइब पॉडकास्ट नहीं',
+  'Select all': 'सभी चुनें',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'सभी सदस्यताएँ शामिल करता है। प्रत्येक पॉडकास्ट को उसके मेनू से बाहर रखा जा सकता है। बंद करने पर ये विकल्प बने रहते हैं।',
   'Episode cache': 'एपिसोड कैश',
   'Unlimited': 'असीमित',
@@ -4363,6 +4403,11 @@ const _id = <String, String>{
   'The synchronization server did not respond.':
       'Server sinkronisasi tidak menjawab.',
   'Automatic download': 'Unduhan otomatis',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'Saat aktif, episode terbaru yang belum diputar atau sedang berjalan tetap di perangkat, sampai batas ini. Episode yang sudah selesai tidak diunduh.',
+  'Choose which subscriptions download new episodes, and how many.':
+      'Pilih langganan mana yang mengunduh episode baru, dan berapa banyak.',
+  'No subscribed podcasts': 'Tidak ada podcast yang dilanggani',
+  'Select all': 'Pilih semua',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'Mencakup semua langganan. Setiap podcast dapat dikecualikan dari menunya. Mematikan ini mempertahankan pilihan itu.',
   'Episode cache': 'Cache episode',
   'Unlimited': 'Tak terbatas',
@@ -4857,6 +4902,12 @@ const _ja = <String, String>{
   'Wrong username or password.': 'ユーザー名またはパスワードが拒否されました。',
   'The synchronization server did not respond.': '同期サーバーが応答しませんでした。',
   'Automatic download': '自動ダウンロード',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.':
+      'オンにすると、未再生または再生中の新しいエピソードが、この上限まで端末に残ります。聞き終えたエピソードはダウンロードされません。',
+  'Choose which subscriptions download new episodes, and how many.':
+      '新しいエピソードを自動ダウンロードする登録と、その件数を選びます。',
+  'No subscribed podcasts': '登録中のポッドキャストはありません',
+  'Select all': 'すべて選択',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.':
       'すべての購読を含めます。各ポッドキャストはメニューから除外できます。オフにしてもその選択は残ります。',
   'Episode cache': 'エピソードのキャッシュ',
@@ -5351,6 +5402,12 @@ const _ko = <String, String>{
   'Wrong username or password.': '사용자 이름 또는 비밀번호가 거부되었습니다.',
   'The synchronization server did not respond.': '동기화 서버가 응답하지 않았습니다.',
   'Automatic download': '자동 다운로드',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.':
+      '켜면 아직 듣지 않았거나 듣는 중인 최신 에피소드가 이 한도까지 기기에 남습니다. 이미 들은 에피소드는 받지 않습니다.',
+  'Choose which subscriptions download new episodes, and how many.':
+      '새 에피소드를 자동으로 받을 구독과 개수를 고릅니다.',
+  'No subscribed podcasts': '구독 중인 팟캐스트가 없습니다',
+  'Select all': '모두 선택',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.':
       '모든 구독을 포함합니다. 각 팟캐스트는 메뉴에서 제외할 수 있습니다. 끄면 그 선택은 유지됩니다.',
   'Episode cache': '에피소드 캐시',
@@ -5850,6 +5907,11 @@ const _ru = <String, String>{
   'The synchronization server did not respond.':
       'Сервер синхронизации не ответил.',
   'Automatic download': 'Автозагрузка',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'Когда включено, новейшие непрослушанные или текущие выпуски остаются на устройстве, в пределах этого лимита. Прослушанные выпуски не скачиваются.',
+  'Choose which subscriptions download new episodes, and how many.':
+      'Выберите, какие подписки скачивают новые выпуски и сколько.',
+  'No subscribed podcasts': 'Нет подписанных подкастов',
+  'Select all': 'Выбрать все',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'Включает все подписки. Каждый подкаст можно исключить в его меню. Выключение сохраняет этот выбор.',
   'Episode cache': 'Кэш выпусков',
   'Unlimited': 'Без ограничения',
@@ -6352,6 +6414,10 @@ const _tr = <String, String>{
   'The synchronization server did not respond.':
       'Eşitleme sunucusu yanıt vermedi.',
   'Automatic download': 'Otomatik indirme',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'Açıkken, dinlenmemiş veya sürmekte olan en yeni bölümler bu sınıra kadar cihazda kalır. Dinlenmiş bölümler indirilmez.',
+  'Choose which subscriptions download new episodes, and how many.': 'Hangi aboneliklerin yeni bölümleri indireceğini ve kaç tane olduğunu seçin.',
+  'No subscribed podcasts': 'Abone olunan podcast yok',
+  'Select all': 'Tümünü seç',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'Tüm abonelikleri kapsar. Her podcast menüsünden çıkarılabilir. Kapatmak bu seçimleri korur.',
   'Episode cache': 'Bölüm önbelleği',
   'Unlimited': 'Sınırsız',
@@ -6852,6 +6918,11 @@ const _ar = <String, String>{
   'Wrong username or password.': 'اسم المستخدم أو كلمة المرور مرفوض.',
   'The synchronization server did not respond.': 'لم يستجب خادم المزامنة.',
   'Automatic download': 'تنزيل تلقائي',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'عند التفعيل، تبقى أحدث الحلقات غير المسموعة أو قيد التشغيل على الجهاز، حتى هذا الحد. الحلقات التي سُمعت لا تُنزَّل.',
+  'Choose which subscriptions download new episodes, and how many.':
+      'اختر الاشتراكات التي تنزّل الحلقات الجديدة، وعددها.',
+  'No subscribed podcasts': 'لا توجد مدونات صوتية مشترَك فيها',
+  'Select all': 'تحديد الكل',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'يشمل كل الاشتراكات. يمكن استبعاد كل بودكاست من قائمته. إيقافه يُبقي هذه الاختيارات.',
   'Episode cache': 'ذاكرة الحلقات',
   'Unlimited': 'غير محدود',
@@ -7353,6 +7424,11 @@ const _pl = <String, String>{
   'The synchronization server did not respond.':
       'Serwer synchronizacji nie odpowiedział.',
   'Automatic download': 'Automatyczne pobieranie',
+  'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'Gdy jest włączone, najnowsze nieodsłuchane lub trwające odcinki zostają na urządzeniu, do tego limitu. Odsłuchane odcinki nie są pobierane.',
+  'Choose which subscriptions download new episodes, and how many.':
+      'Wybierz, które subskrypcje pobierają nowe odcinki i ile.',
+  'No subscribed podcasts': 'Brak zasubskrybowanych podcastów',
+  'Select all': 'Zaznacz wszystko',
   'Includes every subscription. Each podcast can be excluded from its menu. Turning this off keeps those choices.': 'Obejmuje wszystkie subskrypcje. Każdy podcast można wykluczyć z jego menu. Wyłączenie zachowuje te wybory.',
   'Episode cache': 'Pamięć odcinków',
   'Unlimited': 'Bez limitu',

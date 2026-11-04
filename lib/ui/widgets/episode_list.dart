@@ -611,7 +611,7 @@ class _EpisodeWindowList extends StatelessWidget {
     final entries = window.entries;
     if (entries.isEmpty) {
       if (onRefresh == null) return empty;
-      return RefreshIndicator(
+      return FrostedRefreshIndicator(
         onRefresh: onRefresh!,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -706,7 +706,7 @@ class _EpisodeWindowList extends StatelessWidget {
           );
     final scrollable = onRefresh == null
         ? list
-        : RefreshIndicator(onRefresh: onRefresh!, child: list);
+        : FrostedRefreshIndicator(onRefresh: onRefresh!, child: list);
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         if (notification is! ScrollUpdateNotification &&

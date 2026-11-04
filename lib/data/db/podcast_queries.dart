@@ -64,11 +64,25 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     );
   }
 
-  /// Inclut chaque abonnement dans le téléchargement automatique.
-  /// Un aperçu non suivi n’est pas modifié.
-  Future<void> enableAutoDownloadForSubscriptions() {
-    return (update(podcasts)..where((table) => table.subscribed.equals(true)))
-        .write(const PodcastsCompanion(autoDownload: Value(true)));
+  /// Les identifiants vides ne changent rien.
+  Future<void> setPodcastsAutoDownload(
+    Iterable<int> ids, {
+    required bool autoDownload,
+  }) {
+    final wanted = ids.toList();
+    if (wanted.isEmpty) return Future.value();
+    return (update(podcasts)..where((table) => table.id.isIn(wanted))).write(
+      PodcastsCompanion(autoDownload: Value(autoDownload)),
+    );
+  }
+
+  /// `null` = illimité. Les identifiants vides ne changent rien.
+  Future<void> setPodcastsAutoDownloadLimit(Iterable<int> ids, int? limit) {
+    final wanted = ids.toList();
+    if (wanted.isEmpty) return Future.value();
+    return (update(podcasts)..where((table) => table.id.isIn(wanted))).write(
+      PodcastsCompanion(autoDownloadLimit: Value(limit)),
+    );
   }
 
   /// Inclut chaque abonnement dans les alertes de nouveaux épisodes.

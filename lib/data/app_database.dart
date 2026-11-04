@@ -27,6 +27,10 @@ class Podcasts extends Table {
   DateTimeColumn get refreshedAt => dateTime().nullable()();
   BoolColumn get preferred => boolean().withDefault(const Constant(false))();
   BoolColumn get autoDownload => boolean().withDefault(const Constant(false))();
+
+  /// Plafond d’épisodes de ce podcast. `null` = illimité. Défaut : 1.
+  IntColumn get autoDownloadLimit =>
+      integer().nullable().withDefault(const Constant(1))();
   BoolColumn get keepUpdated => boolean().withDefault(const Constant(true))();
 
   /// Prévient quand un épisode paraît. Coupé au départ, comme AntennaPod.

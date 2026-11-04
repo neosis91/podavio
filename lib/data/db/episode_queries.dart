@@ -598,10 +598,18 @@ mixin _EpisodeQueries on _$AppDatabase {
     )..where((table) => table.downloadPath.isNotNull())).get();
   }
 
-  /// Épisodes non lus, pas encore téléchargés, d’un podcast inclus.
+  /// Épisodes non lus ou en cours, pas encore téléchargés, d’un podcast inclus.
+  ///
+  /// « En cours » est un épisode commencé (`position` > 0) et pas marqué lu.
+  /// Un épisode terminé ne revient jamais dans cette liste.
   Future<List<DownloadCandidate>> automaticDownloadCandidates() async {
     final query = selectOnly(episodes)
-      ..addColumns([episodes.id, episodes.podcastId, episodes.publishedAt])
+      ..addColumns([
+        episodes.id,
+        episodes.podcastId,
+        episodes.publishedAt,
+        podcasts.autoDownloadLimit,
+      ])
       ..join([innerJoin(podcasts, podcasts.id.equalsExp(episodes.podcastId))])
       ..where(
         podcasts.autoDownload.equals(true) &
@@ -618,6 +626,7 @@ mixin _EpisodeQueries on _$AppDatabase {
           played: false,
           downloaded: false,
           publishedAt: row.read(episodes.publishedAt),
+          limit: podcastAutoDownloadLimit(row.read(podcasts.autoDownloadLimit)),
         ),
     ];
   }

@@ -147,6 +147,18 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _autoDownloadLimitMeta = const VerificationMeta(
+    'autoDownloadLimit',
+  );
+  @override
+  late final GeneratedColumn<int> autoDownloadLimit = GeneratedColumn<int>(
+    'auto_download_limit',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
   static const VerificationMeta _keepUpdatedMeta = const VerificationMeta(
     'keepUpdated',
   );
@@ -297,6 +309,7 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     refreshedAt,
     preferred,
     autoDownload,
+    autoDownloadLimit,
     keepUpdated,
     episodeNotification,
     subscribed,
@@ -405,6 +418,15 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         autoDownload.isAcceptableOrUnknown(
           data['auto_download']!,
           _autoDownloadMeta,
+        ),
+      );
+    }
+    if (data.containsKey('auto_download_limit')) {
+      context.handle(
+        _autoDownloadLimitMeta,
+        autoDownloadLimit.isAcceptableOrUnknown(
+          data['auto_download_limit']!,
+          _autoDownloadLimitMeta,
         ),
       );
     }
@@ -561,6 +583,10 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         DriftSqlType.bool,
         data['${effectivePrefix}auto_download'],
       )!,
+      autoDownloadLimit: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}auto_download_limit'],
+      ),
       keepUpdated: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}keep_updated'],
@@ -627,6 +653,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
   final DateTime? refreshedAt;
   final bool preferred;
   final bool autoDownload;
+
+  /// Plafond d’épisodes de ce podcast. `null` = illimité. Défaut : 1.
+  final int? autoDownloadLimit;
   final bool keepUpdated;
 
   /// Prévient quand un épisode paraît. Coupé au départ, comme AntennaPod.
@@ -671,6 +700,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     this.refreshedAt,
     required this.preferred,
     required this.autoDownload,
+    this.autoDownloadLimit,
     required this.keepUpdated,
     required this.episodeNotification,
     required this.subscribed,
@@ -706,6 +736,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     }
     map['preferred'] = Variable<bool>(preferred);
     map['auto_download'] = Variable<bool>(autoDownload);
+    if (!nullToAbsent || autoDownloadLimit != null) {
+      map['auto_download_limit'] = Variable<int>(autoDownloadLimit);
+    }
     map['keep_updated'] = Variable<bool>(keepUpdated);
     map['episode_notification'] = Variable<bool>(episodeNotification);
     map['subscribed'] = Variable<bool>(subscribed);
@@ -748,6 +781,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           : Value(refreshedAt),
       preferred: Value(preferred),
       autoDownload: Value(autoDownload),
+      autoDownloadLimit: autoDownloadLimit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(autoDownloadLimit),
       keepUpdated: Value(keepUpdated),
       episodeNotification: Value(episodeNotification),
       subscribed: Value(subscribed),
@@ -788,6 +824,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       refreshedAt: serializer.fromJson<DateTime?>(json['refreshedAt']),
       preferred: serializer.fromJson<bool>(json['preferred']),
       autoDownload: serializer.fromJson<bool>(json['autoDownload']),
+      autoDownloadLimit: serializer.fromJson<int?>(json['autoDownloadLimit']),
       keepUpdated: serializer.fromJson<bool>(json['keepUpdated']),
       episodeNotification: serializer.fromJson<bool>(
         json['episodeNotification'],
@@ -819,6 +856,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       'refreshedAt': serializer.toJson<DateTime?>(refreshedAt),
       'preferred': serializer.toJson<bool>(preferred),
       'autoDownload': serializer.toJson<bool>(autoDownload),
+      'autoDownloadLimit': serializer.toJson<int?>(autoDownloadLimit),
       'keepUpdated': serializer.toJson<bool>(keepUpdated),
       'episodeNotification': serializer.toJson<bool>(episodeNotification),
       'subscribed': serializer.toJson<bool>(subscribed),
@@ -846,6 +884,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     Value<DateTime?> refreshedAt = const Value.absent(),
     bool? preferred,
     bool? autoDownload,
+    Value<int?> autoDownloadLimit = const Value.absent(),
     bool? keepUpdated,
     bool? episodeNotification,
     bool? subscribed,
@@ -870,6 +909,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     refreshedAt: refreshedAt.present ? refreshedAt.value : this.refreshedAt,
     preferred: preferred ?? this.preferred,
     autoDownload: autoDownload ?? this.autoDownload,
+    autoDownloadLimit: autoDownloadLimit.present
+        ? autoDownloadLimit.value
+        : this.autoDownloadLimit,
     keepUpdated: keepUpdated ?? this.keepUpdated,
     episodeNotification: episodeNotification ?? this.episodeNotification,
     subscribed: subscribed ?? this.subscribed,
@@ -908,6 +950,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       autoDownload: data.autoDownload.present
           ? data.autoDownload.value
           : this.autoDownload,
+      autoDownloadLimit: data.autoDownloadLimit.present
+          ? data.autoDownloadLimit.value
+          : this.autoDownloadLimit,
       keepUpdated: data.keepUpdated.present
           ? data.keepUpdated.value
           : this.keepUpdated,
@@ -959,6 +1004,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           ..write('refreshedAt: $refreshedAt, ')
           ..write('preferred: $preferred, ')
           ..write('autoDownload: $autoDownload, ')
+          ..write('autoDownloadLimit: $autoDownloadLimit, ')
           ..write('keepUpdated: $keepUpdated, ')
           ..write('episodeNotification: $episodeNotification, ')
           ..write('subscribed: $subscribed, ')
@@ -988,6 +1034,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     refreshedAt,
     preferred,
     autoDownload,
+    autoDownloadLimit,
     keepUpdated,
     episodeNotification,
     subscribed,
@@ -1016,6 +1063,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           other.refreshedAt == this.refreshedAt &&
           other.preferred == this.preferred &&
           other.autoDownload == this.autoDownload &&
+          other.autoDownloadLimit == this.autoDownloadLimit &&
           other.keepUpdated == this.keepUpdated &&
           other.episodeNotification == this.episodeNotification &&
           other.subscribed == this.subscribed &&
@@ -1042,6 +1090,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
   final Value<DateTime?> refreshedAt;
   final Value<bool> preferred;
   final Value<bool> autoDownload;
+  final Value<int?> autoDownloadLimit;
   final Value<bool> keepUpdated;
   final Value<bool> episodeNotification;
   final Value<bool> subscribed;
@@ -1066,6 +1115,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.refreshedAt = const Value.absent(),
     this.preferred = const Value.absent(),
     this.autoDownload = const Value.absent(),
+    this.autoDownloadLimit = const Value.absent(),
     this.keepUpdated = const Value.absent(),
     this.episodeNotification = const Value.absent(),
     this.subscribed = const Value.absent(),
@@ -1091,6 +1141,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.refreshedAt = const Value.absent(),
     this.preferred = const Value.absent(),
     this.autoDownload = const Value.absent(),
+    this.autoDownloadLimit = const Value.absent(),
     this.keepUpdated = const Value.absent(),
     this.episodeNotification = const Value.absent(),
     this.subscribed = const Value.absent(),
@@ -1118,6 +1169,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Expression<DateTime>? refreshedAt,
     Expression<bool>? preferred,
     Expression<bool>? autoDownload,
+    Expression<int>? autoDownloadLimit,
     Expression<bool>? keepUpdated,
     Expression<bool>? episodeNotification,
     Expression<bool>? subscribed,
@@ -1143,6 +1195,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       if (refreshedAt != null) 'refreshed_at': refreshedAt,
       if (preferred != null) 'preferred': preferred,
       if (autoDownload != null) 'auto_download': autoDownload,
+      if (autoDownloadLimit != null) 'auto_download_limit': autoDownloadLimit,
       if (keepUpdated != null) 'keep_updated': keepUpdated,
       if (episodeNotification != null)
         'episode_notification': episodeNotification,
@@ -1171,6 +1224,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Value<DateTime?>? refreshedAt,
     Value<bool>? preferred,
     Value<bool>? autoDownload,
+    Value<int?>? autoDownloadLimit,
     Value<bool>? keepUpdated,
     Value<bool>? episodeNotification,
     Value<bool>? subscribed,
@@ -1196,6 +1250,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       refreshedAt: refreshedAt ?? this.refreshedAt,
       preferred: preferred ?? this.preferred,
       autoDownload: autoDownload ?? this.autoDownload,
+      autoDownloadLimit: autoDownloadLimit ?? this.autoDownloadLimit,
       keepUpdated: keepUpdated ?? this.keepUpdated,
       episodeNotification: episodeNotification ?? this.episodeNotification,
       subscribed: subscribed ?? this.subscribed,
@@ -1249,6 +1304,9 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     if (autoDownload.present) {
       map['auto_download'] = Variable<bool>(autoDownload.value);
     }
+    if (autoDownloadLimit.present) {
+      map['auto_download_limit'] = Variable<int>(autoDownloadLimit.value);
+    }
     if (keepUpdated.present) {
       map['keep_updated'] = Variable<bool>(keepUpdated.value);
     }
@@ -1300,6 +1358,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
           ..write('refreshedAt: $refreshedAt, ')
           ..write('preferred: $preferred, ')
           ..write('autoDownload: $autoDownload, ')
+          ..write('autoDownloadLimit: $autoDownloadLimit, ')
           ..write('keepUpdated: $keepUpdated, ')
           ..write('episodeNotification: $episodeNotification, ')
           ..write('subscribed: $subscribed, ')
@@ -3841,6 +3900,7 @@ typedef $$PodcastsTableCreateCompanionBuilder = PodcastsCompanion Function({
   Value<DateTime?> refreshedAt,
   Value<bool> preferred,
   Value<bool> autoDownload,
+  Value<int?> autoDownloadLimit,
   Value<bool> keepUpdated,
   Value<bool> episodeNotification,
   Value<bool> subscribed,
@@ -3866,6 +3926,7 @@ typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<DateTime?> refreshedAt,
   Value<bool> preferred,
   Value<bool> autoDownload,
+  Value<int?> autoDownloadLimit,
   Value<bool> keepUpdated,
   Value<bool> episodeNotification,
   Value<bool> subscribed,
@@ -3969,6 +4030,11 @@ class $$PodcastsTableFilterComposer
 
   ColumnFilters<bool> get autoDownload => $composableBuilder(
     column: $table.autoDownload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get autoDownloadLimit => $composableBuilder(
+    column: $table.autoDownloadLimit,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4122,6 +4188,11 @@ class $$PodcastsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get autoDownloadLimit => $composableBuilder(
+    column: $table.autoDownloadLimit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get keepUpdated => $composableBuilder(
     column: $table.keepUpdated,
     builder: (column) => ColumnOrderings(column),
@@ -4228,6 +4299,11 @@ class $$PodcastsTableAnnotationComposer
 
   GeneratedColumn<bool> get autoDownload => $composableBuilder(
     column: $table.autoDownload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get autoDownloadLimit => $composableBuilder(
+    column: $table.autoDownloadLimit,
     builder: (column) => column,
   );
 
@@ -4352,6 +4428,7 @@ class $$PodcastsTableTableManager
                 Value<DateTime?> refreshedAt = const Value.absent(),
                 Value<bool> preferred = const Value.absent(),
                 Value<bool> autoDownload = const Value.absent(),
+                Value<int?> autoDownloadLimit = const Value.absent(),
                 Value<bool> keepUpdated = const Value.absent(),
                 Value<bool> episodeNotification = const Value.absent(),
                 Value<bool> subscribed = const Value.absent(),
@@ -4376,6 +4453,7 @@ class $$PodcastsTableTableManager
                 refreshedAt: refreshedAt,
                 preferred: preferred,
                 autoDownload: autoDownload,
+                autoDownloadLimit: autoDownloadLimit,
                 keepUpdated: keepUpdated,
                 episodeNotification: episodeNotification,
                 subscribed: subscribed,
@@ -4402,6 +4480,7 @@ class $$PodcastsTableTableManager
                 Value<DateTime?> refreshedAt = const Value.absent(),
                 Value<bool> preferred = const Value.absent(),
                 Value<bool> autoDownload = const Value.absent(),
+                Value<int?> autoDownloadLimit = const Value.absent(),
                 Value<bool> keepUpdated = const Value.absent(),
                 Value<bool> episodeNotification = const Value.absent(),
                 Value<bool> subscribed = const Value.absent(),
@@ -4426,6 +4505,7 @@ class $$PodcastsTableTableManager
                 refreshedAt: refreshedAt,
                 preferred: preferred,
                 autoDownload: autoDownload,
+                autoDownloadLimit: autoDownloadLimit,
                 keepUpdated: keepUpdated,
                 episodeNotification: episodeNotification,
                 subscribed: subscribed,

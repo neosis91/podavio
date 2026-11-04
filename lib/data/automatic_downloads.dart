@@ -45,7 +45,6 @@ Future<void> runAutomaticDownloads(Ref ref) async {
 Future<void> _runOnce(Ref ref) async {
   if (!ref.mounted) return;
   final settings = ref.read(settingsProvider);
-  if (!settings.automaticDownload) return;
   final onMobile = await ref.read(mobileDataProbeProvider)();
   if (!ref.mounted) return;
   if (mobileDataBlocksDownload(
@@ -60,7 +59,6 @@ Future<void> _runOnce(Ref ref) async {
   final cached = await database.cachedLocalDownloads();
   if (!ref.mounted) return;
   final fresh = ref.read(settingsProvider);
-  if (!fresh.automaticDownload) return;
   final decision = decideAutomaticDownloads(
     enabled: true,
     cacheSize: fresh.episodeCacheSize,
@@ -68,7 +66,6 @@ Future<void> _runOnce(Ref ref) async {
     incoming: incoming,
     cached: cached,
     now: DateTime.now(),
-    perPodcastLimit: fresh.automaticDownloadLimit,
   );
   final downloads = ref.read(downloadProgressProvider.notifier);
   for (final id in decision.deleteIds) {
@@ -82,10 +79,9 @@ Future<void> _runOnce(Ref ref) async {
     final episode = await database.episodeById(id);
     if (episode == null) continue;
     unawaited(
-      downloads.download(episode, automatic: true).then<void>(
-        (_) {},
-        onError: (Object _, StackTrace _) {},
-      ),
+      downloads
+          .download(episode, automatic: true)
+          .then<void>((_) {}, onError: (Object _, StackTrace _) {}),
     );
   }
 }

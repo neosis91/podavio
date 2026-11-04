@@ -23,6 +23,7 @@ class AppRoutes {
   static const interfaceLanguage = '/appearance/language';
   static const playback = '/playback';
   static const downloadSettings = '/download-settings';
+  static const automaticDownloads = '/download-settings/automatic';
   static const network = '/network';
   static const eco = '/eco';
   static const notifications = '/notifications';

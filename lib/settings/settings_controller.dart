@@ -6,6 +6,9 @@ import '../core/theme.dart';
 import '../data/catalog_categories.dart';
 import '../data/discover_languages.dart';
 import '../data/download_policy.dart';
+
+export '../data/download_policy.dart'
+    show automaticDownloadLimits, podcastAutoDownloadLimit;
 import '../data/providers.dart';
 import '../l10n/interface_locale.dart';
 import '../ui/nav_catalog.dart';
@@ -560,10 +563,6 @@ String episodeCacheSizeLabel(int? size) {
   return '$size episodes';
 }
 
-/// Plafond d’épisodes téléchargés automatiquement par podcast.
-/// Une valeur absente est illimitée.
-const automaticDownloadLimits = <int>[1, 2, 3, 4, 5, 10, 20, 50, 100, 200, 500];
-
 /// `null` ou une valeur inconnue → illimité.
 int? automaticDownloadLimitFromStored(int? stored) {
   if (stored == null || !automaticDownloadLimits.contains(stored)) return null;
@@ -873,7 +872,8 @@ class AppSettings {
       automaticDownloadLimit: clearAutomaticDownloadLimit
           ? null
           : (automaticDownloadLimit ?? this.automaticDownloadLimit),
-      simultaneousDownloads: simultaneousDownloads ?? this.simultaneousDownloads,
+      simultaneousDownloads:
+          simultaneousDownloads ?? this.simultaneousDownloads,
       allowMobileData: allowMobileData ?? this.allowMobileData,
       allowMobileStreaming: allowMobileStreaming ?? this.allowMobileStreaming,
       allowMobileRefresh: allowMobileRefresh ?? this.allowMobileRefresh,
