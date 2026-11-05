@@ -111,6 +111,10 @@ Les nouveautés se rédigent dans `CHANGELOG.md`, sous un titre `## AAAA.M.N`, u
 
 Les APK de release doivent être signés avec le keystore déjà en place, `android/upload-keystore.jks`, et son `android/key.properties`. Voir [docs/android-signing.md](docs/android-signing.md). Ne pas relancer la création du keystore : la signature changerait et les mises à jour in-place échoueraient.
 
+## Licence
+
+Podavio est distribué sous la GNU General Public License v3.0 uniquement. Le texte complet est dans [LICENSE](LICENSE).
+
 ## Suite prévue
 
 - Contrôles de lecture dans la notification, sur l’écran de verrouillage et avec le casque

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -134,10 +136,16 @@ class WebCompanionScanPage extends ConsumerStatefulWidget {
 
 class _WebCompanionScanPageState extends ConsumerState<WebCompanionScanPage>
     with WidgetsBindingObserver {
-  // QR seul. Le code d’appairage est sombre sur fond clair. L’effort
-  // équilibré rattrape un cadre flou sans relancer tout le décodage
-  // sur chaque image vide.
-  static const _reader = Yomu(
+  // QR seul, sombre sur fond clair. Le passage rapide suffit quand le
+  // code est net. Sinon le passage équilibré reprend la même image,
+  // déjà réduite au viseur.
+  static const _fast = Yomu(
+    enableQRCode: true,
+    barcodeScanner: BarcodeScanner.none,
+    effort: DecodeEffort.fast,
+    readLightOnDark: false,
+  );
+  static const _balanced = Yomu(
     enableQRCode: true,
     barcodeScanner: BarcodeScanner.none,
     effort: DecodeEffort.balanced,
@@ -217,6 +225,11 @@ class _WebCompanionScanPageState extends ConsumerState<WebCompanionScanPage>
         _release(controller);
         return;
       }
+      await _aimCenter(controller);
+      if (!mounted || _camera != controller) {
+        _release(controller);
+        return;
+      }
       await controller.startImageStream(_onFrame);
       if (!mounted || _camera != controller) {
         _release(controller);
@@ -248,46 +261,79 @@ class _WebCompanionScanPageState extends ConsumerState<WebCompanionScanPage>
     camera.dispose();
   }
 
+  Future<void> _aimCenter(CameraController controller) async {
+    try {
+      await controller.setFocusMode(FocusMode.auto);
+      if (controller.value.focusPointSupported) {
+        await controller.setFocusPoint(const Offset(0.5, 0.5));
+      }
+      if (controller.value.exposurePointSupported) {
+        await controller.setExposurePoint(const Offset(0.5, 0.5));
+      }
+    } on CameraException {
+      // Cet appareil ne règle pas la mise au point au centre.
+    }
+  }
+
   void _onFrame(CameraImage image) {
     if (_busy || _decoding || !mounted) return;
     final frame = _frameOf(image);
     if (frame == null) return;
     _decoding = true;
     try {
-      final text = _reader.decode(frame).text;
-      if (text.isEmpty) return;
+      final text = _read(frame);
+      if (text == null || text.isEmpty) return;
       _busy = true;
       setState(() {});
       _pair(text);
-    } on YomuException {
-      // Cette image ne contient pas de QR lisible.
     } finally {
       _decoding = false;
+    }
+  }
+
+  String? _read(YomuImage frame) {
+    try {
+      return _fast.decode(frame).text;
+    } on YomuException {
+      try {
+        return _balanced.decode(frame).text;
+      } on YomuException {
+        return null;
+      }
     }
   }
 
   YomuImage? _frameOf(CameraImage image) {
     if (image.planes.isEmpty) return null;
     final plane = image.planes.first;
-    switch (image.format.group) {
-      case ImageFormatGroup.yuv420:
-      case ImageFormatGroup.nv21:
-        return YomuImage.yuv420(
-          yBytes: plane.bytes,
-          width: image.width,
-          height: image.height,
-          yRowStride: plane.bytesPerRow,
-        );
-      case ImageFormatGroup.bgra8888:
-        return YomuImage.bgra(
-          bytes: plane.bytes,
-          width: image.width,
-          height: image.height,
-          rowStride: plane.bytesPerRow,
-        );
-      default:
-        return null;
+    final pixelStride = switch (image.format.group) {
+      ImageFormatGroup.bgra8888 => 4,
+      ImageFormatGroup.yuv420 ||
+      ImageFormatGroup.nv21 => plane.bytesPerPixel ?? 1,
+      _ => 0,
+    };
+    if (pixelStride <= 0) return null;
+    final crop = _cropCenter(
+      bytes: plane.bytes,
+      width: image.width,
+      height: image.height,
+      stride: plane.bytesPerRow,
+      pixelStride: pixelStride,
+    );
+    if (crop == null) return null;
+    if (pixelStride == 4) {
+      return YomuImage.bgra(
+        bytes: crop.bytes,
+        width: crop.side,
+        height: crop.side,
+        rowStride: crop.side * 4,
+      );
     }
+    return YomuImage.grayscale(
+      bytes: crop.bytes,
+      width: crop.side,
+      height: crop.side,
+    );
   }
 
   Future<void> _pair(String raw) async {
@@ -431,6 +477,29 @@ class _WebCompanionScanPageState extends ConsumerState<WebCompanionScanPage>
       ),
     );
   }
+}
+
+/// Carré central, calé sur le viseur. Le décodeur ignore le reste de l’image.
+({Uint8List bytes, int side})? _cropCenter({
+  required Uint8List bytes,
+  required int width,
+  required int height,
+  required int stride,
+  required int pixelStride,
+}) {
+  if (width <= 0 || height <= 0 || pixelStride <= 0) return null;
+  final side = math.max(1, (math.min(width, height) * 0.75).round());
+  if (side > width || side > height) return null;
+  final left = (width - side) ~/ 2;
+  final top = (height - side) ~/ 2;
+  final rowBytes = side * pixelStride;
+  final packed = Uint8List(side * rowBytes);
+  for (var row = 0; row < side; row++) {
+    final src = (top + row) * stride + left * pixelStride;
+    if (src < 0 || src + rowBytes > bytes.length) return null;
+    packed.setRange(row * rowBytes, row * rowBytes + rowBytes, bytes, src);
+  }
+  return (bytes: packed, side: side);
 }
 
 class _ScanShadePainter extends CustomPainter {
