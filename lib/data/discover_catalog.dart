@@ -221,11 +221,10 @@ class DiscoverCatalog {
     ];
   }
 
-  /// Une page de podcasts pour les sujets choisis d’une catégorie.
+  /// Une page des podcasts étiquetés dans les sujets choisis.
   ///
-  /// Page 0 : le premier sujet (Apple + PI + fyyd). Pages suivantes : un
-  /// sujet à la fois, pour que le scroll apporte encore des podcasts nouveaux.
-  /// [subjects] vide ou absent : le regroupement par défaut.
+  /// [page] parcourt les sujets à tour de rôle, puis la page suivante de
+  /// chacun. [subjects] vide ou absent : le regroupement par défaut.
   Future<List<DiscoverHit>> categoryHitsPage({
     required String id,
     required int page,
@@ -235,78 +234,18 @@ class DiscoverCatalog {
   }) async {
     final category = catalogCategoryById(id);
     if (category == null) return const [];
-
-    Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
-      try {
-        return await future;
-      } catch (_) {
-        return null;
-      }
-    }
-
     final members = (subjects == null || subjects.isEmpty)
         ? category.regroupMembers
         : subjects;
-    final piles = <List<DiscoverHit>?>[];
-    final weights = <double>[];
-
-    if (page == 0) {
-      final first = members.first;
-      final results = await Future.wait([
-        safe(
-          _appleChartHits(
-            languages: languages,
-            limit: pageSize,
-            genre: first.genre,
-          ),
-        ),
-        safe(
-          _podcastIndex.trending(
-            languages: languages,
-            max: pageSize,
-            category: first.genre,
-          ),
-        ),
-        safe(
-          _fyyd.category(
-            first.fyydId,
-            count: pageSize,
-            page: 0,
-            languages: languages,
-          ),
-        ),
-      ]);
-      piles.addAll(results);
-      weights.addAll(const [1.0, 1.0, 0.8]);
-    } else {
-      final index = (page - 1) % members.length;
-      final deep = (page - 1) ~/ members.length;
-      final member = members[index];
-      final pair = await Future.wait([
-        safe(
-          _podcastIndex.trending(
-            languages: languages,
-            max: (deep + 2) * pageSize,
-            category: member.genre,
-          ),
-        ),
-        safe(
-          _fyyd.category(
-            member.fyydId,
-            count: pageSize,
-            page: deep + (index == 0 ? 1 : 0),
-            languages: languages,
-          ),
-        ),
-      ]);
-      piles.addAll(pair);
-      weights.addAll(const [1.0, 0.8]);
-    }
-
-    if (piles.every((list) => list == null)) {
-      throw Exception('La recherche a échoué.');
-    }
-    return _mergeHits(piles, weights);
+    if (members.isEmpty || page < 0) return const [];
+    final member = members[page % members.length];
+    final deep = page ~/ members.length;
+    return _fyyd.category(
+      member.fyydId,
+      count: pageSize,
+      page: deep,
+      languages: languages,
+    );
   }
 
   /// Recherche multi-annuaires (Apple, Podcast Index, fyyd).

@@ -497,12 +497,23 @@ class HomeCategoryHitsNotifier extends AsyncNotifier<DiscoverCharts> {
     _reset();
     final hits = <DiscoverHit>[];
     var hasMore = true;
+    final members = enabledSubjects(
+      categoryId,
+      ref.read(categorySubjectsProvider)[categoryId],
+    );
+    final maxAttempts = (members.length * 2).clamp(2, 16);
+    var emptyStreak = 0;
     while (hits.length < firstBatch && hasMore && _page < _maxPages) {
       final fresh = await _fetchFresh();
       if (fresh.isEmpty) {
-        hasMore = false;
-        break;
+        emptyStreak++;
+        if (emptyStreak >= maxAttempts) {
+          hasMore = false;
+          break;
+        }
+        continue;
       }
+      emptyStreak = 0;
       hits.addAll(fresh);
     }
     return DiscoverCharts(hits: hits, hasMore: hasMore && _page < _maxPages);

@@ -156,7 +156,7 @@ class FeedService {
     return _catalog.categoryShelves(id, languages: languages);
   }
 
-  /// Une page de podcasts pour les sujets choisis d’une catégorie.
+  /// Une page des podcasts étiquetés dans les sujets choisis d’une catégorie.
   Future<List<DiscoverHit>> categoryHitsPage({
     required String id,
     required int page,
