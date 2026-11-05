@@ -213,9 +213,6 @@ mixin _EpisodeQueries on _$AppDatabase {
     int? limit,
   }) {
     final needle = search.trim();
-    final hasSearch = needle.isNotEmpty;
-    // Recherche accent/casse-insensible comme les abonnements (`searchMatch`) :
-    // SQLite `lower()` ne plie pas les diacritiques, donc on filtre en Dart.
     return _episodeWindow(
       unreadOnly: unreadOnly,
       favoritesOnly: favoritesOnly,
@@ -226,18 +223,9 @@ mixin _EpisodeQueries on _$AppDatabase {
       inProgressOnly: inProgressOnly,
       podcastId: podcastId,
       playlistId: playlistId,
-      limit: hasSearch ? null : limit,
-    ).watch().map((rows) {
-      if (!hasSearch) return rows;
-      final matched = [
-        for (final entry in rows)
-          if (searchMatch(entry.episode.title, needle) ||
-              searchMatch(entry.podcast.title, needle))
-            entry,
-      ];
-      if (limit == null || matched.length <= limit) return matched;
-      return matched.sublist(0, limit);
-    });
+      titleFoldLike: needle.isEmpty ? null : foldedLikePattern(needle),
+      limit: limit,
+    ).watch();
   }
 
   Selectable<EpisodeEntry> _episodeWindow({
@@ -255,6 +243,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool randomOrder = false,
     int? podcastId,
     int? playlistId,
+    String? titleFoldLike,
     int? limit,
     bool stableOrder = false,
     int? afterEpisodeId,
@@ -341,6 +330,12 @@ mixin _EpisodeQueries on _$AppDatabase {
     if (recentDownloads) query.where(episodes.downloadPath.isNotNull());
     if (unplayedOnly) query.where(episodes.played.equals(false));
     if (playedOnly) query.where(episodes.played.equals(true));
+    if (titleFoldLike != null) {
+      query.where(
+        episodes.titleFold.like(titleFoldLike, escapeChar: r'\') |
+            podcasts.titleFold.like(titleFoldLike, escapeChar: r'\'),
+      );
+    }
     if (podcastId != null) {
       query.where(episodes.podcastId.equals(podcastId));
     } else if (!downloadsOnly &&
@@ -462,6 +457,7 @@ mixin _EpisodeQueries on _$AppDatabase {
           podcastId: row.read(episodes.podcastId)!,
           guid: row.read(episodes.guid)!,
           title: row.read(episodes.title)!,
+          titleFold: '',
           description: '',
           audioUrl: row.read(episodes.audioUrl)!,
           mimeType: row.read(episodes.mimeType),
@@ -483,6 +479,7 @@ mixin _EpisodeQueries on _$AppDatabase {
           id: row.read(podcasts.id)!,
           feedUrl: row.read(podcasts.feedUrl)!,
           title: row.read(podcasts.title)!,
+          titleFold: '',
           author: row.read(podcasts.author)!,
           description: '',
           imageUrl: row.read(podcasts.imageUrl),
@@ -812,6 +809,7 @@ mixin _EpisodeQueries on _$AppDatabase {
       inProgressOnly: inProgressOnly,
       podcastId: podcastId,
       playlistId: playlistId,
+      titleFoldLike: search.trim().isEmpty ? null : foldedLikePattern(search),
       limit: limit,
       stableOrder: true,
       afterEpisodeId: afterId,
@@ -825,17 +823,8 @@ mixin _EpisodeQueries on _$AppDatabase {
           : await _playlistPosition(playlistId, afterId),
       beforeAnchor: before != null,
     ).get();
-    final needle = search.trim();
-    final entries = needle.isEmpty
-        ? rows
-        : [
-            for (final entry in rows)
-              if (searchMatch(entry.episode.title, needle) ||
-                  searchMatch(entry.podcast.title, needle))
-                entry,
-          ];
     return (
-      entries: before != null ? entries.reversed.toList() : entries,
+      entries: before != null ? rows.reversed.toList() : rows,
       mayHaveMore: rows.length >= limit,
     );
   }

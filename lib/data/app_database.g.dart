@@ -42,6 +42,18 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _titleFoldMeta = const VerificationMeta(
+    'titleFold',
+  );
+  @override
+  late final GeneratedColumn<String> titleFold = GeneratedColumn<String>(
+    'title_fold',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _authorMeta = const VerificationMeta('author');
   @override
   late final GeneratedColumn<String> author = GeneratedColumn<String>(
@@ -300,6 +312,7 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     id,
     feedUrl,
     title,
+    titleFold,
     author,
     description,
     imageUrl,
@@ -352,6 +365,12 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
       );
     } else if (isInserting) {
       context.missing(_titleMeta);
+    }
+    if (data.containsKey('title_fold')) {
+      context.handle(
+        _titleFoldMeta,
+        titleFold.isAcceptableOrUnknown(data['title_fold']!, _titleFoldMeta),
+      );
     }
     if (data.containsKey('author')) {
       context.handle(
@@ -547,6 +566,10 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         DriftSqlType.string,
         data['${effectivePrefix}title'],
       )!,
+      titleFold: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title_fold'],
+      )!,
       author: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}author'],
@@ -644,6 +667,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
   final int id;
   final String feedUrl;
   final String title;
+
+  /// [title] plié par [foldForSearch], pour la recherche SQL.
+  final String titleFold;
   final String author;
   final String description;
   final String? imageUrl;
@@ -691,6 +717,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     required this.id,
     required this.feedUrl,
     required this.title,
+    required this.titleFold,
     required this.author,
     required this.description,
     this.imageUrl,
@@ -719,6 +746,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     map['id'] = Variable<int>(id);
     map['feed_url'] = Variable<String>(feedUrl);
     map['title'] = Variable<String>(title);
+    map['title_fold'] = Variable<String>(titleFold);
     map['author'] = Variable<String>(author);
     map['description'] = Variable<String>(description);
     if (!nullToAbsent || imageUrl != null) {
@@ -766,6 +794,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       id: Value(id),
       feedUrl: Value(feedUrl),
       title: Value(title),
+      titleFold: Value(titleFold),
       author: Value(author),
       description: Value(description),
       imageUrl: imageUrl == null && nullToAbsent
@@ -815,6 +844,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       id: serializer.fromJson<int>(json['id']),
       feedUrl: serializer.fromJson<String>(json['feedUrl']),
       title: serializer.fromJson<String>(json['title']),
+      titleFold: serializer.fromJson<String>(json['titleFold']),
       author: serializer.fromJson<String>(json['author']),
       description: serializer.fromJson<String>(json['description']),
       imageUrl: serializer.fromJson<String?>(json['imageUrl']),
@@ -847,6 +877,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       'id': serializer.toJson<int>(id),
       'feedUrl': serializer.toJson<String>(feedUrl),
       'title': serializer.toJson<String>(title),
+      'titleFold': serializer.toJson<String>(titleFold),
       'author': serializer.toJson<String>(author),
       'description': serializer.toJson<String>(description),
       'imageUrl': serializer.toJson<String?>(imageUrl),
@@ -875,6 +906,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     int? id,
     String? feedUrl,
     String? title,
+    String? titleFold,
     String? author,
     String? description,
     Value<String?> imageUrl = const Value.absent(),
@@ -900,6 +932,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     id: id ?? this.id,
     feedUrl: feedUrl ?? this.feedUrl,
     title: title ?? this.title,
+    titleFold: titleFold ?? this.titleFold,
     author: author ?? this.author,
     description: description ?? this.description,
     imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
@@ -933,6 +966,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       id: data.id.present ? data.id.value : this.id,
       feedUrl: data.feedUrl.present ? data.feedUrl.value : this.feedUrl,
       title: data.title.present ? data.title.value : this.title,
+      titleFold: data.titleFold.present ? data.titleFold.value : this.titleFold,
       author: data.author.present ? data.author.value : this.author,
       description: data.description.present
           ? data.description.value
@@ -995,6 +1029,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           ..write('id: $id, ')
           ..write('feedUrl: $feedUrl, ')
           ..write('title: $title, ')
+          ..write('titleFold: $titleFold, ')
           ..write('author: $author, ')
           ..write('description: $description, ')
           ..write('imageUrl: $imageUrl, ')
@@ -1025,6 +1060,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     id,
     feedUrl,
     title,
+    titleFold,
     author,
     description,
     imageUrl,
@@ -1054,6 +1090,7 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           other.id == this.id &&
           other.feedUrl == this.feedUrl &&
           other.title == this.title &&
+          other.titleFold == this.titleFold &&
           other.author == this.author &&
           other.description == this.description &&
           other.imageUrl == this.imageUrl &&
@@ -1081,6 +1118,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
   final Value<int> id;
   final Value<String> feedUrl;
   final Value<String> title;
+  final Value<String> titleFold;
   final Value<String> author;
   final Value<String> description;
   final Value<String?> imageUrl;
@@ -1106,6 +1144,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.id = const Value.absent(),
     this.feedUrl = const Value.absent(),
     this.title = const Value.absent(),
+    this.titleFold = const Value.absent(),
     this.author = const Value.absent(),
     this.description = const Value.absent(),
     this.imageUrl = const Value.absent(),
@@ -1132,6 +1171,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.id = const Value.absent(),
     required String feedUrl,
     required String title,
+    this.titleFold = const Value.absent(),
     this.author = const Value.absent(),
     this.description = const Value.absent(),
     this.imageUrl = const Value.absent(),
@@ -1160,6 +1200,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Expression<int>? id,
     Expression<String>? feedUrl,
     Expression<String>? title,
+    Expression<String>? titleFold,
     Expression<String>? author,
     Expression<String>? description,
     Expression<String>? imageUrl,
@@ -1186,6 +1227,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       if (id != null) 'id': id,
       if (feedUrl != null) 'feed_url': feedUrl,
       if (title != null) 'title': title,
+      if (titleFold != null) 'title_fold': titleFold,
       if (author != null) 'author': author,
       if (description != null) 'description': description,
       if (imageUrl != null) 'image_url': imageUrl,
@@ -1215,6 +1257,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Value<int>? id,
     Value<String>? feedUrl,
     Value<String>? title,
+    Value<String>? titleFold,
     Value<String>? author,
     Value<String>? description,
     Value<String?>? imageUrl,
@@ -1241,6 +1284,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       id: id ?? this.id,
       feedUrl: feedUrl ?? this.feedUrl,
       title: title ?? this.title,
+      titleFold: titleFold ?? this.titleFold,
       author: author ?? this.author,
       description: description ?? this.description,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -1276,6 +1320,9 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
+    }
+    if (titleFold.present) {
+      map['title_fold'] = Variable<String>(titleFold.value);
     }
     if (author.present) {
       map['author'] = Variable<String>(author.value);
@@ -1349,6 +1396,7 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
           ..write('id: $id, ')
           ..write('feedUrl: $feedUrl, ')
           ..write('title: $title, ')
+          ..write('titleFold: $titleFold, ')
           ..write('author: $author, ')
           ..write('description: $description, ')
           ..write('imageUrl: $imageUrl, ')
@@ -1424,6 +1472,18 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleFoldMeta = const VerificationMeta(
+    'titleFold',
+  );
+  @override
+  late final GeneratedColumn<String> titleFold = GeneratedColumn<String>(
+    'title_fold',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
   );
   static const VerificationMeta _descriptionMeta = const VerificationMeta(
     'description',
@@ -1630,6 +1690,7 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
     podcastId,
     guid,
     title,
+    titleFold,
     description,
     audioUrl,
     mimeType,
@@ -1686,6 +1747,12 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
       );
     } else if (isInserting) {
       context.missing(_titleMeta);
+    }
+    if (data.containsKey('title_fold')) {
+      context.handle(
+        _titleFoldMeta,
+        titleFold.isAcceptableOrUnknown(data['title_fold']!, _titleFoldMeta),
+      );
     }
     if (data.containsKey('description')) {
       context.handle(
@@ -1844,6 +1911,10 @@ class $EpisodesTable extends Episodes with TableInfo<$EpisodesTable, Episode> {
         DriftSqlType.string,
         data['${effectivePrefix}title'],
       )!,
+      titleFold: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title_fold'],
+      )!,
       description: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}description'],
@@ -1926,6 +1997,9 @@ class Episode extends DataClass implements Insertable<Episode> {
   final int podcastId;
   final String guid;
   final String title;
+
+  /// [title] plié par [foldForSearch], pour la recherche SQL.
+  final String titleFold;
   final String description;
   final String audioUrl;
   final String? mimeType;
@@ -1950,6 +2024,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     required this.podcastId,
     required this.guid,
     required this.title,
+    required this.titleFold,
     required this.description,
     required this.audioUrl,
     this.mimeType,
@@ -1975,6 +2050,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     map['podcast_id'] = Variable<int>(podcastId);
     map['guid'] = Variable<String>(guid);
     map['title'] = Variable<String>(title);
+    map['title_fold'] = Variable<String>(titleFold);
     map['description'] = Variable<String>(description);
     map['audio_url'] = Variable<String>(audioUrl);
     if (!nullToAbsent || mimeType != null) {
@@ -2023,6 +2099,7 @@ class Episode extends DataClass implements Insertable<Episode> {
       podcastId: Value(podcastId),
       guid: Value(guid),
       title: Value(title),
+      titleFold: Value(titleFold),
       description: Value(description),
       audioUrl: Value(audioUrl),
       mimeType: mimeType == null && nullToAbsent
@@ -2075,6 +2152,7 @@ class Episode extends DataClass implements Insertable<Episode> {
       podcastId: serializer.fromJson<int>(json['podcastId']),
       guid: serializer.fromJson<String>(json['guid']),
       title: serializer.fromJson<String>(json['title']),
+      titleFold: serializer.fromJson<String>(json['titleFold']),
       description: serializer.fromJson<String>(json['description']),
       audioUrl: serializer.fromJson<String>(json['audioUrl']),
       mimeType: serializer.fromJson<String?>(json['mimeType']),
@@ -2102,6 +2180,7 @@ class Episode extends DataClass implements Insertable<Episode> {
       'podcastId': serializer.toJson<int>(podcastId),
       'guid': serializer.toJson<String>(guid),
       'title': serializer.toJson<String>(title),
+      'titleFold': serializer.toJson<String>(titleFold),
       'description': serializer.toJson<String>(description),
       'audioUrl': serializer.toJson<String>(audioUrl),
       'mimeType': serializer.toJson<String?>(mimeType),
@@ -2127,6 +2206,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     int? podcastId,
     String? guid,
     String? title,
+    String? titleFold,
     String? description,
     String? audioUrl,
     Value<String?> mimeType = const Value.absent(),
@@ -2149,6 +2229,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     podcastId: podcastId ?? this.podcastId,
     guid: guid ?? this.guid,
     title: title ?? this.title,
+    titleFold: titleFold ?? this.titleFold,
     description: description ?? this.description,
     audioUrl: audioUrl ?? this.audioUrl,
     mimeType: mimeType.present ? mimeType.value : this.mimeType,
@@ -2175,6 +2256,7 @@ class Episode extends DataClass implements Insertable<Episode> {
       podcastId: data.podcastId.present ? data.podcastId.value : this.podcastId,
       guid: data.guid.present ? data.guid.value : this.guid,
       title: data.title.present ? data.title.value : this.title,
+      titleFold: data.titleFold.present ? data.titleFold.value : this.titleFold,
       description: data.description.present
           ? data.description.value
           : this.description,
@@ -2222,6 +2304,7 @@ class Episode extends DataClass implements Insertable<Episode> {
           ..write('podcastId: $podcastId, ')
           ..write('guid: $guid, ')
           ..write('title: $title, ')
+          ..write('titleFold: $titleFold, ')
           ..write('description: $description, ')
           ..write('audioUrl: $audioUrl, ')
           ..write('mimeType: $mimeType, ')
@@ -2249,6 +2332,7 @@ class Episode extends DataClass implements Insertable<Episode> {
     podcastId,
     guid,
     title,
+    titleFold,
     description,
     audioUrl,
     mimeType,
@@ -2275,6 +2359,7 @@ class Episode extends DataClass implements Insertable<Episode> {
           other.podcastId == this.podcastId &&
           other.guid == this.guid &&
           other.title == this.title &&
+          other.titleFold == this.titleFold &&
           other.description == this.description &&
           other.audioUrl == this.audioUrl &&
           other.mimeType == this.mimeType &&
@@ -2299,6 +2384,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
   final Value<int> podcastId;
   final Value<String> guid;
   final Value<String> title;
+  final Value<String> titleFold;
   final Value<String> description;
   final Value<String> audioUrl;
   final Value<String?> mimeType;
@@ -2321,6 +2407,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     this.podcastId = const Value.absent(),
     this.guid = const Value.absent(),
     this.title = const Value.absent(),
+    this.titleFold = const Value.absent(),
     this.description = const Value.absent(),
     this.audioUrl = const Value.absent(),
     this.mimeType = const Value.absent(),
@@ -2344,6 +2431,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     required int podcastId,
     required String guid,
     required String title,
+    this.titleFold = const Value.absent(),
     this.description = const Value.absent(),
     required String audioUrl,
     this.mimeType = const Value.absent(),
@@ -2370,6 +2458,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     Expression<int>? podcastId,
     Expression<String>? guid,
     Expression<String>? title,
+    Expression<String>? titleFold,
     Expression<String>? description,
     Expression<String>? audioUrl,
     Expression<String>? mimeType,
@@ -2393,6 +2482,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
       if (podcastId != null) 'podcast_id': podcastId,
       if (guid != null) 'guid': guid,
       if (title != null) 'title': title,
+      if (titleFold != null) 'title_fold': titleFold,
       if (description != null) 'description': description,
       if (audioUrl != null) 'audio_url': audioUrl,
       if (mimeType != null) 'mime_type': mimeType,
@@ -2418,6 +2508,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     Value<int>? podcastId,
     Value<String>? guid,
     Value<String>? title,
+    Value<String>? titleFold,
     Value<String>? description,
     Value<String>? audioUrl,
     Value<String?>? mimeType,
@@ -2441,6 +2532,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
       podcastId: podcastId ?? this.podcastId,
       guid: guid ?? this.guid,
       title: title ?? this.title,
+      titleFold: titleFold ?? this.titleFold,
       description: description ?? this.description,
       audioUrl: audioUrl ?? this.audioUrl,
       mimeType: mimeType ?? this.mimeType,
@@ -2475,6 +2567,9 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
     }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
+    }
+    if (titleFold.present) {
+      map['title_fold'] = Variable<String>(titleFold.value);
     }
     if (description.present) {
       map['description'] = Variable<String>(description.value);
@@ -2537,6 +2632,7 @@ class EpisodesCompanion extends UpdateCompanion<Episode> {
           ..write('podcastId: $podcastId, ')
           ..write('guid: $guid, ')
           ..write('title: $title, ')
+          ..write('titleFold: $titleFold, ')
           ..write('description: $description, ')
           ..write('audioUrl: $audioUrl, ')
           ..write('mimeType: $mimeType, ')
@@ -3891,6 +3987,7 @@ typedef $$PodcastsTableCreateCompanionBuilder = PodcastsCompanion Function({
   Value<int> id,
   required String feedUrl,
   required String title,
+  Value<String> titleFold,
   Value<String> author,
   Value<String> description,
   Value<String?> imageUrl,
@@ -3917,6 +4014,7 @@ typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<int> id,
   Value<String> feedUrl,
   Value<String> title,
+  Value<String> titleFold,
   Value<String> author,
   Value<String> description,
   Value<String?> imageUrl,
@@ -3985,6 +4083,11 @@ class $$PodcastsTableFilterComposer
 
   ColumnFilters<String> get title => $composableBuilder(
     column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get titleFold => $composableBuilder(
+    column: $table.titleFold,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4143,6 +4246,11 @@ class $$PodcastsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get titleFold => $composableBuilder(
+    column: $table.titleFold,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get author => $composableBuilder(
     column: $table.author,
     builder: (column) => ColumnOrderings(column),
@@ -4266,6 +4374,9 @@ class $$PodcastsTableAnnotationComposer
 
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get titleFold =>
+      $composableBuilder(column: $table.titleFold, builder: (column) => column);
 
   GeneratedColumn<String> get author =>
       $composableBuilder(column: $table.author, builder: (column) => column);
@@ -4419,6 +4530,7 @@ class $$PodcastsTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<String> feedUrl = const Value.absent(),
                 Value<String> title = const Value.absent(),
+                Value<String> titleFold = const Value.absent(),
                 Value<String> author = const Value.absent(),
                 Value<String> description = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
@@ -4444,6 +4556,7 @@ class $$PodcastsTableTableManager
                 id: id,
                 feedUrl: feedUrl,
                 title: title,
+                titleFold: titleFold,
                 author: author,
                 description: description,
                 imageUrl: imageUrl,
@@ -4471,6 +4584,7 @@ class $$PodcastsTableTableManager
                 Value<int> id = const Value.absent(),
                 required String feedUrl,
                 required String title,
+                Value<String> titleFold = const Value.absent(),
                 Value<String> author = const Value.absent(),
                 Value<String> description = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
@@ -4496,6 +4610,7 @@ class $$PodcastsTableTableManager
                 id: id,
                 feedUrl: feedUrl,
                 title: title,
+                titleFold: titleFold,
                 author: author,
                 description: description,
                 imageUrl: imageUrl,
@@ -4534,14 +4649,19 @@ class $$PodcastsTableTableManager
               getPrefetchedDataCallback: (items) async {
                 return [
                   if (episodesRefs)
-                    await $_getPrefetchedData<Podcast, $PodcastsTable, Episode>(
+                    await $_getPrefetchedDataByColumns<
+                      Podcast,
+                      $PodcastsTable,
+                      Episode,
+                      $EpisodesTable
+                    >(
                       currentTable: table,
                       referencedTable: $$PodcastsTableReferences
                           ._episodesRefsTable(db),
                       managerFromTypedResult: (p0) =>
                           $$PodcastsTableReferences(db, table, p0).episodesRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.podcastId == item.id),
+                      currentColumn: 'id',
+                      referencedColumn: 'podcast_id',
                       typedResults: items,
                     ),
                 ];
@@ -4571,6 +4691,7 @@ typedef $$EpisodesTableCreateCompanionBuilder = EpisodesCompanion Function({
   required int podcastId,
   required String guid,
   required String title,
+  Value<String> titleFold,
   Value<String> description,
   required String audioUrl,
   Value<String?> mimeType,
@@ -4594,6 +4715,7 @@ typedef $$EpisodesTableUpdateCompanionBuilder = EpisodesCompanion Function({
   Value<int> podcastId,
   Value<String> guid,
   Value<String> title,
+  Value<String> titleFold,
   Value<String> description,
   Value<String> audioUrl,
   Value<String?> mimeType,
@@ -4717,6 +4839,11 @@ class $$EpisodesTableFilterComposer
 
   ColumnFilters<String> get title => $composableBuilder(
     column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get titleFold => $composableBuilder(
+    column: $table.titleFold,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4928,6 +5055,11 @@ class $$EpisodesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get titleFold => $composableBuilder(
+    column: $table.titleFold,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get description => $composableBuilder(
     column: $table.description,
     builder: (column) => ColumnOrderings(column),
@@ -5054,6 +5186,9 @@ class $$EpisodesTableAnnotationComposer
 
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get titleFold =>
+      $composableBuilder(column: $table.titleFold, builder: (column) => column);
 
   GeneratedColumn<String> get description => $composableBuilder(
     column: $table.description,
@@ -5263,6 +5398,7 @@ class $$EpisodesTableTableManager
                 Value<int> podcastId = const Value.absent(),
                 Value<String> guid = const Value.absent(),
                 Value<String> title = const Value.absent(),
+                Value<String> titleFold = const Value.absent(),
                 Value<String> description = const Value.absent(),
                 Value<String> audioUrl = const Value.absent(),
                 Value<String?> mimeType = const Value.absent(),
@@ -5285,6 +5421,7 @@ class $$EpisodesTableTableManager
                 podcastId: podcastId,
                 guid: guid,
                 title: title,
+                titleFold: titleFold,
                 description: description,
                 audioUrl: audioUrl,
                 mimeType: mimeType,
@@ -5309,6 +5446,7 @@ class $$EpisodesTableTableManager
                 required int podcastId,
                 required String guid,
                 required String title,
+                Value<String> titleFold = const Value.absent(),
                 Value<String> description = const Value.absent(),
                 required String audioUrl,
                 Value<String?> mimeType = const Value.absent(),
@@ -5331,6 +5469,7 @@ class $$EpisodesTableTableManager
                 podcastId: podcastId,
                 guid: guid,
                 title: title,
+                titleFold: titleFold,
                 description: description,
                 audioUrl: audioUrl,
                 mimeType: mimeType,
@@ -5404,10 +5543,11 @@ class $$EpisodesTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (episodeChaptersRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Episode,
                           $EpisodesTable,
-                          EpisodeChapter
+                          EpisodeChapter,
+                          $EpisodeChaptersTable
                         >(
                           currentTable: table,
                           referencedTable: $$EpisodesTableReferences
@@ -5418,17 +5558,16 @@ class $$EpisodesTableTableManager
                                 table,
                                 p0,
                               ).episodeChaptersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.episodeId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'episode_id',
                           typedResults: items,
                         ),
                       if (playbackPositionsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Episode,
                           $EpisodesTable,
-                          PlaybackPosition
+                          PlaybackPosition,
+                          $PlaybackPositionsTable
                         >(
                           currentTable: table,
                           referencedTable: $$EpisodesTableReferences
@@ -5439,17 +5578,16 @@ class $$EpisodesTableTableManager
                                 table,
                                 p0,
                               ).playbackPositionsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.episodeId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'episode_id',
                           typedResults: items,
                         ),
                       if (playlistEpisodesRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Episode,
                           $EpisodesTable,
-                          PlaylistEpisode
+                          PlaylistEpisode,
+                          $PlaylistEpisodesTable
                         >(
                           currentTable: table,
                           referencedTable: $$EpisodesTableReferences
@@ -5460,10 +5598,8 @@ class $$EpisodesTableTableManager
                                 table,
                                 p0,
                               ).playlistEpisodesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.episodeId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'episode_id',
                           typedResults: items,
                         ),
                     ];
@@ -6353,10 +6489,11 @@ class $$PlaylistsTableTableManager
               getPrefetchedDataCallback: (items) async {
                 return [
                   if (playlistEpisodesRefs)
-                    await $_getPrefetchedData<
+                    await $_getPrefetchedDataByColumns<
                       Playlist,
                       $PlaylistsTable,
-                      PlaylistEpisode
+                      PlaylistEpisode,
+                      $PlaylistEpisodesTable
                     >(
                       currentTable: table,
                       referencedTable: $$PlaylistsTableReferences
@@ -6367,8 +6504,8 @@ class $$PlaylistsTableTableManager
                             table,
                             p0,
                           ).playlistEpisodesRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.playlistId == item.id),
+                      currentColumn: 'id',
+                      referencedColumn: 'playlist_id',
                       typedResults: items,
                     ),
                 ];
