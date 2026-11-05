@@ -194,19 +194,19 @@ class PlayerPage extends ConsumerWidget {
                   child: appBar,
                 ),
               ),
-              body: _PageCollapseDrag(
-                immediate: true,
-                onDragStart: onHeaderDragStart,
-                onDragUpdate: onHeaderDragUpdate,
-                onDragEnd: onHeaderDragEnd,
-                onDragCancel: onHeaderDragCancel,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    // Pendant l’expansion, la hauteur est trop faible pour la barre transport.
-                    final showTransport = constraints.maxHeight >= 200;
-                    return Column(
-                      children: [
-                        Expanded(
+              body: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Pendant l’expansion, la hauteur est trop faible pour la barre transport.
+                  final showTransport = constraints.maxHeight >= 200;
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: _PageCollapseDrag(
+                          immediate: true,
+                          onDragStart: onHeaderDragStart,
+                          onDragUpdate: onHeaderDragUpdate,
+                          onDragEnd: onHeaderDragEnd,
+                          onDragCancel: onHeaderDragCancel,
                           child: Align(
                             alignment: Alignment.topCenter,
                             child: ConstrainedBox(
@@ -215,26 +215,26 @@ class PlayerPage extends ConsumerWidget {
                             ),
                           ),
                         ),
-                        if (showTransport)
-                          SafeArea(
-                            top: false,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                              child: Align(
-                                alignment: Alignment.topCenter,
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 720,
-                                  ),
-                                  child: const PlayerTransport(),
+                      ),
+                      if (showTransport)
+                        SafeArea(
+                          top: false,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 720,
                                 ),
+                                child: const PlayerTransport(),
                               ),
                             ),
                           ),
-                      ],
-                    );
-                  },
-                ),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
             if (!carMode)

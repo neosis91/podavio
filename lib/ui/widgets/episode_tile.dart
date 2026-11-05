@@ -9,14 +9,11 @@ import '../../data/feed_service.dart';
 import '../../data/providers.dart';
 import '../../player/playback_source.dart';
 import '../../player/player_controller.dart';
-import '../../player/player_sheet_controller.dart';
 import '../../settings/settings_controller.dart';
-import '../playlist_membership.dart';
 import '../router.dart';
 import 'brand.dart';
 import 'episode_actions_sheet.dart';
 import 'highlighted_text.dart';
-import 'list_metrics.dart';
 import 'marquee_text.dart';
 import 'playing_cover.dart';
 
@@ -53,7 +50,8 @@ class EpisodeTile extends ConsumerWidget {
   final int? reorderIndex;
   final String highlightQuery;
 
-  /// Ligne proche de la file du lecteur : pochette, titre, podcast, menu.
+  /// Un appui lance la lecture. Sinon, il ouvre la page de l’épisode.
+  /// La forme de la ligne suit la densité des listes.
   final bool queueStyle;
 
   /// Liste à reprendre dans le lecteur quand la lecture part de cette ligne.
@@ -72,7 +70,6 @@ class EpisodeTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final episode = entry.episode;
-    final theme = Theme.of(context);
     final progress = ref.watch(
       downloadProgressProvider.select((items) => items[episode.id]),
     );
@@ -101,495 +98,48 @@ class EpisodeTile extends ConsumerWidget {
               : Duration(seconds: episode.durationSeconds!));
     final position =
         playback?.position ?? Duration(milliseconds: episode.positionMs);
-    final double? listenFraction;
-    if (!episode.played &&
-        position > Duration.zero &&
-        duration != null &&
-        duration > Duration.zero) {
-      listenFraction = (position.inMilliseconds / duration.inMilliseconds)
-          .clamp(0.0, 1.0);
-    } else {
-      listenFraction = null;
-    }
-    final showListenProgress = listenFraction != null;
-    final dateLabel = formatListDate(episode.publishedAt);
-    final metaParts = <String>[
-      if (dateLabel.isNotEmpty) dateLabel,
-      if (duration != null) formatClock(duration),
-      // « reste » uniquement page podcast, et seulement sans barre de progression.
-      if (!showPodcast &&
-          !showListenProgress &&
-          !episode.played &&
-          position > Duration.zero &&
-          duration != null)
-        'reste ${formatClock(duration - position)}',
-    ];
-    final metaSuffix = metaParts.join(' · ');
-
-    if (queueStyle) {
-      return _QueueStyleRow(
-        entry: entry,
-        playing: playing,
-        progress: progress,
-        preferPodcastCover: preferPodcastCover,
-        ecoFromShow: ecoFromShow,
-        reorderIndex: selecting ? null : reorderIndex,
-        highlightQuery: highlightQuery,
-        showPodcast: showPodcast,
-        position: position,
-        duration: duration,
-        selecting: selecting,
-        selected: selected,
-        onLongPress: onLongPress,
-        onTap: () {
-          if (selecting) {
-            onToggleSelect?.call();
-            return;
-          }
+    return _QueueStyleRow(
+      entry: entry,
+      density: density,
+      playing: playing,
+      progress: progress,
+      preferPodcastCover: preferPodcastCover,
+      ecoFromShow: ecoFromShow,
+      reorderIndex: selecting ? null : reorderIndex,
+      highlightQuery: highlightQuery,
+      showPodcast: showPodcast,
+      position: position,
+      duration: duration,
+      selecting: selecting,
+      selected: selected,
+      onLongPress: onLongPress,
+      onTap: () {
+        if (selecting) {
+          onToggleSelect?.call();
+          return;
+        }
+        if (queueStyle) {
           ref
               .read(playerProvider.notifier)
               .playOrPauseEntry(entry, source: playbackSource);
-        },
-        onCancelDownload: () =>
-            ref.read(downloadProgressProvider.notifier).cancel(episode.id),
-        onMore: selecting
-            ? null
-            : () => showEpisodeActionsSheet(
-                context,
-                ref,
-                entry,
-                onMoveUp: onMoveUp,
-                onMoveDown: onMoveDown,
-                onRemove: onRemove,
-              ),
-      );
-    }
-
-    final inCustomPlaylist =
-        ref
-            .watch(customPlaylistEpisodeIdsProvider)
-            .asData
-            ?.value
-            .contains(episode.id) ??
-        false;
-    final statusIcons = <Widget>[
-      if (episode.downloadPath != null)
-        Icon(
-          Icons.download_for_offline,
-          size: 16,
-          color: theme.colorScheme.onSurface,
-        ),
-      if (episode.favorite)
-        Icon(Icons.favorite, size: 16, color: favoriteHeartColor),
-      if (episode.queueIndex != null || inCustomPlaylist)
-        IconTheme(
-          data: IconThemeData(color: theme.colorScheme.onSurface, size: 16),
-          child: const PlaylistPlayIcon(size: 16),
-        ),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final metrics = EpisodeTileMetrics.resolve(
-          width: constraints.maxWidth,
-          textTheme: theme.textTheme,
-          textScaler: MediaQuery.textScalerOf(context),
-          density: density,
-          played: episode.played,
-          onSurface: theme.colorScheme.onSurface,
-          muted: theme.colorScheme.onSurfaceVariant,
-        );
-        final coverSize = metrics.coverSize;
-        final playingHighlight = theme.colorScheme.primaryContainer.withValues(
-          alpha: 0.35,
-        );
-
-        final selectedHighlight = theme.colorScheme.secondaryContainer
-            .withValues(alpha: 0.45);
-        return Material(
-          color: selecting && selected
-              ? selectedHighlight
-              : playing
-              ? playingHighlight
-              : Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              if (selecting) {
-                onToggleSelect?.call();
-                return;
-              }
-              context.push(AppRoutes.episode(episode.id));
-            },
-            onLongPress: onLongPress,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                reorderIndex != null || selecting
-                    ? 4
-                    : metrics.horizontalPadding,
-                metrics.verticalPadding,
-                4,
-                metrics.verticalPadding,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  if (selecting)
-                    SizedBox(
-                      width: 40,
-                      height: coverSize,
-                      child: Checkbox(
-                        value: selected,
-                        onChanged: (_) => onToggleSelect?.call(),
-                      ),
-                    )
-                  else if (reorderIndex != null)
-                    Tooltip(
-                      message: 'Déplacer',
-                      child: ReorderableDragStartListener(
-                        index: reorderIndex!,
-                        child: SizedBox(
-                          width: 40,
-                          height: coverSize,
-                          child: const Center(child: DragIndicatorIcon()),
-                        ),
-                      ),
-                    ),
-                  _EpisodeCoverWithProgress(
-                    episodeId: episode.id,
-                    label: episode.title,
-                    colorKey: entry.podcast.title,
-                    url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
-                    localPath: entry.imagePath(
-                      preferPodcastCover: preferPodcastCover,
-                    ),
-                    httpHeaders: podcastAuthHeaders(
-                      username: entry.podcast.authUsername,
-                      password: entry.podcast.authPassword,
-                    ),
-                    coverSize: coverSize,
-                    listenFraction: listenFraction,
-                    progressBarHeight: metrics.progressBarHeight,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        MarqueeText(
-                          text: episode.title,
-                          query: highlightQuery,
-                          style: metrics.titleStyle,
-                        ),
-                        SizedBox(height: metrics.gap),
-                        _EpisodeMetaRow(
-                          showPodcast: showPodcast,
-                          podcastTitle: entry.podcast.title,
-                          metaSuffix: metaSuffix,
-                          style: metrics.metaStyle,
-                          statusIcons: statusIcons,
-                          highlightQuery: highlightQuery,
-                        ),
-                      ],
-                    ),
-                  ),
-                  _EpisodeTileTrailing(
-                    metrics: metrics,
-                    progress: progress,
-                    downloaded: episode.downloadPath != null,
-                    playing: playing,
-                    episode: episode,
-                    onCancelDownload: () => ref
-                        .read(downloadProgressProvider.notifier)
-                        .cancel(episode.id),
-                    onPlay: () async {
-                      if (playing) {
-                        openPlayer(ref);
-                        return;
-                      }
-                      await ref
-                          .read(playerProvider.notifier)
-                          .playEntry(entry, source: playbackSource);
-                    },
-                    onMenuAction: (action) {
-                      if (action == EpisodeMenuAction.queue) {
-                        showPlaylistMembershipSheet(context, ref, entry);
-                        return;
-                      }
-                      runEpisodeAction(context, ref, entry, action);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
+          return;
+        }
+        context.push(AppRoutes.episode(episode.id));
       },
+      onCancelDownload: () =>
+          ref.read(downloadProgressProvider.notifier).cancel(episode.id),
+      onMore: selecting
+          ? null
+          : () => showEpisodeActionsSheet(
+              context,
+              ref,
+              entry,
+              onMoveUp: onMoveUp,
+              onMoveDown: onMoveDown,
+              onRemove: onRemove,
+            ),
     );
   }
-}
-
-/// Actions trailing : anneau DL (+ % hors étroit), play si téléchargé, sinon menu.
-class _EpisodeTileTrailing extends StatelessWidget {
-  const _EpisodeTileTrailing({
-    required this.metrics,
-    required this.progress,
-    required this.downloaded,
-    required this.playing,
-    required this.episode,
-    required this.onCancelDownload,
-    required this.onPlay,
-    required this.onMenuAction,
-  });
-
-  final EpisodeTileMetrics metrics;
-  final double? progress;
-  final bool downloaded;
-  final bool playing;
-  final Episode episode;
-  final VoidCallback onCancelDownload;
-  final VoidCallback onPlay;
-  final ValueChanged<EpisodeMenuAction> onMenuAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final value = progress;
-
-    if (value != null) {
-      return Padding(
-        padding: const EdgeInsets.only(right: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (metrics.showDownloadPercent) ...[
-              Text(
-                '${(value.clamp(0, 1) * 100).round()} %',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.primary,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-              const SizedBox(width: 4),
-            ],
-            DownloadProgressRing(
-              progress: value,
-              size: metrics.progressRingSize,
-              onCancel: onCancelDownload,
-              visualDensity: metrics.trailingVisualDensity,
-              constraints: metrics.trailingConstraints,
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (downloaded)
-          IconButton(
-            tooltip: playing ? 'Ouvrir le lecteur' : 'Lire',
-            onPressed: onPlay,
-            visualDensity: metrics.trailingVisualDensity,
-            constraints: metrics.trailingConstraints,
-            style: IconButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: Size.square(metrics.trailingMinSize),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            icon: Icon(playing ? Icons.graphic_eq : Icons.play_arrow),
-          ),
-        PopupMenuButton<EpisodeMenuAction>(
-          tooltip: 'Actions',
-          onSelected: onMenuAction,
-          padding: EdgeInsets.zero,
-          style: IconButton.styleFrom(
-            padding: EdgeInsets.zero,
-            minimumSize: Size.square(metrics.trailingMinSize),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: metrics.trailingVisualDensity,
-          ),
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: EpisodeMenuAction.queue,
-              child: Row(
-                children: [
-                  PlaylistAddIcon(),
-                  SizedBox(width: 12),
-                  Text('Playlists'),
-                ],
-              ),
-            ),
-            PopupMenuItem(
-              value: EpisodeMenuAction.played,
-              child: Text(
-                episode.played ? 'Marquer comme non lu' : 'Marquer comme lu',
-              ),
-            ),
-            PopupMenuItem(
-              value: EpisodeMenuAction.favorite,
-              child: Text(
-                episode.favorite
-                    ? 'Retirer des favoris'
-                    : 'Ajouter aux favoris',
-              ),
-            ),
-            PopupMenuItem(
-              value: EpisodeMenuAction.download,
-              child: Text(
-                episode.downloadPath == null
-                    ? 'Télécharger'
-                    : 'Supprimer le téléchargement',
-              ),
-            ),
-            const PopupMenuItem(
-              value: EpisodeMenuAction.share,
-              child: Text('Partager'),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-/// Jaquette avec barre de progression fine en dessous (largeur = côté du carré).
-class _EpisodeCoverWithProgress extends StatelessWidget {
-  const _EpisodeCoverWithProgress({
-    required this.episodeId,
-    required this.label,
-    required this.colorKey,
-    required this.url,
-    required this.localPath,
-    required this.httpHeaders,
-    required this.coverSize,
-    required this.listenFraction,
-    required this.progressBarHeight,
-  });
-
-  final int episodeId;
-  final String label;
-  final String colorKey;
-  final String? url;
-  final String? localPath;
-  final Map<String, String>? httpHeaders;
-  final double coverSize;
-  final double? listenFraction;
-  final double progressBarHeight;
-
-  @override
-  Widget build(BuildContext context) {
-    final fraction = listenFraction;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        PlayingEpisodeCover(
-          episodeId: episodeId,
-          label: label,
-          colorKey: colorKey,
-          url: url,
-          localPath: localPath,
-          httpHeaders: httpHeaders,
-          size: coverSize,
-          radius: 8,
-        ),
-        if (fraction != null) ...[
-          const SizedBox(height: 2),
-          SizedBox(
-            width: coverSize,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(1),
-              child: LinearProgressIndicator(
-                value: fraction,
-                minHeight: progressBarHeight,
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-/// Ligne méta alignée à gauche : podcast · date · durée [· reste] + icônes.
-/// Le podcast est ellipsisé en premier ; méta et icônes restent à sa suite.
-class _EpisodeMetaRow extends StatelessWidget {
-  const _EpisodeMetaRow({
-    required this.showPodcast,
-    required this.podcastTitle,
-    required this.metaSuffix,
-    required this.style,
-    required this.statusIcons,
-    this.highlightQuery = '',
-  });
-
-  final bool showPodcast;
-  final String podcastTitle;
-  final String metaSuffix;
-  final TextStyle style;
-  final List<Widget> statusIcons;
-  final String highlightQuery;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasMeta = metaSuffix.isNotEmpty;
-    return Row(
-      children: [
-        Expanded(
-          child: Row(
-            children: [
-              if (showPodcast)
-                Flexible(
-                  child: HighlightedText(
-                    text: podcastTitle.isEmpty ? ' ' : podcastTitle,
-                    query: highlightQuery,
-                    maxLines: 1,
-                    style: style,
-                  ),
-                )
-              else if (hasMeta)
-                Flexible(
-                  child: Text(
-                    metaSuffix,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: style,
-                  ),
-                )
-              else
-                const Text(' '),
-              if (showPodcast && hasMeta)
-                Flexible(
-                  fit: FlexFit.loose,
-                  child: Text(
-                    ' · $metaSuffix',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: style,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (statusIcons.isNotEmpty) ...[
-          const SizedBox(width: 8),
-          ..._spacedIcons(statusIcons),
-        ],
-      ],
-    );
-  }
-}
-
-List<Widget> _spacedIcons(List<Widget> icons) {
-  if (icons.length <= 1) return icons;
-  final out = <Widget>[icons.first];
-  for (var i = 1; i < icons.length; i++) {
-    out
-      ..add(const SizedBox(width: 6))
-      ..add(icons[i]);
-  }
-  return out;
 }
 
 /// Podcast, date de sortie, durée, et logos téléchargé / favori / playlist.
@@ -638,6 +188,11 @@ class EpisodeListSubtitle extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
+    final meta = [
+      if (dateLabel.isNotEmpty) dateLabel,
+      if (duration != null) duration,
+    ].join(' · ');
+    final metaLabel = showPodcast && meta.isNotEmpty ? ' · $meta' : meta;
     return Row(
       children: [
         if (showPodcast)
@@ -646,18 +201,19 @@ class EpisodeListSubtitle extends ConsumerWidget {
               text: entry.podcast.title,
               query: highlightQuery,
               maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: textStyle,
             ),
           ),
-        if (dateLabel.isNotEmpty) ...[
-          if (showPodcast) Text(' · ', style: textStyle),
-          Text(dateLabel, style: textStyle),
-        ],
-        if (duration != null) ...[
-          if (showPodcast || dateLabel.isNotEmpty)
-            Text(' · ', style: textStyle),
-          Text(duration, style: textStyle),
-        ],
+        if (metaLabel.isNotEmpty)
+          Flexible(
+            child: Text(
+              metaLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: textStyle,
+            ),
+          ),
         if (downloaded) ...[
           const SizedBox(width: 6),
           Icon(Icons.download_for_offline, size: 16, color: scheme.onSurface),
@@ -733,9 +289,135 @@ class _ListenProgress extends StatelessWidget {
   }
 }
 
+/// Ligne d’épisode selon la densité des listes.
+///
+/// Compact : pochette à gauche, titre et méta à côté.
+/// Confortable : titre au-dessus, barre de progression sous la méta.
+class EpisodeLine extends StatelessWidget {
+  const EpisodeLine({
+    super.key,
+    required this.entry,
+    required this.density,
+    required this.preferPodcastCover,
+    required this.position,
+    required this.duration,
+    this.coverSize = 48,
+    this.showPodcast = true,
+    this.highlightQuery = '',
+    this.ecoFromShow = false,
+    this.titleStyle,
+    this.metaStyle,
+  });
+
+  final EpisodeEntry entry;
+  final EpisodeListDensity density;
+  final bool preferPodcastCover;
+  final Duration position;
+  final Duration? duration;
+  final double coverSize;
+  final bool showPodcast;
+  final String highlightQuery;
+  final bool ecoFromShow;
+  final TextStyle? titleStyle;
+  final TextStyle? metaStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final episode = entry.episode;
+    final comfortable = density == EpisodeListDensity.comfortable;
+    final title =
+        titleStyle ??
+        theme.textTheme.titleSmall?.copyWith(
+          fontWeight: comfortable ? FontWeight.w600 : null,
+          color: episode.played ? scheme.onSurfaceVariant : scheme.onSurface,
+        );
+    final meta =
+        metaStyle ??
+        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final cover = PlayingEpisodeCover(
+      episodeId: episode.id,
+      label: episode.title,
+      colorKey: entry.podcast.title,
+      url: ecoFromShow
+          ? entry.podcast.imageUrl
+          : entry.imageUrl(preferPodcastCover: preferPodcastCover),
+      localPath: ecoFromShow
+          ? entry.podcast.imagePath
+          : entry.imagePath(preferPodcastCover: preferPodcastCover),
+      httpHeaders: podcastAuthHeaders(
+        username: entry.podcast.authUsername,
+        password: entry.podcast.authPassword,
+      ),
+      size: coverSize,
+      radius: 4,
+    );
+    final subtitle = EpisodeListSubtitle(
+      entry: entry,
+      showPodcast: showPodcast,
+      highlightQuery: highlightQuery,
+      style: meta,
+    );
+    if (!comfortable) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          cover,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                MarqueeText(
+                  text: episode.title,
+                  query: highlightQuery,
+                  style: title,
+                ),
+                subtitle,
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        MarqueeText(text: episode.title, query: highlightQuery, style: title),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            cover,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  subtitle,
+                  const SizedBox(height: 6),
+                  _ListenProgress(
+                    position: position,
+                    duration: duration,
+                    played: episode.played,
+                    style: meta,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _QueueStyleRow extends StatelessWidget {
   const _QueueStyleRow({
     required this.entry,
+    required this.density,
     required this.playing,
     required this.progress,
     required this.preferPodcastCover,
@@ -754,6 +436,7 @@ class _QueueStyleRow extends StatelessWidget {
   });
 
   final EpisodeEntry entry;
+  final EpisodeListDensity density;
   final bool playing;
   final double? progress;
   final bool preferPodcastCover;
@@ -772,16 +455,7 @@ class _QueueStyleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final episode = entry.episode;
-    final titleStyle = theme.textTheme.titleSmall?.copyWith(
-      fontWeight: FontWeight.w600,
-      color: episode.played ? scheme.onSurfaceVariant : scheme.onSurface,
-    );
-    final podcastStyle = theme.textTheme.bodySmall?.copyWith(
-      color: scheme.onSurfaceVariant,
-    );
+    final scheme = Theme.of(context).colorScheme;
     final selectedHighlight = scheme.secondaryContainer.withValues(alpha: 0.45);
     final row = InkWell(
       onTap: onTap,
@@ -793,64 +467,15 @@ class _QueueStyleRow extends StatelessWidget {
           children: [
             if (selecting) Checkbox(value: selected, onChanged: (_) => onTap()),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  MarqueeText(
-                    text: episode.title,
-                    query: highlightQuery,
-                    style: titleStyle,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      PlayingEpisodeCover(
-                        episodeId: episode.id,
-                        label: episode.title,
-                        colorKey: entry.podcast.title,
-                        url: ecoFromShow
-                            ? entry.podcast.imageUrl
-                            : entry.imageUrl(
-                                preferPodcastCover: preferPodcastCover,
-                              ),
-                        localPath: ecoFromShow
-                            ? entry.podcast.imagePath
-                            : entry.imagePath(
-                                preferPodcastCover: preferPodcastCover,
-                              ),
-                        httpHeaders: podcastAuthHeaders(
-                          username: entry.podcast.authUsername,
-                          password: entry.podcast.authPassword,
-                        ),
-                        size: 48,
-                        radius: 4,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            EpisodeListSubtitle(
-                              entry: entry,
-                              showPodcast: showPodcast,
-                              highlightQuery: highlightQuery,
-                              style: podcastStyle,
-                            ),
-                            const SizedBox(height: 6),
-                            _ListenProgress(
-                              position: position,
-                              duration: duration,
-                              played: episode.played,
-                              style: podcastStyle,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              child: EpisodeLine(
+                entry: entry,
+                density: density,
+                preferPodcastCover: preferPodcastCover,
+                ecoFromShow: ecoFromShow,
+                highlightQuery: highlightQuery,
+                showPodcast: showPodcast,
+                position: position,
+                duration: duration,
               ),
             ),
           ],

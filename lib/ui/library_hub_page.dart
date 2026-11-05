@@ -4,10 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../data/providers.dart';
 import '../l10n/l10n.dart';
-import 'history_page.dart';
+import '../player/playback_source.dart';
 import 'nav_catalog.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
+import 'widgets/episode_tile.dart';
 import 'widgets/frosted_header.dart';
 import 'widgets/empty_state.dart';
 
@@ -185,10 +186,11 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 child: Center(child: CircularProgressIndicator()),
               );
             }
-            return HistoryEpisodeRow(
+            return EpisodeTile(
               key: ValueKey(entries[entryIndex].episode.id),
               entry: entries[entryIndex],
-              showMenu: true,
+              queueStyle: true,
+              playbackSource: PlaybackSource.fromQuery(_history),
             );
           },
         ),

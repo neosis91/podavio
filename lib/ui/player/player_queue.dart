@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/app_database.dart';
-import '../../data/feed_service.dart';
 import '../../data/providers.dart';
 import '../../player/playback_source.dart';
 import '../../player/player_controller.dart';
@@ -14,8 +13,6 @@ import '../widgets/app_bottom_sheet.dart';
 import '../widgets/brand.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/episode_tile.dart';
-import '../widgets/marquee_text.dart';
-import '../widgets/playing_cover.dart';
 import 'player_panel.dart';
 
 class PlayerQueue extends ConsumerStatefulWidget {
@@ -717,6 +714,10 @@ class _QueueNowPlaying extends ConsumerWidget {
     final preferPodcastCover = ref.watch(
       settingsProvider.select((settings) => settings.preferPodcastCover),
     );
+    final density = ref.watch(
+      settingsProvider.select((settings) => settings.episodeListDensity),
+    );
+    final timing = _episodeLineTiming(ref, entry.episode);
     return Material(
       color: scheme.primaryContainer.withValues(alpha: 0.35),
       child: InkWell(
@@ -731,42 +732,20 @@ class _QueueNowPlaying extends ConsumerWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              PlayingEpisodeCover(
-                episodeId: entry.episode.id,
-                label: entry.episode.title,
-                colorKey: entry.podcast.title,
-                url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
-                localPath: entry.imagePath(
-                  preferPodcastCover: preferPodcastCover,
-                ),
-                httpHeaders: podcastAuthHeaders(
-                  username: entry.podcast.authUsername,
-                  password: entry.podcast.authPassword,
-                ),
-                size: _queueWide(context) ? 72 : 55,
-                radius: 4,
-              ),
-              SizedBox(width: _queueWide(context) ? 16 : 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    MarqueeText(
-                      text: entry.episode.title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      entry.podcast.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+                child: EpisodeLine(
+                  entry: entry,
+                  density: density,
+                  preferPodcastCover: preferPodcastCover,
+                  position: timing.$1,
+                  duration: timing.$2,
+                  coverSize: _queueWide(context) ? 72 : 55,
+                  titleStyle: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                  metaStyle: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
               if (canAdd)
@@ -836,57 +815,52 @@ class _QueueRow extends ConsumerWidget {
     final preferPodcastCover = ref.watch(
       settingsProvider.select((settings) => settings.preferPodcastCover),
     );
+    final density = ref.watch(
+      settingsProvider.select((settings) => settings.episodeListDensity),
+    );
+    final timing = _episodeLineTiming(ref, entry.episode);
+    final wide = _queueWide(context);
     return InkWell(
       onTap: () => ref.read(playerProvider.notifier).playOrPauseEntry(entry),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
-          _queueWide(context) ? 28 : 20,
-          _queueWide(context) ? 10 : 6,
+          wide ? 28 : 20,
+          wide ? 10 : 6,
           8,
-          _queueWide(context) ? 10 : 6,
+          wide ? 10 : 6,
         ),
-        child: Row(
-          children: [
-            PlayingEpisodeCover(
-              episodeId: entry.episode.id,
-              label: entry.episode.title,
-              colorKey: entry.podcast.title,
-              url: entry.imageUrl(preferPodcastCover: preferPodcastCover),
-              localPath: entry.imagePath(
-                preferPodcastCover: preferPodcastCover,
-              ),
-              httpHeaders: podcastAuthHeaders(
-                username: entry.podcast.authUsername,
-                password: entry.podcast.authPassword,
-              ),
-              size: _queueWide(context) ? 64 : 48,
-              radius: 4,
-            ),
-            SizedBox(width: _queueWide(context) ? 16 : 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  MarqueeText(
-                    text: entry.episode.title,
-                    style:
-                        (_queueWide(context)
-                                ? theme.textTheme.titleMedium
-                                : theme.textTheme.titleSmall)
-                            ?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  EpisodeListSubtitle(
-                    entry: entry,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        child: EpisodeLine(
+          entry: entry,
+          density: density,
+          preferPodcastCover: preferPodcastCover,
+          position: timing.$1,
+          duration: timing.$2,
+          coverSize: wide ? 64 : 48,
+          titleStyle:
+              (wide ? theme.textTheme.titleMedium : theme.textTheme.titleSmall)
+                  ?.copyWith(fontWeight: FontWeight.w600),
+          metaStyle: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
         ),
       ),
     );
   }
+}
+
+(Duration, Duration?) _episodeLineTiming(WidgetRef ref, Episode episode) {
+  final playback = ref.watch(
+    playerProvider.select((state) {
+      if (state.episodeId != episode.id) return null;
+      return (position: state.position, duration: state.duration);
+    }),
+  );
+  final duration = playback != null && playback.duration > Duration.zero
+      ? playback.duration
+      : (episode.durationSeconds == null
+            ? null
+            : Duration(seconds: episode.durationSeconds!));
+  final position =
+      playback?.position ?? Duration(milliseconds: episode.positionMs);
+  return (position, duration);
 }

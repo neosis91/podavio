@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/platform.dart';
 import '../../data/app_database.dart';
@@ -9,6 +10,7 @@ import '../../data/download_controller.dart';
 import '../../data/download_service.dart';
 import '../../data/providers.dart';
 import '../../player/playback_source.dart';
+import '../router.dart';
 import 'app_bottom_sheet.dart';
 import 'brand.dart';
 import 'empty_state.dart';
@@ -360,7 +362,19 @@ class _EpisodeListScaffoldState extends ConsumerState<EpisodeListScaffold> {
           ? EpisodeSelectionAppBar(session: _selection!)
           : FrostedAppBar(
               title: widget.title,
-              leading: widget.leading,
+              // Le bouton implicite appelle Navigator.maybePop, que la coque
+              // peut absorber. On sort explicitement de la page.
+              leading:
+                  widget.leading ??
+                  BackButton(
+                    onPressed: () {
+                      if (context.canPop()) {
+                        context.pop();
+                        return;
+                      }
+                      context.go(AppRoutes.library);
+                    },
+                  ),
               actions: widget.actions,
             ),
       body: EpisodeListBody(

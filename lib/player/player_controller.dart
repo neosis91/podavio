@@ -150,13 +150,15 @@ final hasNextInQueueProvider = StreamProvider<bool>((ref) {
   final source = ref.watch(
     playerProvider.select((state) => state.playbackSource),
   );
-  return source.watch(ref.watch(databaseProvider)).map((items) {
-    if (items.isEmpty) return false;
-    if (episodeId == null) return source.isQueue;
-    final index = items.indexWhere((entry) => entry.episode.id == episodeId);
-    if (index < 0) return source.isQueue;
-    return index + 1 < items.length;
-  });
+  final podcastId = ref.watch(
+    playerProvider.select((state) => state.podcastId),
+  );
+  return QueueCursor().watchHasNext(
+    source: source,
+    episodeId: episodeId,
+    podcastId: podcastId,
+    database: ref.watch(databaseProvider),
+  );
 });
 
 class PlayerNotifier extends Notifier<PlayerUiState> {
@@ -559,9 +561,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     );
   }
 
-  /// Épisode précédent dans la playlist.
-  /// Au-delà de 3 s, reprend l’épisode courant depuis le début (comme [skipChapter]).
-  /// Sans précédent, revient aussi au début.
+  /// Épisode précédent dans la liste en cours, sinon dans le podcast.
+  /// Sans précédent, reprend l’épisode courant depuis le début.
   Future<void> playPreviousInQueue() async {
     final step = await _queue.previous(
       remote: _remote,
