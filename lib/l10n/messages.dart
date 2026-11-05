@@ -304,6 +304,9 @@ const _fr = <String, String>{
   'Scan the code': 'Scanner le code',
   'Scanning is available on the phone':
       'Le scan est disponible sur le téléphone',
+  'Allow camera access to scan the code':
+      'Autorisez l’accès à la caméra pour scanner le code',
+  'The camera could not be opened': 'La caméra n’a pas pu être ouverte',
   'Browser connected': 'Navigateur connecté',
   'Waiting for the browser': 'En attente du navigateur',
   'Safety number': 'Empreinte de sécurité',
@@ -835,6 +838,9 @@ const _de = <String, String>{
   'Scan the code': 'Code scannen',
   'Scanning is available on the phone':
       'Das Scannen ist auf dem Telefon verfügbar',
+  'Allow camera access to scan the code':
+      'Erlauben Sie den Kamerazugriff, um den Code zu scannen',
+  'The camera could not be opened': 'Die Kamera konnte nicht geöffnet werden',
   'Browser connected': 'Browser verbunden',
   'Waiting for the browser': 'Warten auf den Browser',
   'Safety number': 'Sicherheitsnummer',
@@ -1348,6 +1354,9 @@ const _es = <String, String>{
   'Scan the code': 'Escanear el código',
   'Scanning is available on the phone':
       'El escaneo está disponible en el teléfono',
+  'Allow camera access to scan the code':
+      'Permite el acceso a la cámara para escanear el código',
+  'The camera could not be opened': 'No se ha podido abrir la cámara',
   'Browser connected': 'Navegador conectado',
   'Waiting for the browser': 'Esperando al navegador',
   'Safety number': 'Número de seguridad',
@@ -1857,6 +1866,9 @@ const _it = <String, String>{
   'Scan the code': 'Scansiona il codice',
   'Scanning is available on the phone':
       'La scansione è disponibile sul telefono',
+  'Allow camera access to scan the code':
+      'Consenti l’accesso alla fotocamera per scansionare il codice',
+  'The camera could not be opened': 'Impossibile aprire la fotocamera',
   'Browser connected': 'Browser connesso',
   'Waiting for the browser': 'In attesa del browser',
   'Safety number': 'Numero di sicurezza',
@@ -2368,6 +2380,9 @@ const _pt = <String, String>{
   'Scan the code': 'Digitalizar o código',
   'Scanning is available on the phone':
       'A digitalização está disponível no telefone',
+  'Allow camera access to scan the code':
+      'Permita o acesso à câmara para digitalizar o código',
+  'The camera could not be opened': 'Não foi possível abrir a câmara',
   'Browser connected': 'Navegador ligado',
   'Waiting for the browser': 'À espera do navegador',
   'Safety number': 'Número de segurança',
@@ -2879,6 +2894,9 @@ const _nl = <String, String>{
   'Encrypted link to the browser': 'Versleutelde koppeling met de browser',
   'Scan the code': 'Code scannen',
   'Scanning is available on the phone': 'Scannen kan op de telefoon',
+  'Allow camera access to scan the code':
+      'Sta cameratoegang toe om de code te scannen',
+  'The camera could not be opened': 'De camera kon niet worden geopend',
   'Browser connected': 'Browser verbonden',
   'Waiting for the browser': 'Wachten op de browser',
   'Safety number': 'Veiligheidsnummer',
@@ -3379,6 +3397,8 @@ const _zh = <String, String>{
   'Encrypted link to the browser': '与浏览器的加密连接',
   'Scan the code': '扫描二维码',
   'Scanning is available on the phone': '扫描只能在手机上进行',
+  'Allow camera access to scan the code': '请允许使用相机以扫描此代码',
+  'The camera could not be opened': '无法打开相机',
   'Browser connected': '浏览器已连接',
   'Waiting for the browser': '等待浏览器',
   'Safety number': '安全编号',
@@ -3880,6 +3900,9 @@ const _hi = <String, String>{
   'Open your library in the browser. The phone keeps the data, encrypted end to end.': 'ब्राउज़र में अपनी लाइब्रेरी खोलें। डेटा फ़ोन पर रहता है और एंड-टू-एंड एन्क्रिप्टेड है।',
   'On a computer, open web.podavio.com and scan the code shown there. The phone keeps the data, encrypted end to end.': 'कंप्यूटर पर web.podavio.com खोलें और वहाँ दिखा कोड स्कैन करें। डेटा फ़ोन पर रहता है और एंड-टू-एंड एन्क्रिप्टेड है।',
   'Scanning is available on the phone': 'स्कैन फ़ोन पर उपलब्ध है',
+  'Allow camera access to scan the code':
+      'कोड स्कैन करने के लिए कैमरे की अनुमति दें',
+  'The camera could not be opened': 'कैमरा नहीं खुल सका',
   'Browser connected': 'ब्राउज़र जुड़ा है',
   'Waiting for the browser': 'ब्राउज़र की प्रतीक्षा',
   'Safety number': 'सुरक्षा संख्या',
@@ -4389,6 +4412,9 @@ const _id = <String, String>{
   'Encrypted link to the browser': 'Tautan terenkripsi ke peramban',
   'Scan the code': 'Pindai kode',
   'Scanning is available on the phone': 'Pemindaian tersedia di ponsel',
+  'Allow camera access to scan the code':
+      'Izinkan akses kamera untuk memindai kode',
+  'The camera could not be opened': 'Kamera tidak dapat dibuka',
   'Browser connected': 'Peramban terhubung',
   'Waiting for the browser': 'Menunggu peramban',
   'Safety number': 'Nomor keamanan',
@@ -4894,6 +4920,8 @@ const _ja = <String, String>{
   'On a computer, open web.podavio.com and scan the code shown there. The phone keeps the data, encrypted end to end.':
       'パソコンで web.podavio.com を開き、表示されたコードをスキャンします。データは端末に残り、端から端まで暗号化されます。',
   'Scanning is available on the phone': 'スキャンはスマートフォンで行えます',
+  'Allow camera access to scan the code': 'コードをスキャンするにはカメラへのアクセスを許可してください',
+  'The camera could not be opened': 'カメラを開けませんでした',
   'Browser connected': 'ブラウザ接続中',
   'Waiting for the browser': 'ブラウザを待っています',
   'Safety number': '安全番号',
@@ -5398,6 +5426,8 @@ const _ko = <String, String>{
   'On a computer, open web.podavio.com and scan the code shown there. The phone keeps the data, encrypted end to end.':
       '컴퓨터에서 web.podavio.com을 열고 표시된 코드를 스캔하세요. 데이터는 휴대폰에 남고 종단간 암호화됩니다.',
   'Scanning is available on the phone': '스캔은 휴대폰에서 할 수 있습니다',
+  'Allow camera access to scan the code': '코드를 스캔하려면 카메라 접근을 허용하세요',
+  'The camera could not be opened': '카메라를 열 수 없습니다',
   'Browser connected': '브라우저 연결됨',
   'Waiting for the browser': '브라우저를 기다리는 중',
   'Safety number': '안전 번호',
@@ -5907,6 +5937,9 @@ const _ru = <String, String>{
   'Encrypted link to the browser': 'Зашифрованная связь с браузером',
   'Scan the code': 'Сканировать код',
   'Scanning is available on the phone': 'Сканирование доступно на телефоне',
+  'Allow camera access to scan the code':
+      'Разрешите доступ к камере, чтобы сканировать код',
+  'The camera could not be opened': 'Не удалось открыть камеру',
   'Browser connected': 'Браузер подключён',
   'Waiting for the browser': 'Ожидание браузера',
   'Safety number': 'Контрольное число',
@@ -6417,6 +6450,9 @@ const _tr = <String, String>{
   'Encrypted link to the browser': 'Tarayıcıya şifreli bağlantı',
   'Scan the code': 'Kodu tara',
   'Scanning is available on the phone': 'Tarama telefonda kullanılabilir',
+  'Allow camera access to scan the code':
+      'Kodu taramak için kamera erişimine izin verin',
+  'The camera could not be opened': 'Kamera açılamadı',
   'Browser connected': 'Tarayıcı bağlı',
   'Waiting for the browser': 'Tarayıcı bekleniyor',
   'Safety number': 'Güvenlik numarası',
@@ -6926,6 +6962,9 @@ const _ar = <String, String>{
   'Encrypted link to the browser': 'رابط مشفّر إلى المتصفح',
   'Scan the code': 'امسح الرمز',
   'Scanning is available on the phone': 'المسح متاح على الهاتف',
+  'Allow camera access to scan the code':
+      'اسمح بالوصول إلى الكاميرا لمسح الرمز',
+  'The camera could not be opened': 'تعذر فتح الكاميرا',
   'Browser connected': 'المتصفح متصل',
   'Waiting for the browser': 'في انتظار المتصفح',
   'Safety number': 'رقم الأمان',
@@ -7436,6 +7475,9 @@ const _pl = <String, String>{
   'Encrypted link to the browser': 'Szyfrowane połączenie z przeglądarką',
   'Scan the code': 'Skanuj kod',
   'Scanning is available on the phone': 'Skanowanie jest dostępne w telefonie',
+  'Allow camera access to scan the code':
+      'Zezwól na dostęp do aparatu, aby zeskanować kod',
+  'The camera could not be opened': 'Nie udało się otworzyć aparatu',
   'Browser connected': 'Przeglądarka połączona',
   'Waiting for the browser': 'Oczekiwanie na przeglądarkę',
   'Safety number': 'Numer bezpieczeństwa',
