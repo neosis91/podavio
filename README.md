@@ -111,6 +111,20 @@ Les nouveautés se rédigent dans `CHANGELOG.md`, sous un titre `## AAAA.M.N`, u
 
 Les APK de release doivent être signés avec le keystore déjà en place, `android/upload-keystore.jks`, et son `android/key.properties`. Voir [docs/android-signing.md](docs/android-signing.md). Ne pas relancer la création du keystore : la signature changerait et les mises à jour in-place échoueraient.
 
+## Traductions
+
+Les textes de l’interface sont dans `l10n/`, un fichier JSON par langue. La clé est le texte anglais. Dans `l10n/en.json`, chaque valeur recopie sa clé. Les autres fichiers portent la traduction.
+
+Pour en ajouter un, l’écrire dans le code avec `context.tr('…')`, l’ajouter dans `l10n/en.json`, puis dans les langues déjà traduites. Ensuite :
+
+```bash
+dart run tool/l10n_generate.dart
+```
+
+Le script réécrit `lib/l10n/messages.dart`. On ne modifie pas ce fichier à la main. Une traduction absente affiche l’anglais.
+
+Ce rangement est celui qu’un outil comme Crowdin sait lire. Rien n’est branché pour l’instant : il suffira plus tard de pointer l’outil vers `l10n/en.json` et `l10n/<langue>.json`.
+
 ## Licence
 
 Podavio est distribué sous la GNU General Public License v3.0 uniquement. Le texte complet est dans [LICENSE](LICENSE).
