@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { RouterLink } from '@angular/router';
-import { QRCodeComponent } from 'angularx-qrcode';
+import { QRCodeComponent } from 'dfx-qrcode';
 
 import { PodavioSession } from '../session.service';
 
