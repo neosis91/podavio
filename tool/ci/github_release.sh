@@ -155,47 +155,7 @@ EOF
 
   publish)
     [ -n "${VERSION}" ] || fail "PODAVIO_RELEASE_VERSION manquant."
-    [ -n "${PODAVIO_SITE_USERNAME:-}" ] || fail "Secret PODAVIO_SITE_USERNAME manquant."
-    [ -n "${PODAVIO_SITE_TOKEN:-}" ] || fail "Secret PODAVIO_SITE_TOKEN manquant."
     python3 tool/changelog.py check "${VERSION}"
-    askpass="$(mktemp)"
-    site="$(mktemp -d)"
-    trap 'rm -rf "${site}" "${askpass}"' EXIT
-    cat > "${askpass}" <<'EOF'
-#!/bin/sh
-case "$1" in
-  *Username*) printf '%s' "$PODAVIO_SITE_USERNAME" ;;
-  *) printf '%s' "$PODAVIO_SITE_TOKEN" ;;
-esac
-EOF
-    chmod 700 "${askpass}"
-    GIT_ASKPASS="${askpass}"
-    GIT_TERMINAL_PROMPT=0
-    export GIT_ASKPASS GIT_TERMINAL_PROMPT
-    git clone --depth 1 https://gitlab.com/neosis91/podavio-site.git "${site}"
-    if [ -d "${site}/releases" ]; then
-      find "${site}/releases" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-    fi
-    dest="${site}/releases/${VERSION}"
-    mkdir -p "${dest}"
-    cp dist/android/podavio-"${VERSION}"-android-*.apk "${dest}/"
-    cp "dist/linux/podavio-${VERSION}-linux-x64.tar.gz" "${dest}/"
-    python3 tool/changelog.py publish \
-      --version "${VERSION}" \
-      --date "$(date -u +%F)" \
-      --site "${site}"
-    git -C "${site}" add -A -- releases latest.json changelog.json journal/index.html
-    if git -C "${site}" diff --cached --quiet; then
-      echo "Le site contient déjà ${VERSION}."
-    else
-      git -C "${site}" \
-        -c user.name="neosis91" \
-        -c user.email="bertrand.jaunet@posteo.net" \
-        commit -m "Publier Podavio ${VERSION} sur podavio.com."
-      git -C "${site}" push origin HEAD:main
-      echo "Site poussé."
-    fi
-    unset GIT_ASKPASS GIT_TERMINAL_PROMPT
     if ! git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
       git -c user.name="neosis91" -c user.email="bertrand.jaunet@posteo.net" \
         tag -a "${VERSION}" -m "Podavio ${VERSION}"

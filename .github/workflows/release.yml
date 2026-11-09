@@ -96,9 +96,7 @@ jobs:
         with:
           name: linux
           path: dist/linux
-      - name: Site, tag et release
+      - name: Tag et release
         env:
           PODAVIO_RELEASE_VERSION: ${{ needs.gate.outputs.version }}
-          PODAVIO_SITE_USERNAME: ${{ secrets.PODAVIO_SITE_USERNAME }}
-          PODAVIO_SITE_TOKEN: ${{ secrets.PODAVIO_SITE_TOKEN }}
         run: tool/ci/github_release.sh publish
