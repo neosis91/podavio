@@ -4,7 +4,7 @@
 
 Podavio est un lecteur de podcasts libre pour Android, iOS, Windows, macOS et Linux. On s’abonne à n’importe quel flux RSS, sans compte obligatoire et sans publicité dans l’application.
 
-Les versions Android et Linux sont les fichiers de la [release GitHub](https://github.com/neosis91/podavio/releases/latest). Le compagnon dans le navigateur est sur [web.podavio.com](https://web.podavio.com).
+Les versions Android, Windows et Linux sont les fichiers de la [release GitHub](https://github.com/neosis91/podavio/releases/latest). Le compagnon dans le navigateur est sur [web.podavio.com](https://web.podavio.com).
 
 ## Fonctions
 
@@ -57,6 +57,8 @@ flutter test
 ```
 
 Linux : `flutter build linux` place le programme dans `build/linux/x64/release/bundle/`.
+
+Windows : `flutter build windows` place `podavio.exe` dans `build/windows/x64/runner/Release/`. Ce dossier contient aussi les bibliothèques nécessaires.
 
 Android : `flutter build apk` produit `build/app/outputs/flutter-apk/app-release.apk`. Une release signée utilise le keystore décrit dans [docs/android-signing.md](docs/android-signing.md).
 

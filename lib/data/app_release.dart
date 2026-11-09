@@ -18,6 +18,7 @@ const _githubAssetSuffixes = {
   'android-x86_64': '-android-x86_64.apk',
   'android-universal': '-android-universal.apk',
   'linux-x64': '-linux-x64.tar.gz',
+  'windows-x64': '-windows-x64.zip',
 };
 
 class AppRelease {

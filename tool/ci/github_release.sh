@@ -153,6 +153,32 @@ EOF
     rm -rf "${bundle}"
     ;;
 
+  build-windows)
+    [ -n "${VERSION}" ] || fail "PODAVIO_RELEASE_VERSION manquant."
+    build_ids
+    flutter config --enable-windows-desktop
+    # shellcheck disable=SC2046
+    flutter build windows --release $(defines)
+    mkdir -p dist/windows
+    name="podavio-${VERSION}-windows-x64"
+    rm -rf "dist/windows/${name}"
+    cp -a build/windows/x64/runner/Release "dist/windows/${name}"
+    if command -v python3 >/dev/null 2>&1; then
+      py=python3
+    else
+      py=python
+    fi
+    PODAVIO_WIN_NAME="${name}" "${py}" - <<'PY'
+import os
+import shutil
+from pathlib import Path
+name = os.environ["PODAVIO_WIN_NAME"]
+root = Path("dist/windows")
+shutil.make_archive(str(root / name), "zip", root_dir=root, base_dir=name)
+PY
+    rm -rf "dist/windows/${name}"
+    ;;
+
   publish)
     [ -n "${VERSION}" ] || fail "PODAVIO_RELEASE_VERSION manquant."
     python3 tool/changelog.py check "${VERSION}"
@@ -172,12 +198,13 @@ EOF
         "dist/android/podavio-${VERSION}-android-armeabi-v7a.apk#APK armeabi-v7a" \
         "dist/android/podavio-${VERSION}-android-arm64-v8a.apk#APK arm64-v8a" \
         "dist/android/podavio-${VERSION}-android-x86_64.apk#APK x86_64" \
-        "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)"
+        "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)" \
+        "dist/windows/podavio-${VERSION}-windows-x64.zip#Windows x64 (podavio.exe)"
     fi
     echo "Release ${VERSION} publiée."
     ;;
 
   *)
-    fail "Usage : tool/ci/github_release.sh gate|keystore|build-android|build-linux|publish"
+    fail "Usage : tool/ci/github_release.sh gate|keystore|build-android|build-linux|build-windows|publish"
     ;;
 esac
