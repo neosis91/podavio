@@ -310,6 +310,12 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
   }
 
+  /// Change la liste suivie par suivant et précédent, sans relancer l’épisode.
+  void setPlaybackSource(PlaybackSource source) {
+    if (_disposed || _ui.playbackSource == source) return;
+    _emit(_ui.copyWith(playbackSource: source));
+  }
+
   Future<void> playEntry(
     EpisodeEntry entry, {
     PlaybackSource? source,

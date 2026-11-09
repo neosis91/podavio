@@ -133,6 +133,61 @@ void main() {
     );
   });
 
+  test('oldest first starts a podcast at its first episode', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final podcastId = (await database.saveFeed(
+      FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'ep-1',
+            title: 'Janvier',
+            description: '',
+            audioUrl: 'https://example.com/1.mp3',
+            publishedAt: DateTime.utc(2024, 1, 1),
+          ),
+          EpisodeDraft(
+            guid: 'ep-2',
+            title: 'Mars',
+            description: '',
+            audioUrl: 'https://example.com/2.mp3',
+            publishedAt: DateTime.utc(2024, 3, 1),
+          ),
+          EpisodeDraft(
+            guid: 'ep-3',
+            title: 'Avril',
+            description: '',
+            audioUrl: 'https://example.com/3.mp3',
+            publishedAt: DateTime.utc(2024, 4, 1),
+          ),
+        ],
+      ),
+    )).podcastId;
+
+    final newest = await database
+        .watchEpisodeWindow(podcastId: podcastId)
+        .first;
+    expect(newest.map((entry) => entry.episode.title), [
+      'Avril',
+      'Mars',
+      'Janvier',
+    ]);
+
+    final oldest = await database
+        .watchEpisodeWindow(podcastId: podcastId, oldestFirst: true)
+        .first;
+    expect(oldest.map((entry) => entry.episode.title), [
+      'Janvier',
+      'Mars',
+      'Avril',
+    ]);
+  });
+
   test('playback pages walk backward and prepend keeps queue order', () async {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);

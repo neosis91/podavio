@@ -211,6 +211,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     int? playlistId,
     String search = '',
     int? limit,
+    bool oldestFirst = false,
   }) {
     final needle = search.trim();
     return _episodeWindow(
@@ -225,6 +226,7 @@ mixin _EpisodeQueries on _$AppDatabase {
       playlistId: playlistId,
       titleFoldLike: needle.isEmpty ? null : foldedLikePattern(needle),
       limit: limit,
+      oldestFirst: oldestFirst,
     ).watch();
   }
 
@@ -252,6 +254,7 @@ mixin _EpisodeQueries on _$AppDatabase {
     bool afterByLastPlayed = false,
     int? afterPlaylistPosition,
     bool beforeAnchor = false,
+    bool oldestFirst = false,
   }) {
     final query = selectOnly(episodes)
       ..addColumns([
@@ -442,8 +445,9 @@ mixin _EpisodeQueries on _$AppDatabase {
         ?tie,
       ]);
     } else {
+      final descending = oldestFirst ? beforeAnchor : newestFirst;
       query.orderBy([
-        newestFirst
+        descending
             ? OrderingTerm.desc(episodes.publishedAt)
             : OrderingTerm.asc(episodes.publishedAt),
         ?tie,

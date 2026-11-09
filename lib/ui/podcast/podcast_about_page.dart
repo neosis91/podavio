@@ -41,7 +41,6 @@ class PodcastAboutPage extends ConsumerWidget {
             ),
           );
         }
-        final description = plainText(item.description);
         final persons = item.persons;
         final funding = item.fundingLinks;
         final titleStyle = Theme.of(context).textTheme.titleSmall
@@ -57,21 +56,6 @@ class PodcastAboutPage extends ConsumerWidget {
                 podcastId: item.id,
                 subscribedAt: item.subscribedAt,
               ),
-              if (description.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Description', style: titleStyle),
-                      const SizedBox(height: 8),
-                      SelectableText(
-                        description,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
               if (persons.isNotEmpty)
                 _PersonsSection(persons: persons, titleStyle: titleStyle),
               if (funding.isNotEmpty)
