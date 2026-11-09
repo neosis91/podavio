@@ -20,7 +20,7 @@ tool/ci/create_android_keystore.sh
 
 et l’empreinte SHA-256.
 
-`tool/release_local.sh` refuse de publier si `key.properties` ou le keystore manque.
+`tool/release_local.sh` refuse de publier si `key.properties` ou le keystore manque. L’action GitHub lit les mêmes secrets.
 
 **Sauvegarde hors Git** le `.jks` et les mots de passe (coffre / gestionnaire).
 Si tu perds le keystore, tu ne pourras plus mettre à jour l’app installée avec
@@ -28,11 +28,9 @@ la même identité de signature (désinstall / réinstall obligatoire).
 
 ## Release
 
-```bash
-tool/release_local.sh 2026.10.6
-```
+La fusion de `develop` dans `main` compile Android et Linux, puis publie sur podavio.com. Le titre `## AAAA.M.N` doit déjà être dans `CHANGELOG.md`.
 
-Gradle lit `android/key.properties` (`android/app/build.gradle.kts`) et signe en release. Les APK ne contiennent pas le keystore.
+`tool/release_local.sh` reste un secours sur une machine qui a le keystore.
 
 ## Migration depuis les APK debug
 

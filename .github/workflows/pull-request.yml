@@ -1,0 +1,19 @@
+name: Contrôles de pull request
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  cible:
+    name: check:mr_target
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Cible de la pull request
+        env:
+          CI_PIPELINE_SOURCE: merge_request_event
+          CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.base_ref }}
+          CI_MERGE_REQUEST_SOURCE_BRANCH_NAME: ${{ github.head_ref }}
+          CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
+        run: tool/ci/check_mr_target.sh

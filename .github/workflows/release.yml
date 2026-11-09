@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.decide.outputs.release }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Fusion develop vers main
+        id: decide
+        run: tool/ci/github_release.sh gate
+
+  android:
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: tool/ci/github_release.sh keystore
+      - name: APK
+        env:
+          PODAVIO_RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+        run: tool/ci/github_release.sh build-android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/android/*.apk
+          if-no-files-found: error
+
+  linux:
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Dépendances
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Archive Linux
+        env:
+          PODAVIO_RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+        run: tool/ci/github_release.sh build-linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/linux/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: [gate, android, linux]
+    if: needs.gate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: android
+          path: dist/android
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: dist/linux
+      - name: Site, tag et release
+        env:
+          PODAVIO_RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+          PODAVIO_SITE_USERNAME: ${{ secrets.PODAVIO_SITE_USERNAME }}
+          PODAVIO_SITE_TOKEN: ${{ secrets.PODAVIO_SITE_TOKEN }}
+        run: tool/ci/github_release.sh publish

@@ -1,6 +1,6 @@
 # Contrôles de merge request uniquement.
-# Les binaires sont compilés en local : tool/release_local.sh
-# (le tag est poussé avec ci.skip ; un tag ne lance pas ce pipeline).
+# La release part de GitHub Actions quand develop est fusionné dans main.
+# (un tag ne lance pas ce pipeline).
 
 stages:
   - merge_checks
