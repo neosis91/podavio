@@ -75,7 +75,12 @@ case "${1:-}" in
     VERSION="$(changelog_version)"
     remote="$(git ls-remote --tags origin "refs/tags/${VERSION}" | awk 'END { print $1 }')"
     if [ -n "${remote}" ] && [ "${remote}" != "${SHA_FULL}" ]; then
-      fail "Le tag ${VERSION} existe déjà et pointe vers un autre commit."
+      if gh release view "${VERSION}" >/dev/null 2>&1; then
+        echo "La release ${VERSION} est déjà publiée."
+        echo "release=false" >> "${GITHUB_OUTPUT:?}"
+        exit 0
+      fi
+      fail "Le tag ${VERSION} existe déjà et pointe vers un autre commit, sans release GitHub."
     fi
     if [ "${remote}" = "${SHA_FULL}" ]; then
       echo "Le tag ${VERSION} est déjà sur ce commit."
@@ -180,6 +185,10 @@ EOF
 
   publish)
     [ -n "${VERSION}" ] || fail "PODAVIO_RELEASE_VERSION manquant."
+    if [ -z "${GH_TOKEN:-}" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
+      export GH_TOKEN="${GITHUB_TOKEN}"
+    fi
+    [ -n "${GH_TOKEN:-}" ] || fail "GH_TOKEN manquant."
     python3 tool/changelog.py check "${VERSION}"
     if ! git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
       git -c user.name="neosis91" -c user.email="bertrand.jaunet@posteo.net" \
