@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-# Compile Android + Linux sur cette machine et publie une release GitLab.
-# Aucun runner SaaS : le tag est poussé avec ci.skip.
+# Compilation manuelle de secours. Le chemin normal est la fusion
+# develop → main, qui lance .github/workflows/release.yml.
 #
 # Usage :
 #   tool/release_local.sh              # affiche la prochaine version CalVer
