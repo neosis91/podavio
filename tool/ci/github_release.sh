@@ -159,24 +159,20 @@ EOF
     flutter config --enable-windows-desktop
     # shellcheck disable=SC2046
     flutter build windows --release $(defines)
+    source="$(cygpath -w "${PWD}/build/windows/x64/runner/Release")"
+    year="${VERSION%%.*}"
+    rest="${VERSION#*.}"
+    month="${rest%%.*}"
+    patch="${VERSION##*.}"
+    msi_version="$(printf '%d.%s.%s' "$((year % 100))" "${month}" "${patch}")"
+    dotnet tool install --global wix --version 7.0.1
+    export PATH="${HOME}/.dotnet/tools:${PATH}"
     mkdir -p dist/windows
-    name="podavio-${VERSION}-windows-x64"
-    rm -rf "dist/windows/${name}"
-    cp -a build/windows/x64/runner/Release "dist/windows/${name}"
-    if command -v python3 >/dev/null 2>&1; then
-      py=python3
-    else
-      py=python
-    fi
-    PODAVIO_WIN_NAME="${name}" "${py}" - <<'PY'
-import os
-import shutil
-from pathlib import Path
-name = os.environ["PODAVIO_WIN_NAME"]
-root = Path("dist/windows")
-shutil.make_archive(str(root / name), "zip", root_dir=root, base_dir=name)
-PY
-    rm -rf "dist/windows/${name}"
+    wix build windows/installer/podavio.wxs \
+      -arch x64 \
+      -d "ProductVersion=${msi_version}" \
+      -d "SourceDir=${source}" \
+      -o "dist/windows/podavio-${VERSION}-windows-x64.msi"
     ;;
 
   publish)
@@ -199,7 +195,7 @@ PY
         "dist/android/podavio-${VERSION}-android-arm64-v8a.apk#APK arm64-v8a" \
         "dist/android/podavio-${VERSION}-android-x86_64.apk#APK x86_64" \
         "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)" \
-        "dist/windows/podavio-${VERSION}-windows-x64.zip#Windows x64 (podavio.exe)"
+        "dist/windows/podavio-${VERSION}-windows-x64.msi#Windows x64 (.msi)"
     fi
     echo "Release ${VERSION} publiée."
     ;;

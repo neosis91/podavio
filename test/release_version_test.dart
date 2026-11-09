@@ -60,8 +60,8 @@ void main() {
       "browser_download_url": "https://github.com/neosis91/podavio/releases/download/2026.10.11/podavio-2026.10.11-linux-x64.tar.gz"
     },
     {
-      "name": "podavio-2026.10.11-windows-x64.zip",
-      "browser_download_url": "https://github.com/neosis91/podavio/releases/download/2026.10.11/podavio-2026.10.11-windows-x64.zip"
+      "name": "podavio-2026.10.11-windows-x64.msi",
+      "browser_download_url": "https://github.com/neosis91/podavio/releases/download/2026.10.11/podavio-2026.10.11-windows-x64.msi"
     }
   ]
 }
@@ -78,7 +78,7 @@ void main() {
     );
     expect(
       release?.fileUri('windows-x64')?.toString(),
-      'https://github.com/neosis91/podavio/releases/download/2026.10.11/podavio-2026.10.11-windows-x64.zip',
+      'https://github.com/neosis91/podavio/releases/download/2026.10.11/podavio-2026.10.11-windows-x64.msi',
     );
     expect(AppRelease.tryParseGitHub('{"tag_name":"2026.10.11"}'), isNull);
   });

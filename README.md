@@ -58,7 +58,7 @@ flutter test
 
 Linux : `flutter build linux` place le programme dans `build/linux/x64/release/bundle/`.
 
-Windows : `flutter build windows` place `podavio.exe` dans `build/windows/x64/runner/Release/`. Ce dossier contient aussi les bibliothèques nécessaires.
+Windows : `flutter build windows` place `podavio.exe` dans `build/windows/x64/runner/Release/`. Ce dossier contient aussi les bibliothèques nécessaires. La release GitHub est un seul fichier `.msi` : l’ouvrir installe ce dossier et ajoute un raccourci.
 
 Android : `flutter build apk` produit `build/app/outputs/flutter-apk/app-release.apk`. Une release signée utilise le keystore décrit dans [docs/android-signing.md](docs/android-signing.md).
 

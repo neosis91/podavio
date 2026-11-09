@@ -6,7 +6,7 @@ La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
 ## 2026.11.3
 
-- The GitHub release includes a Windows x64 archive. It contains podavio.exe and the libraries that program needs.
+- The GitHub release includes one Windows file, an .msi installer. Opening it installs Podavio for the current user and adds a Start menu shortcut.
 
 ## 2026.11.2
 

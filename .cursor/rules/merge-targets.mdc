@@ -12,7 +12,7 @@ Quand tu ouvres une pull request :
 
 Ne jamais ouvrir une PR feature/fix/release vers `main` directement. Ne jamais ouvrir une PR `develop` vers autre chose que `main`.
 
-La fusion `develop` → `main` publie la release GitHub (APK Android, archive Windows, archive Linux). Le titre `## AAAA.M.N` doit être dans `CHANGELOG.md` avant cette fusion.
+La fusion `develop` → `main` publie la release GitHub (APK Android, installateur Windows, archive Linux). Le titre `## AAAA.M.N` doit être dans `CHANGELOG.md` avant cette fusion.
 
 ## GitHub
 
