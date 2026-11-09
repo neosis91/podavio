@@ -4,6 +4,10 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.11.3
+
+- The GitHub release includes one Windows file, an .msi installer. Opening it installs Podavio for the current user and adds a Start menu shortcut.
+
 ## 2026.11.2
 
 - The podcast page opens on the full square cover. Scrolling past it shows a frosted bar with the show name. Back, the preferred star, and the menu sit below the status bar. The episode list can be reversed, and that order is kept for the show. Play starts the first episode of that order. The third button is Subscribe, or automatic downloads once the show is subscribed. Its icon is green while automatic download is on. The description shows three lines, with Plus and Moins for the rest.

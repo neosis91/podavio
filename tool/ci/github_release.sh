@@ -153,6 +153,28 @@ EOF
     rm -rf "${bundle}"
     ;;
 
+  build-windows)
+    [ -n "${VERSION}" ] || fail "PODAVIO_RELEASE_VERSION manquant."
+    build_ids
+    flutter config --enable-windows-desktop
+    # shellcheck disable=SC2046
+    flutter build windows --release $(defines)
+    source="$(cygpath -w "${PWD}/build/windows/x64/runner/Release")"
+    year="${VERSION%%.*}"
+    rest="${VERSION#*.}"
+    month="${rest%%.*}"
+    patch="${VERSION##*.}"
+    msi_version="$(printf '%d.%s.%s' "$((year % 100))" "${month}" "${patch}")"
+    dotnet tool install --global wix --version 7.0.1
+    export PATH="${HOME}/.dotnet/tools:${PATH}"
+    mkdir -p dist/windows
+    wix build windows/installer/podavio.wxs \
+      -arch x64 \
+      -d "ProductVersion=${msi_version}" \
+      -d "SourceDir=${source}" \
+      -o "dist/windows/podavio-${VERSION}-windows-x64.msi"
+    ;;
+
   publish)
     [ -n "${VERSION}" ] || fail "PODAVIO_RELEASE_VERSION manquant."
     python3 tool/changelog.py check "${VERSION}"
@@ -172,12 +194,13 @@ EOF
         "dist/android/podavio-${VERSION}-android-armeabi-v7a.apk#APK armeabi-v7a" \
         "dist/android/podavio-${VERSION}-android-arm64-v8a.apk#APK arm64-v8a" \
         "dist/android/podavio-${VERSION}-android-x86_64.apk#APK x86_64" \
-        "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)"
+        "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)" \
+        "dist/windows/podavio-${VERSION}-windows-x64.msi#Windows x64 (.msi)"
     fi
     echo "Release ${VERSION} publiée."
     ;;
 
   *)
-    fail "Usage : tool/ci/github_release.sh gate|keystore|build-android|build-linux|publish"
+    fail "Usage : tool/ci/github_release.sh gate|keystore|build-android|build-linux|build-windows|publish"
     ;;
 esac

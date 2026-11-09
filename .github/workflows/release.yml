@@ -80,8 +80,29 @@ jobs:
           path: dist/linux/*.tar.gz
           if-no-files-found: error
 
+  windows:
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Exécutable Windows
+        shell: bash
+        env:
+          PODAVIO_RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+        run: tool/ci/github_release.sh build-windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/windows/*.msi
+          if-no-files-found: error
+
   publish:
-    needs: [gate, android, linux]
+    needs: [gate, android, linux, windows]
     if: needs.gate.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -96,6 +117,10 @@ jobs:
         with:
           name: linux
           path: dist/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: dist/windows
       - name: Tag et release
         env:
           PODAVIO_RELEASE_VERSION: ${{ needs.gate.outputs.version }}
