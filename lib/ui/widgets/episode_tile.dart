@@ -216,7 +216,11 @@ class EpisodeListSubtitle extends ConsumerWidget {
           ),
         if (downloaded) ...[
           const SizedBox(width: 6),
-          Icon(Icons.download_for_offline, size: 16, color: scheme.onSurface),
+          Icon(
+            Icons.download_for_offline,
+            size: 16,
+            color: downloadActiveColor,
+          ),
         ],
         if (episode.favorite) ...[
           const SizedBox(width: 6),

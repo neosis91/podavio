@@ -157,17 +157,6 @@ class PlaybackPage extends ConsumerWidget {
               onChanged: notifier.setRefreshIntervalMinutes,
             ),
           ),
-          SettingsSectionTitle(context.tr('Downloads')),
-          SwitchListTile(
-            title: Text(context.tr('Add to playlist')),
-            subtitle: Text(
-              context.tr(
-                'Adds the episode to the playlist when the download finishes',
-              ),
-            ),
-            value: settings.enqueueDownloads,
-            onChanged: notifier.setEnqueueDownloads,
-          ),
         ],
       ),
     );

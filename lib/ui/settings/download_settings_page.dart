@@ -75,6 +75,16 @@ class DownloadSettingsPage extends ConsumerWidget {
             onTap: () => _pickEpisodeCacheSize(context, ref),
           ),
           SwitchListTile(
+            title: Text(context.tr('Add to playlist')),
+            subtitle: Text(
+              context.tr(
+                'Adds the episode to the playlist when the download finishes',
+              ),
+            ),
+            value: settings.enqueueDownloads,
+            onChanged: ref.read(settingsProvider.notifier).setEnqueueDownloads,
+          ),
+          SwitchListTile(
             title: const Text('Retirer de la playlist'),
             subtitle: const Text(
               'Enlève l’épisode de la playlist quand son téléchargement est supprimé',

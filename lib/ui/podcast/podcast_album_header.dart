@@ -362,9 +362,7 @@ class PodcastActionRow extends StatelessWidget {
               child: Icon(
                 Icons.downloading,
                 size: 22,
-                color: automaticDownload
-                    ? const Color(0xff4CAF50)
-                    : Colors.white,
+                color: automaticDownload ? downloadActiveColor : Colors.white,
               ),
             )
           else
@@ -505,7 +503,7 @@ class _CoverActionPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.28),
+        color: coverControlColor,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
@@ -551,7 +549,7 @@ class _CoverIconButton extends StatelessWidget {
       tooltip: tooltip,
       onPressed: onPressed,
       style: IconButton.styleFrom(
-        backgroundColor: Colors.black.withValues(alpha: 0.28),
+        backgroundColor: coverControlColor,
         foregroundColor: Colors.white,
         fixedSize: const Size(48, 48),
         shape: const CircleBorder(),

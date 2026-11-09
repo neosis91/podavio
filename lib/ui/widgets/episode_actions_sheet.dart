@@ -202,7 +202,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
               : episode.downloadPath != null
               ? Icons.download_for_offline
               : Icons.download_for_offline_outlined,
-          color: episode.downloadPath != null ? const Color(0xFF00A0CB) : null,
+          color: episode.downloadPath != null ? downloadActiveColor : null,
         ),
         label: context.tr(
           downloading
