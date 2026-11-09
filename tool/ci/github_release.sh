@@ -168,7 +168,10 @@ EOF
     dotnet tool install --global wix --version 7.0.1
     export PATH="${HOME}/.dotnet/tools:${PATH}"
     mkdir -p dist/windows
+    # WiX 7 refuse de démarrer sans cet accord. En dessous de 10 000 $
+    # de revenu annuel, la redevance de maintenance ne s’applique pas.
     wix build windows/installer/podavio.wxs \
+      -acceptEula wix7 \
       -arch x64 \
       -d "ProductVersion=${msi_version}" \
       -d "SourceDir=${source}" \
