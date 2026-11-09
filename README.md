@@ -4,7 +4,7 @@
 
 Podavio est un lecteur de podcasts libre pour Android, iOS, Windows, macOS et Linux. On s’abonne à n’importe quel flux RSS, sans compte obligatoire et sans publicité dans l’application.
 
-Les versions Android et Linux sont sur [podavio.com](https://podavio.com). Le compagnon dans le navigateur est sur [web.podavio.com](https://web.podavio.com).
+Les versions Android et Linux sont les fichiers de la [release GitHub](https://github.com/neosis91/podavio/releases/latest). Le compagnon dans le navigateur est sur [web.podavio.com](https://web.podavio.com).
 
 ## Fonctions
 

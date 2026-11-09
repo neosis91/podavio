@@ -7,8 +7,18 @@ import '../core/build_info.dart';
 import '../core/release_version.dart';
 import 'providers.dart';
 
+const githubLatestReleaseUrl =
+    'https://api.github.com/repos/neosis91/podavio/releases/latest';
 const latestReleaseUrl = 'https://podavio.com/latest.json';
 const downloadPageUrl = 'https://podavio.com/download';
+
+const _githubAssetSuffixes = {
+  'android-arm64-v8a': '-android-arm64-v8a.apk',
+  'android-armeabi-v7a': '-android-armeabi-v7a.apk',
+  'android-x86_64': '-android-x86_64.apk',
+  'android-universal': '-android-universal.apk',
+  'linux-x64': '-linux-x64.tar.gz',
+};
 
 class AppRelease {
   const AppRelease({
@@ -22,14 +32,16 @@ class AppRelease {
   final DateTime? date;
   final List<String> notes;
 
-  /// Chemins relatifs sous podavio.com, ex. `android-universal`.
+  /// URL absolue, ou chemin relatif sous podavio.com.
   final Map<String, String> files;
 
-  /// URL absolue d’un artefact, ou null.
+  /// URL de téléchargement d’un artefact, ou null.
   Uri? fileUri(String key) {
-    final relative = files[key]?.trim();
-    if (relative == null || relative.isEmpty) return null;
-    return Uri.parse('https://podavio.com/$relative');
+    final value = files[key]?.trim();
+    if (value == null || value.isEmpty) return null;
+    final absolute = Uri.tryParse(value);
+    if (absolute != null && absolute.hasScheme) return absolute;
+    return Uri.parse('https://podavio.com/$value');
   }
 
   static AppRelease? tryParse(String body) {
@@ -66,22 +78,91 @@ class AppRelease {
       return null;
     }
   }
+
+  /// Release GitHub : les fichiers sont les `browser_download_url`.
+  static AppRelease? tryParseGitHub(String body) {
+    try {
+      final json = jsonDecode(body);
+      if (json is! Map) return null;
+      final tag = json['tag_name'];
+      if (tag is! String || tag.trim().isEmpty) return null;
+      final version = tag.trim().replaceFirst(RegExp(r'^v'), '');
+      final published = json['published_at'];
+      final date = published is String ? DateTime.tryParse(published) : null;
+      final notes = <String>[];
+      final rawBody = json['body'];
+      if (rawBody is String) {
+        for (final line in rawBody.split('\n')) {
+          final trimmed = line.trim();
+          if (trimmed.startsWith('- ')) {
+            notes.add(trimmed.substring(2).trim());
+          } else if (trimmed.startsWith('* ')) {
+            notes.add(trimmed.substring(2).trim());
+          }
+        }
+      }
+      final files = <String, String>{};
+      final assets = json['assets'];
+      if (assets is List) {
+        for (final asset in assets) {
+          if (asset is! Map) continue;
+          final name = asset['name'];
+          final url = asset['browser_download_url'];
+          if (name is! String || url is! String || url.trim().isEmpty) continue;
+          for (final entry in _githubAssetSuffixes.entries) {
+            if (name.endsWith(entry.value)) {
+              files[entry.key] = url.trim();
+            }
+          }
+        }
+      }
+      if (files.isEmpty) return null;
+      return AppRelease(
+        version: version,
+        date: date?.toLocal(),
+        notes: notes,
+        files: files,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
-/// Dernière publication sur podavio.com, sans comparer à la version locale.
+Future<AppRelease?> _readRelease(http.Client client, Uri url) async {
+  final response = await client
+      .get(
+        url,
+        headers: const {
+          'User-Agent': 'Podavio',
+          'Accept': 'application/vnd.github+json',
+        },
+      )
+      .timeout(const Duration(seconds: 12));
+  if (response.statusCode != 200) return null;
+  if (url.toString() == githubLatestReleaseUrl) {
+    return AppRelease.tryParseGitHub(response.body);
+  }
+  return AppRelease.tryParse(response.body);
+}
+
+/// Dernière publication. Les fichiers viennent de la release GitHub.
+/// Sans fichiers GitHub, la lecture retombe sur podavio.com.
 Future<AppRelease?> fetchLatestRelease() async {
   final client = http.Client();
   try {
-    final response = await client
-        .get(
-          Uri.parse(latestReleaseUrl),
-          headers: const {'User-Agent': 'Podavio'},
-        )
-        .timeout(const Duration(seconds: 12));
-    if (response.statusCode != 200) return null;
-    return AppRelease.tryParse(response.body);
+    final github = await _readRelease(
+      client,
+      Uri.parse(githubLatestReleaseUrl),
+    );
+    if (github != null) return github;
+    return _readRelease(client, Uri.parse(latestReleaseUrl));
   } catch (_) {
-    return null;
+    try {
+      return _readRelease(client, Uri.parse(latestReleaseUrl));
+    } catch (_) {
+      return null;
+    }
   } finally {
     client.close();
   }
@@ -116,19 +197,17 @@ class AppUpdateFailed extends AppUpdateLookup {
   const AppUpdateFailed();
 }
 
-/// Interroge podavio.com. Une installation sans `PODAVIO_VERSION` n’est pas
-/// comparée : `0.1.0` serait toujours en retard sur le site.
+/// Interroge la release GitHub, puis podavio.com s’il n’y a pas encore de
+/// fichiers. Une installation sans `PODAVIO_VERSION` n’est pas comparée :
+/// `0.1.0` serait toujours en retard.
 Future<AppUpdateLookup> lookupAppUpdate() async {
   final client = http.Client();
   try {
-    final response = await client
-        .get(
-          Uri.parse(latestReleaseUrl),
-          headers: const {'User-Agent': 'Podavio'},
-        )
-        .timeout(const Duration(seconds: 12));
-    if (response.statusCode != 200) return const AppUpdateFailed();
-    final latest = AppRelease.tryParse(response.body);
+    AppRelease? latest;
+    try {
+      latest = await _readRelease(client, Uri.parse(githubLatestReleaseUrl));
+    } catch (_) {}
+    latest ??= await _readRelease(client, Uri.parse(latestReleaseUrl));
     if (latest == null) return const AppUpdateFailed();
     final current = BuildInfo.version;
     if (current.isEmpty) return AppUpdateUnversioned(latest);
