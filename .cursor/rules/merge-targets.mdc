@@ -1,19 +1,22 @@
 ---
-description: Cibles de merge request (develop→main, sinon→develop)
+description: Cibles de pull request et squash (develop→main sans squash, sinon→develop en squash)
 alwaysApply: true
 ---
 
-# Cibles de merge request
+# Cibles et squash
 
-Quand tu crées une merge request (GitLab) :
+Quand tu ouvres une pull request :
 
-- Branche `develop` → cible **toujours** `main`
-- Toute autre branche → cible **toujours** `develop`
+- Branche `develop` → cible **toujours** `main`, commit de merge, squash interdit
+- Toute autre branche → cible **toujours** `develop`, squash obligatoire
 
-Ne jamais ouvrir une MR feature/fix/release vers `main` directement. Ne jamais ouvrir une MR `develop` vers autre chose que `main`.
+Ne jamais ouvrir une PR feature/fix/release vers `main` directement. Ne jamais ouvrir une PR `develop` vers autre chose que `main`.
 
-## GitLab
+La fusion `develop` → `main` publie la release (Android, Linux, podavio.com). Le titre `## AAAA.M.N` doit être dans `CHANGELOG.md` avant cette fusion.
 
-- Branche par défaut du projet : `develop` (préremplit la cible pour les MR hors `develop`)
-- Enforcement CI : job `check:mr_target` (script `tool/ci/check_mr_target.sh`)
-- Les « Target branch rules » natives (Premium) ne sont pas disponibles sur ce projet
+## GitHub
+
+- Branche par défaut : `main`
+- Cible : job `check:mr_target` (script `tool/ci/check_mr_target.sh`)
+- Squash : ruleset `develop` = squash seul, ruleset `main` = merge seul
+
