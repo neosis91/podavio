@@ -4,6 +4,21 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.11.2
+
+- The podcast page opens on the full square cover. Scrolling past it shows a frosted bar with the show name. Back, the preferred star, and the menu sit below the status bar. The episode list can be reversed, and that order is kept for the show. Play starts the first episode of that order. The third button is Subscribe, or automatic downloads once the show is subscribed. Its icon is green while automatic download is on. The description shows three lines, with Plus and Moins for the rest.
+- The episode page opens on the cover, with a heart for the favorite. Under the cover: add to playlist, mark as played or unplayed, play, download, and share. The description folds the same way. Below it, a shelf shows this episode’s podcast and opens its page.
+- A downloaded episode uses one green mark on lists, on the episode page, and in the action sheet. It is the same green as an active automatic download.
+- The dark buttons on a podcast or episode cover use one slate fill.
+- The six library cards, from Favorites through Statistics, keep their color on the border, the label, and the icon. The card background is white in the light theme and black in the dark theme. Downloads uses the downloaded-episode icon, in that green. Favorites uses the heart red.
+- Playback settings include list density, Comfortable or Compact. Compact tightens episode rows and the queue in the player. The default is Comfortable. The horizontal shelves on Home stay cards.
+- Add to playlist, which adds an episode to the playlist when its download finishes, is in Download manager, above Remove from playlist.
+- Search ignores accents and letter case in podcast and episode titles.
+- A category page lists the podcasts in that category and does not show a rank. The ranked list remains on the suggestions page.
+- In Preferences, Podavio Web is the first item under Miscellaneous. The home button uses the phone-and-screen icon.
+- Scanning a Podavio Web code uses the phone camera. The previous barcode library is gone.
+- Merging develop into main builds the Android APKs and the Linux archive and attaches them to the GitHub release. The app and the download page use those file links when the release has them.
+
 ## 2026.11.1
 
 - Automatic download is off for every podcast, including ones that had it on. A page lists the current subscriptions in alphabetical order. Under the name, the row shows the episode limit, and a download icon when automatic download is on. The row, its menu, and the podcast page open one sheet: a switch, a short explanation, and the limit. The default limit is 1 episode. Only the newest unplayed or in-progress episodes are downloaded, up to that limit. Finished episodes are skipped, and turning it off keeps files already on the device.

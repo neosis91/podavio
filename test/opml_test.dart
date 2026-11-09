@@ -46,6 +46,7 @@ void main() {
       id: 1,
       feedUrl: 'https://a.example/feed',
       title: 'A & B',
+      titleFold: '',
       author: '',
       description: '',
       imageUrl: 'https://a.example/cover.jpg',

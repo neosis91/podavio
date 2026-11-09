@@ -9,7 +9,6 @@ import 'package:podavio/data/download_controller.dart';
 import 'package:podavio/data/providers.dart';
 import 'package:podavio/player/player_controller.dart';
 import 'package:podavio/settings/settings_controller.dart';
-import 'package:podavio/ui/widgets/brand.dart';
 import 'package:podavio/ui/widgets/episode_tile.dart';
 import 'package:podavio/ui/widgets/list_metrics.dart';
 import 'package:podavio/ui/widgets/playing_cover.dart';
@@ -52,8 +51,13 @@ void main() {
           );
 
           expect(tester.takeException(), isNull);
-          expect(find.textContaining('Un titre assez long'), findsOneWidget);
-          expect(find.byType(LinearProgressIndicator), findsOneWidget);
+          expect(find.textContaining('Un titre assez long'), findsWidgets);
+          expect(
+            find.byType(LinearProgressIndicator),
+            density == EpisodeListDensity.comfortable
+                ? findsOneWidget
+                : findsNothing,
+          );
           expect(find.byIcon(Icons.favorite), findsOneWidget);
 
           final metrics = EpisodeTileMetrics.resolve(
@@ -80,7 +84,7 @@ void main() {
     }
   }
 
-  testWidgets('download percent is hidden on narrow, shown on phone+', (
+  testWidgets('download progress is a ring without a percent label', (
     tester,
   ) async {
     final narrow = await _pumpTile(
@@ -101,7 +105,7 @@ void main() {
       downloadProgress: {1: 0.42},
     );
     expect(tester.takeException(), isNull);
-    expect(find.text('42 %'), findsOneWidget);
+    expect(find.text('42 %'), findsNothing);
     expect(find.byType(DownloadProgressRing), findsOneWidget);
     await phone.close(tester);
   });
@@ -156,8 +160,7 @@ void main() {
         reorderIndex: 0,
       );
       expect(tester.takeException(), isNull);
-      expect(find.byType(DragIndicatorIcon), findsOneWidget);
-      expect(find.byType(ReorderableDragStartListener), findsOneWidget);
+      expect(find.byType(ReorderableDelayedDragStartListener), findsOneWidget);
       await harness.close(tester);
     }
   });
@@ -309,6 +312,7 @@ EpisodeEntry _entry({
       podcastId: 1,
       guid: 'guid-$id',
       title: title,
+      titleFold: '',
       description: '',
       audioUrl: 'https://example.com/a.mp3',
       durationSeconds: durationSeconds,
@@ -324,6 +328,7 @@ EpisodeEntry _entry({
       id: 1,
       feedUrl: 'https://example.com/feed.xml',
       title: podcastTitle,
+      titleFold: '',
       author: 'Auteur',
       description: '',
       subscribedAt: DateTime(2025, 1, 1),

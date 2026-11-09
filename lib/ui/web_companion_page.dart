@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
+import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:yomu/yomu.dart';
 
 import '../l10n/l10n.dart';
 import '../web_companion/web_companion_controller.dart';
@@ -131,15 +134,218 @@ class WebCompanionScanPage extends ConsumerStatefulWidget {
       _WebCompanionScanPageState();
 }
 
-class _WebCompanionScanPageState extends ConsumerState<WebCompanionScanPage> {
+class _WebCompanionScanPageState extends ConsumerState<WebCompanionScanPage>
+    with WidgetsBindingObserver {
+  // QR seul, sombre sur fond clair. Le passage rapide suffit quand le
+  // code est net. Sinon le passage équilibré reprend la même image,
+  // déjà réduite au viseur.
+  static const _fast = Yomu(
+    enableQRCode: true,
+    barcodeScanner: BarcodeScanner.none,
+    effort: DecodeEffort.fast,
+    readLightOnDark: false,
+  );
+  static const _balanced = Yomu(
+    enableQRCode: true,
+    barcodeScanner: BarcodeScanner.none,
+    effort: DecodeEffort.balanced,
+    readLightOnDark: false,
+  );
+
+  CameraController? _camera;
+  final _released = <CameraController>{};
   var _busy = false;
+  var _opening = false;
+  var _decoding = false;
+  String? _cameraError;
 
   bool get _canScan =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _openCamera();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _release(_camera);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_canScan || _busy) return;
+    if (state == AppLifecycleState.inactive) {
+      final camera = _camera;
+      if (camera == null || !camera.value.isInitialized) return;
+      _release(camera);
+      if (mounted) setState(() {});
+    } else if (state == AppLifecycleState.resumed && _camera == null) {
+      _openCamera();
+    }
+  }
+
+  Future<void> _openCamera() async {
+    if (_opening || _busy || !_canScan) return;
+    _opening = true;
+    if (_cameraError != null && mounted) {
+      setState(() => _cameraError = null);
+    }
+    try {
+      final cameras = await availableCameras();
+      if (!mounted || _busy) return;
+      final description =
+          cameras
+              .where(
+                (camera) => camera.lensDirection == CameraLensDirection.back,
+              )
+              .firstOrNull ??
+          cameras.firstOrNull;
+      if (description == null) {
+        setState(() => _cameraError = 'The camera could not be opened');
+        return;
+      }
+      final controller = CameraController(
+        description,
+        ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: defaultTargetPlatform == TargetPlatform.iOS
+            ? ImageFormatGroup.bgra8888
+            : ImageFormatGroup.yuv420,
+      );
+      _camera = controller;
+      await controller.initialize();
+      if (!mounted || _camera != controller) {
+        _release(controller);
+        return;
+      }
+      await _aimCenter(controller);
+      if (!mounted || _camera != controller) {
+        _release(controller);
+        return;
+      }
+      await controller.startImageStream(_onFrame);
+      if (!mounted || _camera != controller) {
+        _release(controller);
+        return;
+      }
+      setState(() => _cameraError = null);
+    } on CameraException catch (error) {
+      _release(_camera);
+      if (!mounted) return;
+      setState(() {
+        _cameraError = _permissionDenied(error.code)
+            ? 'Allow camera access to scan the code'
+            : 'The camera could not be opened';
+      });
+    } finally {
+      _opening = false;
+    }
+  }
+
+  bool _permissionDenied(String code) {
+    return code == 'CameraAccessDenied' ||
+        code == 'CameraAccessDeniedWithoutPrompt' ||
+        code == 'CameraAccessRestricted';
+  }
+
+  void _release(CameraController? camera) {
+    if (camera == null || !_released.add(camera)) return;
+    if (identical(_camera, camera)) _camera = null;
+    camera.dispose();
+  }
+
+  Future<void> _aimCenter(CameraController controller) async {
+    try {
+      await controller.setFocusMode(FocusMode.auto);
+      if (controller.value.focusPointSupported) {
+        await controller.setFocusPoint(const Offset(0.5, 0.5));
+      }
+      if (controller.value.exposurePointSupported) {
+        await controller.setExposurePoint(const Offset(0.5, 0.5));
+      }
+    } on CameraException {
+      // Cet appareil ne règle pas la mise au point au centre.
+    }
+  }
+
+  void _onFrame(CameraImage image) {
+    if (_busy || _decoding || !mounted) return;
+    final frame = _frameOf(image);
+    if (frame == null) return;
+    _decoding = true;
+    try {
+      final text = _read(frame);
+      if (text == null || text.isEmpty) return;
+      _busy = true;
+      setState(() {});
+      _pair(text);
+    } finally {
+      _decoding = false;
+    }
+  }
+
+  String? _read(YomuImage frame) {
+    try {
+      return _fast.decode(frame).text;
+    } on YomuException {
+      try {
+        return _balanced.decode(frame).text;
+      } on YomuException {
+        return null;
+      }
+    }
+  }
+
+  YomuImage? _frameOf(CameraImage image) {
+    if (image.planes.isEmpty) return null;
+    final plane = image.planes.first;
+    final pixelStride = switch (image.format.group) {
+      ImageFormatGroup.bgra8888 => 4,
+      ImageFormatGroup.yuv420 ||
+      ImageFormatGroup.nv21 => plane.bytesPerPixel ?? 1,
+      _ => 0,
+    };
+    if (pixelStride <= 0) return null;
+    final crop = _cropCenter(
+      bytes: plane.bytes,
+      width: image.width,
+      height: image.height,
+      stride: plane.bytesPerRow,
+      pixelStride: pixelStride,
+    );
+    if (crop == null) return null;
+    if (pixelStride == 4) {
+      return YomuImage.bgra(
+        bytes: crop.bytes,
+        width: crop.side,
+        height: crop.side,
+        rowStride: crop.side * 4,
+      );
+    }
+    return YomuImage.grayscale(
+      bytes: crop.bytes,
+      width: crop.side,
+      height: crop.side,
+    );
+  }
+
   Future<void> _pair(String raw) async {
+    final camera = _camera;
+    if (camera != null && camera.value.isStreamingImages) {
+      try {
+        await camera.stopImageStream();
+      } on CameraException {
+        // La caméra s’est fermée pendant le décodage de cette image.
+      }
+    }
+    if (!mounted) return;
     await ref.read(webCompanionProvider.notifier).pair(raw);
     if (!mounted) return;
     final link = ref.read(webCompanionProvider);
@@ -152,6 +358,17 @@ class _WebCompanionScanPageState extends ConsumerState<WebCompanionScanPage> {
       return;
     }
     setState(() => _busy = false);
+    final current = _camera;
+    if (current != null &&
+        current.value.isInitialized &&
+        !current.value.isStreamingImages) {
+      try {
+        await current.startImageStream(_onFrame);
+      } on CameraException {
+        if (!mounted) return;
+        setState(() => _cameraError = 'The camera could not be opened');
+      }
+    }
   }
 
   @override
@@ -189,24 +406,17 @@ class _WebCompanionScanPageState extends ConsumerState<WebCompanionScanPage> {
                   width: shortest * 0.68,
                   height: shortest * 0.68,
                 );
+                final camera = _camera;
+                final ready = camera != null && camera.value.isInitialized;
+                final cameraError = _cameraError;
                 return Stack(
                   fit: StackFit.expand,
                   children: [
                     ColoredBox(
                       color: scheme.surfaceContainerHighest,
-                      child: _busy || !_canScan
-                          ? const SizedBox.expand()
-                          : MobileScanner(
-                              scanWindow: window,
-                              onDetect: (capture) {
-                                if (_busy) return;
-                                final raw =
-                                    capture.barcodes.firstOrNull?.rawValue;
-                                if (raw == null || raw.isEmpty) return;
-                                setState(() => _busy = true);
-                                _pair(raw);
-                              },
-                            ),
+                      child: ready
+                          ? CameraPreview(camera)
+                          : const SizedBox.expand(),
                     ),
                     Positioned.fill(
                       child: IgnorePointer(
@@ -215,7 +425,8 @@ class _WebCompanionScanPageState extends ConsumerState<WebCompanionScanPage> {
                         ),
                       ),
                     ),
-                    if (_busy) const Center(child: CircularProgressIndicator()),
+                    if (_busy || (_canScan && cameraError == null && !ready))
+                      const Center(child: CircularProgressIndicator()),
                     if (!_busy && !_canScan)
                       Center(
                         child: Padding(
@@ -223,6 +434,26 @@ class _WebCompanionScanPageState extends ConsumerState<WebCompanionScanPage> {
                           child: Text(
                             context.tr('Scanning is available on the phone'),
                             textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    if (!_busy && cameraError != null)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                context.tr(cameraError),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              TextButton(
+                                onPressed: _openCamera,
+                                child: Text(context.tr('Retry')),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -246,6 +477,29 @@ class _WebCompanionScanPageState extends ConsumerState<WebCompanionScanPage> {
       ),
     );
   }
+}
+
+/// Carré central, calé sur le viseur. Le décodeur ignore le reste de l’image.
+({Uint8List bytes, int side})? _cropCenter({
+  required Uint8List bytes,
+  required int width,
+  required int height,
+  required int stride,
+  required int pixelStride,
+}) {
+  if (width <= 0 || height <= 0 || pixelStride <= 0) return null;
+  final side = math.max(1, (math.min(width, height) * 0.75).round());
+  if (side > width || side > height) return null;
+  final left = (width - side) ~/ 2;
+  final top = (height - side) ~/ 2;
+  final rowBytes = side * pixelStride;
+  final packed = Uint8List(side * rowBytes);
+  for (var row = 0; row < side; row++) {
+    final src = (top + row) * stride + left * pixelStride;
+    if (src < 0 || src + rowBytes > bytes.length) return null;
+    packed.setRange(row * rowBytes, row * rowBytes + rowBytes, bytes, src);
+  }
+  return (bytes: packed, side: side);
 }
 
 class _ScanShadePainter extends CustomPainter {

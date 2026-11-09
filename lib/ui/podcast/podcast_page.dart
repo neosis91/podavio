@@ -30,6 +30,7 @@ import '../widgets/marquee_text.dart';
 import '../widgets/messages.dart';
 import 'cover_palette.dart';
 import 'podcast_album_header.dart';
+import 'podcast_list_order.dart';
 
 class PodcastPage extends ConsumerStatefulWidget {
   const PodcastPage({super.key, required this.podcastId});
@@ -45,8 +46,20 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
   var _selecting = false;
   final _selected = <int>{};
   final _scrollController = ScrollController();
+  var _pastCover = false;
+  bool? _reversedApplied;
 
-  EpisodeQuery get _query => EpisodeQuery(podcastId: widget.podcastId);
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onCoverScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onCoverScroll());
+  }
 
   @override
   void dispose() {
@@ -54,8 +67,67 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     super.dispose();
   }
 
+  void _onCoverScroll() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final size = MediaQuery.sizeOf(context);
+    final landscape = size.width > size.height;
+    final bar = MediaQuery.paddingOf(context).top + kToolbarHeight;
+    final past = !landscape && _scrollController.offset > size.width - bar;
+    if (past != _pastCover) setState(() => _pastCover = past);
+  }
+
+  bool _reversed() => ref.read(podcastListReversedProvider(widget.podcastId));
+
+  EpisodeQuery _showQuery({bool paginated = true}) {
+    return EpisodeQuery(
+      podcastId: widget.podcastId,
+      paginated: paginated,
+      oldestFirst: _reversed(),
+    );
+  }
+
   void _loadMore() {
-    ref.read(episodesProvider(_query).notifier).loadMore();
+    ref.read(episodesProvider(_showQuery()).notifier).loadMore();
+  }
+
+  void _leave() {
+    if (_selecting) {
+      _exitSelection();
+      return;
+    }
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    context.go(AppRoutes.library);
+  }
+
+  Future<void> _toggleReverse() async {
+    await ref
+        .read(podcastListReversedProvider(widget.podcastId).notifier)
+        .toggle();
+    if (!mounted) return;
+    final source = ref.read(playerProvider).playbackSource;
+    if (!_isThisShow(source)) return;
+    ref
+        .read(playerProvider.notifier)
+        .setPlaybackSource(
+          PlaybackSource.fromQuery(_showQuery(paginated: false)),
+        );
+  }
+
+  bool _isThisShow(PlaybackSource source) {
+    final query = source.query;
+    return query.podcastId == widget.podcastId &&
+        !query.unreadOnly &&
+        !query.favoritesOnly &&
+        !query.downloadsOnly &&
+        !query.cacheOnly &&
+        !query.queuedOnly &&
+        !query.historyOnly &&
+        !query.inProgressOnly &&
+        query.playlistId == null &&
+        query.search.isEmpty;
   }
 
   void _withScrollPinned(VoidCallback update) {
@@ -136,7 +208,12 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
   @override
   Widget build(BuildContext context) {
     final podcast = ref.watch(podcastProvider(widget.podcastId));
-    final episodes = ref.watch(episodesProvider(_query));
+    final episodes = ref.watch(episodesProvider(_showQuery()));
+    final reversed = ref.watch(podcastListReversedProvider(widget.podcastId));
+    if (_reversedApplied != reversed) {
+      _reversedApplied = reversed;
+      _previousEpisodes = null;
+    }
     final loaded = episodes.asData?.value;
     if (loaded != null) _previousEpisodes = loaded;
     final window = loaded ?? _previousEpisodes;
@@ -238,6 +315,8 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
             textColor: Colors.white,
           ),
         );
+        final size = MediaQuery.sizeOf(context);
+        final landscape = size.width > size.height;
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: SystemUiOverlayStyle.light,
           child: Theme(
@@ -247,10 +326,13 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
               duration: const Duration(milliseconds: 500),
               builder: (context, color, child) {
                 return FrostedScaffold(
+                  scrolled: landscape || _pastCover,
                   appBar: selection != null
                       ? EpisodeSelectionAppBar(session: selection)
                       : FrostedAppBar(
-                          alwaysFrosted: true,
+                          revealOnScroll: !landscape,
+                          automaticallyImplyLeading: false,
+                          leading: BackButton(onPressed: _leave),
                           title: MarqueeText(
                             text: item.title,
                             style: Theme.of(context).textTheme.titleLarge
@@ -277,6 +359,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                           episodes: episodes,
                           pullToRefresh: true,
                           background: listBackground,
+                          fadeColor: background,
                           showPause: playingHere,
                           onPlay: first == null
                               ? null
@@ -289,6 +372,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                         episodes: episodes,
                         pullToRefresh: false,
                         background: listBackground,
+                        fadeColor: background,
                         showPause: playingHere,
                         onPlay: first == null
                             ? null
@@ -341,6 +425,14 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _refresh(context, ref, item.feedUrl);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.bar_chart_outlined),
+                title: const Text('Informations'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  context.push(AppRoutes.podcastAbout(item.id));
                 },
               ),
               if (item.subscribed)
@@ -435,9 +527,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         .read(playerProvider.notifier)
         .playOrPauseEntry(
           first,
-          source: PlaybackSource.fromQuery(
-            EpisodeQuery(podcastId: item.id, paginated: false),
-          ),
+          source: PlaybackSource.fromQuery(_showQuery(paginated: false)),
         );
   }
 
@@ -447,6 +537,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     required AsyncValue<EpisodeWindow> episodes,
     required bool pullToRefresh,
     required Color background,
+    required Color fadeColor,
     required bool showPause,
     required VoidCallback? onPlay,
   }) {
@@ -466,6 +557,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         episodes: episodes,
         pullToRefresh: pullToRefresh,
         background: background,
+        fadeColor: fadeColor,
         showPause: showPause,
         onPlay: onPlay,
       ),
@@ -478,6 +570,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     required AsyncValue<EpisodeWindow> episodes,
     required bool pullToRefresh,
     required Color background,
+    required Color fadeColor,
     required bool showPause,
     required VoidCallback? onPlay,
   }) {
@@ -489,19 +582,23 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
       physics: pullToRefresh ? const AlwaysScrollableScrollPhysics() : null,
       slivers: [
         if (!landscape)
-          SliverPadding(
-            padding: EdgeInsets.only(
-              top: MediaQuery.viewPaddingOf(context).top + kToolbarHeight,
-            ),
-            sliver: SliverToBoxAdapter(
-              child: PodcastAlbumHeader(
-                podcast: item,
-                showPause: showPause,
-                onPlay: onPlay,
-                onAbout: () => context.push(AppRoutes.podcastAbout(item.id)),
+          SliverToBoxAdapter(
+            child: PodcastAlbumHeader(
+              podcast: item,
+              showPause: showPause,
+              onPlay: onPlay,
+              onBack: _leave,
+              onMore: () => _showPodcastActions(item),
+              onReverse: _toggleReverse,
+              reversed: ref.watch(
+                podcastListReversedProvider(widget.podcastId),
               ),
+              onAutomaticDownload: () => _showAutoDownload(item),
+              fadeColor: fadeColor,
             ),
           ),
+        if (landscape)
+          SliverToBoxAdapter(child: PodcastDescription(html: item.description)),
         ..._episodeSlivers(
           window: window,
           episodes: episodes,
@@ -514,7 +611,9 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
       podcast: item,
       showPause: showPause,
       onPlay: onPlay,
-      onAbout: () => context.push(AppRoutes.podcastAbout(item.id)),
+      onReverse: _toggleReverse,
+      reversed: ref.watch(podcastListReversedProvider(widget.podcastId)),
+      onAutomaticDownload: () => _showAutoDownload(item),
       listColor: background,
       episodes: scroll,
     );
@@ -571,9 +670,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
   }
 
   List<Widget> _episodeListSlivers(EpisodeWindow window, Color background) {
-    final source = PlaybackSource(
-      EpisodeQuery(podcastId: widget.podcastId, paginated: false),
-    );
+    final source = PlaybackSource.fromQuery(_showQuery(paginated: false));
     return [
       DecoratedSliver(
         decoration: BoxDecoration(color: background),

@@ -316,16 +316,6 @@ class PreferencesPage extends ConsumerWidget {
             onTap: () => context.push(AppRoutes.sync),
           ),
           ListTile(
-            leading: const Icon(Icons.phonelink),
-            title: Text(context.tr('Podavio Web')),
-            subtitle: Text(
-              ref.watch(webCompanionProvider).browserOnline
-                  ? context.tr('Browser connected')
-                  : context.tr('Encrypted link to the browser'),
-            ),
-            onTap: () => context.push(AppRoutes.webCompanion),
-          ),
-          ListTile(
             leading: const Icon(Icons.notifications_outlined),
             title: Text(context.tr('Notifications')),
             onTap: () => context.push(AppRoutes.notifications),
@@ -353,6 +343,16 @@ class PreferencesPage extends ConsumerWidget {
             onTap: () => context.push(AppRoutes.backupRestore),
           ),
           _SectionTitle(context.tr('Miscellaneous')),
+          ListTile(
+            leading: const Icon(Icons.phonelink),
+            title: Text(context.tr('Podavio Web')),
+            subtitle: Text(
+              ref.watch(webCompanionProvider).browserOnline
+                  ? context.tr('Browser connected')
+                  : context.tr('Encrypted link to the browser'),
+            ),
+            onTap: () => context.push(AppRoutes.webCompanion),
+          ),
           if (NearbyApkSource().isSupported)
             ListTile(
               leading: const Icon(Icons.qr_code_2_outlined),

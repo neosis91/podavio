@@ -218,6 +218,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
           PodcastsCompanion.insert(
             feedUrl: draft.feedUrl,
             title: draft.title,
+            titleFold: Value(foldForSearch(draft.title)),
             author: Value(draft.author),
             description: Value(draft.description),
             imageUrl: Value(draft.imageUrl),
@@ -240,6 +241,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
         )..where((table) => table.id.equals(podcastId))).write(
           PodcastsCompanion(
             title: Value(draft.title),
+            titleFold: Value(foldForSearch(draft.title)),
             author: Value(draft.author),
             description: Value(draft.description),
             imageUrl: Value(draft.imageUrl),
@@ -318,6 +320,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
               podcastId: podcastId,
               guid: episode.guid,
               title: episode.title,
+              titleFold: Value(foldForSearch(episode.title)),
               description: Value(episode.description),
               audioUrl: episode.audioUrl,
               mimeType: Value(episode.mimeType),
@@ -368,6 +371,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
               episodes,
               EpisodesCompanion(
                 title: Value(item.episode.title),
+                titleFold: Value(foldForSearch(item.episode.title)),
                 description: Value(item.episode.description),
                 audioUrl: Value(item.episode.audioUrl),
                 mimeType: Value(item.episode.mimeType),
@@ -565,6 +569,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
             podcasts,
             PodcastsCompanion(
               title: Value(title),
+              titleFold: Value(foldForSearch(title)),
               author: Value(author),
               description: Value(description),
             ),
@@ -601,6 +606,7 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
             episodes,
             EpisodesCompanion(
               title: Value(title),
+              titleFold: Value(foldForSearch(title)),
               description: Value(description),
             ),
             where: (table) => table.id.equals(id),

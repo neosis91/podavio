@@ -25,6 +25,7 @@ class PlaybackSource {
         playlistId: query.playlistId,
         search: query.search,
         paginated: false,
+        oldestFirst: query.oldestFirst,
       ),
     );
   }
@@ -46,6 +47,7 @@ class PlaybackSource {
       podcastId: query.podcastId,
       playlistId: query.playlistId,
       search: query.search,
+      oldestFirst: query.oldestFirst,
     );
   }
 

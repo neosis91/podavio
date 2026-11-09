@@ -249,6 +249,7 @@ class EpisodesNotifier extends Notifier<AsyncValue<EpisodeWindow>> {
           podcastId: query.podcastId,
           playlistId: query.playlistId,
           search: query.search,
+          oldestFirst: query.oldestFirst,
           limit: query.paginated ? _limit : null,
         )
         .listen(
@@ -281,6 +282,7 @@ class EpisodeQuery {
     this.playlistId,
     this.search = '',
     this.paginated = true,
+    this.oldestFirst = false,
   });
 
   final bool unreadOnly;
@@ -295,6 +297,9 @@ class EpisodeQuery {
   final String search;
   final bool paginated;
 
+  /// Plus ancien en tête. Réservé à la page d’un podcast.
+  final bool oldestFirst;
+
   @override
   bool operator ==(Object other) {
     return other is EpisodeQuery &&
@@ -308,7 +313,8 @@ class EpisodeQuery {
         other.podcastId == podcastId &&
         other.playlistId == playlistId &&
         other.search == search &&
-        other.paginated == paginated;
+        other.paginated == paginated &&
+        other.oldestFirst == oldestFirst;
   }
 
   @override
@@ -324,6 +330,7 @@ class EpisodeQuery {
     playlistId,
     search,
     paginated,
+    oldestFirst,
   );
 }
 

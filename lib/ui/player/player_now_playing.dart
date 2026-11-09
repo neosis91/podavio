@@ -271,10 +271,8 @@ class _CoverPlayGesturesState extends ConsumerState<_CoverPlayGestures> {
   }
 
   void _previousEpisode() {
-    final position = ref.read(playerProvider).position;
-    final restart = position.inMilliseconds > 3000;
     ref.read(playerProvider.notifier).playPreviousInQueue();
-    _flashFeedback(restart ? 'Début' : 'Précédent', onRight: false);
+    _flashFeedback('Précédent', onRight: false);
   }
 
   void _nextEpisode() {

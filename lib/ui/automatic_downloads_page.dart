@@ -286,7 +286,7 @@ class _PodcastRow extends StatelessWidget {
                         const Icon(
                           Icons.downloading,
                           size: 18,
-                          color: Color(0xff4CAF50),
+                          color: downloadActiveColor,
                         ),
                       ],
                     ],

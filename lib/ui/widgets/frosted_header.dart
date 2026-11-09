@@ -66,6 +66,7 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.bottom,
     this.automaticallyImplyLeading = true,
     this.alwaysFrosted = false,
+    this.revealOnScroll = false,
   });
 
   final Widget? title;
@@ -77,26 +78,48 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
   /// Si vrai, le givre reste affiché même sans défilement.
   final bool alwaysFrosted;
 
+  /// Titre et actions invisibles tant que [FrostedHeaderScroll] est au repos.
+  final bool revealOnScroll;
+
   @override
   Size get preferredSize =>
       Size.fromHeight(kToolbarHeight + (bottom?.preferredSize.height ?? 0));
 
   @override
   Widget build(BuildContext context) {
-    return AppBar(
-      title: title,
-      leading: leading,
-      actions: actions,
-      bottom: bottom,
-      automaticallyImplyLeading: automaticallyImplyLeading,
-      forceMaterialTransparency: true,
-      backgroundColor: Colors.transparent,
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      shadowColor: Colors.transparent,
-      flexibleSpace: FrostedHeaderBackdrop(
-        scrolled: alwaysFrosted ? true : null,
+    final revealed = !revealOnScroll || FrostedHeaderScroll.of(context);
+    Widget? fade(Widget? child) {
+      if (child == null || !revealOnScroll) return child;
+      return AnimatedOpacity(
+        opacity: revealed ? 1 : 0,
+        duration: const Duration(milliseconds: 200),
+        child: child,
+      );
+    }
+
+    return IgnorePointer(
+      ignoring: revealOnScroll && !revealed,
+      child: AppBar(
+        title: fade(title),
+        leading: fade(leading),
+        actions: actions == null
+            ? null
+            : [for (final action in actions!) fade(action)!],
+        bottom: bottom,
+        automaticallyImplyLeading: automaticallyImplyLeading,
+        forceMaterialTransparency: true,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: FrostedHeaderBackdrop(
+          scrolled: alwaysFrosted
+              ? true
+              : revealOnScroll
+              ? revealed
+              : null,
+        ),
       ),
     );
   }
@@ -104,10 +127,18 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
 
 /// Scaffold dont le corps passe sous la barre, pour que le givre ait du contenu à flouter.
 class FrostedScaffold extends StatefulWidget {
-  const FrostedScaffold({super.key, this.appBar, required this.body});
+  const FrostedScaffold({
+    super.key,
+    this.appBar,
+    required this.body,
+    this.scrolled,
+  });
 
   final PreferredSizeWidget? appBar;
   final Widget body;
+
+  /// Si fourni, remplace la détection interne du défilement.
+  final bool? scrolled;
 
   @override
   State<FrostedScaffold> createState() => _FrostedScaffoldState();
@@ -117,6 +148,7 @@ class _FrostedScaffoldState extends State<FrostedScaffold> {
   var _scrolled = false;
 
   bool _onScroll(ScrollNotification notification) {
+    if (widget.scrolled != null) return false;
     if (notification.metrics.axis != Axis.vertical) return false;
     final scrolled = notification.metrics.pixels > 0;
     if (scrolled == _scrolled) return false;
@@ -140,7 +172,7 @@ class _FrostedScaffoldState extends State<FrostedScaffold> {
         ? 0.0
         : MediaQuery.paddingOf(context).top + bar.preferredSize.height;
     return FrostedHeaderScroll(
-      scrolled: _scrolled,
+      scrolled: widget.scrolled ?? _scrolled,
       child: Scaffold(
         extendBodyBehindAppBar: widget.appBar != null,
         appBar: widget.appBar,

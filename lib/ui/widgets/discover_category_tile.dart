@@ -11,13 +11,10 @@ import 'messages.dart';
 
 /// Ligne de podcast dans une catégorie (style liste type Podcast Addict).
 class DiscoverCategoryTile extends ConsumerStatefulWidget {
-  const DiscoverCategoryTile({
-    super.key,
-    required this.rank,
-    required this.hit,
-  });
+  const DiscoverCategoryTile({super.key, this.rank, required this.hit});
 
-  final int rank;
+  /// Place dans un classement. Absent dans une liste de catégorie.
+  final int? rank;
   final DiscoverHit hit;
 
   @override
@@ -60,7 +57,9 @@ class _DiscoverCategoryTileState extends ConsumerState<DiscoverCategoryTile> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                '${widget.rank}. ${hit.title}',
+                widget.rank == null
+                    ? hit.title
+                    : '${widget.rank}. ${hit.title}',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.titleMedium?.copyWith(
