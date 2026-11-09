@@ -222,7 +222,7 @@ li {
   width: 100%;
   border: 0;
   background: transparent;
-  color: var(--green);
+  
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -238,11 +238,11 @@ li {
 }
 
 .rail-item:not(.on) {
-  opacity: 0.45;
+  color: #fff;
 }
 
 .rail-item.on {
-  opacity: 1;
+  color: var(--green);
 }
 
 .rail-item img {

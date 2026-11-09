@@ -1,24 +1,14 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:drift/drift.dart';
-import 'package:http/http.dart' as http;
 import 'package:podcast_search/podcast_search.dart' as remote;
 
 import 'app_database.dart';
-import 'http_auth.dart';
-import 'apple_feed.dart';
-import 'chapters_parser.dart';
 import 'catalog_categories.dart';
+import 'chapter_loader.dart';
+import 'discover_catalog.dart';
 import 'discover_hit.dart';
 import 'discover_languages.dart';
-import 'feed_text.dart';
-import 'fyyd_search.dart';
+import 'feed_refresh.dart';
+import 'http_auth.dart';
 import 'models.dart';
-import 'podcast_index_search.dart';
-import '../sync/sync_hooks.dart';
-import 'spotify_feed.dart';
 
 const podavioUserAgent = 'Podavio/0.1 (podcast player)';
 
@@ -52,71 +42,36 @@ Map<String, String>? podcastAuthHeaders({String? username, String? password}) {
 
 enum DiscoverSearchScope { combined, apple, podcastIndex, fyyd }
 
+/// Abonnement, recherche et chapitres. Le travail est dans [FeedRefresh],
+/// [DiscoverCatalog] et [ChapterLoader].
 class FeedService {
-  FeedService(this._database);
+  FeedService(AppDatabase database) {
+    _catalog = DiscoverCatalog(database);
+    _refresh = FeedRefresh(database, _catalog);
+    _chapters = ChapterLoader(database);
+  }
 
-  final AppDatabase _database;
-  final PodcastIndexSearch _podcastIndex = PodcastIndexSearch();
-  final FyydSearch _fyyd = FyydSearch();
-  final _chapterInflight = <int, Future<void>>{};
-  final _chapterFailedAt = <int, DateTime>{};
-  final _channelLanguages = <String, String?>{};
-  final _categoryQueue = <Podcast>[];
-  final _categoryInflight = <int>{};
-  final _categoryFailedAt = <int, DateTime>{};
-  var _categoryRunning = 0;
-  static const _chapterRetryBackoff = Duration(minutes: 5);
-  static const _categoryRetryBackoff = Duration(minutes: 10);
-  static const _categoryConcurrency = 3;
+  late final DiscoverCatalog _catalog;
+  late final FeedRefresh _refresh;
+  late final ChapterLoader _chapters;
 
   Future<SubscribeResult> subscribe(
     String rawUrl, {
     String? username,
     String? password,
     bool notifyNewEpisodes = false,
-  }) async {
-    final url = await _resolveFeedUrl(rawUrl);
-    final existing = await _database.findByFeedUrl(url);
-    final wasSubscribed = existing?.subscribed ?? false;
-    final saved = await _refreshUrl(
-      url,
-      subscribed: true,
-      keepUpdated: true,
+  }) {
+    return _refresh.subscribe(
+      rawUrl,
       username: username,
       password: password,
+      notifyNewEpisodes: notifyNewEpisodes,
     );
-    final id = saved.podcastId;
-    final created = existing == null || !wasSubscribed;
-    if (created && notifyNewEpisodes) {
-      await _database.setPodcastEpisodeNotification(id, enabled: true);
-    }
-    if (created) SyncHooks.reportSubscribed(url);
-    return SubscribeResult(podcastId: id, created: created);
   }
 
   /// Charge le flux en aperçu (épisodes utilisables) sans l’ajouter à la bibliothèque.
-  Future<int> preview(
-    String rawUrl, {
-    String? username,
-    String? password,
-  }) async {
-    final url = await _resolveFeedUrl(rawUrl);
-    final existing = await _database.findByFeedUrl(url);
-    if (existing != null) {
-      // Rafraîchir les épisodes sans changer le statut d’abonnement.
-      return (await _refreshUrl(
-        url,
-        username: username,
-        password: password,
-      )).podcastId;
-    }
-    return (await _refreshUrl(
-      url,
-      subscribed: false,
-      keepUpdated: false,
-      username: username,
-      password: password,
-    )).podcastId;
+  Future<int> preview(String rawUrl, {String? username, String? password}) {
+    return _refresh.preview(rawUrl, username: username, password: password);
   }
 
   /// Abonne plusieurs flux en parallèle (réseau), avec une limite de concurrence.
@@ -125,37 +80,15 @@ class FeedService {
     int concurrency = 2,
     void Function(int done, int total, List<SubscribeFailure> failures)?
     onProgress,
-  }) async {
-    if (urls.isEmpty) return const RefreshReport(total: 0);
-    final total = urls.length;
-    final workers = concurrency.clamp(1, total);
-    var next = 0;
-    var done = 0;
-    final failures = <SubscribeFailure>[];
-
-    Future<void> worker() async {
-      while (true) {
-        final index = next;
-        if (index >= total) return;
-        next = index + 1;
-        final url = urls[index];
-        try {
-          await subscribe(url);
-        } catch (error) {
-          failures.add(
-            SubscribeFailure(feedUrl: url, message: describeFeedError(error)),
-          );
-        }
-        done++;
-        onProgress?.call(done, total, List.unmodifiable(failures));
-      }
-    }
-
-    await Future.wait(List.generate(workers, (_) => worker()));
-    return RefreshReport(total: total, failures: List.unmodifiable(failures));
+  }) {
+    return _refresh.subscribeMany(
+      urls,
+      concurrency: concurrency,
+      onProgress: onProgress,
+    );
   }
 
-  Future<SavedFeed> refresh(String feedUrl) => _refreshUrl(feedUrl);
+  Future<SavedFeed> refresh(String feedUrl) => _refresh.refresh(feedUrl);
 
   Future<RefreshReport> refreshAll({
     int concurrency = 2,
@@ -163,59 +96,12 @@ class FeedService {
     Future<void> Function()? beforeEach,
     void Function(int done, int total, List<SubscribeFailure> failures)?
     onProgress,
-  }) async {
-    final podcasts = (await _database.listPodcasts())
-        .where((podcast) => podcast.keepUpdated)
-        .toList();
-    if (podcasts.isEmpty) return const RefreshReport(total: 0);
-    final total = podcasts.length;
-    final workers = concurrency.clamp(1, total);
-    var next = 0;
-    var done = 0;
-    final failures = <SubscribeFailure>[];
-    final arrivals = <NewEpisodeArrival>[];
-
-    Future<void> worker() async {
-      while (true) {
-        if (beforeEach != null) await beforeEach();
-        final index = next;
-        if (index >= total) return;
-        next = index + 1;
-        final podcast = podcasts[index];
-        try {
-          final saved = await _refreshUrl(podcast.feedUrl);
-          if (shouldNotifyNewEpisodes(
-            notifyNewEpisodes: notifyNewEpisodes,
-            keepUpdated: podcast.keepUpdated,
-            episodeNotification: podcast.episodeNotification,
-            newCount: saved.newEpisodeIds.length,
-          )) {
-            arrivals.add(
-              NewEpisodeArrival(
-                podcastId: podcast.id,
-                title: podcast.title,
-                count: saved.newEpisodeIds.length,
-              ),
-            );
-          }
-        } catch (error) {
-          failures.add(
-            SubscribeFailure(
-              feedUrl: podcast.feedUrl,
-              message: describeFeedError(error),
-            ),
-          );
-        }
-        done++;
-        onProgress?.call(done, total, List.unmodifiable(failures));
-      }
-    }
-
-    await Future.wait(List.generate(workers, (_) => worker()));
-    return RefreshReport(
-      total: total,
-      failures: List.unmodifiable(failures),
-      arrivals: List.unmodifiable(arrivals),
+  }) {
+    return _refresh.refreshAll(
+      concurrency: concurrency,
+      notifyNewEpisodes: notifyNewEpisodes,
+      beforeEach: beforeEach,
+      onProgress: onProgress,
     );
   }
 
@@ -223,45 +109,21 @@ class FeedService {
     String query, {
     List<String> languages = const [discoverLanguagesAll],
   }) {
-    final stores = appleSearchStores(languages);
-    final country = stores.isEmpty ? remote.Country.none : stores.first;
-    return remote.Search().search(query, country: country, limit: 30);
+    return _catalog.search(query, languages: languages);
   }
 
   Future<remote.SearchResult> charts({
     List<String> languages = const [discoverLanguagesAll],
   }) {
-    final stores = appleChartStores(languages);
-    final country = stores.isEmpty ? remote.Country.unitedStates : stores.first;
-    return remote.Search().charts(country: country, limit: 24);
+    return _catalog.charts(languages: languages);
   }
 
   /// Suggestions combinées (Apple, Podcast Index, fyyd).
   Future<List<DiscoverHit>> discoverCharts({
     int limit = 24,
     List<String> languages = const [discoverLanguagesAll],
-  }) async {
-    Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
-      try {
-        return await future;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    final results = await Future.wait([
-      safe(_appleChartHits(languages: languages)),
-      safe(_podcastIndex.trending(languages: languages, max: limit)),
-      safe(_fyyd.suggestions(count: limit, languages: languages)),
-    ]);
-
-    final merged = _mergeHits(results, const [1.0, 1.0, 0.8]);
-    // Grille visuelle : préférer ceux qui ont une jaquette.
-    final withArt = merged.where((h) => (h.imageUrl ?? '').isNotEmpty).toList();
-    final without = merged.where((h) => (h.imageUrl ?? '').isEmpty).toList();
-    final ordered = [...withArt, ...without];
-    if (ordered.length <= limit) return ordered;
-    return ordered.sublist(0, limit);
+  }) {
+    return _catalog.discoverCharts(limit: limit, languages: languages);
   }
 
   /// Une page de suggestions. La page 0 mêle les tops Apple ; les suivantes
@@ -270,97 +132,18 @@ class FeedService {
     required int page,
     int pageSize = 16,
     List<String> languages = const [discoverLanguagesAll],
-  }) async {
-    Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
-      try {
-        return await future;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    final results = await Future.wait([
-      safe(
-        page == 0
-            ? _appleChartHits(languages: languages)
-            : Future.value(const <DiscoverHit>[]),
-      ),
-      safe(
-        _podcastIndex.trending(
-          languages: languages,
-          max: (page + 1) * pageSize,
-        ),
-      ),
-      safe(
-        _fyyd.suggestions(count: pageSize, page: page, languages: languages),
-      ),
-    ]);
-
-    final merged = _mergeHits(results, const [1.0, 1.0, 0.8]);
-    final withArt = merged.where((h) => (h.imageUrl ?? '').isNotEmpty).toList();
-    final without = merged.where((h) => (h.imageUrl ?? '').isEmpty).toList();
-    return [...withArt, ...without];
-  }
-
-  Future<List<DiscoverHit>> _appleChartHits({
-    List<String> languages = const [discoverLanguagesAll],
-    int limit = 24,
-    String genre = '',
   }) {
-    return _appleFromStores(appleChartStores(languages), (country) async {
-      final result = await remote.Search().charts(
-        country: country,
-        limit: limit,
-        genre: genre,
-      );
-      return _appleHits(result, languages);
-    });
+    return _catalog.discoverChartsPage(
+      page: page,
+      pageSize: pageSize,
+      languages: languages,
+    );
   }
 
   /// Genres les plus présents dans les classements du mois : tops Apple et
   /// tendances Podcast Index des 30 derniers jours.
-  Future<List<String>> mostPlayedCategoryIds(List<String> languages) async {
-    final batches = await Future.wait([
-      _appleChartCategoryIds(languages),
-      () async {
-        try {
-          return await _podcastIndex.trendingCategoryIds(languages: languages);
-        } catch (_) {
-          return const <String>[];
-        }
-      }(),
-    ]);
-    final ids = [for (final batch in batches) ...batch];
-    if (ids.isEmpty) {
-      throw Exception('La recherche a échoué.');
-    }
-    return rankPlayedCategories(ids);
-  }
-
-  Future<List<String>> _appleChartCategoryIds(List<String> languages) async {
-    final batches = await Future.wait([
-      for (final store in appleChartStores(languages))
-        _appleStoreCategoryIds(store),
-    ]);
-    return [for (final batch in batches) ...batch];
-  }
-
-  Future<List<String>> _appleStoreCategoryIds(remote.Country store) async {
-    if (store.code.isEmpty) return const [];
-    try {
-      final response = await http
-          .get(
-            Uri.parse(
-              'https://itunes.apple.com/${store.code}/rss/toppodcasts/limit=100/json',
-            ),
-            headers: const {'User-Agent': podavioUserAgent},
-          )
-          .timeout(const Duration(seconds: 25));
-      if (response.statusCode != 200) return const [];
-      return catalogIdsFromAppleChart(jsonDecode(response.body));
-    } catch (_) {
-      return const [];
-    }
+  Future<List<String>> mostPlayedCategoryIds(List<String> languages) {
+    return _catalog.mostPlayedCategoryIds(languages);
   }
 
   /// Trois rangées pour une catégorie : classements Apple, tendances
@@ -369,133 +152,25 @@ class FeedService {
   Future<List<HomeCategoryShelf>> categoryShelves(
     String id, {
     List<String> languages = const [discoverLanguagesAll],
-  }) async {
-    final category = catalogCategoryById(id);
-    if (category == null) return const [];
-
-    Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
-      try {
-        return await future;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    final results = await Future.wait([
-      safe(
-        _appleChartHits(languages: languages, limit: 18, genre: category.genre),
-      ),
-      safe(
-        _podcastIndex.trending(
-          languages: languages,
-          max: 18,
-          category: category.genre,
-        ),
-      ),
-      safe(_fyyd.category(category.fyydId, count: 18, languages: languages)),
-    ]);
-    if (results.every((list) => list == null)) {
-      throw Exception('La recherche a échoué.');
-    }
-
-    const sources = [
-      DiscoverSource.apple,
-      DiscoverSource.podcastIndex,
-      DiscoverSource.fyyd,
-    ];
-    return [
-      for (var i = 0; i < results.length; i++)
-        if (results[i] != null && results[i]!.isNotEmpty)
-          HomeCategoryShelf(source: sources[i], hits: results[i]!),
-    ];
+  }) {
+    return _catalog.categoryShelves(id, languages: languages);
   }
 
-  /// Une page de podcasts pour les sujets choisis d’une catégorie.
-  ///
-  /// Page 0 : le premier sujet (Apple + PI + fyyd). Pages suivantes : un
-  /// sujet à la fois, pour que le scroll apporte encore des podcasts nouveaux.
-  /// [subjects] vide ou absent : le regroupement par défaut.
+  /// Une page des podcasts étiquetés dans les sujets choisis d’une catégorie.
   Future<List<DiscoverHit>> categoryHitsPage({
     required String id,
     required int page,
     int pageSize = 20,
     List<String> languages = const [discoverLanguagesAll],
     List<CatalogMember>? subjects,
-  }) async {
-    final category = catalogCategoryById(id);
-    if (category == null) return const [];
-
-    Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
-      try {
-        return await future;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    final members = (subjects == null || subjects.isEmpty)
-        ? category.regroupMembers
-        : subjects;
-    final piles = <List<DiscoverHit>?>[];
-    final weights = <double>[];
-
-    if (page == 0) {
-      final first = members.first;
-      final results = await Future.wait([
-        safe(
-          _appleChartHits(
-            languages: languages,
-            limit: pageSize,
-            genre: first.genre,
-          ),
-        ),
-        safe(
-          _podcastIndex.trending(
-            languages: languages,
-            max: pageSize,
-            category: first.genre,
-          ),
-        ),
-        safe(
-          _fyyd.category(
-            first.fyydId,
-            count: pageSize,
-            page: 0,
-            languages: languages,
-          ),
-        ),
-      ]);
-      piles.addAll(results);
-      weights.addAll(const [1.0, 1.0, 0.8]);
-    } else {
-      final index = (page - 1) % members.length;
-      final deep = (page - 1) ~/ members.length;
-      final member = members[index];
-      final pair = await Future.wait([
-        safe(
-          _podcastIndex.trending(
-            languages: languages,
-            max: (deep + 2) * pageSize,
-            category: member.genre,
-          ),
-        ),
-        safe(
-          _fyyd.category(
-            member.fyydId,
-            count: pageSize,
-            page: deep + (index == 0 ? 1 : 0),
-            languages: languages,
-          ),
-        ),
-      ]);
-      piles.addAll(pair);
-      weights.addAll(const [1.0, 0.8]);
-    }
-
-    if (piles.every((list) => list == null)) {
-      throw Exception('La recherche a échoué.');
-    }
-    return _mergeHits(piles, weights);
+  }) {
+    return _catalog.categoryHitsPage(
+      id: id,
+      page: page,
+      pageSize: pageSize,
+      languages: languages,
+      subjects: subjects,
+    );
   }
 
   /// Recherche multi-annuaires (Apple, Podcast Index, fyyd).
@@ -503,697 +178,30 @@ class FeedService {
     String query, {
     DiscoverSearchScope scope = DiscoverSearchScope.combined,
     List<String> languages = const [discoverLanguagesAll],
-  }) async {
-    final trimmed = query.trim();
-    if (trimmed.isEmpty) return const [];
-
-    switch (scope) {
-      case DiscoverSearchScope.apple:
-        return _searchAppleHits(trimmed, languages);
-      case DiscoverSearchScope.podcastIndex:
-        return _podcastIndex.search(trimmed, languages: languages);
-      case DiscoverSearchScope.fyyd:
-        return _fyyd.search(trimmed, languages: languages);
-      case DiscoverSearchScope.combined:
-        return _searchCombined(trimmed, languages);
-    }
-  }
-
-  Future<List<DiscoverHit>> _searchCombined(
-    String query,
-    List<String> languages,
-  ) async {
-    Future<List<DiscoverHit>?> safe(Future<List<DiscoverHit>> future) async {
-      try {
-        return await future;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    final results = await Future.wait([
-      safe(_searchAppleHits(query, languages)),
-      safe(_podcastIndex.search(query, languages: languages)),
-      safe(_fyyd.search(query, languages: languages)),
-    ]);
-
-    return _mergeHits(results, const [1.0, 1.0, 0.8]);
-  }
-
-  /// Pondération proche d’AntennaPod CombinedSearcher.
-  List<DiscoverHit> _mergeHits(
-    List<List<DiscoverHit>?> results,
-    List<double> weights,
-  ) {
-    final ranking = <String, double>{};
-    final byKey = <String, DiscoverHit>{};
-
-    for (var provider = 0; provider < results.length; provider++) {
-      final list = results[provider];
-      if (list == null) continue;
-      final weight = weights[provider];
-      for (var i = 0; i < list.length; i++) {
-        final hit = list[i];
-        final key = hit.dedupeKey;
-        byKey.putIfAbsent(key, () => hit);
-        ranking[key] = (ranking[key] ?? 0) + weight / (i + 1);
-      }
-    }
-
-    final sorted = ranking.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return [for (final e in sorted) byKey[e.key]!];
-  }
-
-  Future<List<DiscoverHit>> _searchAppleHits(
-    String query,
-    List<String> languages,
-  ) {
-    return _appleFromStores(appleSearchStores(languages), (country) async {
-      final result = await remote.Search().search(
-        query,
-        country: country,
-        limit: 30,
-      );
-      return _appleHits(result, languages);
-    });
-  }
-
-  Future<List<DiscoverHit>> _appleFromStores(
-    List<remote.Country> stores,
-    Future<List<DiscoverHit>> Function(remote.Country country) fetch,
-  ) async {
-    if (stores.isEmpty) return const [];
-    final results = await Future.wait([
-      for (final store in stores)
-        () async {
-          try {
-            return await fetch(store);
-          } catch (_) {
-            return null;
-          }
-        }(),
-    ]);
-    if (results.every((list) => list == null)) {
-      throw Exception('La recherche a échoué.');
-    }
-    return _mergeHits(results, [for (final _ in stores) 1.0]);
-  }
-
-  Future<List<DiscoverHit>> _appleHits(
-    remote.SearchResult result,
-    List<String> languages,
-  ) async {
-    if (!result.successful) {
-      throw Exception(
-        result.lastError.isEmpty ? 'La recherche a échoué.' : result.lastError,
-      );
-    }
-    final hits = [
-      for (final item in result.items)
-        DiscoverHit(
-          title: item.trackName ?? item.collectionName ?? 'Podcast',
-          author: item.artistName ?? '',
-          imageUrl: item.bestArtworkUrl,
-          feedUrl: item.feedUrl?.trim() ?? '',
-          source: DiscoverSource.apple,
-          appleId: item.collectionId ?? item.trackId,
-          episodeCount: item.trackCount,
-          lastEpisodeAt: item.releaseDate,
-        ),
-    ];
-    if (discoverLanguagesAreAll(languages) || hits.isEmpty) return hits;
-
-    // La boutique est un pays, pas une langue : tagesschau est dans le store FR.
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
-    try {
-      final checked = await Future.wait([
-        for (final hit in hits) _appleHitIfLanguage(client, hit, languages),
-      ]);
-      return [for (final hit in checked) ?hit];
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  Future<DiscoverHit?> _appleHitIfLanguage(
-    HttpClient client,
-    DiscoverHit hit,
-    List<String> languages,
-  ) async {
-    final url = hit.feedUrl.trim();
-    if (url.isEmpty) return hit;
-    final read = await _channelLanguage(client, url);
-    if (!read.reached) return hit;
-    if (!discoverLanguageMatches(read.language, languages)) return null;
-    return hit;
-  }
-
-  Future<({bool reached, String? language})> _channelLanguage(
-    HttpClient client,
-    String url,
-  ) async {
-    if (_channelLanguages.containsKey(url)) {
-      return (reached: true, language: _channelLanguages[url]);
-    }
-    final read = await _fetchChannelLanguage(client, url);
-    if (read.reached) _channelLanguages[url] = read.language;
-    return read;
-  }
-
-  /// Lit le début du flux jusqu’à la langue du channel. Un échec réseau
-  /// laisse le résultat visible ; une langue absente l’écarte.
-  Future<({bool reached, String? language})> _fetchChannelLanguage(
-    HttpClient client,
-    String url,
-  ) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null || !uri.hasScheme) return (reached: false, language: null);
-    try {
-      final request = await client
-          .getUrl(uri)
-          .timeout(const Duration(seconds: 6));
-      request.followRedirects = true;
-      request.headers.set(HttpHeaders.userAgentHeader, podavioUserAgent);
-      final response = await request.close().timeout(
-        const Duration(seconds: 8),
-      );
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        await response.drain<void>();
-        return (reached: false, language: null);
-      }
-      final buffer = StringBuffer();
-      var bytes = 0;
-      const maxBytes = 64 * 1024;
-      await for (final chunk in response.timeout(const Duration(seconds: 8))) {
-        bytes += chunk.length;
-        buffer.write(utf8.decode(chunk, allowMalformed: true));
-        final text = buffer.toString();
-        final language = rssChannelLanguage(text);
-        if (language != null) return (reached: true, language: language);
-        if (text.toLowerCase().contains('<item')) {
-          return (reached: true, language: null);
-        }
-        if (bytes >= maxBytes) return (reached: false, language: null);
-      }
-      final text = buffer.toString();
-      if (text.trim().isEmpty) return (reached: false, language: null);
-      return (reached: true, language: rssChannelLanguage(text));
-    } catch (_) {
-      return (reached: false, language: null);
-    }
+  }) {
+    return _catalog.discoverSearch(query, scope: scope, languages: languages);
   }
 
   /// Resolves the public RSS address when iTunes search omitted it.
-  Future<String> feedUrlForAppleShow(int id) async {
-    final response = await http
-        .get(
-          Uri.parse('https://podcasts.apple.com/podcast/id$id'),
-          headers: const {
-            'User-Agent': 'Mozilla/5.0 (compatible; Podavio/0.1)',
-          },
-        )
-        .timeout(const Duration(seconds: 20));
-    if (response.statusCode != 200) {
-      throw Exception('La page Apple Podcasts n’a pas répondu.');
-    }
-    final feed = appleFeedUrlFromPage(response.body);
-    if (feed == null) {
-      throw Exception(
-        'Ce podcast n’a pas de flux RSS public. Podavio ne peut pas s’y abonner.',
-      );
-    }
-    return feed;
-  }
+  Future<String> feedUrlForAppleShow(int id) =>
+      _catalog.feedUrlForAppleShow(id);
 
-  Future<SavedFeed> _refreshUrl(
-    String url, {
-    bool? subscribed,
-    bool? keepUpdated,
-    String? username,
-    String? password,
-  }) async {
-    final existing = await _database.findByFeedUrl(url);
-    final explicit = username != null || password != null;
-    final user = explicit ? _blankToNull(username) : existing?.authUsername;
-    final pass = explicit
-        ? ((password ?? '').isEmpty ? null : password)
-        : existing?.authPassword;
-    final loaded = await _loadRemoteFeed(url, username: user, password: pass);
-    final pscByKey = await _loadPscChapters(
-      url,
-      username: user,
-      password: pass,
-    );
-    final saved = await _database.saveFeed(
-      _draftFrom(
-        url,
-        loaded.podcast,
-        categories: loaded.categories,
-        pscByKey: pscByKey,
-      ),
-      subscribed: subscribed,
-      keepUpdated: keepUpdated,
-    );
-    if (explicit) {
-      await _database.setPodcastCredentials(
-        saved.podcastId,
-        username: user,
-        password: pass,
-      );
-    }
-    return saved;
-  }
-
-  Future<({remote.Podcast podcast, List<String> categories})> _loadRemoteFeed(
-    String url, {
-    String? username,
-    String? password,
-  }) async {
-    final headers = podcastRequestHeaders(
-      userAgent: podavioUserAgent,
-      username: username,
-      password: password,
-    );
-    final http.Response response;
-    try {
-      response = headers.containsKey('Authorization')
-          ? await getKeepingAuthorization(
-              Uri.parse(url),
-              headers: headers,
-              timeout: const Duration(seconds: 40),
-            )
-          : await http
-                .get(Uri.parse(url), headers: headers)
-                .timeout(const Duration(seconds: 40));
-    } on remote.PodcastFailedException catch (error) {
-      if (error.statusCode == 401) {
-        throw FeedUnauthorizedException(
-          hadCredentials: headers.containsKey('Authorization'),
-        );
-      }
-      rethrow;
-    } on TimeoutException {
-      throw Exception('Le flux met trop de temps à répondre.');
-    }
-    if (response.statusCode == 401) {
-      throw FeedUnauthorizedException(
-        hadCredentials: headers.containsKey('Authorization'),
-      );
-    }
-    if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
-      throw Exception('Erreur HTTP ${response.statusCode}');
-    }
-
-    final document = decodeFeedDocument(
-      response.bodyBytes,
-      contentType: response.headers['content-type'],
-    );
-    final categories = rssChannelCategories(document);
-    final directory = await Directory.systemTemp.createTemp('podavio-feed-');
-    try {
-      final file = File('${directory.path}/feed.xml');
-      await file.writeAsString(document);
-      final podcast = await remote.Feed.loadFeedFile(file: file.path);
-      return (podcast: podcast, categories: categories);
-    } finally {
-      await directory.delete(recursive: true);
-    }
-  }
-
-  /// Lit les genres des abonnements qui n’en ont pas encore. Un échec réseau
-  /// est retenté plus tard ; une lecture aboutie, même vide, est mémorisée.
+  /// Lit les genres des abonnements qui n’en ont pas encore.
   void backfillPodcastCategories(List<Podcast> pending) {
-    final queued = {for (final podcast in _categoryQueue) podcast.id};
-    for (final podcast in pending) {
-      if (podcast.categoriesJson != null) continue;
-      if (queued.contains(podcast.id) ||
-          _categoryInflight.contains(podcast.id)) {
-        continue;
-      }
-      final failedAt = _categoryFailedAt[podcast.id];
-      if (failedAt != null &&
-          DateTime.now().difference(failedAt) < _categoryRetryBackoff) {
-        continue;
-      }
-      _categoryQueue.add(podcast);
-      queued.add(podcast.id);
-    }
-    _pumpCategoryQueue();
-  }
-
-  void _pumpCategoryQueue() {
-    while (_categoryRunning < _categoryConcurrency &&
-        _categoryQueue.isNotEmpty) {
-      final podcast = _categoryQueue.removeAt(0);
-      _categoryRunning++;
-      _categoryInflight.add(podcast.id);
-      unawaited(
-        _backfillCategory(podcast).whenComplete(() {
-          _categoryRunning--;
-          _categoryInflight.remove(podcast.id);
-          _pumpCategoryQueue();
-        }),
-      );
-    }
-  }
-
-  Future<void> _backfillCategory(Podcast podcast) async {
-    try {
-      final categories = await _fetchChannelCategories(
-        podcast.feedUrl,
-        username: podcast.authUsername,
-        password: podcast.authPassword,
-      );
-      if (categories == null) {
-        _categoryFailedAt[podcast.id] = DateTime.now();
-        return;
-      }
-      _categoryFailedAt.remove(podcast.id);
-      await _database.setPodcastCategoriesIfMissing(podcast.id, categories);
-    } catch (_) {
-      _categoryFailedAt[podcast.id] = DateTime.now();
-    }
-  }
-
-  /// `null` si le début du flux n’a pas pu être lu. Une liste vide : aucun genre.
-  Future<List<String>?> _fetchChannelCategories(
-    String url, {
-    String? username,
-    String? password,
-  }) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null || !uri.hasScheme) return null;
-    final client = HttpClient();
-    try {
-      final request = await client
-          .getUrl(uri)
-          .timeout(const Duration(seconds: 8));
-      request.followRedirects = true;
-      request.headers.set(HttpHeaders.userAgentHeader, podavioUserAgent);
-      final authorization = basicAuthorization(username, password);
-      if (authorization != null) {
-        request.headers.set(HttpHeaders.authorizationHeader, authorization);
-      }
-      final response = await request.close().timeout(
-        const Duration(seconds: 12),
-      );
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        await response.drain<void>();
-        return null;
-      }
-      final buffer = StringBuffer();
-      var bytes = 0;
-      const maxBytes = 256 * 1024;
-      await for (final chunk in response.timeout(const Duration(seconds: 12))) {
-        bytes += chunk.length;
-        buffer.write(utf8.decode(chunk, allowMalformed: true));
-        final text = buffer.toString();
-        if (text.toLowerCase().contains('<item')) {
-          return rssChannelCategories(text);
-        }
-        if (bytes >= maxBytes) {
-          final found = rssChannelCategories(text);
-          return found.isEmpty ? null : found;
-        }
-      }
-      final text = buffer.toString();
-      if (text.trim().isEmpty) return null;
-      return rssChannelCategories(text);
-    } catch (_) {
-      return null;
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  Future<Map<String, List<ChapterDraft>>> _loadPscChapters(
-    String url, {
-    String? username,
-    String? password,
-  }) async {
-    try {
-      final headers = podcastRequestHeaders(
-        userAgent: podavioUserAgent,
-        username: username,
-        password: password,
-      );
-      final response = headers.containsKey('Authorization')
-          ? await getKeepingAuthorization(Uri.parse(url), headers: headers)
-          : await http
-                .get(Uri.parse(url), headers: headers)
-                .timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
-        return const {};
-      }
-      return parsePscChaptersByItem(
-        decodeFeedDocument(
-          response.bodyBytes,
-          contentType: response.headers['content-type'],
-        ),
-      );
-    } catch (_) {
-      return const {};
-    }
-  }
-
-  FeedDraft _draftFrom(
-    String url,
-    remote.Podcast podcast, {
-    List<String> categories = const [],
-    Map<String, List<ChapterDraft>> pscByKey = const {},
-  }) {
-    final episodes = <EpisodeDraft>[];
-    for (final episode in podcast.episodes) {
-      final audioUrl = episode.contentUrl?.trim() ?? '';
-      if (audioUrl.isEmpty) continue;
-      final guid = episode.guid.trim().isEmpty ? audioUrl : episode.guid.trim();
-      final notes = _notes(episode);
-      final chapters =
-          pscByKey[guid] ?? pscByKey[audioUrl] ?? const <ChapterDraft>[];
-      episodes.add(
-        EpisodeDraft(
-          guid: guid,
-          title: episode.title.trim().isEmpty
-              ? 'Sans titre'
-              : repairMojibake(episode.title.trim()),
-          description: repairMojibake(_bounded(notes)),
-          audioUrl: audioUrl,
-          mimeType: episode.mimeType,
-          durationSeconds: episode.duration?.inSeconds,
-          publishedAt: episode.publicationDate,
-          imageUrl: _blankToNull(episode.imageUrl),
-          chaptersUrl: _blankToNull(episode.chapters?.url),
-          chapters: chapters,
-        ),
-      );
-    }
-
-    final persons = [
-      for (final person in podcast.persons)
-        if (person.name.trim().isNotEmpty)
-          PodcastPerson(
-            name: person.name.trim(),
-            role: _blankToNull(person.role),
-            group: _blankToNull(person.group),
-            image: _blankToNull(person.image),
-            link: _blankToNull(person.link),
-          ),
-    ];
-    final funding = [
-      for (final item in podcast.funding)
-        if ((item.url ?? '').trim().isNotEmpty)
-          PodcastFunding(
-            url: item.url!.trim(),
-            label: _blankToNull(item.value),
-          ),
-    ];
-    // `copyright` du package porte en pratique itunes:author.
-    final itunesAuthor = podcast.copyright?.trim() ?? '';
-    final author = persons.isNotEmpty
-        ? persons.map((person) => person.name).join(', ')
-        : itunesAuthor;
-
-    return FeedDraft(
-      feedUrl: url,
-      title: repairMojibake(_blankToNull(podcast.title) ?? url),
-      author: repairMojibake(author),
-      description: repairMojibake(_bounded(podcast.description?.trim() ?? '')),
-      imageUrl: _blankToNull(podcast.image),
-      link: _blankToNull(podcast.link),
-      persons: persons,
-      funding: funding,
-      categories: categories,
-      episodes: episodes,
-    );
-  }
-
-  String _notes(remote.Episode episode) {
-    final content = episode.content?.trim() ?? '';
-    final description = episode.description.trim();
-    if (content.length >= description.length) return content;
-    return description;
-  }
-
-  String _bounded(String value) {
-    const maxLength = 20000;
-    if (value.length <= maxLength) return value;
-    return value.substring(0, maxLength);
-  }
-
-  String? _blankToNull(String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) return null;
-    return trimmed;
+    _catalog.backfillPodcastCategories(pending);
   }
 
   /// Fetch chapitres encore en cours pour cet épisode.
   bool isChaptersInflight(int episodeId) =>
-      _chapterInflight.containsKey(episodeId);
+      _chapters.isChaptersInflight(episodeId);
 
   /// Dernier fetch a échoué et le backoff empêche un nouvel essai.
-  bool chaptersRecentlyFailed(int episodeId) {
-    final failedAt = _chapterFailedAt[episodeId];
-    if (failedAt == null) return false;
-    return DateTime.now().difference(failedAt) < _chapterRetryBackoff;
-  }
+  bool chaptersRecentlyFailed(int episodeId) =>
+      _chapters.chaptersRecentlyFailed(episodeId);
 
   /// Charge et mémorise les chapitres Podcast Index d’un épisode (lazy).
-  Future<void> ensureChapters(int episodeId) {
-    final inflight = _chapterInflight[episodeId];
-    if (inflight != null) return inflight;
-    final future = _ensureChapters(episodeId).whenComplete(() {
-      _chapterInflight.remove(episodeId);
-    });
-    _chapterInflight[episodeId] = future;
-    return future;
-  }
-
-  Future<void> _ensureChapters(int episodeId) async {
-    final episode = await _database.episodeById(episodeId);
-    if (episode == null) return;
-    if (episode.chaptersFetched) return;
-    final failedAt = _chapterFailedAt[episodeId];
-    if (failedAt != null &&
-        DateTime.now().difference(failedAt) < _chapterRetryBackoff) {
-      return;
-    }
-    final url = episode.chaptersUrl?.trim() ?? '';
-    if (url.isEmpty) {
-      await _database.markChaptersFetched(episodeId);
-      return;
-    }
-    try {
-      final podcast = await _database.getPodcast(episode.podcastId);
-      final headers = podcastRequestHeaders(
-        userAgent: podavioUserAgent,
-        username: podcast?.authUsername,
-        password: podcast?.authPassword,
-      );
-      final response = headers.containsKey('Authorization')
-          ? await getKeepingAuthorization(
-              Uri.parse(url),
-              headers: headers,
-              timeout: const Duration(seconds: 20),
-            )
-          : await http
-                .get(Uri.parse(url), headers: headers)
-                .timeout(const Duration(seconds: 20));
-      if (response.statusCode != 200) {
-        throw Exception('Chapitres HTTP ${response.statusCode}');
-      }
-      final parsed = parseChaptersJson(response.body);
-      final rows = <EpisodeChaptersCompanion>[
-        for (var i = 0; i < parsed.length; i++)
-          EpisodeChaptersCompanion.insert(
-            episodeId: episodeId,
-            startMs: parsed[i].startMs,
-            title: Value(parsed[i].title),
-            link: Value(parsed[i].link),
-            toc: Value(parsed[i].toc),
-            sortIndex: Value(i),
-          ),
-      ];
-      await _database.replaceChapters(episodeId, rows);
-      _chapterFailedAt.remove(episodeId);
-    } catch (_) {
-      // Pas de markFetched : réessai après backoff.
-      _chapterFailedAt[episodeId] = DateTime.now();
-    }
-  }
-
-  Future<String> _resolveFeedUrl(String raw) async {
-    final SpotifyShowLink link;
-    try {
-      final parsed = spotifyShowLink(raw);
-      if (parsed == null) return _normalizeUrl(raw);
-      link = parsed;
-    } on FormatException {
-      rethrow;
-    }
-    final show = await _spotifyShow(link);
-    final result = await search(show.title);
-    if (!result.successful) {
-      throw Exception(
-        result.lastError.isEmpty
-            ? 'La recherche du flux public a échoué.'
-            : result.lastError,
-      );
-    }
-    final feed = matchingFeedUrl(
-      title: show.title,
-      author: show.author,
-      candidates: [
-        for (final item in result.items)
-          FeedCandidate(
-            title: item.collectionName ?? item.trackName ?? '',
-            author: item.artistName ?? '',
-            feedUrl: item.feedUrl,
-          ),
-      ],
-    );
-    if (feed == null) {
-      throw Exception(
-        '« ${show.title} » n’a pas de flux RSS public. Les émissions réservées à Spotify ne peuvent pas être lues dans Podavio.',
-      );
-    }
-    return feed;
-  }
-
-  Future<SpotifyShowInfo> _spotifyShow(SpotifyShowLink link) async {
-    final response = await http
-        .get(
-          Uri.parse(link.pageUrl),
-          headers: const {
-            'User-Agent': 'Mozilla/5.0 (compatible; Podavio/0.1)',
-          },
-        )
-        .timeout(const Duration(seconds: 20));
-    if (response.statusCode != 200) {
-      throw Exception('La page Spotify n’a pas répondu.');
-    }
-    final show = spotifyShowFromHtml(response.body);
-    if (show == null) {
-      throw Exception('Impossible de reconnaître cette émission Spotify.');
-    }
-    return show;
-  }
-
-  String _normalizeUrl(String raw) {
-    final trimmed = raw.trim();
-    if (trimmed.isEmpty) {
-      throw const FormatException('Indiquez l’adresse d’un flux RSS.');
-    }
-    final withScheme = trimmed.contains('://') ? trimmed : 'https://$trimmed';
-    final uri = Uri.tryParse(withScheme);
-    if (uri == null ||
-        !uri.hasScheme ||
-        (uri.scheme != 'http' && uri.scheme != 'https') ||
-        uri.host.isEmpty) {
-      throw const FormatException('Cette adresse de flux n’est pas valide.');
-    }
-    return uri.toString();
-  }
+  Future<void> ensureChapters(int episodeId) =>
+      _chapters.ensureChapters(episodeId);
 }
 
 String describeFeedError(Object error) {

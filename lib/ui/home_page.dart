@@ -537,7 +537,7 @@ class _WebButton extends StatelessWidget {
     return IconButton(
       tooltip: context.tr('Podavio Web'),
       onPressed: () => context.push(AppRoutes.webCompanion),
-      icon: const Icon(Icons.qr_code_2),
+      icon: const Icon(Icons.phonelink),
     );
   }
 }

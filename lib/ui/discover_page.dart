@@ -767,7 +767,7 @@ class _ExploreCategoryList extends ConsumerWidget {
                 color: Theme.of(context).colorScheme.outlineVariant
                     .withValues(alpha: 0.5),
               ),
-            DiscoverCategoryTile(rank: entry.$1 + 1, hit: entry.$2),
+            DiscoverCategoryTile(hit: entry.$2),
           ],
           if (hasMore || loadingMore)
             const Padding(

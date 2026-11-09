@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:cast/device.dart';
@@ -10,7 +9,6 @@ import 'package:just_audio/just_audio.dart';
 import '../data/app_database.dart';
 import '../data/download_controller.dart';
 import '../data/download_policy.dart';
-import '../data/playback_file.dart';
 import '../data/feed_service.dart';
 import '../data/http_auth.dart';
 import '../data/online_status.dart';
@@ -19,10 +17,14 @@ import '../settings/settings_controller.dart';
 import '../sync/sync_hooks.dart';
 import '../web_companion/web_remote.dart';
 import 'cast_playback.dart';
+import 'cast_session.dart';
 import 'playback_handler.dart';
-import 'stream_quality.dart';
 import 'playback_source.dart';
 import 'player_sheet_controller.dart';
+import 'queue_cursor.dart';
+import 'sleep_timer.dart';
+import 'stream_cache.dart';
+import 'stream_quality.dart';
 
 class PlayerUiState {
   const PlayerUiState({
@@ -148,13 +150,15 @@ final hasNextInQueueProvider = StreamProvider<bool>((ref) {
   final source = ref.watch(
     playerProvider.select((state) => state.playbackSource),
   );
-  return source.watch(ref.watch(databaseProvider)).map((items) {
-    if (items.isEmpty) return false;
-    if (episodeId == null) return source.isQueue;
-    final index = items.indexWhere((entry) => entry.episode.id == episodeId);
-    if (index < 0) return source.isQueue;
-    return index + 1 < items.length;
-  });
+  final podcastId = ref.watch(
+    playerProvider.select((state) => state.podcastId),
+  );
+  return QueueCursor().watchHasNext(
+    source: source,
+    episodeId: episodeId,
+    podcastId: podcastId,
+    database: ref.watch(databaseProvider),
+  );
 });
 
 class PlayerNotifier extends Notifier<PlayerUiState> {
@@ -162,6 +166,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   static const _carModeKey = 'carMode';
 
   late AudioPlayer _player;
+  late QueueCursor _queue;
+  late SleepTimer _sleep;
+  late CastSession _cast;
+  late StreamCache _cache;
   PlayerUiState _ui = const PlayerUiState();
   var _started = false;
   var _disposed = false;
@@ -176,13 +184,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   Duration _skipIntro = Duration.zero;
   Duration _skipOutro = Duration.zero;
   int? _outroSkippedEpisodeId;
-  Timer? _sleepTimer;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration?>? _durationSub;
   StreamSubscription<PlayerState>? _stateSub;
-  StreamSubscription<CastPlaybackUpdate>? _castSub;
-  StreamSubscription<double>? _cacheProgress;
-  CastPlayback? _cast;
 
   @override
   PlayerUiState build() {
@@ -198,6 +202,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         carMode: carMode,
       );
       unawaited(_player.setVolume(settings.volume));
+      _queue = QueueCursor();
+      _sleep = SleepTimer();
+      _cast = CastSession();
+      _cache = StreamCache(ref.read(downloadServiceProvider));
       final handler = playbackHandler;
       if (handler != null) {
         handler.skipBack = Duration(seconds: settings.skipBackSeconds);
@@ -302,6 +310,12 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
   }
 
+  /// Change la liste suivie par suivant et précédent, sans relancer l’épisode.
+  void setPlaybackSource(PlaybackSource source) {
+    if (_disposed || _ui.playbackSource == source) return;
+    _emit(_ui.copyWith(playbackSource: source));
+  }
+
   Future<void> playEntry(
     EpisodeEntry entry, {
     PlaybackSource? source,
@@ -398,12 +412,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       return;
     }
     if (!_ui.hasEpisode) return;
-    final cast = _cast;
-    if (cast != null) {
+    if (_cast.active) {
       if (_ui.playing) {
-        cast.pause();
+        _cast.pause();
       } else {
-        cast.play();
+        _cast.play();
       }
       return;
     }
@@ -422,12 +435,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   /// Lecture ou pause, sans inverser l’état s’il est déjà le bon.
   Future<void> setPlaying(bool playing) async {
     if (!_ui.hasEpisode) return;
-    final cast = _cast;
-    if (cast != null) {
+    if (_cast.active) {
       if (playing) {
-        cast.play();
+        _cast.play();
       } else {
-        cast.pause();
+        _cast.pause();
       }
       return;
     }
@@ -447,9 +459,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       return;
     }
     if (!_ui.hasEpisode) return;
-    final cast = _cast;
-    if (cast != null) {
-      cast.seek(position);
+    if (_cast.active) {
+      _cast.seek(position);
       _emit(_ui.copyWith(position: position));
       await persistPosition();
       return;
@@ -531,7 +542,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     await persistPosition();
     await syncPositionToEpisode();
     if (_disposed || !ref.mounted) return;
-    _sleepTimer?.cancel();
+    _sleep.close();
     try {
       await _player.stop();
     } catch (error, stack) {
@@ -546,73 +557,66 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
   }
 
-  /// Voisin dans la liste d’origine. `1` = suivant, `-1` = précédent.
-  /// Hors de la file de lecture, le suivant retombe sur le premier, comme avant.
-  Future<EpisodeEntry?> _relativeEntry(int delta) async {
-    final source = _ui.playbackSource;
-    final items = await source.watch(ref.read(databaseProvider)).first;
-    if (_disposed || items.isEmpty) return null;
-    final currentId = _ui.episodeId;
-    if (currentId == null) {
-      return delta > 0 && source.isQueue ? items.first : null;
-    }
-    final index = items.indexWhere((entry) => entry.episode.id == currentId);
-    if (index < 0) {
-      return delta > 0 && source.isQueue ? items.first : null;
-    }
-    final target = index + delta;
-    if (target < 0 || target >= items.length) return null;
-    return items[target];
+  Future<EpisodeEntry?> _relativeEntry(int delta) {
+    return _queue.relative(
+      delta: delta,
+      source: _ui.playbackSource,
+      episodeId: _ui.episodeId,
+      database: ref.read(databaseProvider),
+      isDisposed: () => _disposed,
+    );
   }
 
-  /// Épisode précédent dans la playlist.
-  /// Au-delà de 3 s, reprend l’épisode courant depuis le début (comme [skipChapter]).
-  /// Sans précédent, revient aussi au début.
+  /// Épisode précédent dans la liste en cours, sinon dans le podcast.
+  /// Sans précédent, reprend l’épisode courant depuis le début.
   Future<void> playPreviousInQueue() async {
-    if (_remote) {
-      if (_ui.position.inMilliseconds > 3000) {
-        await seek(Duration.zero);
-        return;
-      }
-      WebRemoteHooks.command({'type': 'command', 'action': 'previous'});
-      return;
-    }
-    if (_advancing || _disposed || !_ui.hasEpisode) return;
-    if (_ui.position.inMilliseconds > 3000) {
-      await seek(Duration.zero);
-      return;
-    }
-    final currentId = _ui.episodeId;
-    if (currentId == null) return;
-    final previous = await _relativeEntry(-1);
-    if (_disposed || !ref.mounted) return;
-    if (previous == null) {
-      await seek(Duration.zero);
-      return;
-    }
-    _advancing = true;
-    try {
-      await _play(previous.episode, previous.podcast);
-    } finally {
-      _advancing = false;
-    }
+    final step = await _queue.previous(
+      remote: _remote,
+      advancing: _advancing,
+      hasEpisode: _ui.hasEpisode,
+      position: _ui.position,
+      source: _ui.playbackSource,
+      episodeId: _ui.episodeId,
+      database: ref.read(databaseProvider),
+      isDisposed: () => _disposed,
+      isMounted: () => ref.mounted,
+    );
+    await _applyQueueStep(step);
   }
 
   /// Passe à l’épisode suivant dans la playlist.
   Future<void> playNextInQueue() async {
-    if (_remote) {
-      WebRemoteHooks.command({'type': 'command', 'action': 'next'});
-      return;
-    }
-    if (_advancing || _disposed) return;
-    final next = await _relativeEntry(1);
-    if (next == null || _disposed) return;
-    _advancing = true;
-    try {
-      // La file reste dans l’ordre affiché. `_play` sync la position précédente.
-      await _play(next.episode, next.podcast);
-    } finally {
-      _advancing = false;
+    final step = await _queue.next(
+      remote: _remote,
+      advancing: _advancing,
+      source: _ui.playbackSource,
+      episodeId: _ui.episodeId,
+      database: ref.read(databaseProvider),
+      isDisposed: () => _disposed,
+    );
+    // La file reste dans l’ordre affiché. `_play` sync la position précédente.
+    await _applyQueueStep(step);
+  }
+
+  Future<void> _applyQueueStep(QueueStep step) async {
+    switch (step.kind) {
+      case QueueStepKind.none:
+        return;
+      case QueueStepKind.seekStart:
+        await seek(Duration.zero);
+      case QueueStepKind.remote:
+        WebRemoteHooks.command({
+          'type': 'command',
+          'action': step.remoteAction,
+        });
+      case QueueStepKind.play:
+        final entry = step.entry!;
+        _advancing = true;
+        try {
+          await _play(entry.episode, entry.podcast);
+        } finally {
+          _advancing = false;
+        }
     }
   }
 
@@ -682,25 +686,16 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   }
 
   void setSleep(Duration? duration, {bool atEnd = false}) {
-    _sleepTimer?.cancel();
-    if (duration == null && !atEnd) {
-      _emit(_ui.copyWith(clearSleep: true));
-      return;
-    }
-    if (atEnd) {
-      _emit(_ui.copyWith(clearSleep: true, sleepAtEnd: true));
-      return;
-    }
-    final ends = DateTime.now().add(duration!);
-    _emit(_ui.copyWith(sleepEndsAt: ends, sleepAtEnd: false));
-    _sleepTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (DateTime.now().isBefore(ends)) {
-        _emit(_ui.copyWith(sleepEndsAt: ends));
-        return;
-      }
-      _sleepTimer?.cancel();
-      unawaited(_pauseForSleep());
-    });
+    _sleep.arm(
+      duration: duration,
+      atEnd: atEnd,
+      onCleared: () => _emit(_ui.copyWith(clearSleep: true)),
+      onUntilEnd: () => _emit(_ui.copyWith(clearSleep: true, sleepAtEnd: true)),
+      onArmed: (ends) =>
+          _emit(_ui.copyWith(sleepEndsAt: ends, sleepAtEnd: false)),
+      onTick: (ends) => _emit(_ui.copyWith(sleepEndsAt: ends)),
+      onElapsed: _pauseForSleep,
+    );
   }
 
   Future<void> _pauseForSleep() async {
@@ -898,7 +893,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       }
       await _prepareSession();
       if (!ref.mounted || _disposed) return;
-      await _setEpisodeAudio(
+      await _cache.open(
+        _player,
         sourceUri,
         headers: downloaded
             ? null
@@ -907,14 +903,23 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
                 username: podcast.authUsername,
                 password: podcast.authPassword,
               ),
+        episodeId: episode.id,
+        isUsable: () => ref.mounted && !_disposed,
+        isSameEpisode: () =>
+            ref.mounted && !_disposed && _ui.episodeId == episode.id,
       );
       await _player.setSpeed(_ui.speed);
       await _player.setVolume(_ui.volume);
       if (start > Duration.zero) await _player.seek(start);
       if (!ref.mounted || _disposed) return;
-      if (_cast != null) {
+      if (_cast.active) {
         await _player.pause();
-        final error = await _loadOnCast(episode, podcast, start);
+        final error = await _cast.load(
+          episode: episode,
+          podcast: podcast,
+          position: start,
+          preferPodcastCover: preferPodcastCover,
+        );
         if (error != null && !_disposed) {
           _emit(_ui.copyWith(error: error, playing: false));
         }
@@ -934,34 +939,6 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
   }
 
-  /// Ouvre [uri]. Un fichier local est réessayé via une copie au nom simple
-  /// si le décodeur refuse le chemin d’origine. Jamais de repli réseau.
-  Future<void> _setEpisodeAudio(
-    Uri uri, {
-    required Map<String, String>? headers,
-  }) async {
-    final remote = uri.scheme == 'http' || uri.scheme == 'https';
-    if (remote) {
-      await _setRemoteAudio(uri, headers: headers);
-      return;
-    }
-    try {
-      await _player.setAudioSource(AudioSource.uri(uri, headers: headers));
-    } catch (error, stack) {
-      final path = uri.scheme == 'file' ? uri.toFilePath() : null;
-      if (path == null || isPlaybackCacheFile(path)) {
-        debugPrint('Lecture impossible: $error\n$stack');
-        rethrow;
-      }
-      debugPrint('Lecture du fichier, nouvel essai: $error\n$stack');
-      final copy = await ref
-          .read(downloadServiceProvider)
-          .copyLocalFileForPlayback(path);
-      if (!ref.mounted || _disposed || copy == null) rethrow;
-      await _player.setAudioSource(AudioSource.file(copy));
-    }
-  }
-
   /// Envoie l’épisode sur [device] et met le lecteur local en pause.
   /// Renvoie un message si le flux ne peut pas être casté.
   Future<String?> castTo(CastDevice device) async {
@@ -972,24 +949,21 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       return 'Cet épisode n’a pas d’adresse que le Cast peut lire';
     }
-    final playback = CastPlayback();
-    try {
-      await playback.open(device);
-    } catch (_) {
-      await playback.close();
-      return 'Connexion à ${device.name} impossible';
-    }
-    if (_disposed || !ref.mounted) {
-      await playback.close();
-      return null;
-    }
-    await _castSub?.cancel();
-    await _cast?.close();
-    _cast = playback;
-    _castSub = playback.updates.listen(_onCastUpdate);
+    final opened = await _cast.connect(
+      device,
+      isGone: () => _disposed || !ref.mounted,
+      onUpdate: _onCastUpdate,
+    );
+    if (opened.aborted) return null;
+    if (!opened.connected) return opened.message;
     await _player.pause();
     _emit(_ui.copyWith(castDeviceName: device.name, playing: true));
-    final error = await _loadOnCast(entry.episode, entry.podcast, _ui.position);
+    final error = await _cast.load(
+      episode: entry.episode,
+      podcast: entry.podcast,
+      position: _ui.position,
+      preferPodcastCover: ref.read(settingsProvider).preferPodcastCover,
+    );
     if (error != null) {
       await playHere();
       return error;
@@ -999,14 +973,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   /// Revient sur l’appareil, à la position du Cast.
   Future<void> playHere() async {
-    final cast = _cast;
-    if (cast == null) return;
+    if (!_cast.active) return;
     final position = _ui.position;
     final wasPlaying = _ui.playing;
-    _cast = null;
-    await _castSub?.cancel();
-    _castSub = null;
-    await cast.close();
+    await _cast.release();
     if (_disposed || !ref.mounted) return;
     _emit(_ui.copyWith(clearCast: true, playing: false, position: position));
     await _player.seek(position);
@@ -1015,49 +985,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
   }
 
-  Future<String?> _loadOnCast(
-    Episode episode,
-    Podcast podcast,
-    Duration position,
-  ) async {
-    final cast = _cast;
-    if (cast == null) return null;
-    final url = episode.audioUrl.trim();
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      return 'Cet épisode n’a pas d’adresse que le Cast peut lire';
-    }
-    final settings = ref.read(settingsProvider);
-    final cover = EpisodeEntry(episode: episode, podcast: podcast);
-    try {
-      cast.load(
-        url: url,
-        contentType: _castContentType(episode),
-        title: episode.title,
-        artist: podcast.title,
-        imageUrl: cover.imageUrl(
-          preferPodcastCover: settings.preferPodcastCover,
-        ),
-        position: position,
-      );
-    } catch (_) {
-      return 'Envoi vers le Cast impossible';
-    }
-    return null;
-  }
-
-  String _castContentType(Episode episode) {
-    final mime = episode.mimeType?.trim();
-    if (mime != null && mime.isNotEmpty) return mime;
-    final url = episode.audioUrl.toLowerCase();
-    if (url.contains('.m4a') || url.contains('.mp4') || url.contains('.aac')) {
-      return 'audio/mp4';
-    }
-    if (url.contains('.ogg') || url.contains('.opus')) return 'audio/ogg';
-    return 'audio/mpeg';
-  }
-
   void _onCastUpdate(CastPlaybackUpdate update) {
-    if (_disposed || _cast == null || !ref.mounted) return;
+    if (_disposed || !_cast.active || !ref.mounted) return;
     if (update.completed) {
       unawaited(_onCompleted());
       return;
@@ -1126,7 +1055,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
 
   void _bind() {
     _positionSub = _player.positionStream.listen((position) {
-      if (_cast != null || _remote) return;
+      if (_cast.active || _remote) return;
       final now = DateTime.now();
       if (now.difference(_lastPositionUi) >=
           const Duration(milliseconds: 250)) {
@@ -1152,7 +1081,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       _maybeSkipOutro(_ui.position);
     });
     _stateSub = _player.playerStateStream.listen((playerState) {
-      if (_cast != null || _remote) return;
+      if (_cast.active || _remote) return;
       _emit(_ui.copyWith(playing: playerState.playing));
       if (playerState.processingState == ProcessingState.completed) {
         unawaited(_onCompleted());
@@ -1265,71 +1194,21 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
     if (_disposed || !ref.mounted || _ui.episodeId != episode.id) return;
     try {
-      await _setRemoteAudio(
+      await _cache.open(
+        _player,
         uri,
         headers: podcastRequestHeaders(
           userAgent: podavioUserAgent,
           username: podcast.authUsername,
           password: podcast.authPassword,
         ),
+        episodeId: episode.id,
+        isUsable: () => ref.mounted && !_disposed,
+        isSameEpisode: () =>
+            ref.mounted && !_disposed && _ui.episodeId == episode.id,
       );
     } catch (error, stack) {
       debugPrint('Flux après suppression: $error\n$stack');
-    }
-  }
-
-  Future<void> _rememberStreamCache(int episodeId, File file) async {
-    for (var attempt = 0; attempt < 10; attempt++) {
-      if (_disposed || !ref.mounted || _ui.episodeId != episodeId) return;
-      if (await file.exists() && await file.length() > 0) {
-        await ref
-            .read(downloadServiceProvider)
-            .rememberStreamCache(episodeId, file.path);
-        return;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    }
-  }
-
-  /// Joue le flux et garde le fichier une fois qu’il est complet.
-  /// Un échec du cache revient au streaming simple.
-  Future<void> _setRemoteAudio(
-    Uri uri, {
-    required Map<String, String>? headers,
-  }) async {
-    await _cacheProgress?.cancel();
-    _cacheProgress = null;
-    final episodeId = _ui.episodeId;
-    if (episodeId == null) {
-      await _player.setAudioSource(AudioSource.uri(uri, headers: headers));
-      return;
-    }
-    try {
-      final downloads = ref.read(downloadServiceProvider);
-      final file = await downloads.streamCacheFileFor(
-        episodeId,
-        uri.toString(),
-      );
-      if (await file.exists() && await file.length() > 0) {
-        await downloads.rememberStreamCache(episodeId, file.path);
-      }
-      if (_disposed || !ref.mounted || _ui.episodeId != episodeId) return;
-      // Le cache de flux est encore marqué expérimental par just_audio.
-      // ignore: experimental_member_use
-      final source = LockCachingAudioSource(
-        uri,
-        headers: headers,
-        cacheFile: file,
-      );
-      _cacheProgress = source.downloadProgressStream.listen((progress) {
-        if (progress < 1) return;
-        unawaited(_rememberStreamCache(episodeId, file));
-      });
-      await _player.setAudioSource(source);
-    } catch (error, stack) {
-      debugPrint('Cache de lecture indisponible: $error\n$stack');
-      if (_disposed || !ref.mounted) return;
-      await _player.setAudioSource(AudioSource.uri(uri, headers: headers));
     }
   }
 
@@ -1346,12 +1225,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       handler.onDirectionalSkip = null;
       handler.detach();
     }
-    _sleepTimer?.cancel();
-    final cast = _cast;
-    _cast = null;
-    await _castSub?.cancel();
-    await _cacheProgress?.cancel();
-    await cast?.close();
+    _sleep.close();
+    await _cast.release();
+    await _cache.close();
     await _positionSub?.cancel();
     await _durationSub?.cancel();
     await _stateSub?.cancel();

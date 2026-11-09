@@ -43,4 +43,35 @@ void main() {
     );
     expect(AppRelease.tryParse('{}'), isNull);
   });
+
+  test('a GitHub release exposes its asset links', () {
+    final release = AppRelease.tryParseGitHub('''
+{
+  "tag_name": "2026.10.11",
+  "published_at": "2026-10-07T00:00:00Z",
+  "body": "- Fichiers sur GitHub.\\n- Archive Linux.",
+  "assets": [
+    {
+      "name": "podavio-2026.10.11-android-universal.apk",
+      "browser_download_url": "https://github.com/neosis91/podavio/releases/download/2026.10.11/podavio-2026.10.11-android-universal.apk"
+    },
+    {
+      "name": "podavio-2026.10.11-linux-x64.tar.gz",
+      "browser_download_url": "https://github.com/neosis91/podavio/releases/download/2026.10.11/podavio-2026.10.11-linux-x64.tar.gz"
+    }
+  ]
+}
+''');
+    expect(release?.version, '2026.10.11');
+    expect(release?.notes, ['Fichiers sur GitHub.', 'Archive Linux.']);
+    expect(
+      release?.fileUri('android-universal')?.toString(),
+      'https://github.com/neosis91/podavio/releases/download/2026.10.11/podavio-2026.10.11-android-universal.apk',
+    );
+    expect(
+      release?.fileUri('linux-x64')?.toString(),
+      'https://github.com/neosis91/podavio/releases/download/2026.10.11/podavio-2026.10.11-linux-x64.tar.gz',
+    );
+    expect(AppRelease.tryParseGitHub('{"tag_name":"2026.10.11"}'), isNull);
+  });
 }

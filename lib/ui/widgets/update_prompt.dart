@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/app_release.dart';
 
-/// Boîte affichée une fois par lancement quand podavio.com a une version plus récente.
+/// Boîte affichée une fois par lancement quand une release plus récente existe.
 class UpdatePrompt extends ConsumerStatefulWidget {
   const UpdatePrompt({super.key});
 

@@ -30,8 +30,8 @@
       @if (!session.fingerprint()) {
         @if (session.qrPayload(); as payload) {
           <qrcode
-            [qrdata]="payload"
-            [width]="264"
+            [data]="payload"
+            [imageWidth]="264"
             [margin]="1"
             elementType="svg"
             errorCorrectionLevel="M"

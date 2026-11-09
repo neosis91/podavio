@@ -4,8 +4,15 @@ import 'package:flutter_svg/flutter_svg.dart';
 /// Rouge du cœur déjà en favori, le même que la carte Bibliothèque.
 const favoriteHeartColor = Color(0xffD10000);
 
+/// Épisode déjà téléchargé, ou téléchargement automatique actif.
+const downloadActiveColor = Color(0xff4CAF50);
+
 /// Jaune de l’étoile d’un podcast préféré.
 const preferredStarColor = Color(0xFFFFC107);
+
+/// Boutons sombres posés sur la jaquette (retour, étoile, cœur, menu).
+/// Gris `surfaceContainerHighest` du thème sombre de SimpMusic, à 80 %.
+const coverControlColor = Color(0xCC303538);
 
 class PodavioLogo extends StatelessWidget {
   const PodavioLogo({super.key, this.width = 240});

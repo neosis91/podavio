@@ -28,7 +28,7 @@ la même identité de signature (désinstall / réinstall obligatoire).
 
 ## Release
 
-La fusion de `develop` dans `main` compile Android et Linux, puis publie sur podavio.com. Le titre `## AAAA.M.N` doit déjà être dans `CHANGELOG.md`.
+La fusion de `develop` dans `main` compile Android et Linux, puis les joint à la release GitHub. Le titre `## AAAA.M.N` doit déjà être dans `CHANGELOG.md`.
 
 `tool/release_local.sh` reste un secours sur une machine qui a le keystore.
 

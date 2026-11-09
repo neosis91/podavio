@@ -18,6 +18,9 @@ class Podcasts extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get feedUrl => text().unique()();
   TextColumn get title => text()();
+
+  /// [title] plié par [foldForSearch], pour la recherche SQL.
+  TextColumn get titleFold => text().withDefault(const Constant(''))();
   TextColumn get author => text().withDefault(const Constant(''))();
   TextColumn get description => text().withDefault(const Constant(''))();
   TextColumn get imageUrl => text().nullable()();
@@ -78,6 +81,9 @@ class Episodes extends Table {
       integer().references(Podcasts, #id, onDelete: KeyAction.cascade)();
   TextColumn get guid => text()();
   TextColumn get title => text()();
+
+  /// [title] plié par [foldForSearch], pour la recherche SQL.
+  TextColumn get titleFold => text().withDefault(const Constant(''))();
   TextColumn get description => text().withDefault(const Constant(''))();
   TextColumn get audioUrl => text()();
   TextColumn get mimeType => text().nullable()();
@@ -207,7 +213,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -279,6 +285,11 @@ class AppDatabase extends _$AppDatabase
       if (from < 17) {
         await migrator.addColumn(episodes, episodes.cachePath);
       }
+      if (from < 18) {
+        await migrator.addColumn(podcasts, podcasts.titleFold);
+        await migrator.addColumn(episodes, episodes.titleFold);
+        await _backfillTitleFolds();
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -330,6 +341,46 @@ class AppDatabase extends _$AppDatabase
       'CREATE INDEX IF NOT EXISTS episodes_download_path '
       'ON episodes (download_path)',
     );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS episodes_podcast_published '
+      'ON episodes (podcast_id, published_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS episodes_in_progress '
+      'ON episodes (last_played_at) '
+      'WHERE played = 0 AND position_ms > 0',
+    );
+  }
+
+  Future<void> _backfillTitleFolds() async {
+    final podcastRows = await (selectOnly(
+      podcasts,
+    )..addColumns([podcasts.id, podcasts.title])).get();
+    final episodeRows = await (selectOnly(
+      episodes,
+    )..addColumns([episodes.id, episodes.title])).get();
+    await batch((statement) {
+      for (final row in podcastRows) {
+        final id = row.read(podcasts.id);
+        final title = row.read(podcasts.title);
+        if (id == null || title == null) continue;
+        statement.update(
+          podcasts,
+          PodcastsCompanion(titleFold: Value(foldForSearch(title))),
+          where: (table) => table.id.equals(id),
+        );
+      }
+      for (final row in episodeRows) {
+        final id = row.read(episodes.id);
+        final title = row.read(episodes.title);
+        if (id == null || title == null) continue;
+        statement.update(
+          episodes,
+          EpisodesCompanion(titleFold: Value(foldForSearch(title))),
+          where: (table) => table.id.equals(id),
+        );
+      }
+    });
   }
 }
 

@@ -4,10 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../data/providers.dart';
 import '../l10n/l10n.dart';
-import 'history_page.dart';
+import '../player/playback_source.dart';
 import 'nav_catalog.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
+import 'widgets/episode_tile.dart';
 import 'widgets/frosted_header.dart';
 import 'widgets/empty_state.dart';
 
@@ -38,39 +39,33 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     const tiles = <_LibraryTileData>[
       _LibraryTileData(
         path: AppRoutes.favorites,
-        background: Color(0xffff99ae),
+        color: favoriteHeartColor,
         icon: Icons.favorite,
-        iconColor: favoriteHeartColor,
       ),
       _LibraryTileData(
         path: AppRoutes.episodes,
-        background: Color(0xff00BCD4),
+        color: Color(0xff00BCD4),
         icon: Icons.podcasts,
-        iconColor: Colors.black,
       ),
       _LibraryTileData(
         path: AppRoutes.downloads,
-        background: Color(0xff4CAF50),
-        icon: Icons.downloading,
-        iconColor: Colors.black,
+        color: downloadActiveColor,
+        icon: Icons.download_for_offline,
       ),
       _LibraryTileData(
         path: AppRoutes.cache,
-        background: Color(0xffff9800),
+        color: Color(0xffff9800),
         icon: Icons.folder,
-        iconColor: Colors.black,
       ),
       _LibraryTileData(
         path: AppRoutes.playlists,
-        background: Color(0xffFFEB3B),
+        color: Color(0xffFFEB3B),
         icon: Icons.playlist_play,
-        iconColor: Colors.black,
       ),
       _LibraryTileData(
         path: AppRoutes.stats,
-        background: Color(0xffCE93D8),
+        color: Color(0xffCE93D8),
         icon: Icons.insights,
-        iconColor: Colors.black,
       ),
     ];
     final pages = {
@@ -185,10 +180,11 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 child: Center(child: CircularProgressIndicator()),
               );
             }
-            return HistoryEpisodeRow(
+            return EpisodeTile(
               key: ValueKey(entries[entryIndex].episode.id),
               entry: entries[entryIndex],
-              showMenu: true,
+              queueStyle: true,
+              playbackSource: PlaybackSource.fromQuery(_history),
             );
           },
         ),
@@ -200,15 +196,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 class _LibraryTileData {
   const _LibraryTileData({
     required this.path,
-    required this.background,
+    required this.color,
     required this.icon,
-    required this.iconColor,
   });
 
   final String path;
-  final Color background;
+  final Color color;
   final IconData icon;
-  final Color iconColor;
 }
 
 class _LibraryTile extends StatelessWidget {
@@ -219,20 +213,25 @@ class _LibraryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(8),
+      side: BorderSide(color: data.color, width: 1.5),
+    );
     return Material(
-      color: data.background,
+      color: dark ? Colors.black : Colors.white,
       elevation: 1,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.black,
-      borderRadius: BorderRadius.circular(8),
+      shape: shape,
       child: InkWell(
         onTap: () => context.push(page.path),
-        borderRadius: BorderRadius.circular(8),
+        customBorder: shape,
         child: Row(
           children: [
             Padding(
               padding: const EdgeInsets.all(10),
-              child: Icon(data.icon, size: 30, color: data.iconColor),
+              child: Icon(data.icon, size: 30, color: data.color),
             ),
             Expanded(
               child: Text(
@@ -240,7 +239,7 @@ class _LibraryTile extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleSmall
-                    ?.copyWith(color: Colors.black),
+                    ?.copyWith(color: data.color),
               ),
             ),
           ],

@@ -8,6 +8,16 @@ String foldForSearch(String value) {
   return buffer.toString();
 }
 
+/// Motif `LIKE` pour une recherche déjà pliée. `%` et `_` restent littéraux.
+String foldedLikePattern(String needle) {
+  final folded = foldForSearch(needle);
+  final escaped = folded
+      .replaceAll(r'\', r'\\')
+      .replaceAll('%', r'\%')
+      .replaceAll('_', r'\_');
+  return '%$escaped%';
+}
+
 /// `true` si [haystack] contient [needle] sans tenir compte casse / accents.
 bool searchMatch(String haystack, String needle) {
   final foldedNeedle = foldForSearch(needle.trim());
