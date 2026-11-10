@@ -1,0 +1,4 @@
+• The offered update is the latest GitHub release.
+• An existing library receives the automatic-download limit.
+• An empty screen scrolls when its message is taller than the window.
+• Android 8 is the minimum.

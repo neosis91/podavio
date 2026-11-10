@@ -1,0 +1,4 @@
+• La mise à jour proposée est la dernière release GitHub.
+• Une bibliothèque déjà installée reçoit la limite de téléchargement automatique.
+• Un écran vide défile quand son message dépasse la fenêtre.
+• Android 8 est le minimum.

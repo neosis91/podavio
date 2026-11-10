@@ -1,13 +1,32 @@
+import io.sentry.android.gradle.extensions.SentryPluginExtension
+import java.io.File
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    id("io.sentry.android.gradle")
+    // Appliqué plus bas, seulement si SENTRY_AUTH_TOKEN est défini.
+    // Sans jeton, le plugin télécharge sentry-cli : le build F-Droid ne le fait pas.
+    id("io.sentry.android.gradle") apply false
 }
 
-import java.util.Properties
-import java.io.File
-import java.io.FileInputStream
+// Premier titre ## AAAA.M.N de CHANGELOG.md, et son code AAAAMMNN.
+fun publishedVersion(): Pair<String, Int>? {
+    val changelog = rootProject.file("../CHANGELOG.md")
+    if (!changelog.isFile) return null
+    val match = Regex(
+        """^## \[?(\d{4})\.(\d+)\.(\d+)\]?(?:\s+-\s+\d{4}-\d{2}-\d{2})?\s*$""",
+        RegexOption.MULTILINE,
+    ).find(changelog.readText()) ?: return null
+    val year = match.groupValues[1].toInt()
+    val month = match.groupValues[2].toInt()
+    val patch = match.groupValues[3].toInt()
+    if (month !in 1..12 || patch > 99) return null
+    val name = "${match.groupValues[1]}.${match.groupValues[2]}.${match.groupValues[3]}"
+    return name to (year * 10000 + month * 100 + patch)
+}
 
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
@@ -110,19 +129,36 @@ dependencies {
     implementation("androidx.media:media:1.7.1")
 }
 
-// R8 est activé sur la release Flutter. Le mapping part seulement si le
-// jeton est là : un build local, ou une CI sans secret, ne doit pas échouer.
+// R8 est activé sur la release Flutter. Le plugin, et donc sentry-cli,
+// ne sont chargés que pour la release GitHub, qui a le jeton.
 val sentryAuthToken = System.getenv("SENTRY_AUTH_TOKEN")?.takeIf { it.isNotBlank() }
 
-sentry {
-    org.set("podavio")
-    projectName.set("podavio")
-    url.set("https://de.sentry.io")
-    ignoredBuildTypes.set(setOf("debug"))
-    autoInstallation.enabled = false
-    telemetry.set(false)
-    authToken.set(sentryAuthToken ?: "")
-    includeProguardMapping.set(true)
-    autoUploadProguardMapping.set(sentryAuthToken != null)
-    uploadNativeSymbols.set(sentryAuthToken != null)
+if (sentryAuthToken != null) {
+    apply(plugin = "io.sentry.android.gradle")
+    extensions.configure(SentryPluginExtension::class.java) {
+        org.set("podavio")
+        projectName.set("podavio")
+        url.set("https://de.sentry.io")
+        ignoredBuildTypes.set(setOf("debug"))
+        autoInstallation.enabled = false
+        telemetry.set(false)
+        authToken.set(sentryAuthToken)
+        includeProguardMapping.set(true)
+        autoUploadProguardMapping.set(true)
+        uploadNativeSymbols.set(true)
+    }
+}
+
+// pubspec reste 0.1.0+1. Sans --build-number, la release prend le CalVer
+// du journal, pour que l’APK F-Droid porte 20261104 et non 1.
+val published = publishedVersion()
+if (published != null && flutter.versionCode == 1) {
+    androidComponents {
+        onVariants(selector().withBuildType("release")) { variant ->
+            variant.outputs.forEach { output ->
+                output.versionName.set(published.first)
+                output.versionCode.set(published.second)
+            }
+        }
+    }
 }
