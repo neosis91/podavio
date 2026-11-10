@@ -3,9 +3,16 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Run qui contient déjà les artefacts Android, Linux et Windows
+        required: true
+        type: string
 
 permissions:
   contents: write
+  actions: read
 
 env:
   GH_TOKEN: ${{ github.token }}
@@ -20,17 +27,25 @@ jobs:
     outputs:
       release: ${{ steps.decide.outputs.release }}
       version: ${{ steps.decide.outputs.version }}
+      sha: ${{ steps.decide.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Fusion develop vers main
         id: decide
-        run: tool/ci/github_release.sh gate
+        env:
+          PODAVIO_RUN_ID: ${{ inputs.run_id }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tool/ci/github_release.sh manual
+          else
+            tool/ci/github_release.sh gate
+          fi
 
   android:
     needs: gate
-    if: needs.gate.outputs.release == 'true'
+    if: github.event_name == 'push' && needs.gate.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -55,7 +70,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: tool/ci/github_release.sh build-android
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android
           path: dist/android/*.apk
@@ -63,14 +78,14 @@ jobs:
 
   linux:
     needs: gate
-    if: needs.gate.outputs.release == 'true'
+    if: github.event_name == 'push' && needs.gate.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - name: Dépendances
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libsecret-1-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libsecret-1-dev libcurl4-openssl-dev zlib1g-dev
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -81,7 +96,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: tool/ci/github_release.sh build-linux
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux
           path: dist/linux/*.tar.gz
@@ -89,7 +104,7 @@ jobs:
 
   windows:
     needs: gate
-    if: needs.gate.outputs.release == 'true'
+    if: github.event_name == 'push' && needs.gate.outputs.release == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -104,7 +119,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: tool/ci/github_release.sh build-windows
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: dist/windows/*.msi
@@ -112,21 +127,44 @@ jobs:
 
   publish:
     needs: [gate, android, linux, windows]
-    if: needs.gate.outputs.release == 'true'
+    if: |
+      always() &&
+      needs.gate.result == 'success' &&
+      needs.gate.outputs.release == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+        (needs.android.result == 'success' &&
+         needs.linux.result == 'success' &&
+         needs.windows.result == 'success'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - name: Commit compilé
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git fetch origin "${{ needs.gate.outputs.sha }}"
+          git checkout --detach "${{ needs.gate.outputs.sha }}"
+      - name: Artefacts du run
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PODAVIO_RUN_ID: ${{ inputs.run_id }}
+        run: |
+          gh run download "${PODAVIO_RUN_ID}" --name android --dir dist/android
+          gh run download "${PODAVIO_RUN_ID}" --name linux --dir dist/linux
+          gh run download "${PODAVIO_RUN_ID}" --name windows --dir dist/windows
+      - uses: actions/download-artifact@v8
+        if: github.event_name != 'workflow_dispatch'
         with:
           name: android
           path: dist/android
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
+        if: github.event_name != 'workflow_dispatch'
         with:
           name: linux
           path: dist/linux
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
+        if: github.event_name != 'workflow_dispatch'
         with:
           name: windows
           path: dist/windows

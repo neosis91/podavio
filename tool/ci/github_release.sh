@@ -101,7 +101,22 @@ case "${1:-}" in
     python3 tool/changelog.py check "${VERSION}"
     echo "release=true" >> "${GITHUB_OUTPUT:?}"
     echo "version=${VERSION}" >> "${GITHUB_OUTPUT:?}"
+    echo "sha=${SHA_FULL}" >> "${GITHUB_OUTPUT:?}"
     echo "Release ${VERSION} pour ${SHA}."
+    ;;
+
+  manual)
+    [ -n "${PODAVIO_RUN_ID:-}" ] || fail "PODAVIO_RUN_ID manquant."
+    sha="$(gh run view "${PODAVIO_RUN_ID}" --json headSha --jq .headSha)"
+    [ -n "${sha}" ] || fail "Run ${PODAVIO_RUN_ID} introuvable."
+    git fetch origin "${sha}"
+    git checkout --detach "${sha}"
+    VERSION="$(changelog_version)"
+    python3 tool/changelog.py check "${VERSION}"
+    echo "release=true" >> "${GITHUB_OUTPUT:?}"
+    echo "version=${VERSION}" >> "${GITHUB_OUTPUT:?}"
+    echo "sha=${sha}" >> "${GITHUB_OUTPUT:?}"
+    echo "Publication manuelle ${VERSION} depuis ${sha}."
     ;;
 
   keystore)
@@ -227,6 +242,6 @@ EOF
     ;;
 
   *)
-    fail "Usage : tool/ci/github_release.sh gate|keystore|build-android|build-linux|build-windows|publish"
+    fail "Usage : tool/ci/github_release.sh gate|manual|keystore|build-android|build-linux|build-windows|publish"
     ;;
 esac
