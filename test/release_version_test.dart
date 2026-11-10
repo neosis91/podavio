@@ -80,6 +80,8 @@ void main() {
       release?.fileUri('windows-x64')?.toString(),
       'https://github.com/neosis91/podavio/releases/download/2026.10.11/podavio-2026.10.11-windows-x64.msi',
     );
-    expect(AppRelease.tryParseGitHub('{"tag_name":"2026.10.11"}'), isNull);
+    final tagged = AppRelease.tryParseGitHub('{"tag_name":"2026.10.11"}');
+    expect(tagged?.version, '2026.10.11');
+    expect(tagged?.files, isEmpty);
   });
 }

@@ -4,6 +4,14 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.11.4
+
+- The update dialog compares the installed version with the latest GitHub release.
+- Opening an existing library adds the missing automatic-download limit, so that check no longer fails.
+- An empty screen scrolls when its message is taller than the window.
+- Crashes are reported to Sentry, with the installed version on a release build. Only the opening of the app is traced. A local run reports nothing unless it was started with the Sentry address.
+- Android requires Android 8. A release build uploads the Android code map and the Linux and Windows debug files, so a crash can be read back to the original source.
+
 ## 2026.11.3
 
 - The GitHub release includes one Windows file, an .msi installer. Opening it installs Podavio for the current user and adds a Start menu shortcut.

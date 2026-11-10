@@ -9,7 +9,6 @@ import 'providers.dart';
 
 const githubLatestReleaseUrl =
     'https://api.github.com/repos/neosis91/podavio/releases/latest';
-const latestReleaseUrl = 'https://podavio.com/latest.json';
 const downloadPageUrl = 'https://podavio.com/download';
 
 const _githubAssetSuffixes = {
@@ -117,7 +116,6 @@ class AppRelease {
           }
         }
       }
-      if (files.isEmpty) return null;
       return AppRelease(
         version: version,
         date: date?.toLocal(),
@@ -141,35 +139,22 @@ Future<AppRelease?> _readRelease(http.Client client, Uri url) async {
       )
       .timeout(const Duration(seconds: 12));
   if (response.statusCode != 200) return null;
-  if (url.toString() == githubLatestReleaseUrl) {
-    return AppRelease.tryParseGitHub(response.body);
-  }
-  return AppRelease.tryParse(response.body);
+  return AppRelease.tryParseGitHub(response.body);
 }
 
-/// Dernière publication. Les fichiers viennent de la release GitHub.
-/// Sans fichiers GitHub, la lecture retombe sur podavio.com.
+/// Dernière release GitHub, tag et fichiers joints.
 Future<AppRelease?> fetchLatestRelease() async {
   final client = http.Client();
   try {
-    final github = await _readRelease(
-      client,
-      Uri.parse(githubLatestReleaseUrl),
-    );
-    if (github != null) return github;
-    return _readRelease(client, Uri.parse(latestReleaseUrl));
+    return _readRelease(client, Uri.parse(githubLatestReleaseUrl));
   } catch (_) {
-    try {
-      return _readRelease(client, Uri.parse(latestReleaseUrl));
-    } catch (_) {
-      return null;
-    }
+    return null;
   } finally {
     client.close();
   }
 }
 
-/// Résultat d’une lecture de podavio.com.
+/// Résultat d’une lecture de la release GitHub.
 sealed class AppUpdateLookup {
   const AppUpdateLookup();
 }
@@ -181,7 +166,7 @@ class AppUpdateNewer extends AppUpdateLookup {
   final AppRelease release;
 }
 
-/// La version installée est celle du site, ou plus récente.
+/// La version installée est celle de la release GitHub, ou plus récente.
 class AppUpdateCurrent extends AppUpdateLookup {
   const AppUpdateCurrent();
 }
@@ -193,22 +178,21 @@ class AppUpdateUnversioned extends AppUpdateLookup {
   final AppRelease published;
 }
 
-/// Le site n’a pas répondu.
+/// GitHub n’a pas répondu.
 class AppUpdateFailed extends AppUpdateLookup {
   const AppUpdateFailed();
 }
 
-/// Interroge la release GitHub, puis podavio.com s’il n’y a pas encore de
-/// fichiers. Une installation sans `PODAVIO_VERSION` n’est pas comparée :
+/// Compare la version installée au tag de la dernière release GitHub.
+/// Une installation sans `PODAVIO_VERSION` n’est pas comparée :
 /// `0.1.0` serait toujours en retard.
 Future<AppUpdateLookup> lookupAppUpdate() async {
   final client = http.Client();
   try {
-    AppRelease? latest;
-    try {
-      latest = await _readRelease(client, Uri.parse(githubLatestReleaseUrl));
-    } catch (_) {}
-    latest ??= await _readRelease(client, Uri.parse(latestReleaseUrl));
+    final latest = await _readRelease(
+      client,
+      Uri.parse(githubLatestReleaseUrl),
+    );
     if (latest == null) return const AppUpdateFailed();
     final current = BuildInfo.version;
     if (current.isEmpty) return AppUpdateUnversioned(latest);
@@ -227,16 +211,16 @@ bool appUpdateWasChecked(AppUpdateLookup lookup) {
       lookup is AppUpdateUnversioned;
 }
 
-/// Lecture de podavio.com. Les tests peuvent la remplacer.
+/// Lecture de la release GitHub. Les tests peuvent la remplacer.
 final appUpdateCheckerProvider = Provider<Future<AppUpdateLookup> Function()>(
   (ref) => lookupAppUpdate,
 );
 
-/// Publication plus récente sur podavio.com, ou rien.
+/// Publication GitHub plus récente, ou rien.
 ///
 /// Les lancements locaux n’ont pas `PODAVIO_VERSION` : on ne les prévient pas,
-/// sinon `0.1.0` serait toujours en retard sur le site. L’heure est quand même
-/// retenue quand le site a répondu.
+/// sinon `0.1.0` serait toujours en retard. L’heure est quand même retenue
+/// quand GitHub a répondu.
 final appUpdateProvider = FutureProvider<AppRelease?>((ref) async {
   final lookup = await ref.read(appUpdateCheckerProvider)();
   if (appUpdateWasChecked(lookup)) {

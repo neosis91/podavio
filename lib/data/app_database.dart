@@ -213,7 +213,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -289,6 +289,9 @@ class AppDatabase extends _$AppDatabase
         await migrator.addColumn(podcasts, podcasts.titleFold);
         await migrator.addColumn(episodes, episodes.titleFold);
         await _backfillTitleFolds();
+      }
+      if (from < 19) {
+        await migrator.addColumn(podcasts, podcasts.autoDownloadLimit);
       }
     },
     beforeOpen: (details) async {

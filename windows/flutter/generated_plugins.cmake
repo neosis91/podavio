@@ -9,6 +9,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   flutter_media_session
   flutter_secure_storage_windows
   media_kit_libs_windows_audio
+  sentry_flutter
   share_plus
   url_launcher_windows
 )
