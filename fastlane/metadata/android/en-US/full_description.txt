@@ -1,0 +1,16 @@
+Podavio is a free podcast player for Android. Subscribe to any RSS feed, with no account and no ads.
+
+The library, downloaded files, and playback position stay on the device. The audio stays on the publisher server.
+
+• Search Apple Podcasts, Podcast Index, and fyyd, or add a show by its RSS address
+• Import and export subscriptions as OPML
+• Unplayed episodes, a reorderable playlist, favorites, recent plays, and statistics
+• A player with remembered position, speed, skips, and a sleep timer
+• Episode downloads, including automatic downloads, for listening offline
+• Chapters, light, dark, or system theme, eco mode, and comfortable or compact lists
+• Chromecast and Android Auto
+• Podavio Web: the phone library in the browser, after scanning a QR code
+
+Podavio does not ask for an account. An F-Droid build is compiled without the Sentry address and sends no crash reports. The GitHub release sends crashes to Sentry, including the IP address, and traces only the opening of the app.
+
+Android 8 is the minimum.
