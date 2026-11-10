@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    id("io.sentry.android.gradle")
 }
 
 import java.util.Properties
@@ -51,7 +52,8 @@ android {
         applicationId = "fr.podavio.podavio"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // Sentry Flutter 10 exige l'API 26, le même plancher que SimpMusic.
+        minSdk = maxOf(flutter.minSdkVersion, 26)
         targetSdk = flutter.targetSdkVersion
         // versionName = tag CalVer, mois sans zéro (2026.9.12).
         // versionCode = AAAAMMNN, identique sur chaque APK.
@@ -106,4 +108,21 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // MediaBrowserServiceCompat + MediaSessionCompat pour Android Auto.
     implementation("androidx.media:media:1.7.1")
+}
+
+// R8 est activé sur la release Flutter. Le mapping part seulement si le
+// jeton est là : un build local, ou une CI sans secret, ne doit pas échouer.
+val sentryAuthToken = System.getenv("SENTRY_AUTH_TOKEN")?.takeIf { it.isNotBlank() }
+
+sentry {
+    org.set("podavio")
+    projectName.set("podavio")
+    url.set("https://de.sentry.io")
+    ignoredBuildTypes.set(setOf("debug"))
+    autoInstallation.enabled = false
+    telemetry.set(false)
+    authToken.set(sentryAuthToken ?: "")
+    includeProguardMapping.set(true)
+    autoUploadProguardMapping.set(sentryAuthToken != null)
+    uploadNativeSymbols.set(sentryAuthToken != null)
 }

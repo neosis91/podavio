@@ -52,6 +52,8 @@ jobs:
       - name: APK
         env:
           PODAVIO_RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: tool/ci/github_release.sh build-android
       - uses: actions/upload-artifact@v4
         with:
@@ -76,6 +78,8 @@ jobs:
       - name: Archive Linux
         env:
           PODAVIO_RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: tool/ci/github_release.sh build-linux
       - uses: actions/upload-artifact@v4
         with:
@@ -97,6 +101,8 @@ jobs:
         shell: bash
         env:
           PODAVIO_RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: tool/ci/github_release.sh build-windows
       - uses: actions/upload-artifact@v4
         with:

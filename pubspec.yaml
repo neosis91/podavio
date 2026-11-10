@@ -80,6 +80,9 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   yomu: ^1.3.0
   camera: ^0.12.2
+  # Plantages et ouverture de l'application, comme SimpMusic.
+  # Le DSN arrive par --dart-define=SENTRY_DSN, jamais dans le dépôt.
+  sentry_flutter: ^10.3.0
 
 dev_dependencies:
   flutter_test:
@@ -93,6 +96,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   drift_dev: ^2.35.0
   build_runner: ^2.16.1
+  sentry_dart_plugin: ^3.4.0
 
 # `cast` (via bonsoir) demande encore dbus 0.7, wakelock_plus demande 0.8.
 dependency_overrides:
@@ -174,3 +178,11 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Téléversement des symboles. Le jeton reste dans SENTRY_AUTH_TOKEN.
+sentry:
+  url: https://de.sentry.io
+  org: podavio
+  project: podavio
+  upload_debug_symbols: true
+  ignore_missing: true
