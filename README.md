@@ -2,8 +2,6 @@
   <img src="assets/brand/logo.png" alt="Podavio" width="240">
 </p>
 
-<h1 align="center">Podavio</h1>
-
 <p align="center">
   Lecteur de podcasts libre pour Android, Windows et Linux.<br>
   On s’abonne à n’importe quel flux RSS, sans compte et sans publicité dans l’application.
