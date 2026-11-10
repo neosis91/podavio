@@ -211,21 +211,29 @@ require_site_ready
 
 echo "Podavio ${VERSION} (build ${BUILD}, commit ${SHA})"
 
+sentry_define=""
+if [ -n "${SENTRY_DSN:-}" ]; then
+  sentry_define="--dart-define=SENTRY_DSN=${SENTRY_DSN}"
+fi
+
 flutter build apk --release \
   --build-name="${VERSION}" \
   --build-number="${BUILD}" \
   --dart-define=PODAVIO_VERSION="${VERSION}" \
-  --dart-define=GITLAB_COMMIT_SHA="${SHA}"
+  --dart-define=GITLAB_COMMIT_SHA="${SHA}" \
+  ${sentry_define}
 flutter build apk --release --split-per-abi \
   --build-name="${VERSION}" \
   --build-number="${BUILD}" \
   --dart-define=PODAVIO_VERSION="${VERSION}" \
-  --dart-define=GITLAB_COMMIT_SHA="${SHA}"
+  --dart-define=GITLAB_COMMIT_SHA="${SHA}" \
+  ${sentry_define}
 flutter build linux --release \
   --build-name="${VERSION}" \
   --build-number="${BUILD}" \
   --dart-define=PODAVIO_VERSION="${VERSION}" \
-  --dart-define=GITLAB_COMMIT_SHA="${SHA}"
+  --dart-define=GITLAB_COMMIT_SHA="${SHA}" \
+  ${sentry_define}
 
 rm -rf dist/android dist/linux
 mkdir -p dist/android dist/linux

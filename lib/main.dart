@@ -7,14 +7,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:path/path.dart' as p;
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
+import 'core/crash_reporting.dart';
 import 'l10n/interface_locale.dart';
 import 'data/providers.dart';
 import 'player/playback_handler.dart';
 
-Future<void> main() async {
+Future<void> main() {
+  return startCrashReporting(_start);
+}
+
+Future<void> _start() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _ensureMpvCacheDir();
   JustAudioMediaKit.title = 'Podavio';
@@ -25,9 +31,11 @@ Future<void> main() async {
   }
   final preferences = await SharedPreferences.getInstance();
   runApp(
-    ProviderScope(
-      overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
-      child: const PodavioApp(),
+    SentryWidget(
+      child: ProviderScope(
+        overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
+        child: const PodavioApp(),
+      ),
     ),
   );
 }

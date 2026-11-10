@@ -55,6 +55,17 @@ defines() {
     --build-number="${BUILD}" \
     --dart-define=PODAVIO_VERSION="${VERSION}" \
     --dart-define=GITLAB_COMMIT_SHA="${SHA}"
+  if [ -n "${SENTRY_DSN:-}" ]; then
+    printf '%s\n' --dart-define=SENTRY_DSN="${SENTRY_DSN}"
+  fi
+}
+
+upload_symbols() {
+  if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
+    echo "SENTRY_AUTH_TOKEN absent : symboles non envoyés."
+    return 0
+  fi
+  dart run sentry_dart_plugin
 }
 
 case "${1:-}" in
@@ -144,6 +155,7 @@ EOF
       )"
       [ "${actual}" = "${expected}" ] || fail "Signature incorrecte : ${apk}"
     done
+    upload_symbols
     ;;
 
   build-linux)
@@ -156,6 +168,7 @@ EOF
     cp -a build/linux/x64/release/bundle "${bundle}"
     tar -C dist/linux -czf "${bundle}.tar.gz" "$(basename "${bundle}")"
     rm -rf "${bundle}"
+    upload_symbols
     ;;
 
   build-windows)
@@ -181,6 +194,7 @@ EOF
       -d "ProductVersion=${msi_version}" \
       -d "SourceDir=${source}" \
       -o "dist/windows/podavio-${VERSION}-windows-x64.msi"
+    upload_symbols
     ;;
 
   publish)
