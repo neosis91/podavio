@@ -65,7 +65,7 @@ La [dernière release](https://github.com/neosis91/podavio/releases/latest) cont
 
 - Android : `podavio-*-android-arm64-v8a.apk` pour la plupart des téléphones. `universal` si l’architecture est inconnue. `armeabi-v7a` et `x86_64` sont aussi fournis. Android 8 est le minimum.
 - Windows : `podavio-*-windows-x64.msi`. L’ouvrir installe Podavio pour l’utilisateur courant et ajoute un raccourci dans le menu Démarrer.
-- Linux : `podavio-*-linux-x64.tar.gz`. Extraire l’archive et lancer `podavio`.
+- Linux : `podavio-*-linux-x64.tar.gz`. Extraire l’archive et lancer `podavio`. Le système doit fournir libcurl, déjà présent sur la plupart des distributions.
 
 La page [podavio.com/download](https://podavio.com/download) pointe vers ces mêmes fichiers. L’application, quand elle propose une mise à jour, ouvre cette page.
 
