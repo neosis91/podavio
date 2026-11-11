@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:audio_session/audio_session.dart';
 import 'package:cast/device.dart';
@@ -16,6 +17,7 @@ import '../data/providers.dart';
 import '../settings/settings_controller.dart';
 import '../sync/sync_hooks.dart';
 import '../web_companion/web_remote.dart';
+import 'audio_effects.dart';
 import 'cast_playback.dart';
 import 'cast_session.dart';
 import 'playback_handler.dart';
@@ -184,6 +186,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   Duration _skipIntro = Duration.zero;
   Duration _skipOutro = Duration.zero;
   int? _outroSkippedEpisodeId;
+  AndroidLoudnessEnhancer? _loudness;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration?>? _durationSub;
   StreamSubscription<PlayerState>? _stateSub;
@@ -192,7 +195,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   PlayerUiState build() {
     if (!_started) {
       _started = true;
-      _player = AudioPlayer();
+      _player = _openPlayer();
       final settings = ref.read(settingsProvider);
       final prefs = ref.read(sharedPreferencesProvider);
       final carMode = prefs.getBool(_carModeKey) ?? false;
@@ -202,6 +205,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         carMode: carMode,
       );
       unawaited(_player.setVolume(settings.volume));
+      unawaited(_applyAudioEffects(ref.read(audioEffectsProvider)));
+      ref.listen(audioEffectsProvider, (previous, next) {
+        unawaited(_applyAudioEffects(next));
+      });
       _queue = QueueCursor();
       _sleep = SleepTimer();
       _cast = CastSession();
@@ -1040,6 +1047,37 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
     await _player.setSpeed(speed);
     _emit(_ui.copyWith(speed: speed));
+  }
+
+  static const _amplifyGain = 8.0;
+
+  AudioPlayer _openPlayer() {
+    if (kIsWeb || !Platform.isAndroid) return AudioPlayer();
+    final effects = ref.read(audioEffectsProvider);
+    final loudness = AndroidLoudnessEnhancer();
+    _loudness = loudness;
+    loudness.setTargetGain(effects.amplify ? _amplifyGain : 0);
+    loudness.setEnabled(effects.amplify);
+    return AudioPlayer(
+      audioPipeline: AudioPipeline(androidAudioEffects: [loudness]),
+    );
+  }
+
+  Future<void> _applyAudioEffects(AudioEffects effects) async {
+    // just_audio expose la coupure des silences et le renforcement Android.
+    // Le stabilisateur et le mono restent mémorisés : le moteur n’a pas
+    // de compresseur ni de mixage mono.
+    try {
+      await _player.setSkipSilenceEnabled(effects.skipSilence);
+    } catch (_) {
+      // La coupure des silences n’existe pas sur toutes les plateformes.
+    }
+    final loudness = _loudness;
+    if (loudness == null) return;
+    try {
+      await loudness.setTargetGain(effects.amplify ? _amplifyGain : 0);
+      await loudness.setEnabled(effects.amplify);
+    } catch (_) {}
   }
 
   Future<void> _prepareSession() async {

@@ -186,6 +186,22 @@ class SettingsIcon extends StatelessWidget {
   }
 }
 
+class TuneIcon extends StatelessWidget {
+  const TuneIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SvgPicture.asset(
+      'assets/brand/tune.svg',
+      width: size,
+      height: size,
+      semanticsLabel: 'Effets audios',
+    );
+  }
+}
+
 class InfoIcon extends StatelessWidget {
   const InfoIcon({super.key, this.size = 24});
 
