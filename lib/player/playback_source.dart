@@ -11,6 +11,15 @@ class PlaybackSource {
     EpisodeQuery(queuedOnly: true, paginated: false),
   );
 
+  /// Épisodes d’un podcast, du plus ancien au plus récent.
+  /// Les précédents sont les plus anciens, « À suivre » les plus récents.
+  /// L’ordre affiché sur la page du podcast ne change pas cette file.
+  factory PlaybackSource.podcast(int podcastId) {
+    return PlaybackSource(
+      EpisodeQuery(podcastId: podcastId, paginated: false, oldestFirst: true),
+    );
+  }
+
   factory PlaybackSource.fromQuery(EpisodeQuery query) {
     return PlaybackSource(
       EpisodeQuery(
