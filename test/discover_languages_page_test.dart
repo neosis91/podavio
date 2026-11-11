@@ -29,6 +29,8 @@ void main() {
     await tester.pump();
 
     expect(find.byIcon(Icons.search), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.search));
+    await tester.pump();
     await tester.enterText(find.byType(TextField), 'alban');
     await tester.pump();
 
@@ -53,6 +55,8 @@ void main() {
     await tester.enterText(find.byType(TextField), '');
     await tester.pump();
     expect(find.text('Allemand'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pump();
     expect(find.byIcon(Icons.search), findsOneWidget);
   });
 }
