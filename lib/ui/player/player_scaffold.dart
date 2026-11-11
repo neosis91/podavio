@@ -380,6 +380,7 @@ class _QueueSheetState extends ConsumerState<_QueueSheet>
                         child: _PlaylistOverlay(
                           background: widget.background,
                           themed: widget.themed,
+                          sheetFullyOpen: () => _controller.value >= 0.999,
                           onDragStart: _onDragStart,
                           onDragUpdate: (details) =>
                               _onDragUpdate(details, extent),
@@ -403,6 +404,7 @@ class _PlaylistOverlay extends StatelessWidget {
   const _PlaylistOverlay({
     required this.background,
     required this.themed,
+    required this.sheetFullyOpen,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
@@ -411,6 +413,7 @@ class _PlaylistOverlay extends StatelessWidget {
 
   final Color? background;
   final bool themed;
+  final bool Function() sheetFullyOpen;
   final GestureDragStartCallback onDragStart;
   final GestureDragUpdateCallback onDragUpdate;
   final GestureDragEndCallback onDragEnd;
@@ -446,6 +449,7 @@ class _PlaylistOverlay extends StatelessWidget {
                     width: double.infinity,
                     height: double.infinity,
                     child: PlayerQueue(
+                      sheetFullyOpen: sheetFullyOpen,
                       onDragStart: onDragStart,
                       onDragUpdate: onDragUpdate,
                       onDragEnd: onDragEnd,
@@ -463,8 +467,8 @@ class _PlaylistOverlay extends StatelessWidget {
 }
 
 /// Glisser vers le bas réduit le lecteur en suivant le doigt.
-/// Dans la file, l’appui long sert à réordonner : le swipe vers le bas
-/// est géré par la liste, une fois arrivée en haut.
+/// Dans la file, l’appui long sert à réordonner. Le glissé vers le bas
+/// ferme la file seulement s’il part du haut de la liste.
 class _PageCollapseDrag extends StatefulWidget {
   const _PageCollapseDrag({
     required this.child,
