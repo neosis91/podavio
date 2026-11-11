@@ -219,21 +219,21 @@ class AppDatabase extends _$AppDatabase
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
-        await migrator.addColumn(podcasts, podcasts.preferred);
-        await migrator.addColumn(episodes, episodes.downloadedAt);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.preferred);
+        await _addColumnIfMissing(migrator, episodes, episodes.downloadedAt);
       }
       if (from < 3) {
-        await migrator.addColumn(podcasts, podcasts.imagePath);
-        await migrator.addColumn(episodes, episodes.imagePath);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.imagePath);
+        await _addColumnIfMissing(migrator, episodes, episodes.imagePath);
       }
       if (from < 4) {
-        await migrator.addColumn(podcasts, podcasts.autoDownload);
-        await migrator.addColumn(podcasts, podcasts.keepUpdated);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.autoDownload);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.keepUpdated);
       }
       if (from < 5) {
-        await migrator.addColumn(episodes, episodes.chaptersUrl);
-        await migrator.addColumn(episodes, episodes.chaptersFetched);
-        await migrator.createTable(episodeChapters);
+        await _addColumnIfMissing(migrator, episodes, episodes.chaptersUrl);
+        await _addColumnIfMissing(migrator, episodes, episodes.chaptersFetched);
+        await _createTableIfMissing(migrator, episodeChapters);
       }
       if (from < 6) {
         // Nouveau client HTTP (User-Agent) : retenter les URLs déjà marquées.
@@ -243,10 +243,10 @@ class AppDatabase extends _$AppDatabase
         );
       }
       if (from < 7) {
-        await migrator.addColumn(podcasts, podcasts.subscribed);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.subscribed);
       }
       if (from < 8) {
-        await migrator.createTable(playbackPositions);
+        await _createTableIfMissing(migrator, playbackPositions);
         await _createEpisodeIndexes();
       }
       if (from < 9) {
@@ -258,40 +258,56 @@ class AppDatabase extends _$AppDatabase
         );
       }
       if (from < 10) {
-        await migrator.addColumn(podcasts, podcasts.playbackSpeed);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.playbackSpeed);
       }
       if (from < 11) {
-        await migrator.addColumn(podcasts, podcasts.skipIntroSeconds);
-        await migrator.addColumn(podcasts, podcasts.skipOutroSeconds);
+        await _addColumnIfMissing(
+          migrator,
+          podcasts,
+          podcasts.skipIntroSeconds,
+        );
+        await _addColumnIfMissing(
+          migrator,
+          podcasts,
+          podcasts.skipOutroSeconds,
+        );
       }
       if (from < 12) {
-        await migrator.addColumn(podcasts, podcasts.authUsername);
-        await migrator.addColumn(podcasts, podcasts.authPassword);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.authUsername);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.authPassword);
       }
       if (from < 13) {
-        await migrator.createTable(playlists);
-        await migrator.createTable(playlistEpisodes);
+        await _createTableIfMissing(migrator, playlists);
+        await _createTableIfMissing(migrator, playlistEpisodes);
       }
       if (from < 14) {
-        await migrator.addColumn(podcasts, podcasts.episodeNotification);
+        await _addColumnIfMissing(
+          migrator,
+          podcasts,
+          podcasts.episodeNotification,
+        );
       }
       if (from < 15) {
-        await migrator.addColumn(podcasts, podcasts.personsJson);
-        await migrator.addColumn(podcasts, podcasts.fundingJson);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.personsJson);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.fundingJson);
       }
       if (from < 16) {
-        await migrator.addColumn(podcasts, podcasts.categoriesJson);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.categoriesJson);
       }
       if (from < 17) {
-        await migrator.addColumn(episodes, episodes.cachePath);
+        await _addColumnIfMissing(migrator, episodes, episodes.cachePath);
       }
       if (from < 18) {
-        await migrator.addColumn(podcasts, podcasts.titleFold);
-        await migrator.addColumn(episodes, episodes.titleFold);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.titleFold);
+        await _addColumnIfMissing(migrator, episodes, episodes.titleFold);
         await _backfillTitleFolds();
       }
       if (from < 19) {
-        await migrator.addColumn(podcasts, podcasts.autoDownloadLimit);
+        await _addColumnIfMissing(
+          migrator,
+          podcasts,
+          podcasts.autoDownloadLimit,
+        );
       }
     },
     beforeOpen: (details) async {
@@ -301,6 +317,35 @@ class AppDatabase extends _$AppDatabase
       await _ensureDefaultPlaylist();
     },
   );
+
+  /// Some builds declared columns in the table classes before bumping
+  /// [schemaVersion], so `createAll` produced files that already have them
+  /// while `user_version` is older. Skipping existing columns lets those
+  /// databases (and backups made from them) upgrade.
+  Future<void> _addColumnIfMissing(
+    Migrator migrator,
+    TableInfo<Table, dynamic> table,
+    GeneratedColumn<Object> column,
+  ) async {
+    final rows = await customSelect(
+      'PRAGMA table_info("${table.actualTableName}")',
+    ).get();
+    if (rows.any((row) => row.read<String>('name') == column.name)) return;
+    await migrator.addColumn(table, column);
+  }
+
+  /// Same as [_addColumnIfMissing], for tables.
+  Future<void> _createTableIfMissing(
+    Migrator migrator,
+    TableInfo<Table, dynamic> table,
+  ) async {
+    final rows = await customSelect(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable.withString(table.actualTableName)],
+    ).get();
+    if (rows.isNotEmpty) return;
+    await migrator.createTable(table);
+  }
 
   /// La file de lecture existe toujours, et ne se supprime pas.
   Future<void> _ensureDefaultPlaylist() async {
