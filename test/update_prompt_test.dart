@@ -7,6 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:podavio/data/app_database.dart';
 import 'package:podavio/data/app_release.dart';
 import 'package:podavio/data/providers.dart';
+import 'package:podavio/ui/activity_notices.dart';
 import 'package:podavio/ui/more_page.dart';
 import 'package:podavio/ui/router.dart';
 import 'package:podavio/ui/shell.dart';
@@ -97,6 +98,10 @@ void main() {
     await tester.pump();
 
     expect(find.text('Mise à jour disponible'), findsNothing);
+    await tester.tap(find.byType(ActivityButton));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
     expect(find.text('Podavio est à jour'), findsOneWidget);
 
     await _close(tester, database);

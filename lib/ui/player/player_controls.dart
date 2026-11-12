@@ -239,6 +239,11 @@ class PlayerTransport extends ConsumerWidget {
                 icon: const InfoIcon(),
               ),
               IconButton(
+                tooltip: 'Effets audios',
+                onPressed: () => showAudioEffectsSheet(context),
+                icon: const TuneIcon(),
+              ),
+              IconButton(
                 tooltip: castName ?? context.tr('Audio output'),
                 color: castName == null ? null : const Color(0xFF4FC3F7),
                 onPressed: () => showAudioOutputSheet(context, ref),

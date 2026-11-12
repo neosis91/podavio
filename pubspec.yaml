@@ -126,6 +126,7 @@ flutter:
     - assets/brand/pause.svg
     - assets/brand/drag_indicator.svg
     - assets/brand/info.svg
+    - assets/brand/tune.svg
     - assets/brand/star.svg
     - assets/brand/star_fill.svg
     - assets/brand/select_all.png

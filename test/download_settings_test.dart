@@ -166,7 +166,7 @@ void main() {
       findsOneWidget,
     );
     expect(container.read(settingsProvider).automaticDownload, isFalse);
-    expect(find.byType(SwitchListTile), findsNWidgets(2));
+    expect(find.byType(SwitchListTile), findsNWidgets(3));
 
     await _openChoice(tester, 'Cache d’épisodes');
     await tester.tap(find.text('20 épisodes'));

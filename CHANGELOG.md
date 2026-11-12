@@ -4,6 +4,14 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.11.5
+
+- In the big player, a swipe that starts while the queue is scrolled only moves the list, including when the finger reaches the top. Closing the queue is a downward swipe that starts at the top of the list and follows the finger.
+- Playing from a podcast page orders the queue from oldest to newest. Previous holds the older episodes and Up next the newer ones. Reversing the list on the podcast page no longer reverses that queue.
+- The big player has an audio effects button between notes and audio output. The sheet sets amplification, a volume stabilizer, mono, and silence removal. Silence removal has an efficiency: Low, Medium, High, Very high, or Extreme. The choices are kept. On Android, amplification raises the level and silence removal skips quiet stretches. The efficiency steps, the volume stabilizer, and mono are stored and do not change the sound yet.
+- Opening a library that already has a column or table the upgrade would add no longer fails. The upgrade skips what is already there.
+- Publishing a release updates the download files. The version notes on podavio.com are read from this file on GitHub.
+
 ## 2026.11.4
 
 - The update dialog compares the installed version with the latest GitHub release.

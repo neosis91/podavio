@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Lit CHANGELOG.md et prépare le journal publié sur podavio.com."""
+"""Lit CHANGELOG.md pour les notes de version.
+
+Le journal de podavio.com lit CHANGELOG.md sur GitHub. Cette commande
+ne réécrit plus cette page.
+"""
 
 import argparse
-import html
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -17,22 +19,6 @@ HEADING_RE = re.compile(
 )
 BULLET_RE = re.compile(r"^[-*]\s+(\S.*)$")
 DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
-START = "<!-- journal:start -->"
-END = "<!-- journal:end -->"
-MONTHS = (
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-)
 
 
 def fail(message):
@@ -102,71 +88,15 @@ def notes_for(version):
     return notes
 
 
-def french_date(iso):
-    year, month, day = (int(part) for part in iso.split("-"))
-    return f"{day} {MONTHS[month - 1]} {year}"
-
-
-def article(version, date, notes):
-    lines = ["    <article>", "      <header>", f"        <h2>{html.escape(version)}</h2>"]
-    if date:
-        lines.append(
-            f'        <time datetime="{date}">{html.escape(french_date(date))}</time>'
-        )
-    lines.append("      </header>")
-    lines.append("      <ul>")
-    for note in notes:
-        lines.append(f"        <li>{html.escape(note)}</li>")
-    lines.append("      </ul>")
-    lines.append("    </article>")
-    return "\n".join(lines)
-
-
 def publish(version, date, site):
     if not DATE_RE.fullmatch(date):
         fail(f"Date invalide : {date}")
-    notes_for(version)
+    notes = notes_for(version)
     site = Path(site)
-    journal = site / "journal" / "index.html"
-    changelog_path = site / "changelog.json"
-    if not journal.is_file():
-        fail(f"Page manquante : {journal}")
-    page = journal.read_text(encoding="utf-8")
-    if START not in page or END not in page:
-        fail(f"{journal} n'a pas les balises {START} et {END}.")
-
-    previous_dates = {}
-    if changelog_path.is_file():
-        previous = json.loads(changelog_path.read_text(encoding="utf-8"))
-        for item in previous.get("releases", []):
-            previous_dates[item["version"]] = item.get("date") or ""
-
-    releases = []
-    for found, notes in load():
-        if not notes:
-            continue
-        releases.append(
-            {
-                "version": found,
-                "date": date if found == version else previous_dates.get(found, ""),
-                "notes": notes,
-            }
-        )
-
-    changelog_path.write_text(
-        json.dumps({"releases": releases}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    body = "\n".join(article(item["version"], item["date"], item["notes"]) for item in releases)
-    pre, rest = page.split(START, 1)
-    _, post = rest.split(END, 1)
-    journal.write_text(f"{pre}{START}\n{body}\n{END}{post}", encoding="utf-8")
-
-    current = next(item for item in releases if item["version"] == version)
     latest = {
         "version": version,
         "date": date,
-        "notes": current["notes"],
+        "notes": notes,
         "files": {
             "android-arm64-v8a": f"releases/{version}/podavio-{version}-android-arm64-v8a.apk",
             "android-armeabi-v7a": f"releases/{version}/podavio-{version}-android-armeabi-v7a.apk",
@@ -179,9 +109,6 @@ def publish(version, date, site):
         json.dumps(latest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    builder = Path(site) / "tool" / "build_pages.py"
-    if builder.is_file():
-        subprocess.run([sys.executable, str(builder)], check=True)
 
 
 def main():

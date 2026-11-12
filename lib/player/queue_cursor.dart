@@ -117,7 +117,8 @@ class QueueCursor {
 
   /// Voisin dans la liste d’origine. `1` = suivant, `-1` = précédent.
   /// Hors de la file de lecture, le suivant retombe sur le premier.
-  /// Sans voisin dans cette liste, on prend l’épisode voisin du même podcast.
+  /// Sans voisin dans cette liste, on prend l’épisode voisin du même podcast,
+  /// du plus ancien vers le plus récent.
   Future<EpisodeEntry?> relative({
     required int delta,
     required PlaybackSource source,
@@ -133,7 +134,7 @@ class QueueCursor {
     final current = await database.getEpisode(episodeId);
     if (current == null || isDisposed()) return null;
     final show = await database
-        .watchEpisodeWindow(podcastId: current.podcast.id)
+        .watchEpisodeWindow(podcastId: current.podcast.id, oldestFirst: true)
         .first;
     if (isDisposed()) return null;
     return _pick(show, delta, episodeId, false);

@@ -10,9 +10,9 @@ Future<int> _userVersion(AppDatabase database) async {
 }
 
 void main() {
-  // Some builds declared new columns before bumping `schemaVersion`, so their
-  // files already have `title_fold` / `auto_download_limit` with an older
-  // `user_version`. Opening them must not re-add the columns.
+  // Certaines versions ont déclaré les colonnes avant de monter schemaVersion.
+  // Le fichier a déjà title_fold et auto_download_limit, avec un user_version
+  // plus ancien. L’ouverture ne doit pas relancer l’ALTER.
   for (final staleVersion in [17, 18]) {
     test(
       'upgrades a v$staleVersion file that already has the columns',

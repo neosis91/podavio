@@ -318,10 +318,9 @@ class AppDatabase extends _$AppDatabase
     },
   );
 
-  /// Some builds declared columns in the table classes before bumping
-  /// [schemaVersion], so `createAll` produced files that already have them
-  /// while `user_version` is older. Skipping existing columns lets those
-  /// databases (and backups made from them) upgrade.
+  /// Certaines versions ont déclaré des colonnes avant de monter
+  /// [schemaVersion]. Le fichier les a déjà, avec un `user_version` plus ancien.
+  /// On saute la colonne pour que ces bases, et leurs sauvegardes, s’ouvrent.
   Future<void> _addColumnIfMissing(
     Migrator migrator,
     TableInfo<Table, dynamic> table,
@@ -334,7 +333,7 @@ class AppDatabase extends _$AppDatabase
     await migrator.addColumn(table, column);
   }
 
-  /// Same as [_addColumnIfMissing], for tables.
+  /// Même garde que [_addColumnIfMissing], pour une table.
   Future<void> _createTableIfMissing(
     Migrator migrator,
     TableInfo<Table, dynamic> table,
