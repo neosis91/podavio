@@ -27,7 +27,6 @@ class PlayerTransport extends ConsumerWidget {
     final streamQuality = ref.watch(
       playerProvider.select((s) => s.streamQualityLabel),
     );
-    final castName = ref.watch(playerProvider.select((s) => s.castDeviceName));
     final carMode = ref.watch(playerProvider.select((s) => s.carMode));
     final speed = ref.watch(playerProvider.select((s) => s.speed));
     final settings = ref.watch(settingsProvider);
@@ -243,12 +242,6 @@ class PlayerTransport extends ConsumerWidget {
                 onPressed: () => showAudioEffectsSheet(context),
                 icon: const TuneIcon(),
               ),
-              IconButton(
-                tooltip: castName ?? context.tr('Audio output'),
-                color: castName == null ? null : const Color(0xFF4FC3F7),
-                onPressed: () => showAudioOutputSheet(context, ref),
-                icon: const Icon(Icons.headphones),
-              ),
               const Spacer(),
               if (hasChapters)
                 IconButton(
@@ -401,6 +394,100 @@ class PlayerFavoriteAction extends ConsumerWidget {
   }
 }
 
+const _headerGlyphSize = 26.0;
+
+ButtonStyle _headerActionStyle() {
+  return IconButton.styleFrom(
+    iconSize: _headerGlyphSize,
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+    minimumSize: const Size(48, 48),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  );
+}
+
+class PlayerCastAction extends ConsumerWidget {
+  const PlayerCastAction({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final castName = ref.watch(
+      playerProvider.select((state) => state.castDeviceName),
+    );
+    return IconButton(
+      tooltip: castName ?? context.tr('Audio output'),
+      style: _headerActionStyle(),
+      color: castName == null ? null : const Color(0xFF4FC3F7),
+      onPressed: () => showAudioOutputSheet(context, ref),
+      icon: const CastIcon(size: _headerGlyphSize),
+    );
+  }
+}
+
+class PlayerSpeedAction extends ConsumerWidget {
+  const PlayerSpeedAction({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final speed = ref.watch(playerProvider.select((state) => state.speed));
+    return IconButton(
+      tooltip: context.tr('Speed'),
+      style: _headerActionStyle().copyWith(
+        minimumSize: const WidgetStatePropertyAll(Size(0, 48)),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        ),
+      ),
+      onPressed: () => choosePlaybackSpeed(context, ref),
+      icon: Builder(
+        builder: (context) => Text(
+          formatPlaybackSpeed(speed),
+          textHeightBehavior: const TextHeightBehavior(
+            applyHeightToFirstAscent: false,
+            applyHeightToLastDescent: false,
+          ),
+          style: TextStyle(
+            color: IconTheme.of(context).color,
+            fontSize: _headerGlyphSize,
+            fontWeight: FontWeight.w600,
+            height: 1,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class PlayerSleepAction extends ConsumerWidget {
+  const PlayerSleepAction({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sleepAtEnd = ref.watch(
+      playerProvider.select((state) => state.sleepAtEnd),
+    );
+    final sleepEndsAt = ref.watch(
+      playerProvider.select((state) => state.sleepEndsAt),
+    );
+    final active = sleepAtEnd || sleepEndsAt != null;
+    final remaining = sleepEndsAt?.difference(DateTime.now());
+    final detail = sleepAtEnd
+        ? 'Fin de l’épisode'
+        : remaining == null
+        ? null
+        : formatClock(remaining.isNegative ? Duration.zero : remaining);
+    final tooltip = detail == null
+        ? context.tr('Sleep timer')
+        : '${context.tr('Sleep timer')} · $detail';
+    return IconButton(
+      tooltip: tooltip,
+      style: _headerActionStyle(),
+      color: active ? Theme.of(context).colorScheme.primary : null,
+      onPressed: () => chooseSleepTimer(context, ref),
+      icon: const BedtimeIcon(size: _headerGlyphSize),
+    );
+  }
+}
+
 class PlayerEpisodeActions extends ConsumerWidget {
   const PlayerEpisodeActions({super.key, required this.episodeId});
 
@@ -412,15 +499,10 @@ class PlayerEpisodeActions extends ConsumerWidget {
     if (entry == null) return const SizedBox.shrink();
     return IconButton(
       tooltip: context.tr('Actions'),
-      onPressed: () => showEpisodeActionsSheet(
-        context,
-        ref,
-        entry,
-        fromPlayer: true,
-        onSpeed: () => choosePlaybackSpeed(context, ref),
-        onSleep: () => chooseSleepTimer(context, ref),
-      ),
-      icon: const MoreVertIcon(),
+      style: _headerActionStyle(),
+      onPressed: () =>
+          showEpisodeActionsSheet(context, ref, entry, fromPlayer: true),
+      icon: const MoreVertIcon(size: _headerGlyphSize),
     );
   }
 }

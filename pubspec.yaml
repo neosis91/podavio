@@ -137,6 +137,8 @@ flutter:
     - assets/brand/translate.svg
     - assets/brand/eco.svg
     - assets/brand/timer.svg
+    - assets/brand/cast.svg
+    - assets/brand/bedtime.svg
     - assets/brand/share.svg
     - assets/brand/podcasts.svg
     - assets/brand/link.svg

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/format.dart';
 import '../../data/activity_messages.dart';
 import '../../data/app_database.dart';
 import '../../data/download_controller.dart';
@@ -34,8 +33,7 @@ Future<void> showEpisodeActionsSheet(
   VoidCallback? onMoveDown,
   VoidCallback? onRemove,
   bool fromPlayer = false,
-  VoidCallback? onSpeed,
-  VoidCallback? onSleep,
+  bool showPodcastLink = true,
 }) {
   final onThisPodcast =
       GoRouterState.of(context).uri.path == AppRoutes.podcast(entry.podcast.id);
@@ -87,18 +85,6 @@ Future<void> showEpisodeActionsSheet(
                 Navigator.pop(sheetContext);
                 onRemove();
               },
-        onSpeed: onSpeed == null
-            ? null
-            : () {
-                Navigator.pop(sheetContext);
-                onSpeed();
-              },
-        onSleep: onSleep == null
-            ? null
-            : () {
-                Navigator.pop(sheetContext);
-                onSleep();
-              },
       );
       if (!fromPlayer) return sheet;
       final theme = _themeAbovePlayer(context);
@@ -136,8 +122,6 @@ class _EpisodeActionsSheet extends ConsumerWidget {
     this.onMoveUp,
     this.onMoveDown,
     this.onRemove,
-    this.onSpeed,
-    this.onSleep,
     this.fromPlayer = false,
     this.showPodcastLink = true,
   });
@@ -153,8 +137,6 @@ class _EpisodeActionsSheet extends ConsumerWidget {
   final VoidCallback? onMoveUp;
   final VoidCallback? onMoveDown;
   final VoidCallback? onRemove;
-  final VoidCallback? onSpeed;
-  final VoidCallback? onSleep;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -174,12 +156,6 @@ class _EpisodeActionsSheet extends ConsumerWidget {
       playerProvider.select((state) => state.episodeId),
     );
     final carMode = ref.watch(playerProvider.select((state) => state.carMode));
-    final speed = fromPlayer
-        ? ref.watch(playerProvider.select((state) => state.speed))
-        : null;
-    final sleepDetail = fromPlayer
-        ? ref.watch(playerProvider.select(_playerSleepDetail))
-        : null;
     final website = fromPlayer ? _podcastWebsite(entry.podcast.link) : null;
 
     final actions = <Widget>[
@@ -269,20 +245,6 @@ class _EpisodeActionsSheet extends ConsumerWidget {
           icon: const DeleteIcon(),
           label: context.tr('Delete'),
           onTap: onRemove,
-        ),
-      if (onSpeed != null && speed != null)
-        _SheetAction(
-          icon: const Icon(Icons.speed),
-          label: context.tr('Speed'),
-          detail: _playbackSpeedLabel(speed),
-          onTap: onSpeed,
-        ),
-      if (onSleep != null)
-        _SheetAction(
-          icon: const TimerIcon(),
-          label: context.tr('Sleep timer'),
-          detail: sleepDetail,
-          onTap: onSleep,
         ),
       if (fromPlayer)
         _SheetAction(
@@ -455,21 +417,6 @@ class _SheetAction extends StatelessWidget {
       ),
     );
   }
-}
-
-String _playbackSpeedLabel(double speed) {
-  final text = speed == speed.roundToDouble()
-      ? speed.toInt().toString()
-      : speed.toString();
-  return '$text×';
-}
-
-/// Temps restant du minuteur, ou « Fin de l’épisode ». `null` s’il est arrêté.
-String? _playerSleepDetail(PlayerUiState state) {
-  if (state.sleepAtEnd) return 'Fin de l’épisode';
-  final remaining = state.sleepRemaining;
-  if (remaining == null) return null;
-  return formatClock(remaining);
 }
 
 Uri? _podcastWebsite(String? link) {
