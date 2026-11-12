@@ -103,6 +103,7 @@ def publish(version, date, site):
             "android-x86_64": f"releases/{version}/podavio-{version}-android-x86_64.apk",
             "android-universal": f"releases/{version}/podavio-{version}-android-universal.apk",
             "linux-x64": f"releases/{version}/podavio-{version}-linux-x64.tar.gz",
+            "linux-amd64": f"releases/{version}/podavio-{version}-linux-amd64.deb",
         },
     }
     (site / "latest.json").write_text(

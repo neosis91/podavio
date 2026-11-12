@@ -1,0 +1,30 @@
+# Maintainer: neosis91 <bertrand.jaunet@posteo.net>
+pkgname=podavio-bin
+pkgver=2026.11.5
+pkgrel=1
+pkgdesc="Podcast player"
+arch=('x86_64')
+url="https://podavio.com"
+license=('GPL-3.0-only')
+depends=('gtk3' 'libsecret' 'curl' 'mpv')
+provides=('podavio')
+conflicts=('podavio')
+options=('!strip' '!debug')
+source=("podavio-${pkgver}-linux-x64.tar.gz::https://github.com/neosis91/podavio/releases/download/${pkgver}/podavio-${pkgver}-linux-x64.tar.gz")
+sha256sums=('828f5678625c2d9ba6403d9ec2884f7b12c9507197dd9d8061f7718c20ca452e')
+
+package() {
+  src="${srcdir}/podavio-${pkgver}-linux-x64"
+  install -dm755 "${pkgdir}/usr/lib/podavio"
+  cp -a "${src}/." "${pkgdir}/usr/lib/podavio/"
+  chmod 755 "${pkgdir}/usr/lib/podavio/podavio"
+  install -dm755 "${pkgdir}/usr/bin"
+  printf '%s\n' '#!/bin/sh' 'exec /usr/lib/podavio/podavio "$@"' \
+    > "${pkgdir}/usr/bin/podavio"
+  chmod 755 "${pkgdir}/usr/bin/podavio"
+  install -Dm644 "${src}/share/applications/fr.podavio.podavio.desktop" \
+    "${pkgdir}/usr/share/applications/fr.podavio.podavio.desktop"
+  install -Dm644 \
+    "${src}/share/icons/hicolor/scalable/apps/fr.podavio.podavio.svg" \
+    "${pkgdir}/usr/share/icons/hicolor/scalable/apps/fr.podavio.podavio.svg"
+}

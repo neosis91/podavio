@@ -283,6 +283,8 @@ done
 bundle="dist/linux/podavio-${VERSION}-linux-x64"
 cp -a build/linux/x64/release/bundle "${bundle}"
 tar -C dist/linux -czf "${bundle}.tar.gz" "$(basename "${bundle}")"
+tool/linux/package_deb.sh "${VERSION}" "${bundle}" \
+  "dist/linux/podavio-${VERSION}-linux-amd64.deb"
 rm -rf "${bundle}"
 
 if [ -n "$(git status --porcelain)" ]; then
@@ -316,6 +318,8 @@ publish_site() {
   done
   cp "dist/linux/podavio-${VERSION}-linux-x64.tar.gz" \
     "${dest}/podavio-${VERSION}-linux-x64.tar.gz"
+  cp "dist/linux/podavio-${VERSION}-linux-amd64.deb" \
+    "${dest}/podavio-${VERSION}-linux-amd64.deb"
 
   python3 "${ROOT}/tool/changelog.py" publish \
     --version "${VERSION}" \
@@ -368,7 +372,8 @@ else
     "dist/android/podavio-${VERSION}-android-armeabi-v7a.apk#APK armeabi-v7a" \
     "dist/android/podavio-${VERSION}-android-arm64-v8a.apk#APK arm64-v8a" \
     "dist/android/podavio-${VERSION}-android-x86_64.apk#APK x86_64" \
-    "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)"
+    "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)" \
+    "dist/linux/podavio-${VERSION}-linux-amd64.deb#Linux amd64 (.deb)"
 fi
 
 echo "Release ${VERSION} publiée (commit ${SHA})."

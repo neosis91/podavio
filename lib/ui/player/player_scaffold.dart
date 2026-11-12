@@ -129,7 +129,7 @@ class PlayerPage extends ConsumerWidget {
           leading: IconButton(
             tooltip: 'Réduire',
             onPressed: () => _collapse(context),
-            icon: const SkipIcon.collapse(),
+            icon: const SkipIcon.collapse(size: 26),
           ),
         ),
         body: const EmptyState(
@@ -151,7 +151,7 @@ class PlayerPage extends ConsumerWidget {
       leading: IconButton(
         tooltip: 'Réduire',
         onPressed: () => _collapse(context),
-        icon: const SkipIcon.collapse(),
+        icon: const SkipIcon.collapse(size: 26),
       ),
       actions: carMode
           ? [
@@ -163,7 +163,12 @@ class PlayerPage extends ConsumerWidget {
                 icon: const Icon(Icons.directions_car),
               ),
             ]
-          : [PlayerEpisodeActions(episodeId: episodeId)],
+          : [
+              const PlayerCastAction(),
+              const PlayerSpeedAction(),
+              const PlayerSleepAction(),
+              PlayerEpisodeActions(episodeId: episodeId),
+            ],
     );
 
     final showPlaylist =

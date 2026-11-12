@@ -182,6 +182,8 @@ EOF
     bundle="dist/linux/podavio-${VERSION}-linux-x64"
     cp -a build/linux/x64/release/bundle "${bundle}"
     tar -C dist/linux -czf "${bundle}.tar.gz" "$(basename "${bundle}")"
+    tool/linux/package_deb.sh "${VERSION}" "${bundle}" \
+      "dist/linux/podavio-${VERSION}-linux-amd64.deb"
     rm -rf "${bundle}"
     upload_symbols
     ;;
@@ -209,6 +211,12 @@ EOF
       -d "ProductVersion=${msi_version}" \
       -d "SourceDir=${source}" \
       -o "dist/windows/podavio-${VERSION}-windows-x64.msi"
+    stage="${PWD}/dist/windows/podavio-${VERSION}-windows-x64"
+    rm -rf "${stage}" "${stage}.zip"
+    cp -a "${PWD}/build/windows/x64/runner/Release" "${stage}"
+    powershell.exe -NoProfile -Command \
+      "Compress-Archive -LiteralPath '${stage}' -DestinationPath '${stage}.zip' -Force"
+    rm -rf "${stage}"
     upload_symbols
     ;;
 
@@ -236,7 +244,9 @@ EOF
         "dist/android/podavio-${VERSION}-android-arm64-v8a.apk#APK arm64-v8a" \
         "dist/android/podavio-${VERSION}-android-x86_64.apk#APK x86_64" \
         "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)" \
-        "dist/windows/podavio-${VERSION}-windows-x64.msi#Windows x64 (.msi)"
+        "dist/linux/podavio-${VERSION}-linux-amd64.deb#Linux amd64 (.deb)" \
+        "dist/windows/podavio-${VERSION}-windows-x64.msi#Windows x64 (.msi)" \
+        "dist/windows/podavio-${VERSION}-windows-x64.zip#Windows x64 (.zip)"
     fi
     echo "Release ${VERSION} publiée."
     ;;

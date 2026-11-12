@@ -4,6 +4,14 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 `tool/release_local.sh` refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.11.6
+
+- In the big player, cast, playback speed, and the sleep timer sit in the top bar, to the left of the menu. Speed and the sleep timer are no longer in the episode menu. Cast uses a cast icon, the timer a moon, and audio effects a sliders icon.
+- The playback speed sheet has a switch, minus and plus around the value, and a slider from 0.4× to 7.0×. The step is 0.01, 0.05, 0.1, 0.25, or 0.5. Ok applies the speed. Cancel leaves it unchanged.
+- The sleep timer sheet asks for a duration in minutes or hours, with shortcuts of 5, 15, 30, and 45 minutes. It can also stop at the end of the episode, or at the next chapter when the episode has chapters. Start begins the timer. Cancel leaves it unchanged.
+- The playback speed, sleep timer, and audio effects sheets use the app colors, including when the player is tinted by the cover.
+- The GitHub release adds a Debian package, `podavio-*-linux-amd64.deb`, for Debian, Ubuntu, and derivatives, and a Windows zip, `podavio-*-windows-x64.zip`, that runs without installing. The Windows installer and the Linux archive stay.
+
 ## 2026.11.5
 
 - In the big player, a swipe that starts while the queue is scrolled only moves the list, including when the finger reaches the top. Closing the queue is a downward swipe that starts at the top of the list and follows the finger.
