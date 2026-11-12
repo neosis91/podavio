@@ -447,7 +447,7 @@ class PlayerSpeedAction extends ConsumerWidget {
           ),
           style: TextStyle(
             color: IconTheme.of(context).color,
-            fontSize: _headerGlyphSize,
+            fontSize: 24,
             fontWeight: FontWeight.w600,
             height: 1,
           ),
