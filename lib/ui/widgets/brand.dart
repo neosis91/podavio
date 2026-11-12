@@ -252,6 +252,44 @@ class PreferredStarIcon extends StatelessWidget {
   }
 }
 
+class CastIcon extends StatelessWidget {
+  const CastIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return SvgPicture.asset(
+      'assets/brand/cast.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      semanticsLabel: 'Diffusion',
+    );
+  }
+}
+
+class BedtimeIcon extends StatelessWidget {
+  const BedtimeIcon({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
+    return SvgPicture.asset(
+      'assets/brand/bedtime.svg',
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      semanticsLabel: 'Minuteur',
+    );
+  }
+}
+
 class TimerIcon extends StatelessWidget {
   const TimerIcon({super.key, this.size = 24});
 

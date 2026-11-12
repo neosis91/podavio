@@ -170,6 +170,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   late AudioPlayer _player;
   late QueueCursor _queue;
   late SleepTimer _sleep;
+  int _chapterArm = 0;
+  int? _sleepChapterAtMs;
   late CastSession _cast;
   late StreamCache _cache;
   PlayerUiState _ui = const PlayerUiState();
@@ -692,20 +694,53 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     await ref.read(sharedPreferencesProvider).setBool(_carModeKey, enabled);
   }
 
-  void setSleep(Duration? duration, {bool atEnd = false}) {
+  void setSleep(
+    Duration? duration, {
+    bool atEnd = false,
+    bool atChapter = false,
+  }) {
+    final arm = ++_chapterArm;
+    _sleepChapterAtMs = null;
+    if (atChapter) unawaited(_loadChapterStop(arm));
     _sleep.arm(
       duration: duration,
-      atEnd: atEnd,
+      atEnd: duration == null && atEnd,
       onCleared: () => _emit(_ui.copyWith(clearSleep: true)),
       onUntilEnd: () => _emit(_ui.copyWith(clearSleep: true, sleepAtEnd: true)),
       onArmed: (ends) =>
-          _emit(_ui.copyWith(sleepEndsAt: ends, sleepAtEnd: false)),
+          _emit(_ui.copyWith(sleepEndsAt: ends, sleepAtEnd: atEnd)),
       onTick: (ends) => _emit(_ui.copyWith(sleepEndsAt: ends)),
       onElapsed: _pauseForSleep,
     );
   }
 
+  /// Prochaine frontière de chapitre après la position actuelle.
+  Future<void> _loadChapterStop(int arm) async {
+    final id = _ui.episodeId;
+    if (id == null || !ref.mounted) return;
+    final chapters = await ref.read(databaseProvider).watchChapters(id).first;
+    if (arm != _chapterArm || _disposed) return;
+    final position = _ui.position.inMilliseconds;
+    for (final chapter in chapters) {
+      if (chapter.startMs > position + 1000) {
+        _sleepChapterAtMs = chapter.startMs;
+        return;
+      }
+    }
+  }
+
+  void _maybeSleepAtChapter(Duration position) {
+    final boundary = _sleepChapterAtMs;
+    if (boundary == null || !_ui.playing) return;
+    if (position.inMilliseconds + 400 < boundary) return;
+    _sleepChapterAtMs = null;
+    unawaited(_pauseForSleep());
+  }
+
   Future<void> _pauseForSleep() async {
+    _sleepChapterAtMs = null;
+    _chapterArm++;
+    _sleep.close();
     await _player.pause();
     await persistPosition();
     await syncPositionToEpisode();
@@ -1034,8 +1069,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   bool _isRemote(Uri uri) => uri.scheme == 'http' || uri.scheme == 'https';
 
   static double _normalizeSpeed(double speed) {
-    final stepped = (speed * 10).round() / 10;
-    return stepped.clamp(0.5, 3.0);
+    final stepped = (speed * 100).round() / 100;
+    return stepped.clamp(0.4, 7.0);
   }
 
   Future<void> _applyDefaultSpeedIfNoPodcastOverride(double speed) async {
@@ -1105,6 +1140,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       final id = _ui.episodeId;
       if (id == null) return;
       _maybeSkipOutro(position);
+      _maybeSleepAtChapter(position);
       if (now.difference(_lastPersist) < const Duration(seconds: 5)) return;
       _lastPersist = now;
       unawaited(
@@ -1168,6 +1204,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       // Garder l’épisode en « en cours » pour le mini-player au prochain lancement.
       await _rememberNowPlaying(id);
       final sleepAtEnd = _ui.sleepAtEnd;
+      if (sleepAtEnd) {
+        _sleepChapterAtMs = null;
+        _chapterArm++;
+        _sleep.close();
+      }
       _emit(
         _ui.copyWith(
           playing: false,

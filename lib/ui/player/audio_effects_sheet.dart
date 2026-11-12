@@ -7,6 +7,7 @@ import '../widgets/app_bottom_sheet.dart';
 Future<void> showAudioEffectsSheet(BuildContext context) {
   return showAppModalBottomSheet<void>(
     context: context,
+    theme: themeAboveCover(context),
     showDragHandle: true,
     builder: (context) => const _AudioEffectsSheet(),
   );
@@ -121,31 +122,11 @@ class _EffectSwitch extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: Text(label)),
-          Theme(
-            data: _themeAboveCover(context),
-            child: Switch(value: value, onChanged: onChanged),
-          ),
+          Switch(value: value, onChanged: onChanged),
         ],
       ),
     );
   }
-}
-
-/// Couleur d’accent de l’application, au-dessus de la teinte de la pochette.
-ThemeData _themeAboveCover(BuildContext context) {
-  var seenTheme = false;
-  ThemeData? outer;
-  context.visitAncestorElements((element) {
-    final widget = element.widget;
-    if (widget is! Theme) return true;
-    if (!seenTheme) {
-      seenTheme = true;
-      return true;
-    }
-    outer = widget.data;
-    return false;
-  });
-  return outer ?? Theme.of(context);
 }
 
 class _SilenceStrengthRow extends StatelessWidget {

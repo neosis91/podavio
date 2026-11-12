@@ -1,0 +1,19 @@
+pkgbase = podavio-bin
+	pkgdesc = Podcast player
+	pkgver = 2026.11.5
+	pkgrel = 1
+	url = https://podavio.com
+	arch = x86_64
+	license = GPL-3.0-only
+	depends = gtk3
+	depends = libsecret
+	depends = curl
+	depends = mpv
+	provides = podavio
+	conflicts = podavio
+	options = !strip
+	options = !debug
+	source = podavio-2026.11.5-linux-x64.tar.gz::https://github.com/neosis91/podavio/releases/download/2026.11.5/podavio-2026.11.5-linux-x64.tar.gz
+	sha256sums = 828f5678625c2d9ba6403d9ec2884f7b12c9507197dd9d8061f7718c20ca452e
+
+pkgname = podavio-bin

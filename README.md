@@ -62,8 +62,8 @@ Un build compilé sans l’adresse Sentry n’envoie rien. C’est le cas d’un
 La [dernière release](https://github.com/neosis91/podavio/releases/latest) contient :
 
 - Android : `podavio-*-android-arm64-v8a.apk` pour la plupart des téléphones. `universal` si l’architecture est inconnue. `armeabi-v7a` et `x86_64` sont aussi fournis. Android 8 est le minimum.
-- Windows : `podavio-*-windows-x64.msi`. L’ouvrir installe Podavio pour l’utilisateur courant et ajoute un raccourci dans le menu Démarrer.
-- Linux : `podavio-*-linux-x64.tar.gz`. Extraire l’archive et lancer `podavio`. Le système doit fournir libcurl, déjà présent sur la plupart des distributions.
+- Windows : `podavio-*-windows-x64.msi`. L’ouvrir installe Podavio pour l’utilisateur courant et ajoute un raccourci dans le menu Démarrer. `podavio-*-windows-x64.zip` s’extrait et se lance avec `podavio.exe`, sans raccourci.
+- Linux : `podavio-*-linux-amd64.deb` pour Debian, Ubuntu et les dérivés. `sudo apt install ./podavio-*-linux-amd64.deb`. L’archive `podavio-*-linux-x64.tar.gz` reste là pour une extraction manuelle. Le système fournit GTK 3, libsecret, libcurl et libmpv. Sur EndeavourOS et Arch Linux, le paquet AUR `podavio-bin` s’installe avec `yay -S podavio-bin`.
 
 La page [podavio.com/download](https://podavio.com/download) pointe vers ces mêmes fichiers. L’application, quand elle propose une mise à jour, ouvre cette page.
 
