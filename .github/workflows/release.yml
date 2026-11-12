@@ -104,7 +104,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: linux
-          path: dist/linux/*.tar.gz
+          path: |
+            dist/linux/*.tar.gz
+            dist/linux/*.deb
           if-no-files-found: error
 
   windows:
@@ -128,7 +130,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: windows
-          path: dist/windows/*.msi
+          path: |
+            dist/windows/*.msi
+            dist/windows/*.zip
           if-no-files-found: error
 
   publish:
