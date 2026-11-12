@@ -1,0 +1,1 @@
+Lecteur de podcasts libre. N’importe quel flux RSS, sans compte ni publicité.

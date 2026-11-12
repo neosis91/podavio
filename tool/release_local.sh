@@ -34,15 +34,11 @@ require_site_ready() {
   resolve_site
   echo "Vérification du dépôt du site…"
   git -C "${site}" fetch origin main
-  page="$(git -C "${site}" show "origin/main:journal/index.html" 2>/dev/null || true)"
-  case "${page}" in
-    *"<!-- journal:start -->"*"<!-- journal:end -->"*) ;;
-    *)
-      echo "origin/main du site n'a pas journal/index.html avec les balises journal:start et journal:end." >&2
-      echo "Sans cette page, latest.json ne serait pas mis à jour." >&2
-      exit 1
-      ;;
-  esac
+  if ! git -C "${site}" cat-file -e "origin/main:download/index.html" 2>/dev/null; then
+    echo "origin/main du site n'a pas download/index.html." >&2
+    echo "Sans cette page, latest.json ne serait pas mis à jour." >&2
+    exit 1
+  fi
 }
 
 remove_site_worktree() {
@@ -326,7 +322,7 @@ publish_site() {
     --date "$(date -u +%F)" \
     --site "${site_work}"
 
-  git -C "${site_work}" add -A -- releases latest.json changelog.json journal/index.html
+  git -C "${site_work}" add -A -- releases latest.json
   if git -C "${site_work}" diff --cached --quiet; then
     echo "Le site contient déjà les fichiers ${VERSION}."
   else

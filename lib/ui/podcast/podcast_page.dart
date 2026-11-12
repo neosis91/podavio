@@ -111,9 +111,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     if (!_isThisShow(source)) return;
     ref
         .read(playerProvider.notifier)
-        .setPlaybackSource(
-          PlaybackSource.fromQuery(_showQuery(paginated: false)),
-        );
+        .setPlaybackSource(PlaybackSource.podcast(widget.podcastId));
   }
 
   bool _isThisShow(PlaybackSource source) {
@@ -527,7 +525,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         .read(playerProvider.notifier)
         .playOrPauseEntry(
           first,
-          source: PlaybackSource.fromQuery(_showQuery(paginated: false)),
+          source: PlaybackSource.podcast(widget.podcastId),
         );
   }
 
@@ -670,7 +668,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
   }
 
   List<Widget> _episodeListSlivers(EpisodeWindow window, Color background) {
-    final source = PlaybackSource.fromQuery(_showQuery(paginated: false));
+    final source = PlaybackSource.podcast(widget.podcastId);
     return [
       DecoratedSliver(
         decoration: BoxDecoration(color: background),

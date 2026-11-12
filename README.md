@@ -2,8 +2,6 @@
   <img src="assets/brand/logo.png" alt="Podavio" width="240">
 </p>
 
-<h1 align="center">Podavio</h1>
-
 <p align="center">
   Lecteur de podcasts libre pour Android, Windows et Linux.<br>
   On s’abonne à n’importe quel flux RSS, sans compte et sans publicité dans l’application.
@@ -103,10 +101,16 @@ Une idée ou un défaut se signale dans les [tickets](https://github.com/neosis9
 
 Une modification part d’une branche, ouverte vers `develop`. Cette fusion se fait en squash. La fusion de `develop` vers `main` est un commit de merge, sans squash : c’est elle qui publie la release GitHub.
 
+## Sponsors
+
+Sentry parraine Podavio et fournit le suivi des plantages de la release.
+
+<p align="center">
+  <a href="https://sentry.io/for/open-source/"><img src="https://sentry-brand.storage.googleapis.com/sentry-wordmark-dark-280x84.png" alt="Sentry" width="280" height="84"></a>
+</p>
+
 ## Licence
 
 Podavio est un logiciel libre, sous la GNU General Public License v3.0 uniquement. Le texte est dans [LICENSE](LICENSE). Il n’y a pas de publicité, pas d’abonnement et pas de fonction payante dans l’application.
 
 Les épisodes restent sur les serveurs de leurs éditeurs. Podavio lit le flux et le fichier. Le programme est fourni tel quel, sans garantie, comme le prévoit la licence.
-
-[Sentry pour l’open source](https://sentry.io/for/open-source/) fournit le suivi des plantages de la release.

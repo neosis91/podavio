@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,16 +12,20 @@ import '../widgets/brand.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/episode_tile.dart';
 import 'player_panel.dart';
+import 'queue_sheet_drag.dart';
 
 class PlayerQueue extends ConsumerStatefulWidget {
   const PlayerQueue({
     super.key,
+    required this.sheetFullyOpen,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
     required this.onDragCancel,
   });
 
+  /// Vrai quand la file couvre le lecteur. Un glissement vers le bas la ferme.
+  final bool Function() sheetFullyOpen;
   final GestureDragStartCallback onDragStart;
   final GestureDragUpdateCallback onDragUpdate;
   final GestureDragEndCallback onDragEnd;
@@ -34,7 +36,7 @@ class PlayerQueue extends ConsumerStatefulWidget {
 }
 
 class _PlayerQueueState extends ConsumerState<PlayerQueue> {
-  final _scroll = ScrollController();
+  late final QueueSheetScrollController _scroll;
   final _nowPlayingKey = GlobalKey();
   List<int>? _orderIds;
   PlaybackSource? _orderSource;
@@ -44,9 +46,26 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
   var _revealScheduled = false;
   var _revealExtent = -1.0;
   var _loadingEarlier = false;
-  var _pulling = false;
-  var _pull = 0.0;
-  var _jumping = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll = QueueSheetScrollController(
+      sheetFullyOpen: () => widget.sheetFullyOpen(),
+      onSheetStart: widget.onDragStart,
+      onSheetDelta: (delta) {
+        widget.onDragUpdate(
+          DragUpdateDetails(
+            delta: Offset(0, delta),
+            primaryDelta: delta,
+            globalPosition: Offset.zero,
+          ),
+        );
+      },
+      onSheetEnd: widget.onDragEnd,
+      onSheetCancel: widget.onDragCancel,
+    );
+  }
 
   @override
   void dispose() {
@@ -234,46 +253,10 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
     );
   }
 
-  /// En haut de la liste, glisser vers le bas ramène au grand lecteur.
-  /// Le panneau suit le doigt, comme le lecteur lui-même.
+  /// Charge les pages voisines. La fermeture au glissé est dans
+  /// [QueueSheetScrollController] : un geste qui défile ne ferme pas la file.
   bool _onQueueScroll(ScrollNotification notification) {
-    if (_jumping || notification.depth != 0) return false;
-    if (notification is OverscrollNotification) {
-      final details = notification.dragDetails;
-      final atTop =
-          notification.metrics.pixels <= notification.metrics.minScrollExtent;
-      if (details != null && atTop && notification.overscroll < 0) {
-        _followSheet(details, -notification.overscroll);
-      }
-    } else if (notification is ScrollUpdateNotification &&
-        _pulling &&
-        notification.dragDetails != null) {
-      final details = notification.dragDetails!;
-      final dy = details.primaryDelta ?? 0;
-      if (dy < 0 && _pull > 0) {
-        final back = math.min(_pull, -dy);
-        _followSheet(details, -back);
-        final pixels = notification.metrics.pixels;
-        if (back > 0 && _scroll.hasClients) {
-          final target = (pixels - back).clamp(
-            0.0,
-            _scroll.position.maxScrollExtent,
-          );
-          if (target != pixels) {
-            _jumping = true;
-            _scroll.jumpTo(target);
-            _jumping = false;
-          }
-        }
-      }
-    } else if (notification is ScrollEndNotification && _pulling) {
-      final end = notification.dragDetails;
-      _pulling = false;
-      _pull = 0;
-      widget.onDragEnd(
-        end ?? DragEndDetails(primaryVelocity: 0, velocity: Velocity.zero),
-      );
-    }
+    if (notification.depth != 0) return false;
     if (notification is! ScrollUpdateNotification &&
         notification is! ScrollEndNotification) {
       return false;
@@ -287,30 +270,6 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
       ref.read(playerProvider.notifier).extendQueue();
     }
     return false;
-  }
-
-  void _followSheet(DragUpdateDetails details, double dy) {
-    if (!_pulling) {
-      _pulling = true;
-      _pull = 0;
-      widget.onDragStart(
-        DragStartDetails(
-          sourceTimeStamp: details.sourceTimeStamp,
-          globalPosition: details.globalPosition,
-          localPosition: details.localPosition,
-        ),
-      );
-    }
-    _pull = math.max(0, _pull + dy);
-    widget.onDragUpdate(
-      DragUpdateDetails(
-        sourceTimeStamp: details.sourceTimeStamp,
-        delta: Offset(0, dy),
-        primaryDelta: dy,
-        globalPosition: details.globalPosition,
-        localPosition: details.localPosition,
-      ),
-    );
   }
 
   @override
@@ -369,6 +328,9 @@ class _PlayerQueueState extends ConsumerState<PlayerQueue> {
             onNotification: _onQueueScroll,
             child: CustomScrollView(
               controller: _scroll,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: ClampingScrollPhysics(),
+              ),
               slivers: [
                 if (previous.isNotEmpty) ...[
                   SliverToBoxAdapter(child: _QueueSectionTitle('Précédents')),

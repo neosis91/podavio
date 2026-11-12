@@ -297,7 +297,8 @@ class EpisodeQuery {
   final String search;
   final bool paginated;
 
-  /// Plus ancien en tête. Réservé à la page d’un podcast.
+  /// Plus ancien en tête. La page d’un podcast peut l’inverser pour l’affichage.
+  /// La file du lecteur, elle, reste dans cet ordre.
   final bool oldestFirst;
 
   @override
