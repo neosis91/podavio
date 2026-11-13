@@ -143,6 +143,10 @@ Future<AppDatabase> _pumpShell(
             path: AppRoutes.about,
             builder: (context, state) => const AboutPage(),
           ),
+          GoRoute(
+            path: AppRoutes.activity,
+            builder: (context, state) => const ActivityPage(),
+          ),
         ],
       ),
     ],
