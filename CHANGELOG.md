@@ -1,7 +1,7 @@
 # Journal des versions
 
 Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
-`tool/release_local.sh` refuse de publier si ce titre manque.
+La publication GitHub refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
 ## 2026.11.6

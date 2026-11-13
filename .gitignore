@@ -52,7 +52,7 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
-# Paquets de release locale (tool/release_local.sh)
+# Binaires de compilation locale
 /dist/
 
 # Podavio Web

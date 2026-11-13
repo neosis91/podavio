@@ -235,7 +235,7 @@ EOF
         tag -a "${VERSION}" -m "Podavio ${VERSION}"
     fi
     git push origin "refs/tags/${VERSION}"
-    notes="$(python3 tool/changelog.py gitlab "${VERSION}")"
+    notes="$(python3 tool/changelog.py notes "${VERSION}")"
     if gh release view "${VERSION}" >/dev/null 2>&1; then
       echo "Release GitHub ${VERSION} déjà présente."
     else
