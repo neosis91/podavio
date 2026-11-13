@@ -214,8 +214,11 @@ EOF
     stage="${PWD}/dist/windows/podavio-${VERSION}-windows-x64"
     rm -rf "${stage}" "${stage}.zip"
     cp -a "${PWD}/build/windows/x64/runner/Release" "${stage}"
+    # Compress-Archive lit un chemin Windows. Git Bash laisse /d/a/...,
+    # que PowerShell transforme en \d\a\... et ne trouve pas.
+    stage_win="$(cygpath -w "${stage}")"
     powershell.exe -NoProfile -Command \
-      "Compress-Archive -LiteralPath '${stage}' -DestinationPath '${stage}.zip' -Force"
+      "Compress-Archive -LiteralPath '${stage_win}' -DestinationPath '${stage_win}.zip' -Force"
     rm -rf "${stage}"
     upload_symbols
     ;;
