@@ -3,47 +3,96 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'local_notifications.dart';
 
-/// Avis affiché pendant ou après le téléchargement d’un épisode.
-class DownloadNotice {
-  const DownloadNotice({
-    required this.episodeId,
-    required this.title,
+/// Un lot de téléchargements, affiché comme une seule notification.
+class DownloadBatch {
+  const DownloadBatch({
+    required this.remaining,
+    required this.progress,
+    this.title,
     this.podcast,
-    this.progress,
+    this.succeeded = 0,
+    this.failed = 0,
+    this.failureMessage,
   });
 
-  final int episodeId;
-  final String title;
-  final String? podcast;
+  /// Fichiers encore en cours ou en attente.
+  final int remaining;
 
-  /// `null` : longueur inconnue. Sinon entre 0 et 1.
-  final double? progress;
+  /// Part déjà écrite du lot, entre 0 et 1.
+  final double progress;
+
+  /// Titre d’un épisode, quand le lot n’en contient qu’un.
+  final String? title;
+  final String? podcast;
+  final int succeeded;
+  final int failed;
+  final String? failureMessage;
 }
 
 /// Notifications système des téléchargements. Les erreurs sont absorbées.
 abstract class DownloadNotifications {
-  Future<void> showProgress(DownloadNotice notice);
+  Future<void> showProgress(DownloadBatch batch);
 
-  Future<void> showFinished(DownloadNotice notice);
+  Future<void> showFinished(DownloadBatch batch);
 
-  Future<void> showFailed(DownloadNotice notice, String message);
-
-  Future<void> dismiss(int episodeId);
+  Future<void> dismiss();
 }
 
-String downloadProgressBody(DownloadNotice notice) {
-  final podcast = _podcastName(notice.podcast);
-  final progress = notice.progress;
-  if (progress == null) {
-    return podcast ?? 'Téléchargement…';
+String downloadBatchProgressTitle(DownloadBatch batch) {
+  if (batch.remaining == 1) {
+    final title = _name(batch.title);
+    if (title != null) return title;
   }
-  final percent = (progress.clamp(0, 1) * 100).round();
-  if (podcast == null) return '$percent %';
-  return '$podcast · $percent %';
+  return 'Téléchargements';
+}
+
+String downloadBatchProgressBody(DownloadBatch batch) {
+  final percent = (batch.progress.clamp(0, 1) * 100).round();
+  final podcast = _name(batch.podcast);
+  final head = batch.remaining == 1 && podcast != null
+      ? '$podcast · $percent %'
+      : batch.remaining == 1
+      ? '$percent %'
+      : '${batch.remaining} épisodes · $percent %';
+  if (batch.failed <= 0) return head;
+  final failures = batch.failed == 1 ? '1 échec' : '${batch.failed} échecs';
+  return '$head · $failures';
+}
+
+String downloadBatchOutcomeTitle(DownloadBatch batch) {
+  if (batch.succeeded + batch.failed == 1) {
+    final title = _name(batch.title);
+    if (title != null) return title;
+  }
+  return 'Téléchargements';
+}
+
+String downloadBatchOutcomeBody(DownloadBatch batch) {
+  final succeeded = batch.succeeded;
+  final failed = batch.failed;
+  if (failed <= 0) {
+    if (succeeded == 1) {
+      final title = _name(batch.title);
+      final done = downloadFinishedBody(batch.podcast);
+      if (title == null) return done;
+      return '$title · $done';
+    }
+    return '$succeeded épisodes téléchargés';
+  }
+  if (succeeded <= 0) {
+    if (failed != 1) return '$failed échecs';
+    final message = _name(batch.failureMessage) ?? '1 échec';
+    final title = _name(batch.title);
+    if (title == null) return message;
+    return '$title · $message';
+  }
+  final ok = succeeded == 1 ? '1 téléchargé' : '$succeeded téléchargés';
+  final ko = failed == 1 ? '1 échec' : '$failed échecs';
+  return '$ok, $ko';
 }
 
 String downloadFinishedBody(String? podcast) {
-  final name = _podcastName(podcast);
+  final name = _name(podcast);
   if (name == null) return 'Téléchargé';
   return 'Téléchargé · $name';
 }
@@ -55,8 +104,8 @@ String downloadErrorText(Object error) {
   return text;
 }
 
-String? _podcastName(String? podcast) {
-  final name = podcast?.trim();
+String? _name(String? value) {
+  final name = value?.trim();
   if (name == null || name.isEmpty) return null;
   return name;
 }
@@ -67,57 +116,47 @@ class SystemDownloadNotifications implements DownloadNotifications {
   Future<void>? _ready;
 
   @override
-  Future<void> showProgress(DownloadNotice notice) {
+  Future<void> showProgress(DownloadBatch batch) {
     return _run(() async {
       await _ensureReady();
+      await _plugin.cancel(id: _outcomeId);
       await _plugin.show(
-        id: notice.episodeId,
-        title: notice.title,
-        body: downloadProgressBody(notice),
-        notificationDetails: _progressDetails(notice),
+        id: _progressId,
+        title: downloadBatchProgressTitle(batch),
+        body: downloadBatchProgressBody(batch),
+        notificationDetails: _progressDetails(batch),
       );
     });
   }
 
   @override
-  Future<void> showFinished(DownloadNotice notice) {
+  Future<void> showFinished(DownloadBatch batch) {
+    final failedOnly = batch.succeeded <= 0 && batch.failed > 0;
     return _run(() async {
       await _ensureReady();
-      await _plugin.cancel(id: notice.episodeId);
+      await _plugin.cancel(id: _progressId);
       await _plugin.show(
-        id: notice.episodeId,
-        title: notice.title,
-        body: downloadFinishedBody(notice.podcast),
+        id: _outcomeId,
+        title: downloadBatchOutcomeTitle(batch),
+        body: downloadBatchOutcomeBody(batch),
         notificationDetails: _outcomeDetails(
-          androidCategory: AndroidNotificationCategory.status,
-          linuxCategory: LinuxNotificationCategory.transferComplete,
+          androidCategory: failedOnly
+              ? AndroidNotificationCategory.error
+              : AndroidNotificationCategory.status,
+          linuxCategory: failedOnly
+              ? LinuxNotificationCategory.transferError
+              : LinuxNotificationCategory.transferComplete,
         ),
       );
     });
   }
 
   @override
-  Future<void> showFailed(DownloadNotice notice, String message) {
+  Future<void> dismiss() {
     return _run(() async {
       await _ensureReady();
-      await _plugin.cancel(id: notice.episodeId);
-      await _plugin.show(
-        id: notice.episodeId,
-        title: notice.title,
-        body: message,
-        notificationDetails: _outcomeDetails(
-          androidCategory: AndroidNotificationCategory.error,
-          linuxCategory: LinuxNotificationCategory.transferError,
-        ),
-      );
-    });
-  }
-
-  @override
-  Future<void> dismiss(int episodeId) {
-    return _run(() async {
-      await _ensureReady();
-      await _plugin.cancel(id: episodeId);
+      await _plugin.cancel(id: _progressId);
+      await _plugin.cancel(id: _outcomeId);
     });
   }
 
@@ -159,11 +198,13 @@ class SystemDownloadNotifications implements DownloadNotifications {
 
 const _progressChannel = 'podavio_downloads';
 const _doneChannel = 'podavio_downloads_done';
+const _progressId = 1400000100;
+const _outcomeId = 1400000101;
 
-NotificationDetails _progressDetails(DownloadNotice notice) {
-  final progress = notice.progress;
-  final percent = progress == null ? 0 : (progress.clamp(0, 1) * 100).round();
-  final body = downloadProgressBody(notice);
+NotificationDetails _progressDetails(DownloadBatch batch) {
+  final progress = batch.progress.clamp(0, 1).toDouble();
+  final percent = (progress * 100).round();
+  final body = downloadBatchProgressBody(batch);
   return NotificationDetails(
     android: AndroidNotificationDetails(
       _progressChannel,
@@ -177,7 +218,7 @@ NotificationDetails _progressDetails(DownloadNotice notice) {
       showProgress: true,
       maxProgress: 100,
       progress: percent,
-      indeterminate: progress == null,
+      indeterminate: false,
       ongoing: true,
       autoCancel: false,
       playSound: false,

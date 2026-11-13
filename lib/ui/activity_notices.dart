@@ -7,8 +7,11 @@ import '../data/download_controller.dart';
 import '../data/feed_refresh_controller.dart';
 import '../data/online_status.dart';
 import '../data/opml_import_controller.dart';
+
+import 'package:go_router/go_router.dart';
+
 import '../l10n/l10n.dart';
-import 'widgets/app_bottom_sheet.dart';
+import 'router.dart';
 
 /// Avis affichés par le bouton à gauche du menu.
 enum ActivityNotice { offline, refresh, downloads, opml, messages }
@@ -81,187 +84,205 @@ List<ActivityNotice> activityNoticesOf(WidgetRef ref) {
   );
 }
 
-void showActivityNotices(BuildContext context) {
-  showAppModalBottomSheet<void>(
-    context: context,
-    // La feuille peint elle-même son fond, qui suit l’avis prioritaire.
-    backgroundColor: Colors.transparent,
-    builder: (context) => const _ActivitySheet(),
-  );
-}
-
-class _ActivitySheet extends ConsumerStatefulWidget {
-  const _ActivitySheet();
+class ActivityPage extends ConsumerStatefulWidget {
+  const ActivityPage({super.key});
 
   @override
-  ConsumerState<_ActivitySheet> createState() => _ActivitySheetState();
+  ConsumerState<ActivityPage> createState() => _ActivityPageState();
 }
 
-class _ActivitySheetState extends ConsumerState<_ActivitySheet> {
+class _ActivityPageState extends ConsumerState<ActivityPage> {
   var _refreshOpen = false;
   var _opmlOpen = false;
+  var _hadNotices = false;
+  var _closing = false;
+
+  void _closeWhenEmpty(List<ActivityNotice> order) {
+    if (order.isNotEmpty) {
+      _hadNotices = true;
+      return;
+    }
+    if (!_hadNotices || _closing) return;
+    _closing = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (context.canPop()) context.pop();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final order = activityNoticesOf(ref);
-    final colors = _sheetColors(context, order);
-    final text = Theme.of(context).textTheme.bodyLarge
-        ?.copyWith(color: colors.foreground);
-    return Material(
-      color: colors.background,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      clipBehavior: Clip.antiAlias,
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.center,
-              child: SizedBox(
-                width: 32,
-                height: 4,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: colors.foreground.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+    _closeWhenEmpty(order);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Notifications')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: order.isEmpty
+              ? const _EmptyNotices()
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  children: [
+                    for (final notice in order)
+                      if (notice == ActivityNotice.messages)
+                        ..._messageCards()
+                      else
+                        _card(notice),
+                  ],
                 ),
-              ),
-            ),
-            if (order.isEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                child: Text('Aucune notification', style: text),
-              )
-            else
-              ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(16, 12, 8, 16),
-                children: [
-                  for (final notice in order) _line(notice, colors.foreground),
-                ],
-              ),
-          ],
         ),
       ),
     );
   }
 
-  /// Fond et texte de l’avis le plus prioritaire.
-  ({Color background, Color foreground}) _sheetColors(
-    BuildContext context,
-    List<ActivityNotice> order,
-  ) {
+  Widget _card(ActivityNotice notice) {
     final scheme = Theme.of(context).colorScheme;
-    if (order.isEmpty) {
-      return (
-        background: scheme.surfaceContainerLow,
-        foreground: scheme.onSurface,
-      );
+    final card = Material(
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: pureBlackOutline(scheme),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: _line(notice),
+    );
+    final dismiss = _dismissOf(notice);
+    if (dismiss == null) {
+      return Padding(padding: const EdgeInsets.only(bottom: 12), child: card);
     }
-    return switch (order.first) {
-      ActivityNotice.offline => (
-        background: podavioRed,
-        foreground: Colors.white,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Dismissible(
+        key: ValueKey(dismiss.key),
+        direction: DismissDirection.horizontal,
+        background: _swipeBackground(Alignment.centerLeft),
+        secondaryBackground: _swipeBackground(Alignment.centerRight),
+        onDismissed: (_) => dismiss.clear(),
+        child: card,
       ),
-      ActivityNotice.downloads => (
-        background: scheme.secondaryContainer,
-        foreground: scheme.onSecondaryContainer,
-      ),
-      ActivityNotice.refresh => _statusColors(
-        scheme,
-        failed: ref.watch(feedRefreshProvider).failures.isNotEmpty,
-        running: ref.watch(feedRefreshProvider).isRunning,
-      ),
-      ActivityNotice.opml => _statusColors(
-        scheme,
-        failed: ref.watch(opmlImportProvider).failures.isNotEmpty,
-        running: ref.watch(opmlImportProvider).isRunning,
-      ),
-      ActivityNotice.messages => (
-        background: scheme.surfaceContainerLow,
-        foreground: scheme.onSurface,
-      ),
-    };
-  }
-
-  ({Color background, Color foreground}) _statusColors(
-    ColorScheme scheme, {
-    required bool failed,
-    required bool running,
-  }) {
-    if (failed && !running) {
-      return (
-        background: scheme.errorContainer,
-        foreground: scheme.onErrorContainer,
-      );
-    }
-    return (
-      background: scheme.secondaryContainer,
-      foreground: scheme.onSecondaryContainer,
     );
   }
 
-  Widget _line(ActivityNotice notice, Color color) {
+  ({String key, VoidCallback clear})? _dismissOf(ActivityNotice notice) {
+    return switch (notice) {
+      ActivityNotice.refresh =>
+        ref.watch(feedRefreshProvider).isRunning
+            ? null
+            : (
+                key: 'refresh',
+                clear: () => ref.read(feedRefreshProvider.notifier).dismiss(),
+              ),
+      ActivityNotice.opml =>
+        ref.watch(opmlImportProvider).isRunning
+            ? null
+            : (
+                key: 'opml',
+                clear: () => ref.read(opmlImportProvider.notifier).dismiss(),
+              ),
+      _ => null,
+    };
+  }
+
+  Widget _swipeBackground(Alignment alignment) {
+    final scheme = Theme.of(context).colorScheme;
+    return ColoredBox(
+      color: scheme.secondaryContainer,
+      child: Align(
+        alignment: alignment,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Icon(Icons.done, color: scheme.onSecondaryContainer),
+        ),
+      ),
+    );
+  }
+
+  Color _accent(ActivityNotice notice) {
+    final scheme = Theme.of(context).colorScheme;
+    return switch (notice) {
+      ActivityNotice.offline => podavioRed,
+      ActivityNotice.downloads => scheme.primary,
+      ActivityNotice.refresh =>
+        ref.watch(feedRefreshProvider).failures.isNotEmpty &&
+                !ref.watch(feedRefreshProvider).isRunning
+            ? scheme.error
+            : scheme.primary,
+      ActivityNotice.opml =>
+        ref.watch(opmlImportProvider).failures.isNotEmpty &&
+                !ref.watch(opmlImportProvider).isRunning
+            ? scheme.error
+            : scheme.primary,
+      ActivityNotice.messages => scheme.primary,
+    };
+  }
+
+  Widget _line(ActivityNotice notice) {
     return switch (notice) {
       ActivityNotice.offline => _textLine(
         icon: Icons.wifi_off,
-        label: context.tr('No internet connection'),
-        color: color,
+        accent: _accent(notice),
+        title: context.tr('No internet connection'),
       ),
-      ActivityNotice.downloads => _downloadLine(color),
-      ActivityNotice.refresh => _refreshLine(color),
-      ActivityNotice.opml => _opmlLine(color),
-      ActivityNotice.messages => _messages(color),
+      ActivityNotice.downloads => _downloadLine(),
+      ActivityNotice.refresh => _refreshLine(),
+      ActivityNotice.opml => _opmlLine(),
+      ActivityNotice.messages => const SizedBox.shrink(),
     };
   }
 
-  Widget _messages(Color color) {
+  List<Widget> _messageCards() {
+    final scheme = Theme.of(context).colorScheme;
     final messages = ref.watch(activityMessagesProvider);
-    return Column(
-      children: [
-        for (final message in messages)
-          _textLine(
-            icon: Icons.info_outline,
-            label: message.text,
-            color: color,
-            trailing: [
-              IconButton(
-                tooltip: 'Fermer',
-                onPressed: () => ref
-                    .read(activityMessagesProvider.notifier)
-                    .dismiss(message.id),
-                icon: Icon(Icons.close, color: color),
+    return [
+      for (final message in messages)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Dismissible(
+            key: ValueKey('message-${message.id}'),
+            direction: DismissDirection.horizontal,
+            background: _swipeBackground(Alignment.centerLeft),
+            secondaryBackground: _swipeBackground(Alignment.centerRight),
+            onDismissed: (_) =>
+                ref.read(activityMessagesProvider.notifier).dismiss(message.id),
+            child: Material(
+              color: scheme.surfaceContainerLow,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: pureBlackOutline(scheme),
               ),
-            ],
+              clipBehavior: Clip.antiAlias,
+              child: _textLine(
+                icon: Icons.info_outline,
+                accent: scheme.primary,
+                title: message.text,
+              ),
+            ),
           ),
-      ],
-    );
+        ),
+    ];
   }
 
-  Widget _downloadLine(Color color) {
+  Widget _downloadLine() {
     final activity = downloadActivityProgress(
       running: ref.watch(downloadProgressProvider).values,
       waiting: ref.watch(downloadWaitingCountProvider),
     );
-    final label = activity.remaining == 1
+    final detail = activity.remaining == 1
         ? context.tr('1 episode left')
         : context.tr('{count} episodes left', {
             'count': '${activity.remaining}',
           });
     return _textLine(
       icon: Icons.download_outlined,
-      label: label,
-      color: color,
+      accent: _accent(ActivityNotice.downloads),
+      title: 'Téléchargement',
+      subtitle: detail,
       progress: activity.progress,
-      progressAroundIcon: true,
     );
   }
 
-  Widget _refreshLine(Color color) {
+  Widget _refreshLine() {
     final refresh = ref.watch(feedRefreshProvider);
     final hasErrors = refresh.failures.isNotEmpty;
     final left = podcastsLeftToRefresh(
@@ -271,7 +292,7 @@ class _ActivitySheetState extends ConsumerState<_ActivitySheet> {
     final remaining = left == 1
         ? context.tr('1 podcast to refresh')
         : context.tr('{count} podcasts to refresh', {'count': '$left'});
-    final label = refresh.isRunning
+    final subtitle = refresh.isRunning
         ? hasErrors
               ? '$remaining · ${refresh.failed} échec${refresh.failed > 1 ? 's' : ''}'
               : remaining
@@ -284,46 +305,35 @@ class _ActivitySheetState extends ConsumerState<_ActivitySheet> {
           : hasErrors
           ? Icons.error_outline
           : Icons.check_circle_outline,
-      label: label,
-      color: color,
+      accent: _accent(ActivityNotice.refresh),
+      title: 'Actualisation',
+      subtitle: subtitle,
       progress: refresh.isRunning ? refresh.progress : null,
-      progressAroundIcon: refresh.isRunning,
-      trailing: [
-        if (hasErrors)
-          IconButton(
-            tooltip: _refreshOpen ? 'Masquer les erreurs' : 'Voir les erreurs',
-            onPressed: () => setState(() => _refreshOpen = !_refreshOpen),
-            icon: Icon(
+      onTap: hasErrors
+          ? () => setState(() => _refreshOpen = !_refreshOpen)
+          : null,
+      trailing: hasErrors
+          ? Icon(
               _refreshOpen ? Icons.expand_less : Icons.expand_more,
-              color: color,
-            ),
-          ),
-        if (!refresh.isRunning)
-          IconButton(
-            tooltip: 'Fermer',
-            onPressed: () {
-              setState(() => _refreshOpen = false);
-              ref.read(feedRefreshProvider.notifier).dismiss();
-            },
-            icon: Icon(Icons.close, color: color),
-          ),
-      ],
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            )
+          : null,
       details: _refreshOpen && hasErrors
           ? [
               for (final failure in refresh.failures)
-                _failure(failure.title, failure.message, color),
+                _failure(failure.title, failure.message),
             ]
           : const [],
     );
   }
 
-  Widget _opmlLine(Color color) {
+  Widget _opmlLine() {
     final import = ref.watch(opmlImportProvider);
     final hasErrors = import.failures.isNotEmpty;
-    final label = import.isRunning
+    final subtitle = import.isRunning
         ? hasErrors
-              ? 'Import OPML · ${import.done} / ${import.total} · ${import.failed} échec${import.failed > 1 ? 's' : ''}'
-              : 'Import OPML · ${import.done} / ${import.total}'
+              ? '${import.done} / ${import.total} · ${import.failed} échec${import.failed > 1 ? 's' : ''}'
+              : '${import.done} / ${import.total}'
         : import.failed == 0
         ? '${import.imported} abonnements importés'
         : '${import.imported} importés, ${import.failed} en échec';
@@ -333,41 +343,30 @@ class _ActivitySheetState extends ConsumerState<_ActivitySheet> {
           : hasErrors
           ? Icons.error_outline
           : Icons.check_circle_outline,
-      label: label,
-      color: color,
+      accent: _accent(ActivityNotice.opml),
+      title: 'Import OPML',
+      subtitle: subtitle,
       progress: import.isRunning ? import.progress : null,
-      trailing: [
-        if (hasErrors)
-          IconButton(
-            tooltip: _opmlOpen ? 'Masquer les erreurs' : 'Voir les erreurs',
-            onPressed: () => setState(() => _opmlOpen = !_opmlOpen),
-            icon: Icon(
+      onTap: hasErrors ? () => setState(() => _opmlOpen = !_opmlOpen) : null,
+      trailing: hasErrors
+          ? Icon(
               _opmlOpen ? Icons.expand_less : Icons.expand_more,
-              color: color,
-            ),
-          ),
-        if (!import.isRunning)
-          IconButton(
-            tooltip: 'Fermer',
-            onPressed: () {
-              setState(() => _opmlOpen = false);
-              ref.read(opmlImportProvider.notifier).dismiss();
-            },
-            icon: Icon(Icons.close, color: color),
-          ),
-      ],
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            )
+          : null,
       details: _opmlOpen && hasErrors
           ? [
               for (final failure in import.failures)
-                _failure(failure.title, failure.message, color),
+                _failure(failure.title, failure.message),
             ]
           : const [],
     );
   }
 
-  Widget _failure(String title, String message, Color color) {
+  Widget _failure(String title, String message) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(left: 36, bottom: 8),
+      padding: const EdgeInsets.only(top: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -375,13 +374,16 @@ class _ActivitySheetState extends ConsumerState<_ActivitySheet> {
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(color: color, fontWeight: FontWeight.w600),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
           ),
+          const SizedBox(height: 2),
           Text(
             message,
             style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: color),
+                ?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -390,59 +392,92 @@ class _ActivitySheetState extends ConsumerState<_ActivitySheet> {
 
   Widget _textLine({
     required IconData icon,
-    required String label,
-    required Color color,
+    required Color accent,
+    required String title,
+    String? subtitle,
     double? progress,
-    bool progressAroundIcon = false,
-    List<Widget> trailing = const [],
+    VoidCallback? onTap,
+    Widget? trailing,
     List<Widget> details = const [],
   }) {
-    final glyph = progressAroundIcon
-        ? SizedBox.square(
-            dimension: 32,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CircularProgressIndicator(
-                  value: progress,
-                  strokeWidth: 2.5,
-                  color: color,
-                  backgroundColor: color.withValues(alpha: 0.24),
-                ),
-                Icon(icon, size: 16, color: color),
-              ],
+    final scheme = Theme.of(context).colorScheme;
+    final body = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
             ),
-          )
-        : Icon(icon, size: 20, color: color);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (progress != null && !progressAroundIcon)
-          Padding(
-            padding: const EdgeInsets.only(right: 8, bottom: 8),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 2,
-              color: color,
-              backgroundColor: color.withValues(alpha: 0.24),
+            child: SizedBox.square(
+              dimension: 44,
+              child: Icon(icon, color: accent, size: 22),
             ),
           ),
-        Row(
-          children: [
-            glyph,
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.bodyLarge
-                    ?.copyWith(color: color),
-              ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ],
+                if (progress != null) ...[
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 6,
+                      color: accent,
+                      backgroundColor: accent.withValues(alpha: 0.16),
+                    ),
+                  ),
+                ],
+                ...details,
+              ],
             ),
-            ...trailing,
-          ],
+          ),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing],
+        ],
+      ),
+    );
+    if (onTap == null) return body;
+    return InkWell(onTap: onTap, child: body);
+  }
+}
+
+class _EmptyNotices extends StatelessWidget {
+  const _EmptyNotices();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.notifications_none,
+          size: 48,
+          color: scheme.onSurfaceVariant,
         ),
-        if (details.isNotEmpty) ...[const SizedBox(height: 8), ...details],
         const SizedBox(height: 12),
+        Text(
+          'Aucune notification',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
       ],
     );
   }
@@ -512,7 +547,7 @@ class ActivityButton extends ConsumerWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => showActivityNotices(context),
+        onTap: () => context.push(AppRoutes.activity),
         customBorder: const CircleBorder(),
         child: SizedBox.square(
           dimension: size,

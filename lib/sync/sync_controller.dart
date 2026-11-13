@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/activity_messages.dart';
 import '../data/automatic_downloads.dart';
 import '../data/download_controller.dart';
 import '../data/providers.dart';
@@ -287,14 +288,14 @@ class SyncController extends Notifier<SyncStatus> {
       await preferences.setBool(_okKey, false);
       await preferences.setString(_errorKey, _errorCode(error));
       if (ref.mounted && ref.read(settingsProvider).notifySyncErrors) {
-        await ref
-            .read(statusNotificationsProvider)
-            .showSyncError(
-              notificationText(
-                ref.read(settingsProvider),
-                'Synchronization failed.',
-              ),
-            );
+        final message = notificationText(
+          ref.read(settingsProvider),
+          'Synchronization failed.',
+        );
+        await ref.read(statusNotificationsProvider).showSyncError(message);
+        if (ref.mounted) {
+          ref.read(activityMessagesProvider.notifier).add(message);
+        }
       }
     } finally {
       client.close();

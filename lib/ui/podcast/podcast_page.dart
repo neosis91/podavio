@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/platform.dart';
 import '../../data/activity_gate.dart';
+import '../../data/activity_messages.dart';
 import '../../data/automatic_downloads.dart';
 import '../../data/download_controller.dart';
 import '../../data/app_database.dart';
@@ -756,6 +757,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
               count: saved.newEpisodeIds.length,
             ),
           ],
+          ref.read(activityMessagesProvider.notifier),
         );
       }
       if (context.mounted) showMessage(context, 'Flux actualisé');

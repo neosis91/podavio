@@ -27,6 +27,7 @@ class AppRoutes {
   static const network = '/network';
   static const eco = '/eco';
   static const notifications = '/notifications';
+  static const activity = '/activity';
   static const about = '/about';
   static const nearbyShare = '/about/nearby-share';
   static const licenses = '/licenses';

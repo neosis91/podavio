@@ -37,6 +37,7 @@ import 'shell.dart';
 import 'stats_page.dart';
 import 'sync_page.dart';
 import 'web_companion_page.dart';
+import 'activity_notices.dart';
 import 'welcome_page.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -73,6 +74,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.home,
             builder: (context, state) => const HomePage(),
+          ),
+          GoRoute(
+            path: AppRoutes.activity,
+            builder: (context, state) => const ActivityPage(),
           ),
           GoRoute(
             path: AppRoutes.library,
