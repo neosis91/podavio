@@ -3,114 +3,116 @@
 </p>
 
 <p align="center">
-  Lecteur de podcasts libre pour Android, Windows et Linux.<br>
-  On s’abonne à n’importe quel flux RSS, sans compte et sans publicité dans l’application.
+  A free podcast player for Android, Windows, and Linux.<br>
+  Subscribe to any RSS feed, with no account and no ads in the app.
 </p>
 
 <p align="center">
-  <a href="https://github.com/neosis91/podavio/releases/latest"><img alt="Télécharger" src="https://img.shields.io/github/v/release/neosis91/podavio?label=t%C3%A9l%C3%A9charger&color=2ea44f"></a>
-  <a href="LICENSE"><img alt="Licence GPL-3.0 uniquement" src="https://img.shields.io/badge/licence-GPL--3.0--uniquement-blue"></a>
+  <a href="https://github.com/neosis91/podavio/releases/latest"><img alt="Download" src="https://img.shields.io/github/v/release/neosis91/podavio?label=download&color=2ea44f"></a>
+  <a href="LICENSE"><img alt="GPL-3.0 only" src="https://img.shields.io/badge/license-GPL--3.0--only-blue"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/neosis91/podavio/releases/latest"><b>Release GitHub</b></a>
+  <a href="https://github.com/neosis91/podavio/releases/latest"><b>GitHub release</b></a>
   ·
   <a href="https://podavio.com/download"><b>podavio.com/download</b></a>
   ·
   <a href="https://web.podavio.com"><b>Podavio Web</b></a>
 </p>
 
-> Podavio Web ouvre la bibliothèque du téléphone dans le navigateur, après un scan du QR code.
+> Podavio Web opens the phone’s library in the browser after a QR code is scanned.
 
-## Fonctions
+## Features
 
-- Recherche parmi Apple Podcasts, Podcast Index et fyyd, et ajout par adresse RSS
-- Import et export OPML des abonnements
-- Épisodes non lus, playlist réordonnable, favoris, lectures récentes et statistiques
-- Lecteur avec position mémorisée, vitesse, sauts et minuteur de sommeil
-- Téléchargement des épisodes, y compris en automatique, pour les écouter hors ligne
-- Chapitres, thème clair, sombre ou système, mode éco, listes confortables ou compactes
-- Chromecast et Android Auto
-- Podavio Web : la bibliothèque du téléphone dans le navigateur
-- Vérification des mises à jour sur la dernière release GitHub
+- Search Apple Podcasts, Podcast Index, and fyyd, and add a show by RSS address
+- Import and export subscriptions as OPML
+- Unplayed episodes, a reorderable playlist, favorites, recent plays, and statistics
+- A player with a remembered position, playback speed, skips, and a sleep timer
+- Episode downloads, including automatic downloads, for offline listening
+- Chapters, a light, dark, or system theme, eco mode, and comfortable or compact lists
+- Chromecast and Android Auto
+- Podavio Web: the phone’s library in the browser
+- An update check against the latest GitHub release
 
-## Captures
+## Screenshots
 
 <p align="center">
-  <img src="store/play/phone-home-fr.png" alt="Accueil" width="240">
-  <img src="store/play/phone-subscriptions-fr.png" alt="Abonnements" width="240">
-  <img src="store/play/phone-library-fr.png" alt="Bibliothèque" width="240">
+  <img src="store/play/phone-home-fr.png" alt="Home" width="240">
+  <img src="store/play/phone-subscriptions-fr.png" alt="Subscriptions" width="240">
+  <img src="store/play/phone-library-fr.png" alt="Library" width="240">
 </p>
 
-## Données
+## Data
 
-- Un podcast est un flux RSS. L’audio reste sur le serveur de l’éditeur. Podavio le lit, le met en mémoire ou le télécharge.
-- La recherche et les suggestions interrogent Apple Podcasts, Podcast Index et fyyd.
-- Les abonnements s’échangent en OPML.
-- La bibliothèque, les fichiers téléchargés et la position de lecture restent sur l’appareil.
+- A podcast is an RSS feed. The audio stays on the publisher’s server. Podavio plays it, caches it, or downloads it.
+- Search and suggestions query Apple Podcasts, Podcast Index, and fyyd.
+- Subscriptions are exchanged as OPML.
+- The library, downloaded files, and playback position stay on the device.
 
-## Confidentialité
+## Privacy
 
-Podavio ne demande pas de compte et n’affiche pas de publicité.
+Podavio does not ask for an account and does not show ads.
 
-La release GitHub envoie les plantages à [Sentry](https://sentry.io) pour les rattacher à une version. [Sentry](https://github.com/getsentry/sentry) est un projet libre. Cet envoi inclut l’adresse IP. Seule l’ouverture de l’application est tracée.
+The GitHub release sends crashes to [Sentry](https://sentry.io) so they can be tied to a version. [Sentry](https://github.com/getsentry/sentry) is free software. That report includes the IP address. Only the opening of the app is traced.
 
-Un build compilé sans l’adresse Sentry n’envoie rien. C’est le cas d’un `flutter run` local, et ce sera le cas d’un build F-Droid, qui compile le dépôt sans ce secret.
+A build compiled without the Sentry address sends nothing. That is the case for a local `flutter run`, and it will be the case for an F-Droid build, which compiles the repository without that secret.
 
-## Quel fichier télécharger
+## Which file to download
 
-La [dernière release](https://github.com/neosis91/podavio/releases/latest) contient :
+The [latest release](https://github.com/neosis91/podavio/releases/latest) contains:
 
-- Android : `podavio-*-android-arm64-v8a.apk` pour la plupart des téléphones. `universal` si l’architecture est inconnue. `armeabi-v7a` et `x86_64` sont aussi fournis. Android 8 est le minimum.
-- Windows : `podavio-*-windows-x64.msi`. L’ouvrir installe Podavio pour l’utilisateur courant et ajoute un raccourci dans le menu Démarrer. `podavio-*-windows-x64.zip` s’extrait et se lance avec `podavio.exe`, sans raccourci.
-- Linux : `podavio-*-linux-amd64.deb` pour Debian, Ubuntu et les dérivés. `sudo apt install ./podavio-*-linux-amd64.deb`. L’archive `podavio-*-linux-x64.tar.gz` reste là pour une extraction manuelle. Le système fournit GTK 3, libsecret, libcurl et libmpv. Sur EndeavourOS et Arch Linux, le paquet AUR `podavio-bin` s’installe avec `yay -S podavio-bin`.
+- Android: `podavio-*-android-arm64-v8a.apk` for most phones. `universal` when the architecture is unknown. `armeabi-v7a` and `x86_64` are provided as well. Android 8 is the minimum.
+- Windows: `podavio-*-windows-x64.msi`. Opening it installs Podavio for the current user and adds a Start menu shortcut. `podavio-*-windows-x64.zip` extracts and runs with `podavio.exe`, without a shortcut.
+- Linux: `podavio-*-linux-amd64.deb` for Debian, Ubuntu, and derivatives. `sudo apt install ./podavio-*-linux-amd64.deb`. The `podavio-*-linux-x64.tar.gz` archive remains for a manual extract. The system provides GTK 3, libsecret, libcurl, and libmpv. On EndeavourOS and Arch Linux, the AUR package `podavio-bin` is installed with `yay -S podavio-bin`.
 
-La page [podavio.com/download](https://podavio.com/download) pointe vers ces mêmes fichiers. L’application, quand elle propose une mise à jour, ouvre cette page.
+The page [podavio.com/download](https://podavio.com/download) points to the same files. When the app offers an update, it opens that page.
 
-macOS et iOS se compilent depuis les sources. Ils ne sont pas dans la release.
+macOS and iOS build from source. They are not in the release.
 
-## Traduire
+## Translating
 
-Les textes de l’interface sont dans `l10n/`, un fichier JSON par langue : allemand, anglais, arabe, chinois, coréen, espagnol, français, hindi, indonésien, italien, japonais, néerlandais, polonais, portugais, russe et turc. La clé est le texte anglais. Dans `l10n/en.json`, chaque valeur recopie sa clé. Les autres fichiers portent la traduction.
+Interface strings live in `l10n/`, one JSON file per language: Arabic, Chinese, Dutch, English, French, German, Hindi, Indonesian, Italian, Japanese, Korean, Polish, Portuguese, Russian, Spanish, and Turkish. The key is the English text. In `l10n/en.json`, each value repeats its key. The other files hold the translation.
 
-Pour en ajouter une, l’écrire dans le code avec `context.tr('…')`, l’ajouter dans `l10n/en.json`, puis dans les langues déjà présentes. Ensuite :
+To add a string, write it in code with `context.tr('…')`, add it to `l10n/en.json`, then to the languages that already exist. Then:
 
 ```bash
 dart run tool/l10n_generate.dart
 ```
 
-Le script réécrit `lib/l10n/messages.dart`. On ne modifie pas ce fichier à la main. Une traduction absente affiche l’anglais.
+The script rewrites `lib/l10n/messages.dart`. Do not edit that file by hand. A missing translation shows the English text.
 
 ## Questions
 
-**Faut-il un compte ?**
-Non. Un flux RSS suffit.
+**Is an account required?**
+No. An RSS feed is enough.
 
-**Où part l’audio ?**
-Il reste chez l’éditeur du podcast. Podavio ne l’héberge pas.
+**Where does the audio go?**
+It stays with the podcast’s publisher. Podavio does not host it.
 
-**La release envoie-t-elle des données ?**
-Elle envoie les plantages à Sentry, avec l’adresse IP, pour corriger l’application. Un build sans l’adresse Sentry ne le fait pas.
+**Does the release send data?**
+It sends crashes to Sentry, with the IP address, so the app can be fixed. A build without the Sentry address does not.
 
-**Comment mettre à jour ?**
-L’application compare la version installée à la dernière release GitHub. Le bouton ouvre [podavio.com/download](https://podavio.com/download).
+**How do I update?**
+The app compares the installed version with the latest GitHub release. The button opens [podavio.com/download](https://podavio.com/download).
 
-## Contribuer
+## Contributing
 
-Une idée ou un défaut se signale dans les [tickets](https://github.com/neosis91/podavio/issues).
+Report an idea or a defect in the [issues](https://github.com/neosis91/podavio/issues).
 
-Une modification part d’une branche, ouverte vers `develop`. Cette fusion se fait en squash. La fusion de `develop` vers `main` est un commit de merge, sans squash : c’est elle qui publie la release GitHub.
+A change starts on a branch and opens toward `develop`. That merge is a squash. The merge from `develop` into `main` is a merge commit, without a squash: that merge publishes the GitHub release.
+
+Please read the [code of conduct](CODE_OF_CONDUCT.md) before taking part.
 
 ## Sponsors
 
-Sentry parraine Podavio et fournit le suivi des plantages de la release.
+Sentry sponsors Podavio and provides crash reporting for the release.
 
 <p align="center">
   <a href="https://sentry.io/for/open-source/"><img src="https://sentry-brand.storage.googleapis.com/sentry-wordmark-dark-280x84.png" alt="Sentry" width="280" height="84"></a>
 </p>
 
-## Licence
+## License
 
-Podavio est un logiciel libre, sous la GNU General Public License v3.0 uniquement. Le texte est dans [LICENSE](LICENSE). Il n’y a pas de publicité, pas d’abonnement et pas de fonction payante dans l’application.
+Podavio is free software, under the GNU General Public License v3.0 only. The text is in [LICENSE](LICENSE). There are no ads, no subscription, and no paid feature in the app.
 
-Les épisodes restent sur les serveurs de leurs éditeurs. Podavio lit le flux et le fichier. Le programme est fourni tel quel, sans garantie, comme le prévoit la licence.
+Episodes stay on their publishers’ servers. Podavio reads the feed and the file. The program is provided as is, without warranty, as the license states.
