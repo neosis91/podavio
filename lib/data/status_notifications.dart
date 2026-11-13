@@ -4,16 +4,13 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../l10n/interface_locale.dart';
 import '../l10n/messages.dart';
 import '../settings/settings_controller.dart';
+import 'activity_messages.dart';
 import 'local_notifications.dart';
 import 'models.dart';
 
 /// Annonces hors du téléchargement : nouveaux épisodes, échec de synchro.
 abstract class StatusNotifications {
-  Future<void> showNewEpisodes(
-    NewEpisodeArrival arrival, {
-    required String body,
-    required String title,
-  });
+  Future<void> showNewEpisodes({required String body, required String title});
 
   Future<void> showSyncError(String message);
 }
@@ -23,13 +20,9 @@ class SystemStatusNotifications implements StatusNotifications {
   Future<void>? _ready;
 
   @override
-  Future<void> showNewEpisodes(
-    NewEpisodeArrival arrival, {
-    required String body,
-    required String title,
-  }) {
+  Future<void> showNewEpisodes({required String body, required String title}) {
     return _show(
-      id: 1500000000 + arrival.podcastId,
+      id: 1500000000,
       title: title,
       body: body,
       channelId: 'podavio_new_episodes',
@@ -91,24 +84,40 @@ class SystemStatusNotifications implements StatusNotifications {
   }
 }
 
+/// Une seule annonce pour toute une actualisation, reprise dans la page.
 Future<void> announceNewEpisodes(
   StatusNotifications notifications,
   AppSettings settings,
   List<NewEpisodeArrival> arrivals,
+  ActivityMessagesNotifier messages,
 ) async {
-  for (final arrival in arrivals) {
-    final key = arrival.count == 1
-        ? '1 new episode from {podcast}'
-        : '{count} new episodes from {podcast}';
-    await notifications.showNewEpisodes(
-      arrival,
-      title: notificationText(settings, 'New episodes'),
-      body: notificationText(settings, key, {
-        'podcast': arrival.title,
-        'count': '${arrival.count}',
-      }),
-    );
-  }
+  if (arrivals.isEmpty) return;
+  final body = newEpisodesNotificationBody(settings, arrivals);
+  messages.add(body);
+  await notifications.showNewEpisodes(
+    title: notificationText(settings, 'New episodes'),
+    body: body,
+  );
+}
+
+/// Au plus douze podcasts : au-delà, la notification resterait un pavé.
+String newEpisodesNotificationBody(
+  AppSettings settings,
+  List<NewEpisodeArrival> arrivals,
+) {
+  final shown = arrivals.take(12);
+  return [for (final arrival in shown) _oneArrival(settings, arrival)]
+      .join('\n');
+}
+
+String _oneArrival(AppSettings settings, NewEpisodeArrival arrival) {
+  final key = arrival.count == 1
+      ? '1 new episode from {podcast}'
+      : '{count} new episodes from {podcast}';
+  return notificationText(settings, key, {
+    'podcast': arrival.title,
+    'count': '${arrival.count}',
+  });
 }
 
 /// Texte d’une notification, dans la langue de l’interface.

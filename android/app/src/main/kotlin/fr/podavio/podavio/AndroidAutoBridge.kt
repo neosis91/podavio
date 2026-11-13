@@ -34,6 +34,8 @@ object AndroidAutoBridge {
                         val args = call.arguments as? Map<*, *>
                         if (args != null) {
                             service?.applyPlaybackState(args)
+                            // No-op tant que le pont montre n’est pas compilé.
+                            runCatching { WearPlaybackFanout.dispatch?.invoke(args) }
                         }
                         result.success(null)
                     }

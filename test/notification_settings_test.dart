@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:podavio/data/app_database.dart';
 import 'package:podavio/data/models.dart';
 import 'package:podavio/data/providers.dart';
+import 'package:podavio/data/status_notifications.dart';
 import 'package:podavio/l10n/messages.dart';
 import 'package:podavio/settings/settings_controller.dart';
 import 'package:podavio/ui/settings_page.dart';
@@ -50,6 +51,26 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+  test('new episodes from several podcasts share one notice', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final container = ProviderContainer(
+      overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
+    );
+    addTearDown(container.dispose);
+    final body = newEpisodesNotificationBody(
+      container.read(settingsProvider),
+      const [
+        NewEpisodeArrival(podcastId: 1, title: 'Un', count: 1),
+        NewEpisodeArrival(podcastId: 2, title: 'Deux', count: 3),
+      ],
+    );
+    expect(body.contains('Un'), isTrue);
+    expect(body.contains('Deux'), isTrue);
+    expect(body.contains('\n'), isTrue);
+    expect('\n'.allMatches(body), hasLength(1));
   });
 
   test('notification strings exist in every language', () {

@@ -483,7 +483,6 @@ Future<void> runEpisodeAction(
             if (!accepted || !context.mounted) return;
           }
           await ref.read(downloadProgressProvider.notifier).download(episode);
-          if (context.mounted) showMessage(context, 'Épisode téléchargé');
         } else {
           await ref
               .read(downloadProgressProvider.notifier)
@@ -498,6 +497,7 @@ Future<void> runEpisodeAction(
   } on DownloadCancelled {
     return;
   } catch (error) {
+    if (action == EpisodeMenuAction.download) return;
     if (context.mounted) showMessage(context, errorText(error));
   }
 }

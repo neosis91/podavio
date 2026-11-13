@@ -103,7 +103,7 @@ class OpmlImportNotifier extends Notifier<OpmlImportState> {
   }
 
   /// Un import réussi s’efface tout seul, comme l’ancien bandeau.
-  /// Les échecs restent jusqu’à fermeture, pour être lus dans la feuille.
+  /// Les échecs restent jusqu’à ce qu’on les fasse glisser hors de la page.
   void _scheduleDismiss() {
     _dismissTimer?.cancel();
     if (state.failures.isNotEmpty || state.isRunning) return;

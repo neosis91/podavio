@@ -6,7 +6,6 @@ ne réécrit plus cette page.
 """
 
 import argparse
-import json
 import re
 import sys
 from pathlib import Path
@@ -18,7 +17,6 @@ HEADING_RE = re.compile(
     r"^\[?([0-9]{4}\.[0-9]+\.[0-9]+)\]?(?:\s+-\s+[0-9]{4}-[0-9]{2}-[0-9]{2})?$"
 )
 BULLET_RE = re.compile(r"^[-*]\s+(\S.*)$")
-DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 
 
 def fail(message):
@@ -88,30 +86,6 @@ def notes_for(version):
     return notes
 
 
-def publish(version, date, site):
-    if not DATE_RE.fullmatch(date):
-        fail(f"Date invalide : {date}")
-    notes = notes_for(version)
-    site = Path(site)
-    latest = {
-        "version": version,
-        "date": date,
-        "notes": notes,
-        "files": {
-            "android-arm64-v8a": f"releases/{version}/podavio-{version}-android-arm64-v8a.apk",
-            "android-armeabi-v7a": f"releases/{version}/podavio-{version}-android-armeabi-v7a.apk",
-            "android-x86_64": f"releases/{version}/podavio-{version}-android-x86_64.apk",
-            "android-universal": f"releases/{version}/podavio-{version}-android-universal.apk",
-            "linux-x64": f"releases/{version}/podavio-{version}-linux-x64.tar.gz",
-            "linux-amd64": f"releases/{version}/podavio-{version}-linux-amd64.deb",
-        },
-    }
-    (site / "latest.json").write_text(
-        json.dumps(latest, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
-
 def main():
     parser = argparse.ArgumentParser(description="Journal des versions Podavio.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -119,22 +93,14 @@ def main():
     check = sub.add_parser("check")
     check.add_argument("version")
 
-    gitlab = sub.add_parser("gitlab")
-    gitlab.add_argument("version")
-
-    published = sub.add_parser("publish")
-    published.add_argument("--version", required=True)
-    published.add_argument("--date", required=True)
-    published.add_argument("--site", required=True)
+    notes = sub.add_parser("notes")
+    notes.add_argument("version")
 
     args = parser.parse_args()
     if args.command == "check":
         notes_for(args.version)
         return
-    if args.command == "gitlab":
-        print("\n".join(f"- {note}" for note in notes_for(args.version)))
-        return
-    publish(args.version, args.date, args.site)
+    print("\n".join(f"- {note}" for note in notes_for(args.version)))
 
 
 if __name__ == "__main__":
