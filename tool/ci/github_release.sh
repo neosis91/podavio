@@ -135,6 +135,8 @@ EOF
     ;;
 
   build-android)
+    # Compile le pont montre dans l’APK téléphone, et le module :wear.
+    export ORG_GRADLE_PROJECT_podavioWear=true
     [ -n "${VERSION}" ] || fail "PODAVIO_RELEASE_VERSION manquant."
     [ -f android/key.properties ] || fail "android/key.properties manquant."
     [ -f android/upload-keystore.jks ] || fail "android/upload-keystore.jks manquant."
@@ -152,6 +154,9 @@ EOF
       "dist/android/podavio-${VERSION}-android-arm64-v8a.apk"
     cp build/app/outputs/flutter-apk/app-x86_64-release.apk \
       "dist/android/podavio-${VERSION}-android-x86_64.apk"
+    ( cd android && ./gradlew :wear:assembleRelease )
+    cp build/wear/outputs/apk/release/wear-release.apk \
+      "dist/android/podavio-${VERSION}-android-wear.apk"
     PODAVIO_STORE_PASS="$(sed -n 's/^storePassword=//p' android/key.properties | head -1)"
     export PODAVIO_STORE_PASS
     expected="$(
@@ -235,7 +240,7 @@ EOF
         tag -a "${VERSION}" -m "Podavio ${VERSION}"
     fi
     git push origin "refs/tags/${VERSION}"
-    notes="$(python3 tool/changelog.py gitlab "${VERSION}")"
+    notes="$(python3 tool/changelog.py notes "${VERSION}")"
     if gh release view "${VERSION}" >/dev/null 2>&1; then
       echo "Release GitHub ${VERSION} déjà présente."
     else

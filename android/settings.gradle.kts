@@ -25,3 +25,11 @@ plugins {
 }
 
 include(":app")
+include(":wear-protocol")
+
+// Télécommande Wear OS. Absent du build F-Droid : pas de SDK Wear, pas de
+// Play Services. La release GitHub pose ORG_GRADLE_PROJECT_podavioWear=true.
+val podavioWear = providers.gradleProperty("podavioWear").orNull == "true"
+if (podavioWear) {
+    include(":wear")
+}

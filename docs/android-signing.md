@@ -20,7 +20,7 @@ tool/ci/create_android_keystore.sh
 
 et l’empreinte SHA-256.
 
-`tool/release_local.sh` refuse de publier si `key.properties` ou le keystore manque. L’action GitHub lit les mêmes secrets.
+L’action GitHub lit ces fichiers sous forme de secrets. Sans eux, les APK de la release ne sont pas signés.
 
 **Sauvegarde hors Git** le `.jks` et les mots de passe (coffre / gestionnaire).
 Si tu perds le keystore, tu ne pourras plus mettre à jour l’app installée avec
@@ -29,8 +29,6 @@ la même identité de signature (désinstall / réinstall obligatoire).
 ## Release
 
 La fusion de `develop` dans `main` compile Android, Windows et Linux, puis les joint à la release GitHub. Le titre `## AAAA.M.N` doit déjà être dans `CHANGELOG.md`.
-
-`tool/release_local.sh` reste un secours sur une machine qui a le keystore.
 
 ## Migration depuis les APK debug
 

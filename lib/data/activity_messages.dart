@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Message qui s’affichait en bandeau. Il vit dans la feuille de notifications.
+/// Message qui s’affichait en bandeau. Il vit dans la page des notifications.
 class ActivityMessage {
   const ActivityMessage({required this.id, required this.text});
 

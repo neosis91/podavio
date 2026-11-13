@@ -146,7 +146,7 @@ Future<AppRelease?> _readRelease(http.Client client, Uri url) async {
 Future<AppRelease?> fetchLatestRelease() async {
   final client = http.Client();
   try {
-    return _readRelease(client, Uri.parse(githubLatestReleaseUrl));
+    return await _readRelease(client, Uri.parse(githubLatestReleaseUrl));
   } catch (_) {
     return null;
   } finally {

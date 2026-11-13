@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:podavio/data/activity_messages.dart';
 import 'package:podavio/data/app_database.dart';
 import 'package:podavio/data/download_controller.dart';
 import 'package:podavio/data/download_notifications.dart';
@@ -12,25 +13,43 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('progress body names the podcast and the percent', () {
+  test('a batch is one notice, whether it holds one episode or several', () {
     expect(
-      downloadProgressBody(
-        const DownloadNotice(episodeId: 1, title: 'Épisode', podcast: 'Essai'),
-      ),
-      'Essai',
-    );
-    expect(
-      downloadProgressBody(
-        const DownloadNotice(
-          episodeId: 1,
-          title: 'Épisode',
-          podcast: 'Essai',
-          progress: 0.42,
-        ),
+      downloadBatchProgressBody(
+        const DownloadBatch(remaining: 1, progress: 0.42, podcast: 'Essai'),
       ),
       'Essai · 42 %',
     );
-    expect(downloadFinishedBody('Essai'), 'Téléchargé · Essai');
+    expect(
+      downloadBatchProgressTitle(
+        const DownloadBatch(remaining: 4, progress: 0.2),
+      ),
+      'Téléchargements',
+    );
+    expect(
+      downloadBatchProgressBody(
+        const DownloadBatch(remaining: 4, progress: 0.2, failed: 1),
+      ),
+      '4 épisodes · 20 % · 1 échec',
+    );
+    expect(
+      downloadBatchOutcomeBody(
+        const DownloadBatch(
+          remaining: 0,
+          progress: 1,
+          title: 'Premier',
+          podcast: 'Essai',
+          succeeded: 1,
+        ),
+      ),
+      'Premier · Téléchargé · Essai',
+    );
+    expect(
+      downloadBatchOutcomeBody(
+        const DownloadBatch(remaining: 0, progress: 1, succeeded: 3, failed: 2),
+      ),
+      '3 téléchargés, 2 échecs',
+    );
     expect(
       downloadErrorText(Exception('Téléchargement refusé')),
       'Téléchargement refusé',
@@ -50,12 +69,17 @@ void main() {
     await harness.notifier.download(harness.episode);
 
     expect(harness.notifications.events, [
-      'progress:',
-      'progress:0.42',
-      'progress:1.0',
-      'finished',
+      'progress:1:0.0',
+      'progress:1:0.0',
+      'progress:1:0.42',
+      'progress:1:1.0',
+      'finished:1:0',
     ]);
     expect(harness.container.read(downloadProgressProvider), isEmpty);
+    expect(
+      harness.container.read(activityMessagesProvider).single.text,
+      'Premier · Téléchargé · Essai',
+    );
   });
 
   test('a failed download notifies the error', () async {
@@ -72,9 +96,14 @@ void main() {
     );
 
     expect(harness.notifications.events, [
-      'progress:',
-      'failed:Téléchargement impossible (500).',
+      'progress:1:0.0',
+      'progress:1:0.0',
+      'finished:0:1',
     ]);
+    expect(
+      harness.container.read(activityMessagesProvider).single.text,
+      contains('Téléchargement impossible (500).'),
+    );
   });
 
   test('a cancelled download removes the notification', () async {
@@ -90,17 +119,50 @@ void main() {
       throwsA(isA<DownloadCancelled>()),
     );
 
-    expect(harness.notifications.events, ['progress:', 'dismiss']);
+    expect(harness.notifications.events, [
+      'progress:1:0.0',
+      'progress:1:0.0',
+      'dismiss',
+    ]);
+    expect(harness.container.read(activityMessagesProvider), isEmpty);
+  });
+
+  test('a group of downloads ends in a single notice', () async {
+    final harness = await _Harness.open(
+      episodeCount: 2,
+      onDownload: (onProgress) async {
+        onProgress?.call(1);
+      },
+    );
+    addTearDown(harness.close);
+
+    await Future.wait([
+      for (final episode in harness.episodes)
+        harness.notifier.download(episode),
+    ]);
+
+    expect(
+      harness.notifications.events.where(
+        (event) => event.startsWith('finished'),
+      ),
+      ['finished:2:0'],
+    );
+    expect(
+      harness.container.read(activityMessagesProvider).single.text,
+      '2 épisodes téléchargés',
+    );
   });
 }
 
 class _Harness {
-  _Harness(this.container, this.database, this.notifications, this.episode);
+  _Harness(this.container, this.database, this.notifications, this.episodes);
 
   final ProviderContainer container;
   final AppDatabase database;
   final _RecordingNotifications notifications;
-  final Episode episode;
+  final List<Episode> episodes;
+
+  Episode get episode => episodes.first;
 
   DownloadProgressNotifier get notifier =>
       container.read(downloadProgressProvider.notifier);
@@ -108,6 +170,7 @@ class _Harness {
   static Future<_Harness> open({
     required Future<void> Function(void Function(double progress)? onProgress)
     onDownload,
+    int episodeCount = 1,
   }) async {
     SharedPreferences.setMockInitialValues({
       'enqueueDownloads': false,
@@ -117,24 +180,27 @@ class _Harness {
     final preferences = await SharedPreferences.getInstance();
     final database = AppDatabase(NativeDatabase.memory());
     final podcastId = (await database.saveFeed(
-      const FeedDraft(
+      FeedDraft(
         feedUrl: 'https://example.com/feed.xml',
         title: 'Essai',
         author: 'Auteur',
         description: 'Description',
         episodes: [
-          EpisodeDraft(
-            guid: 'ep-1',
-            title: 'Premier',
-            description: 'Notes',
-            audioUrl: 'https://example.com/1.mp3',
-          ),
+          for (var index = 0; index < episodeCount; index++)
+            EpisodeDraft(
+              guid: 'ep-$index',
+              title: index == 0 ? 'Premier' : 'Épisode $index',
+              description: 'Notes',
+              audioUrl: 'https://example.com/$index.mp3',
+            ),
         ],
       ),
     )).podcastId;
-    final episode = (await database.watchEpisodes(podcastId: podcastId).first)
-        .single
-        .episode;
+    final stored = [
+      for (final entry
+          in await database.watchEpisodes(podcastId: podcastId).first)
+        entry.episode,
+    ];
     final notifications = _RecordingNotifications();
     final container = ProviderContainer(
       overrides: [
@@ -149,7 +215,7 @@ class _Harness {
         ),
       ],
     );
-    return _Harness(container, database, notifications, episode);
+    return _Harness(container, database, notifications, stored);
   }
 
   Future<void> close() async {
@@ -178,23 +244,17 @@ class _RecordingNotifications implements DownloadNotifications {
   final events = <String>[];
 
   @override
-  Future<void> showProgress(DownloadNotice notice) async {
-    final progress = notice.progress;
-    events.add(progress == null ? 'progress:' : 'progress:$progress');
+  Future<void> showProgress(DownloadBatch batch) async {
+    events.add('progress:${batch.remaining}:${batch.progress}');
   }
 
   @override
-  Future<void> showFinished(DownloadNotice notice) async {
-    events.add('finished');
+  Future<void> showFinished(DownloadBatch batch) async {
+    events.add('finished:${batch.succeeded}:${batch.failed}');
   }
 
   @override
-  Future<void> showFailed(DownloadNotice notice, String message) async {
-    events.add('failed:$message');
-  }
-
-  @override
-  Future<void> dismiss(int episodeId) async {
+  Future<void> dismiss() async {
     events.add('dismiss');
   }
 }

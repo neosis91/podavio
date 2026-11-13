@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:podavio/data/app_database.dart';
 import 'package:podavio/data/models.dart';
 import 'package:podavio/data/providers.dart';
-import 'package:podavio/settings/settings_controller.dart';
 import 'package:podavio/ui/widgets/episode_list.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

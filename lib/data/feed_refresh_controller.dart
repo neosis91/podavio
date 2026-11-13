@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../settings/settings_controller.dart';
 import 'activity_gate.dart';
+import 'activity_messages.dart';
 import 'app_database.dart';
 import 'download_controller.dart';
 import 'models.dart';
@@ -185,6 +186,7 @@ class FeedRefreshNotifier extends Notifier<FeedRefreshState> {
       ref.read(statusNotificationsProvider),
       ref.read(settingsProvider),
       report.arrivals,
+      ref.read(activityMessagesProvider.notifier),
     );
   }
 
