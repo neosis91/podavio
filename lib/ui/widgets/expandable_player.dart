@@ -9,6 +9,7 @@ import '../../player/player_controller.dart';
 import '../../player/player_sheet_controller.dart';
 import '../../settings/settings_controller.dart';
 import '../player_page.dart';
+import 'app_bottom_sheet.dart';
 import 'brand.dart';
 import 'cover.dart';
 import 'marquee_text.dart';
@@ -161,6 +162,11 @@ class _ExpandablePlayerState extends ConsumerState<ExpandablePlayer>
                 height: height,
                 child: BackButtonListener(
                   onBackButtonPressed: () async {
+                    final navigator = Navigator.of(
+                      context,
+                      rootNavigator: true,
+                    );
+                    if (popForegroundPopup(navigator)) return true;
                     if (_controller.value <= 0.05) return false;
                     if (closePlayerPlaylistIfOpen(ref)) return true;
                     ref.read(playerSheetProvider.notifier).collapse();

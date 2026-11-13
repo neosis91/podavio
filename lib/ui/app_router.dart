@@ -39,6 +39,7 @@ import 'sync_page.dart';
 import 'web_companion_page.dart';
 import 'activity_notices.dart';
 import 'welcome_page.dart';
+import 'widgets/app_bottom_sheet.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -53,6 +54,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   });
   return GoRouter(
     navigatorKey: rootNavigatorKey,
+    observers: [sheetBackObserver],
     initialLocation: AppRoutes.home,
     refreshListenable: refresh,
     redirect: (context, state) {
