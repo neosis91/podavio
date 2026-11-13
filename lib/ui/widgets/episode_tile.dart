@@ -188,10 +188,7 @@ class EpisodeListSubtitle extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    final meta = [
-      if (dateLabel.isNotEmpty) dateLabel,
-      if (duration != null) duration,
-    ].join(' · ');
+    final meta = [if (dateLabel.isNotEmpty) dateLabel, ?duration].join(' · ');
     final metaLabel = showPodcast && meta.isNotEmpty ? ' · $meta' : meta;
     return Row(
       children: [
