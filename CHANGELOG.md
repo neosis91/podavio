@@ -4,6 +4,13 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 La publication GitHub refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.11.7
+
+- Notifications open on their own page. Each notice is a card, with the list centered. A running download or refresh shows its progress on the card. A finished notice is dismissed by swiping it away. There is no close button. When the last notice goes away, the page goes back. Opening the page while it is already empty leaves it open and says there are no notifications.
+- A group of downloads is one notice, in the system tray and on that page. One refresh that finds new episodes on several podcasts is one notice too, with one line per podcast and at most twelve lines. A sync failure is one notice, and the same text is on the page. The system tray still follows the notification switches. The page records a finished download batch even when those switches are off. Cancelling a batch leaves no result.
+- Back closes the frontmost bottom sheet before leaving the page. A second sheet closes only the top one. A dialog sitting on a sheet closes first, and the sheet stays.
+- A Wear OS watch can remote-control the phone. The watch shows the episode title and the podcast, play and pause, skip back, and skip forward, then Playlist, Unread, and Downloads. Choosing a row plays that episode on the phone. While audio plays, the watch face keeps an ongoing activity. The sound, the files, and the library stay on the phone. The GitHub release adds a separate watch package. A phone build without that option, including F-Droid, does not include the watch connection.
+
 ## 2026.11.6
 
 - In the big player, cast, playback speed, and the sleep timer sit in the top bar, to the left of the menu. Speed and the sleep timer are no longer in the episode menu. Cast uses a cast icon, the timer a moon, and audio effects a sliders icon.
