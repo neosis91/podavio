@@ -16,6 +16,8 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
+    // Le module montre et son contrat ne lisent pas la config Flutter.
+    if (name == "wear" || name == "wear-protocol") return@subprojects
     project.evaluationDependsOn(":app")
 }
 

@@ -162,3 +162,23 @@ if (published != null && flutter.versionCode == 1) {
         }
     }
 }
+
+// Pont montre. play-services-wearable n’entre pas dans le build F-Droid.
+// Activé par -PpodavioWear=true (ORG_GRADLE_PROJECT_podavioWear dans la
+// release GitHub). Pas de wearApp() : l’APK montre reste un artefact à part.
+val podavioWear = providers.gradleProperty("podavioWear").orNull == "true"
+if (podavioWear) {
+    android.sourceSets.named("main").configure {
+        kotlin.srcDir("src/wear/kotlin")
+        res.srcDir("src/wear/res")
+    }
+    dependencies {
+        implementation(project(":wear-protocol"))
+        implementation("com.google.android.gms:play-services-wearable:19.0.0")
+    }
+    androidComponents {
+        onVariants(selector().all()) { variant ->
+            variant.sources.manifests.addStaticManifestFile("src/wear/AndroidManifest.xml")
+        }
+    }
+}
