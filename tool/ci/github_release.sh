@@ -251,6 +251,7 @@ EOF
         "dist/android/podavio-${VERSION}-android-armeabi-v7a.apk#APK armeabi-v7a" \
         "dist/android/podavio-${VERSION}-android-arm64-v8a.apk#APK arm64-v8a" \
         "dist/android/podavio-${VERSION}-android-x86_64.apk#APK x86_64" \
+        "dist/android/podavio-${VERSION}-android-wear.apk#APK Wear OS" \
         "dist/linux/podavio-${VERSION}-linux-x64.tar.gz#Linux x64 (.tar.gz)" \
         "dist/linux/podavio-${VERSION}-linux-amd64.deb#Linux amd64 (.deb)" \
         "dist/windows/podavio-${VERSION}-windows-x64.msi#Windows x64 (.msi)" \

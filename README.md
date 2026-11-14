@@ -61,7 +61,7 @@ A build compiled without the Sentry address sends nothing. That is the case for 
 
 The [latest release](https://github.com/neosis91/podavio/releases/latest) contains:
 
-- Android: `podavio-*-android-arm64-v8a.apk` for most phones. `universal` when the architecture is unknown. `armeabi-v7a` and `x86_64` are provided as well. Android 8 is the minimum.
+- Android: `podavio-*-android-arm64-v8a.apk` for most phones. `universal` when the architecture is unknown. `armeabi-v7a` and `x86_64` are provided as well. Android 8 is the minimum. `podavio-*-android-wear.apk` is the Wear OS remote. It is installed on the watch, not on the phone.
 - Windows: `podavio-*-windows-x64.msi`. Opening it installs Podavio for the current user and adds a Start menu shortcut. `podavio-*-windows-x64.zip` extracts and runs with `podavio.exe`, without a shortcut.
 - Linux: `podavio-*-linux-amd64.deb` for Debian, Ubuntu, and derivatives. `sudo apt install ./podavio-*-linux-amd64.deb`. The `podavio-*-linux-x64.tar.gz` archive remains for a manual extract. The system provides GTK 3, libsecret, libcurl, and libmpv. On EndeavourOS and Arch Linux, the AUR package `podavio-bin` is installed with `yay -S podavio-bin`.
 
