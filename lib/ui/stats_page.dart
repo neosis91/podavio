@@ -8,6 +8,7 @@ import '../l10n/l10n.dart';
 import '../data/models.dart';
 import '../data/providers.dart';
 import 'router.dart';
+import 'stats_activity_tab.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/frosted_header.dart';
@@ -19,12 +20,15 @@ class StatsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(libraryStatsProvider);
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: FrostedScaffold(
         appBar: FrostedAppBar(
           title: Text(context.tr('Statistics')),
           bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
+              Tab(text: 'Activité'),
               Tab(text: 'Abonnements'),
               Tab(text: 'Années'),
               Tab(text: 'Téléchargements'),
@@ -39,6 +43,7 @@ class StatsPage extends ConsumerWidget {
           ),
           data: (value) => TabBarView(
             children: [
+              ActivityTab(activity: value.activity),
               _SubscriptionsTab(stats: value),
               _YearsTab(stats: value),
               _DownloadsTab(stats: value),
@@ -438,11 +443,11 @@ class _DownloadsTab extends StatelessWidget {
         final ratio = (item.downloadBytes / maxBytes).clamp(0.0, 1.0);
         return ListTile(
           leading: PodcastCover(
-        url: item.imageUrl,
-        label: item.title,
-        size: 48,
-        radius: 8,
-      ),
+            url: item.imageUrl,
+            label: item.title,
+            size: 48,
+            radius: 8,
+          ),
           title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

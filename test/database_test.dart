@@ -133,6 +133,33 @@ void main() {
     );
   });
 
+  test('episode windows keep the cache path', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final podcastId = (await database.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: '',
+        episodes: [
+          EpisodeDraft(
+            guid: 'ep-1',
+            title: 'Un',
+            description: '',
+            audioUrl: 'https://example.com/1.mp3',
+          ),
+        ],
+      ),
+    )).podcastId;
+    final created = await database.watchEpisodes(podcastId: podcastId).first;
+    await database.setCachePath(created.single.episode.id, '/tmp/stream.mp3');
+
+    final page = await database.watchEpisodeWindow(podcastId: podcastId).first;
+    expect(page.single.episode.cachePath, '/tmp/stream.mp3');
+  });
+
   test('oldest first starts a podcast at its first episode', () async {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);

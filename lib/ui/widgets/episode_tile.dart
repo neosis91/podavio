@@ -142,7 +142,7 @@ class EpisodeTile extends ConsumerWidget {
   }
 }
 
-/// Podcast, date de sortie, durée, et logos téléchargé / favori / playlist.
+/// Podcast, date de sortie, durée, et logos téléchargé / cache / favori / playlist.
 class EpisodeListSubtitle extends ConsumerWidget {
   const EpisodeListSubtitle({
     super.key,
@@ -179,10 +179,12 @@ class EpisodeListSubtitle extends ConsumerWidget {
         false;
     final inPlaylist = episode.queueIndex != null || inCustomPlaylist;
     final downloaded = episode.downloadPath != null;
+    final cached = episode.cachePath?.trim().isNotEmpty ?? false;
     if (!showPodcast &&
         dateLabel.isEmpty &&
         duration == null &&
         !downloaded &&
+        !cached &&
         !episode.favorite &&
         !inPlaylist) {
       return const SizedBox.shrink();
@@ -219,6 +221,10 @@ class EpisodeListSubtitle extends ConsumerWidget {
             color: downloadActiveColor,
           ),
         ],
+        if (cached) ...[
+          const SizedBox(width: 6),
+          Icon(Icons.folder, size: 16, color: cacheActiveColor),
+        ],
         if (episode.favorite) ...[
           const SizedBox(width: 6),
           Icon(Icons.favorite, size: 16, color: favoriteHeartColor),
@@ -226,7 +232,7 @@ class EpisodeListSubtitle extends ConsumerWidget {
         if (inPlaylist) ...[
           const SizedBox(width: 6),
           IconTheme(
-            data: IconThemeData(color: scheme.onSurface, size: 16),
+            data: const IconThemeData(color: playlistActiveColor, size: 16),
             child: const PlaylistPlayIcon(size: 16),
           ),
         ],

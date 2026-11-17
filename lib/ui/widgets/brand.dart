@@ -7,6 +7,12 @@ const favoriteHeartColor = Color(0xffD10000);
 /// Épisode déjà téléchargé, ou téléchargement automatique actif.
 const downloadActiveColor = Color(0xff4CAF50);
 
+/// Épisode gardé dans le cache, le même orange que la carte Bibliothèque.
+const cacheActiveColor = Color(0xffff9800);
+
+/// Épisode présent dans une playlist, le même bleu que la carte Bibliothèque.
+const playlistActiveColor = Color(0xff1565C0);
+
 /// Jaune de l’étoile d’un podcast préféré.
 const preferredStarColor = Color(0xFFFFC107);
 
