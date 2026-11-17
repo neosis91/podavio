@@ -9,6 +9,7 @@ import 'providers.dart';
 
 const githubLatestReleaseUrl =
     'https://api.github.com/repos/neosis91/podavio/releases/latest';
+const githubProjectUrl = 'https://github.com/neosis91/podavio';
 const downloadPageUrl = 'https://podavio.com/download';
 
 const _githubAssetSuffixes = {

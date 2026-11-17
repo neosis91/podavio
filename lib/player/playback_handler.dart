@@ -60,10 +60,7 @@ class PlaybackHandler {
   Future<void> prepare() async {
     if (!kIsWeb && Platform.isWindows) {
       try {
-        await _session.setWindowsAppUserModelId(
-          'fr.podavio.podavio',
-          displayName: 'Podavio',
-        );
+        await _session.setAppId('fr.podavio.podavio', displayName: 'Podavio');
       } catch (error, stack) {
         debugPrint('Identifiant Windows indisponible: $error\n$stack');
       }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'chapters_parser.dart';
+import 'listening_activity.dart';
 
 class FeedDraft {
   const FeedDraft({
@@ -379,6 +380,7 @@ class LibraryStats {
     required this.totalDownloadCount,
     required this.podcastCount,
     required this.episodeCount,
+    required this.activity,
   });
 
   final List<SubscriptionStat> subscriptions;
@@ -389,4 +391,5 @@ class LibraryStats {
   final int totalDownloadCount;
   final int podcastCount;
   final int episodeCount;
+  final ListeningActivity activity;
 }

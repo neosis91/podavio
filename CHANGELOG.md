@@ -4,6 +4,13 @@ Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
 La publication GitHub refuse de publier si ce titre manque.
 La section `## Non publié` sert de brouillon : elle n’est pas publiée.
 
+## 2026.11.8
+
+- Library statistics open on Activity. A card shows the total listening time and, when tapped, the months that have listening. With no daily streak, a banner invites a first listen. Daily and weekly streaks follow. This week is a dot per day, Monday through Sunday. This year is a bar per month. Each card names its busiest and quietest days or months. A heatmap fills the current half of the year. Below it, the six most listened categories and the most and least popular weekdays. An episode counts on the day it was last played, and only the first category of its podcast is counted.
+- The six library cards use the application background, including pure black. Playlist is blue. Cache stays orange.
+- On episode lists, a cached episode shows an orange folder. An episode in a playlist shows the playlist icon in that same blue.
+- In Settings, under Miscellaneous, a GitHub row reads Contribute to the project and opens the project page.
+
 ## 2026.11.7
 
 - Notifications open on their own page. Each notice is a card, with the list centered. A running download or refresh shows its progress on the card. A finished notice is dismissed by swiping it away. There is no close button. When the last notice goes away, the page goes back. Opening the page while it is already empty leaves it open and says there are no notifications.

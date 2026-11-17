@@ -52,7 +52,10 @@ dependencies:
   path_provider: ^2.1.6
   path: ^1.9.1
   intl: ^0.20.3
-  file_picker: ^13.1.0
+  # Au-delà, la résolution prend android_file_picker 2.1.6 ou 2.2.0.
+  # 2.2.0 ne compile pas ici : LostDataStore reste invisible pour Kotlin
+  # (AGP 9, builtInKotlin=false). 2.1.6 embarque déjà ces sources.
+  file_picker: ">=13.1.0 <13.3.3"
   share_plus: ^13.3.0
   xml: ^6.6.1
   http: ^1.6.0
@@ -99,8 +102,11 @@ dev_dependencies:
   sentry_dart_plugin: ^3.4.0
 
 # `cast` (via bonsoir) demande encore dbus 0.7, wakelock_plus demande 0.8.
+# android_file_picker 2.1.6 et 2.2.0 ne compilent pas : LostDataStore
+# reste invisible pour Kotlin (AGP 9, builtInKotlin=false).
 dependency_overrides:
   dbus: ^0.8.0
+  android_file_picker: 2.1.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
