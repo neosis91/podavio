@@ -280,6 +280,7 @@ mixin _StatsQueries on _$AppDatabase, _PodcastQueries {
       readsFrom: {episodes},
     ).getSingle()).read<int>('c');
 
+    final activity = buildListeningActivity(samples, now: DateTime.now());
     return LibraryStats(
       subscriptions: subscriptions,
       years: yearStats,
@@ -289,7 +290,7 @@ mixin _StatsQueries on _$AppDatabase, _PodcastQueries {
       totalDownloadCount: totalDownloadCount,
       podcastCount: podcastList.length,
       episodeCount: episodeCount,
-      activity: buildListeningActivity(samples, now: DateTime.now()),
+      activity: activity,
     );
   }
 

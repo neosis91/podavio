@@ -555,6 +555,7 @@ mixin _EpisodeQueries on _$AppDatabase {
         EpisodesCompanion(
           played: Value(played),
           positionMs: played ? const Value(0) : const Value.absent(),
+          lastPlayedAt: played ? Value(DateTime.now()) : const Value.absent(),
         ),
       );
       if (played) {
@@ -583,7 +584,11 @@ mixin _EpisodeQueries on _$AppDatabase {
       await (update(
         episodes,
       )..where((table) => table.played.equals(false))).write(
-        const EpisodesCompanion(played: Value(true), positionMs: Value(0)),
+        EpisodesCompanion(
+          played: const Value(true),
+          positionMs: const Value(0),
+          lastPlayedAt: Value(DateTime.now()),
+        ),
       );
       await delete(playbackPositions).go();
     });
