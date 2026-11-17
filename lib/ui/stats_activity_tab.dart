@@ -631,6 +631,7 @@ class _Heatmap extends StatelessWidget {
                       : _heatColor(scheme, level),
                   borderRadius: BorderRadius.circular(2),
                 ),
+                child: const SizedBox.expand(),
               ),
             ),
           );
@@ -686,6 +687,7 @@ class _Heatmap extends StatelessWidget {
                       for (final week in weeks)
                         Expanded(
                           child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               for (final day in week.days) square(day),
                             ],

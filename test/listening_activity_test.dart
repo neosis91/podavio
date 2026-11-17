@@ -114,6 +114,15 @@ void main() {
       find.text('Catégories les plus populaires'),
       200,
     );
+    final heatCell = find.byWidgetPredicate(
+      (widget) =>
+          widget is SizedBox &&
+          widget.width == double.infinity &&
+          widget.height == double.infinity,
+    );
+    expect(heatCell, findsWidgets);
+    expect(tester.getSize(heatCell.first).width, greaterThan(4));
+    expect(tester.getSize(heatCell.first).height, greaterThan(4));
     expect(find.textContaining('juil.-déc.'), findsOneWidget);
     expect(find.text('Comédie'), findsOneWidget);
     expect(find.text('Mardi'), findsOneWidget);
