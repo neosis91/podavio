@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   dynamic_color
+  flutter_media_session
   flutter_secure_storage_linux
   media_kit_libs_linux
   sentry_flutter

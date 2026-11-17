@@ -54,12 +54,12 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       ),
       _LibraryTileData(
         path: AppRoutes.cache,
-        color: Color(0xffff9800),
+        color: cacheActiveColor,
         icon: Icons.folder,
       ),
       _LibraryTileData(
         path: AppRoutes.playlists,
-        color: Color(0xffFFEB3B),
+        color: playlistActiveColor,
         icon: Icons.playlist_play,
       ),
       _LibraryTileData(
@@ -213,13 +213,12 @@ class _LibraryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(8),
       side: BorderSide(color: data.color, width: 1.5),
     );
     return Material(
-      color: dark ? Colors.black : Colors.white,
+      color: Theme.of(context).scaffoldBackgroundColor,
       elevation: 1,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.black,

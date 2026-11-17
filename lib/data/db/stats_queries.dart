@@ -2,7 +2,9 @@ part of '../app_database.dart';
 
 mixin _StatsQueries on _$AppDatabase, _PodcastQueries {
   /// Signal léger pour invalider `podcastStatsProvider` sans charger toute la liste.
-  Stream<(int, int, int, int, int, int)> watchPodcastStatsSignal(int podcastId) {
+  Stream<(int, int, int, int, int, int)> watchPodcastStatsSignal(
+    int podcastId,
+  ) {
     return customSelect(
       'SELECT COUNT(*) AS c, '
       'COALESCE(SUM(position_ms), 0) AS s, '
@@ -145,23 +147,27 @@ mixin _StatsQueries on _$AppDatabase, _PodcastQueries {
     };
 
     // Historique année/mois : colonnes utiles, abonnements seulement.
-    final historyQuery = selectOnly(episodes).join([
-      innerJoin(
-        podcasts,
-        podcasts.id.equalsExp(episodes.podcastId),
-        useColumns: false,
-      ),
-    ])
-      ..addColumns([
-        episodes.played,
-        episodes.positionMs,
-        episodes.durationSeconds,
-        episodes.lastPlayedAt,
-      ])
-      ..where(
-        episodes.lastPlayedAt.isNotNull() & podcasts.subscribed.equals(true),
-      );
+    final historyQuery =
+        selectOnly(episodes).join([
+            innerJoin(
+              podcasts,
+              podcasts.id.equalsExp(episodes.podcastId),
+              useColumns: false,
+            ),
+          ])
+          ..addColumns([
+            episodes.played,
+            episodes.positionMs,
+            episodes.durationSeconds,
+            episodes.lastPlayedAt,
+            podcasts.categoriesJson,
+          ])
+          ..where(
+            episodes.lastPlayedAt.isNotNull() &
+                podcasts.subscribed.equals(true),
+          );
     final years = <int, _YearBucket>{};
+    final samples = <ListenSample>[];
     for (final row in await historyQuery.get()) {
       final played = row.read(episodes.played)!;
       final positionMs = row.read(episodes.positionMs)!;
@@ -184,6 +190,15 @@ mixin _StatsQueries on _$AppDatabase, _PodcastQueries {
       monthBucket.listenedSeconds += listenedSeconds;
       monthBucket.startedCount++;
       if (played) monthBucket.completedCount++;
+      samples.add(
+        ListenSample(
+          at: playedAt,
+          seconds: listenedSeconds,
+          categories:
+              decodePodcastCategories(row.read(podcasts.categoriesJson)) ??
+              const [],
+        ),
+      );
     }
 
     final subscriptions = <SubscriptionStat>[];
@@ -239,38 +254,31 @@ mixin _StatsQueries on _$AppDatabase, _PodcastQueries {
       (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
     );
 
-    final yearStats =
-        years.entries
-            .map((entry) {
-              final months = [
-                for (var month = 1; month <= 12; month++)
-                  MonthStat(
-                    year: entry.key,
-                    month: month,
-                    listenedSeconds:
-                        entry.value.months[month]?.listenedSeconds ?? 0,
-                    startedCount: entry.value.months[month]?.startedCount ?? 0,
-                    completedCount:
-                        entry.value.months[month]?.completedCount ?? 0,
-                  ),
-              ];
-              return YearStat(
-                year: entry.key,
-                listenedSeconds: entry.value.listenedSeconds,
-                startedCount: entry.value.startedCount,
-                completedCount: entry.value.completedCount,
-                months: months,
-              );
-            })
-            .toList()
-          ..sort((a, b) => b.year.compareTo(a.year));
+    final yearStats = years.entries.map((entry) {
+      final months = [
+        for (var month = 1; month <= 12; month++)
+          MonthStat(
+            year: entry.key,
+            month: month,
+            listenedSeconds: entry.value.months[month]?.listenedSeconds ?? 0,
+            startedCount: entry.value.months[month]?.startedCount ?? 0,
+            completedCount: entry.value.months[month]?.completedCount ?? 0,
+          ),
+      ];
+      return YearStat(
+        year: entry.key,
+        listenedSeconds: entry.value.listenedSeconds,
+        startedCount: entry.value.startedCount,
+        completedCount: entry.value.completedCount,
+        months: months,
+      );
+    }).toList()..sort((a, b) => b.year.compareTo(a.year));
 
     // Total global (y compris aperçus non abonnés), comme avant.
-    final episodeCount =
-        (await customSelect(
-              'SELECT COUNT(*) AS c FROM episodes',
-              readsFrom: {episodes},
-            ).getSingle()).read<int>('c');
+    final episodeCount = (await customSelect(
+      'SELECT COUNT(*) AS c FROM episodes',
+      readsFrom: {episodes},
+    ).getSingle()).read<int>('c');
 
     return LibraryStats(
       subscriptions: subscriptions,
@@ -281,6 +289,7 @@ mixin _StatsQueries on _$AppDatabase, _PodcastQueries {
       totalDownloadCount: totalDownloadCount,
       podcastCount: podcastList.length,
       episodeCount: episodeCount,
+      activity: buildListeningActivity(samples, now: DateTime.now()),
     );
   }
 
@@ -312,8 +321,8 @@ mixin _StatsQueries on _$AppDatabase, _PodcastQueries {
     if (positionMs > 0) return positionMs ~/ 1000;
     return 0;
   }
-
 }
+
 class _YearBucket {
   var listenedSeconds = 0;
   var startedCount = 0;
@@ -326,4 +335,3 @@ class _MonthBucket {
   var startedCount = 0;
   var completedCount = 0;
 }
-

@@ -454,6 +454,7 @@ final libraryStatsProvider = FutureProvider<LibraryStats>((ref) async {
     totalDownloadCount: stats.totalDownloadCount,
     podcastCount: stats.podcastCount,
     episodeCount: stats.episodeCount,
+    activity: stats.activity,
   );
 });
 

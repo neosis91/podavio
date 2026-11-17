@@ -5,6 +5,7 @@ import '../core/search.dart';
 import 'feed_text.dart';
 import '../sync/sync_hooks.dart';
 import 'download_policy.dart';
+import 'listening_activity.dart';
 import 'models.dart';
 
 part 'app_database.g.dart';
