@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:saf_util/saf_util.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/build_info.dart';
 import '../l10n/l10n.dart';
@@ -254,6 +255,16 @@ class _CheckUpdateTileState extends ConsumerState<_CheckUpdateTile> {
   }
 }
 
+Future<void> _openGithubProject(BuildContext context) async {
+  final opened = await launchUrl(
+    Uri.parse(githubProjectUrl),
+    mode: LaunchMode.externalApplication,
+  );
+  if (!opened && context.mounted) {
+    showMessage(context, 'Impossible d’ouvrir le lien');
+  }
+}
+
 String _checkedAtLabel(BuildContext context, DateTime? checkedAt) {
   if (checkedAt == null) return context.tr('Not checked yet');
   final local = checkedAt.toLocal();
@@ -364,6 +375,12 @@ class PreferencesPage extends ConsumerWidget {
               ),
               onTap: () => context.push(AppRoutes.nearbyShare),
             ),
+          ListTile(
+            leading: const LinkIcon(),
+            title: const Text('GitHub'),
+            subtitle: Text(context.tr('Contribute to the project')),
+            onTap: () => _openGithubProject(context),
+          ),
           ListTile(
             leading: const Icon(Icons.info_outline),
             title: Text(context.tr('About')),

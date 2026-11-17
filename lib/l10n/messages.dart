@@ -143,6 +143,7 @@ const _fr = <String, String>{
       'Reliez un service de synchronisation pour l’activer.',
   'Continue listening': 'Continuer d’écouter',
   'Continue without setup': 'Continuer sans configuration',
+  'Contribute to the project': 'Contribuez au projet',
   'Controls': 'Commandes',
   'Copy link': 'Copier le lien',
   'Could not download a shareable APK. Check your connection and try again.': 'Impossible de télécharger un APK partageable. Vérifiez la connexion et réessayez.',
