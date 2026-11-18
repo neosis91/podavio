@@ -548,17 +548,24 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await ref.read(sharedPreferencesProvider).setBool('pureBlack', enabled);
   }
 
-  /// Active le noir pur et l’y maintient. Le désactiver laisse le noir pur tel quel.
+  /// Active le thème sombre et le noir pur. Les couper rend le réglage d’avant.
   Future<void> setEcoMode(bool enabled) async {
     final preferences = ref.read(sharedPreferencesProvider);
     if (enabled) {
+      if (!state.ecoMode) {
+        await preferences.setBool('pureBlackBeforeEco', state.pureBlack);
+      }
       state = state.copyWith(ecoMode: true, pureBlack: true);
       await preferences.setBool('ecoMode', true);
       await preferences.setBool('pureBlack', true);
       return;
     }
-    state = state.copyWith(ecoMode: false);
+    final previous = preferences.getBool('pureBlackBeforeEco');
+    final pureBlack = previous ?? state.pureBlack;
+    state = state.copyWith(ecoMode: false, pureBlack: pureBlack);
     await preferences.setBool('ecoMode', false);
+    await preferences.setBool('pureBlack', pureBlack);
+    if (previous != null) await preferences.remove('pureBlackBeforeEco');
   }
 
   Future<void> setOnboardingComplete(bool enabled) async {
