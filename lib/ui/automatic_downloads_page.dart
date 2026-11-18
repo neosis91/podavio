@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/app_database.dart';
 import '../data/automatic_downloads.dart';
 import '../data/feed_service.dart';
+import '../data/online_status.dart';
 import '../data/providers.dart';
 import '../l10n/l10n.dart';
 import '../settings/settings_controller.dart';
 import 'widgets/app_bottom_sheet.dart';
+import 'widgets/mobile_data_prompt.dart';
 import 'widgets/brand.dart';
 import 'widgets/cover.dart';
 import 'widgets/empty_state.dart';
@@ -173,22 +175,33 @@ class _AutomaticDownloadsPageState
       enabled: podcasts.every((podcast) => podcast.autoDownload),
       selected: _sheetSelection(podcasts),
       onEnabled: (enabled) async {
-        if (!mounted) return;
+        if (!mounted) return false;
+        if (!enabled) {
+          changed = true;
+          await ref
+              .read(databaseProvider)
+              .setPodcastsAutoDownload(ids, autoDownload: false);
+          return false;
+        }
+        final choice = await confirmAutomaticDownloads(context, ref);
+        if (!mounted || !choice.proceed) return false;
         changed = true;
         await ref
             .read(databaseProvider)
-            .setPodcastsAutoDownload(ids, autoDownload: enabled);
-        if (!mounted || !enabled) return;
-        unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
+            .setPodcastsAutoDownload(ids, autoDownload: true);
+        launchAutomaticDownloads(ref, allowMobileOnce: choice.allowMobileOnce);
+        return true;
       },
-      onLimit: (choice) async {
+      onLimit: (limit) async {
+        if (!mounted) return;
+        final choice = await confirmAutomaticDownloads(context, ref);
         if (!mounted) return;
         changed = true;
         await ref
             .read(databaseProvider)
-            .setPodcastsAutoDownloadLimit(ids, choice == 0 ? null : choice);
-        if (!mounted) return;
-        unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
+            .setPodcastsAutoDownloadLimit(ids, limit == 0 ? null : limit);
+        if (!mounted || !choice.proceed) return;
+        launchAutomaticDownloads(ref, allowMobileOnce: choice.allowMobileOnce);
       },
     );
     if (fromSelection && changed && mounted) _exitSelection();
@@ -307,6 +320,46 @@ class _PodcastRow extends StatelessWidget {
   }
 }
 
+/// Sur les données mobiles refusées, demande avant de lancer le passage.
+///
+/// [proceed] est faux si l’utilisateur annule : l’activation ne doit pas rester.
+/// La limite, elle, est déjà choisie par l’appelant.
+Future<({bool proceed, bool allowMobileOnce})> confirmAutomaticDownloads(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  const refused = (proceed: false, allowMobileOnce: false);
+  if (!context.mounted) return refused;
+  final blocked = mobileDataBlocksDownload(
+    allowMobileData: ref.read(settingsProvider).allowMobileData,
+    mobileDataActive: await ref.read(mobileDataProbeProvider)(),
+  );
+  if (!context.mounted) return refused;
+  if (!blocked) return (proceed: true, allowMobileOnce: false);
+  final choice = await confirmMobileDataAction(
+    context,
+    message: context.tr(
+      'Automatic downloads wait for Wi-Fi. Starting one on mobile data asks first.',
+    ),
+    actionLabel: context.tr('Download'),
+    rememberLabel: context.tr('Use Wi-Fi and mobile data for future downloads'),
+  );
+  if (!choice.accepted || !context.mounted) return refused;
+  if (choice.allowFuture) {
+    await ref.read(settingsProvider.notifier).setAllowMobileData(true);
+    return (proceed: true, allowMobileOnce: false);
+  }
+  return (proceed: true, allowMobileOnce: true);
+}
+
+void launchAutomaticDownloads(WidgetRef ref, {required bool allowMobileOnce}) {
+  unawaited(
+    ref
+        .read(automaticDownloadRunProvider.notifier)
+        .run(allowMobileOnce: allowMobileOnce),
+  );
+}
+
 /// Interrupteur, puis la liste des limites. `0` = illimité.
 ///
 /// L’interrupteur laisse la feuille ouverte. Choisir une limite la ferme.
@@ -314,7 +367,7 @@ Future<void> showAutomaticDownloadSheet(
   BuildContext context, {
   required bool enabled,
   required int? selected,
-  required Future<void> Function(bool enabled) onEnabled,
+  required Future<bool> Function(bool enabled) onEnabled,
   required Future<void> Function(int choice) onLimit,
 }) {
   return showAppModalBottomSheet<void>(
@@ -344,7 +397,7 @@ class _AutomaticDownloadSheet extends StatefulWidget {
 
   final bool enabled;
   final int? selected;
-  final Future<void> Function(bool enabled) onEnabled;
+  final Future<bool> Function(bool enabled) onEnabled;
   final Future<void> Function(int choice) onLimit;
 
   @override
@@ -402,7 +455,8 @@ class _AutomaticDownloadSheetState extends State<_AutomaticDownloadSheet> {
                         value: _enabled,
                         onChanged: (value) async {
                           setState(() => _enabled = value);
-                          await widget.onEnabled(value);
+                          final kept = await widget.onEnabled(value);
+                          if (mounted) setState(() => _enabled = kept);
                         },
                       ),
                       Padding(
