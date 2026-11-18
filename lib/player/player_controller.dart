@@ -15,6 +15,7 @@ import '../data/http_auth.dart';
 import '../data/online_status.dart';
 import '../data/providers.dart';
 import '../settings/settings_controller.dart';
+import '../ui/widgets/mobile_data_prompt.dart';
 import '../sync/sync_hooks.dart';
 import '../web_companion/web_remote.dart';
 import 'audio_effects.dart';
@@ -177,6 +178,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   PlayerUiState _ui = const PlayerUiState();
   var _started = false;
   var _disposed = false;
+  var _streamBlocked = false;
+  var _askingMobileStream = false;
   var _advancing = false;
   var _sessionReady = false;
   var _remote = false;
@@ -368,7 +371,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     EpisodeEntry entry, {
     PlaybackSource? source,
   }) async {
-    if (_ui.episodeId == entry.episode.id) {
+    if (_ui.episodeId == entry.episode.id && !_streamBlocked) {
       await toggle();
       return;
     }
@@ -433,6 +436,12 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       await _player.pause();
       await persistPosition();
       await syncPositionToEpisode();
+    } else if (_streamBlocked) {
+      final id = _ui.episodeId;
+      if (id == null) return;
+      final entry = await ref.read(databaseProvider).getEpisode(id);
+      if (!ref.mounted || _disposed || entry == null) return;
+      await _play(entry.episode, entry.podcast);
     } else {
       playbackHandler?.activate();
       await _prepareSession();
@@ -815,6 +824,27 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     Podcast podcast, {
     bool autoplay = true,
   }) async {
+    final settings = ref.read(settingsProvider);
+    final storedDownload = episode.downloadPath?.trim();
+    final downloaded = storedDownload != null && storedDownload.isNotEmpty;
+    var blockRemote = false;
+    if (!downloaded) {
+      final remote = Uri.tryParse(episode.audioUrl);
+      if (remote != null &&
+          _isRemote(remote) &&
+          !settings.allowMobileStreaming) {
+        final onMobile = await ref.read(mobileDataProbeProvider)();
+        if (!ref.mounted || _disposed) return;
+        if (onMobile && autoplay) {
+          final allowed = await _allowMobileStream();
+          if (!ref.mounted || _disposed) return;
+          if (!allowed) return;
+        } else if (onMobile) {
+          blockRemote = true;
+        }
+      }
+    }
+    if (!blockRemote) _streamBlocked = false;
     final previousId = _ui.episodeId;
     if (previousId != null && previousId != episode.id) {
       await persistPosition();
@@ -838,7 +868,6 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     _skipOutro = Duration(seconds: podcast.skipOutroSeconds);
     _outroSkippedEpisodeId = null;
     start = _applyIntroSkip(start, duration);
-    final settings = ref.read(settingsProvider);
     final speed = podcast.playbackSpeed ?? settings.speed;
     final preferPodcastCover = settings.preferPodcastCover;
     final cover = EpisodeEntry(episode: episode, podcast: podcast);
@@ -864,8 +893,6 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         clearStreamQuality: true,
       ),
     );
-    final storedDownload = episode.downloadPath?.trim();
-    final downloaded = storedDownload != null && storedDownload.isNotEmpty;
     // Un fichier téléchargé se lit toujours en local. Le Wi-Fi, les données
     // mobiles et l’absence d’internet ne s’appliquent qu’au flux distant.
     final Uri sourceUri;
@@ -883,18 +910,15 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       sourceUri = Uri.file(path);
     } else {
       sourceUri = Uri.parse(episode.audioUrl);
-      if (_isRemote(sourceUri) && !settings.allowMobileStreaming) {
-        final onMobile = await ref.read(mobileDataProbeProvider)();
-        if (!ref.mounted || _disposed) return;
-        if (onMobile) {
-          _emit(
-            _ui.copyWith(
-              playing: false,
-              error: 'Le streaming est limité au Wi-Fi.',
-            ),
-          );
-          return;
-        }
+      if (blockRemote) {
+        _streamBlocked = true;
+        _emit(
+          _ui.copyWith(
+            playing: false,
+            error: 'Le streaming est limité au Wi-Fi.',
+          ),
+        );
+        return;
       }
     }
     unawaited(
@@ -1067,6 +1091,26 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   }
 
   bool _isRemote(Uri uri) => uri.scheme == 'http' || uri.scheme == 'https';
+
+  /// Fenêtre « Lecture ». Faux si l’utilisateur refuse, ou s’il n’y a pas d’écran.
+  Future<bool> _allowMobileStream() async {
+    if (_askingMobileStream) return false;
+    _askingMobileStream = true;
+    try {
+      final choice = await confirmMobileDataFromRoot(
+        message: 'This stream will use mobile data.',
+        actionLabel: 'Play',
+        rememberLabel: 'Use Wi-Fi and mobile data for future streaming',
+      );
+      if (choice == null || !choice.accepted || !ref.mounted) return false;
+      if (choice.allowFuture) {
+        await ref.read(settingsProvider.notifier).setAllowMobileStreaming(true);
+      }
+      return ref.mounted && !_disposed;
+    } finally {
+      _askingMobileStream = false;
+    }
+  }
 
   static double _normalizeSpeed(double speed) {
     final stepped = (speed * 100).round() / 100;

@@ -17,6 +17,7 @@ import '../../settings/settings_controller.dart';
 import '../playlist_membership.dart';
 import '../router.dart';
 import 'app_bottom_sheet.dart';
+import 'mobile_data_prompt.dart';
 import 'brand.dart';
 import 'cover.dart';
 import 'episode_share_sheet.dart';
@@ -430,27 +431,6 @@ Uri? _podcastWebsite(String? link) {
   return uri;
 }
 
-Future<bool> _confirmMobileDataDownload(BuildContext context) async {
-  final accepted = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(context.tr('Mobile data')),
-      content: Text(context.tr('This download will use mobile data.')),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: Text(context.tr('Cancel')),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: Text(context.tr('Download')),
-        ),
-      ],
-    ),
-  );
-  return accepted ?? false;
-}
-
 Future<void> runEpisodeAction(
   BuildContext context,
   WidgetRef ref,
@@ -479,8 +459,20 @@ Future<void> runEpisodeAction(
           );
           if (blocked) {
             if (!context.mounted) return;
-            final accepted = await _confirmMobileDataDownload(context);
-            if (!accepted || !context.mounted) return;
+            final choice = await confirmMobileDataAction(
+              context,
+              message: context.tr('This download will use mobile data.'),
+              actionLabel: context.tr('Download'),
+              rememberLabel: context.tr(
+                'Use Wi-Fi and mobile data for future downloads',
+              ),
+            );
+            if (!choice.accepted || !context.mounted) return;
+            if (choice.allowFuture) {
+              await ref
+                  .read(settingsProvider.notifier)
+                  .setAllowMobileData(true);
+            }
           }
           await ref.read(downloadProgressProvider.notifier).download(episode);
         } else {

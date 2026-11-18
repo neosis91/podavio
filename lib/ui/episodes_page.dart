@@ -11,6 +11,7 @@ import '../data/online_status.dart';
 import '../settings/settings_controller.dart';
 import 'router.dart';
 import 'widgets/empty_state.dart';
+import 'widgets/mobile_data_prompt.dart';
 import 'widgets/frosted_header.dart';
 import 'widgets/episode_list.dart';
 import 'widgets/list_play_button.dart';
@@ -202,23 +203,42 @@ Future<void> refreshSubscriptions(BuildContext context, WidgetRef ref) async {
     showMessage(context, context.tr('No internet connection'));
     return;
   }
-  final outcome = await ref.read(feedRefreshProvider.notifier).start();
-  if (!context.mounted) return;
-  switch (outcome.result) {
-    case FeedRefreshStartResult.started:
-      break;
-    case FeedRefreshStartResult.alreadyRunning:
-      showMessage(context, 'Actualisation déjà en cours');
-      break;
-    case FeedRefreshStartResult.empty:
-      showMessage(context, 'Aucun abonnement à actualiser');
-      break;
-    case FeedRefreshStartResult.throttled:
-      final wait = formatRefreshRetryAfter(outcome.retryAfter ?? Duration.zero);
-      showMessage(context, 'Actualisation récente — réessayez dans $wait');
-      break;
-    case FeedRefreshStartResult.mobileData:
-      showMessage(context, 'Actualisation uniquement en Wi-Fi');
-      break;
+  var allowMobileOnce = false;
+  while (context.mounted) {
+    final outcome = await ref
+        .read(feedRefreshProvider.notifier)
+        .start(allowMobileOnce: allowMobileOnce);
+    if (!context.mounted) return;
+    switch (outcome.result) {
+      case FeedRefreshStartResult.started:
+        return;
+      case FeedRefreshStartResult.alreadyRunning:
+        showMessage(context, 'Actualisation déjà en cours');
+        return;
+      case FeedRefreshStartResult.empty:
+        showMessage(context, 'Aucun abonnement à actualiser');
+        return;
+      case FeedRefreshStartResult.throttled:
+        final wait = formatRefreshRetryAfter(
+          outcome.retryAfter ?? Duration.zero,
+        );
+        showMessage(context, 'Actualisation récente — réessayez dans $wait');
+        return;
+      case FeedRefreshStartResult.mobileData:
+        if (allowMobileOnce) return;
+        final choice = await confirmMobileDataAction(
+          context,
+          message: context.tr('This refresh will use mobile data.'),
+          actionLabel: context.tr('Refresh now'),
+          rememberLabel: context.tr(
+            'Use Wi-Fi and mobile data for future refreshes',
+          ),
+        );
+        if (!choice.accepted || !context.mounted) return;
+        if (choice.allowFuture) {
+          await ref.read(settingsProvider.notifier).setAllowMobileRefresh(true);
+        }
+        allowMobileOnce = true;
+    }
   }
 }
