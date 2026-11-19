@@ -1,8 +1,13 @@
 # Journal des versions
 
-Avant une release, ajoutez un titre `## AAAA.M.N` et une puce par changement.
+Chaque changement visible ajoute un fichier `changelog.d/*.md` :
+une puce en anglais, une ou deux phrases. Le nom du fichier, en minuscules
+et avec des tirets, fixe l’ordre. `python3 tool/changelog.py collect`
+rassemble ces fichiers sous un titre `## AAAA.M.N` et les retire.
+Lancez-le avant de fusionner `develop` dans `main`.
 La publication GitHub refuse de publier si ce titre manque.
-La section `## Non publié` sert de brouillon : elle n’est pas publiée.
+Une pull request vers `develop` sans fragment porte `[skip changelog]`
+dans son titre, ou l’étiquette `skip-changelog`.
 
 ## 2026.11.9
 
