@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:saf_stream/saf_stream.dart';
 import 'package:saf_util/saf_util.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
@@ -26,7 +28,22 @@ const automaticBackupInterval = Duration(days: 3);
 const automaticBackupKeepCount = 5;
 
 const _backupPrefix = 'PodavioBackup-';
+const _automaticBackupPrefix = 'PodavioAuto-';
 const _backupSuffix = '.sqlite';
+
+/// Incrémenté quand une sauvegarde automatique échoue hors de l’écran
+/// qui l’a demandée. Le shell affiche alors un message.
+final automaticBackupFailureProvider =
+    NotifierProvider<AutomaticBackupFailureNotifier, int>(
+      AutomaticBackupFailureNotifier.new,
+    );
+
+class AutomaticBackupFailureNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void notifyFailure() => state = state + 1;
+}
 
 Future<File> podavioDatabaseFile() async {
   final dir = await getApplicationDocumentsDirectory();
@@ -34,49 +51,125 @@ Future<File> podavioDatabaseFile() async {
 }
 
 String databaseBackupFileName([DateTime? when]) {
-  final stamp = when ?? DateTime.now();
-  final y = stamp.year.toString().padLeft(4, '0');
-  final m = stamp.month.toString().padLeft(2, '0');
-  final d = stamp.day.toString().padLeft(2, '0');
-  return '$_backupPrefix$y-$m-$d$_backupSuffix';
+  return '$_backupPrefix${_backupStamp(when ?? DateTime.now())}$_backupSuffix';
 }
 
+String automaticDatabaseBackupFileName([DateTime? when]) {
+  return '$_automaticBackupPrefix${_backupStamp(when ?? DateTime.now())}$_backupSuffix';
+}
+
+String _backupStamp(DateTime stamp) {
+  String two(int value) => value.toString().padLeft(2, '0');
+  final year = stamp.year.toString().padLeft(4, '0');
+  return '$year-${two(stamp.month)}-${two(stamp.day)}-'
+      '${two(stamp.hour)}${two(stamp.minute)}${two(stamp.second)}';
+}
+
+const _databaseExportChannel = MethodChannel(
+  'fr.podavio.podavio/database_export',
+);
+
+/// Taille d’un morceau envoyé au stockage Android. Reste très en dessous
+/// de la limite du tas Java, contrairement au fichier entier.
+const _backupChunkBytes = 256 * 1024;
+
 /// Copie cohérente de la base (VACUUM INTO), sans fermer Drift.
-Future<Uint8List> exportDatabaseBytes(AppDatabase database) async {
-  final tempDir = await getTemporaryDirectory();
+///
+/// Le fichier temporaire reste en place : l’appelant le supprime après
+/// la copie. Il n’est pas lu en entier en mémoire.
+Future<File> exportDatabaseFile(
+  AppDatabase database, {
+  Directory? directory,
+}) async {
+  final dir = directory ?? await getTemporaryDirectory();
   final temp = File(
     p.join(
-      tempDir.path,
+      dir.path,
       'podavio-export-${DateTime.now().microsecondsSinceEpoch}.sqlite',
     ),
   );
   if (await temp.exists()) await temp.delete();
   final escaped = temp.path.replaceAll("'", "''");
+  await database.customStatement('VACUUM INTO \'$escaped\'');
+  return temp;
+}
+
+Future<void> deleteExportFile(File file) async {
+  if (!await file.exists()) return;
   try {
-    await database.customStatement('VACUUM INTO \'$escaped\'');
-    return await temp.readAsBytes();
-  } finally {
-    if (await temp.exists()) {
-      try {
-        await temp.delete();
-      } catch (_) {}
-    }
+    await file.delete();
+  } catch (_) {}
+}
+
+/// Ouvre le dialogue « Enregistrer sous » et renvoie l’URI du document,
+/// sans envoyer le contenu. Null si l’utilisateur annule.
+Future<String?> pickDatabaseExportUri(String fileName) {
+  return _databaseExportChannel.invokeMethod<String>('createDocument', {
+    'fileName': fileName,
+  });
+}
+
+/// Copie [bytes] vers un fichier temporaire, par morceaux.
+Future<File> stageDatabaseStream(Stream<List<int>> bytes) async {
+  final dir = await getTemporaryDirectory();
+  final file = File(
+    p.join(
+      dir.path,
+      'podavio-import-${DateTime.now().microsecondsSinceEpoch}.sqlite',
+    ),
+  );
+  final sink = file.openWrite();
+  try {
+    await sink.addStream(bytes);
+  } catch (error) {
+    await sink.close();
+    await deleteExportFile(file);
+    rethrow;
+  }
+  await sink.close();
+  return file;
+}
+
+/// Vérifie l’en-tête SQLite, puis remplace [destination] par une copie de [source].
+Future<void> replaceDatabaseFile(File destination, File source) async {
+  await _assertSqliteFile(source);
+  final incoming = File('${destination.path}.incoming');
+  if (await incoming.exists()) await incoming.delete();
+  try {
+    await source.copy(incoming.path);
+    if (await destination.exists()) await destination.delete();
+    await incoming.rename(destination.path);
+  } catch (error) {
+    await deleteExportFile(incoming);
+    rethrow;
   }
 }
 
-/// Remplace la base ouverte par [bytes], puis rouvre les providers Drift.
-Future<void> importDatabaseBytes(
-  ProviderContainer container,
-  Uint8List bytes,
-) async {
-  if (bytes.length < 16) {
+Future<void> _assertSqliteFile(File source) async {
+  final length = await source.length();
+  if (length < 16) {
     throw StateError('File is too small to be a SQLite database.');
   }
-  final header = String.fromCharCodes(bytes.take(15));
-  if (!header.startsWith('SQLite format')) {
-    throw StateError('Not a SQLite database.');
+  final input = await source.open();
+  try {
+    final bytes = await input.read(15);
+    final header = String.fromCharCodes(bytes);
+    if (!header.startsWith('SQLite format')) {
+      throw StateError('Not a SQLite database.');
+    }
+  } finally {
+    await input.close();
   }
+}
 
+/// Remplace la base ouverte par [source], puis rouvre les providers Drift.
+///
+/// [source] est copié sur le disque. Il n’est pas lu en entier en mémoire.
+Future<void> importDatabaseFile(
+  ProviderContainer container,
+  File source,
+) async {
+  await _assertSqliteFile(source);
   await container.read(playerProvider.notifier).dismiss();
 
   final live = await podavioDatabaseFile();
@@ -98,8 +191,7 @@ Future<void> importDatabaseBytes(
       }
     }
     await closeAppDatabase(database);
-
-    await live.writeAsBytes(bytes, flush: true);
+    await replaceDatabaseFile(live, source);
     for (final suffix in ['-wal', '-shm', '-journal']) {
       final side = File('${live.path}$suffix');
       if (await side.exists()) await side.delete();
@@ -155,25 +247,57 @@ Future<bool> storedFileExists(String path) async {
   return File(trimmed).exists();
 }
 
-Future<void> writeBackupBytes(
-  String folder,
-  Uint8List bytes,
-  String name,
-) async {
+Future<void> writeBackupFile(String folder, File source, String name) async {
   if (isContentUri(folder)) {
-    await SafStream().writeFileBytes(
+    final saf = SafStream();
+    final info = await saf.startWriteStream(
       folder,
       name,
       'application/x-sqlite3',
-      bytes,
       overwrite: true,
     );
+    try {
+      await _writeFileChunks(saf, info.session, source);
+    } finally {
+      await saf.endWriteStream(info.session);
+    }
     return;
   }
   final directory = Directory(folder);
   await directory.create(recursive: true);
   final file = File(p.join(directory.path, name));
-  await file.writeAsBytes(bytes, flush: true);
+  if (await file.exists()) await file.delete();
+  await source.copy(file.path);
+}
+
+/// Écrit [source] dans le document déjà créé par le dialogue d’export.
+Future<void> writeBackupToDocument(String uri, File source) async {
+  final saf = SafStream();
+  final info = await saf.startWriteFileUriStream(uri);
+  try {
+    await _writeFileChunks(saf, info.session, source);
+  } finally {
+    await saf.endWriteStream(info.session);
+  }
+}
+
+Future<void> _writeFileChunks(
+  SafStream saf,
+  String session,
+  File source,
+) async {
+  final input = await source.open();
+  try {
+    final buffer = Uint8List(_backupChunkBytes);
+    while (true) {
+      final read = await input.readInto(buffer);
+      if (read <= 0) break;
+      final chunk = Uint8List.fromList(buffer.sublist(0, read));
+      await saf.writeChunk(session, chunk);
+    }
+  } finally {
+    await input.close();
+  }
 }
 
 Future<void> pruneAutomaticBackups(String folder) async {
@@ -191,10 +315,7 @@ Future<List<String>> _listBackupNames(String folder) async {
     final children = await SafUtil().list(folder);
     return [
       for (final child in children)
-        if (!child.isDir &&
-            child.name.startsWith(_backupPrefix) &&
-            child.name.endsWith(_backupSuffix))
-          child.name,
+        if (!child.isDir && _isAutomaticBackupName(child.name)) child.name,
     ];
   }
   final directory = Directory(folder);
@@ -203,9 +324,7 @@ Future<List<String>> _listBackupNames(String folder) async {
   await for (final entity in directory.list()) {
     if (entity is! File) continue;
     final name = p.basename(entity.path);
-    if (name.startsWith(_backupPrefix) && name.endsWith(_backupSuffix)) {
-      names.add(name);
-    }
+    if (_isAutomaticBackupName(name)) names.add(name);
   }
   return names;
 }
@@ -225,6 +344,30 @@ Future<void> _deleteBackup(String folder, String name) async {
   if (await file.exists()) await file.delete();
 }
 
+bool _isAutomaticBackupName(String name) {
+  return name.startsWith(_automaticBackupPrefix) &&
+      name.endsWith(_backupSuffix);
+}
+
+/// Écrit une sauvegarde tout de suite et mémorise l’heure.
+Future<void> performAutomaticDatabaseBackup({
+  required AppDatabase database,
+  required SharedPreferences preferences,
+  required String folder,
+}) async {
+  final file = await exportDatabaseFile(database);
+  try {
+    await writeBackupFile(folder, file, automaticDatabaseBackupFileName());
+  } finally {
+    await deleteExportFile(file);
+  }
+  await pruneAutomaticBackups(folder);
+  await preferences.setInt(
+    lastAutomaticDatabaseBackupAtKey,
+    DateTime.now().millisecondsSinceEpoch,
+  );
+}
+
 /// Lance une sauvegarde auto si l’option est active et que l’intervalle est passé.
 Future<void> maybeRunAutomaticDatabaseBackup(Ref ref) async {
   if (kIsWeb) return;
@@ -241,16 +384,14 @@ Future<void> maybeRunAutomaticDatabaseBackup(Ref ref) async {
   }
 
   try {
-    final bytes = await exportDatabaseBytes(ref.read(databaseProvider));
-    final name = databaseBackupFileName();
-    await writeBackupBytes(folder, bytes, name);
-    await pruneAutomaticBackups(folder);
-    await prefs.setInt(
-      lastAutomaticDatabaseBackupAtKey,
-      DateTime.now().millisecondsSinceEpoch,
+    await performAutomaticDatabaseBackup(
+      database: ref.read(databaseProvider),
+      preferences: prefs,
+      folder: folder,
     );
   } catch (error, stack) {
     debugPrint('Automatic database backup failed: $error\n$stack');
+    ref.read(automaticBackupFailureProvider.notifier).notifyFailure();
   }
 }
 

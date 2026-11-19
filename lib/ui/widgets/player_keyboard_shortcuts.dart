@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
-import '../app_router.dart';
+import '../root_navigator.dart';
 import 'app_bottom_sheet.dart';
 
 /// Raccourcis clavier du lecteur (desktop / TV).
@@ -182,18 +182,15 @@ class _PlayerKeyboardHelpSheet extends ConsumerWidget {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-                  child: Text(
-                    'Gestes autour de la couverture',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                child: Text(
+                  'Gestes autour de la couverture',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
+                ),
               ),
               for (final (keys, label) in gestures)
-                ListTile(
-                  title: Text(label),
-                  trailing: _KeyChip(keys),
-                ),
+                ListTile(title: Text(label), trailing: _KeyChip(keys)),
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
                 child: Text(
@@ -213,10 +210,7 @@ class _PlayerKeyboardHelpSheet extends ConsumerWidget {
                 ),
               ),
               for (final (keys, label) in shortcuts)
-                ListTile(
-                  title: Text(label),
-                  trailing: _KeyChip(keys),
-                ),
+                ListTile(title: Text(label), trailing: _KeyChip(keys)),
             ],
           ),
         ),
@@ -243,9 +237,8 @@ class _KeyChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Text(
           label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+          style: Theme.of(context).textTheme.labelMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
       ),
     );

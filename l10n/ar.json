@@ -142,7 +142,7 @@
   "Drama": "دراما",
   "Earth Sciences": "علوم الأرض",
   "Eco mode": "وضع التوفير",
-  "Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.": "يقلل وضع التوفير الطلبات. الأغلفة المحفوظة أو المخزنة تبقى ظاهرة. الأغلفة الجديدة لا تُنزَّل: يظهر الاسم بالأبيض في مربع يُلوَّن من اسم البودكاست. في القوائم الصغيرة تكون الورقة في الوسط. يُفعَّل المظهر الداكن والأسود الخالص ويبقيان مفعّلين. يتوقف تنزيل الأغلفة التلقائي، ولا يجلب المشغّل غلافًا فقط لتلوين الشاشة.",
+  "Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.": "يقلل وضع التوفير الطلبات. الأغلفة المحفوظة أو المخزنة تبقى ظاهرة. الأغلفة الجديدة لا تُنزَّل: يظهر الاسم بالأبيض في مربع يُلوَّن من اسم البودكاست. في القوائم الصغيرة تكون الورقة في الوسط. يُفعَّل المظهر الداكن والأسود الخالص مع وضع التوفير ويعودان إلى الإعداد السابق عند إيقافه. يتوقف تنزيل الأغلفة التلقائي، ولا يجلب المشغّل غلافًا فقط لتلوين الشاشة.",
   "Eco mode skips new cover downloads. You can turn it off later.": "وضع التوفير لا ينزّل أغلفة جديدة. يمكنك إيقافه لاحقًا.",
   "Education": "تعليم",
   "Education for Kids": "تعليم الأطفال",

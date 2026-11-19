@@ -1,9 +1,9 @@
+import 'dart:ui';
+
 import 'package:podcast_search/podcast_search.dart';
 
 /// Valeur enregistrée quand Explorer ne filtre plus par langue.
 const discoverLanguagesAll = '*';
-
-const discoverLanguagesDefault = <String>['fr'];
 
 /// Nombre max de boutiques Apple interrogées pour une sélection.
 const discoverAppleStoreLimit = 8;
@@ -433,12 +433,123 @@ bool discoverLanguagesAreAll(List<String> codes) {
 }
 
 /// Sélection précise mémorisée pendant que « Toutes les langues » est actif.
-/// `*` et les codes inconnus sont ignorés. Vide → français.
-List<String> normalizeDiscoverLanguagesPicked(List<String>? stored) {
-  if (stored == null || stored.isEmpty) return discoverLanguagesDefault;
-  if (stored.contains(discoverLanguagesAll)) return discoverLanguagesDefault;
-  return normalizeDiscoverLanguages(stored);
+/// `*` et les codes inconnus retombent sur la langue du téléphone, sinon l’anglais.
+List<String> normalizeDiscoverLanguagesPicked(
+  List<String>? stored, {
+  Locale? system,
+}) {
+  final fallback = defaultDiscoverLanguages(system ?? const Locale('en'));
+  if (stored == null || stored.isEmpty) return fallback;
+  if (stored.contains(discoverLanguagesAll)) return fallback;
+  final normalized = normalizeDiscoverLanguages(stored);
+  if (discoverLanguagesAreAll(normalized)) return fallback;
+  return normalized;
 }
+
+/// Codes système qui ne sont pas ceux du catalogue.
+const _systemLanguageAliases = {'iw': 'he', 'id': 'in', 'ji': 'yi'};
+
+/// Langue du téléphone si le catalogue la connaît, sinon null.
+String? discoverLanguageForLocale(Locale locale) {
+  final code = locale.languageCode.trim().toLowerCase();
+  if (_catalogCodes.contains(code)) return code;
+  final alias = _systemLanguageAliases[code];
+  if (alias != null && _catalogCodes.contains(alias)) return alias;
+  return null;
+}
+
+/// Langue d’écoute sans choix enregistré : celle du téléphone, sinon l’anglais.
+List<String> defaultDiscoverLanguages(Locale locale) {
+  return [discoverLanguageForLocale(locale) ?? 'en'];
+}
+
+/// Nom de la langue dans cette langue. La variante garde le pays du catalogue.
+const _endonyms = <String, String>{
+  'de': 'Deutsch',
+  'en': 'English',
+  'es': 'Español',
+  'fr': 'Français',
+  'it': 'Italiano',
+  'pt': 'Português',
+  'nl': 'Nederlands',
+  'zh': '中文',
+  'hi': 'हिन्दी',
+  'in': 'Bahasa Indonesia',
+  'ja': '日本語',
+  'ko': '한국어',
+  'ru': 'Русский',
+  'tr': 'Türkçe',
+  'ar': 'العربية',
+  'pl': 'Polski',
+  'af': 'Afrikaans',
+  'sq': 'Shqip',
+  'am': 'አማርኛ',
+  'hy': 'Հայերեն',
+  'az': 'Azərbaycan',
+  'eu': 'Euskara',
+  'bn': 'বাংলা',
+  'be': 'Беларуская',
+  'bs': 'Bosanski',
+  'bg': 'Български',
+  'ca': 'Català',
+  'hr': 'Hrvatski',
+  'cs': 'Čeština',
+  'da': 'Dansk',
+  'et': 'Eesti',
+  'fi': 'Suomi',
+  'fy': 'Frysk',
+  'gl': 'Galego',
+  'ka': 'ქართული',
+  'el': 'Ελληνικά',
+  'gu': 'ગુજરાતી',
+  'ha': 'Hausa',
+  'he': 'עברית',
+  'hu': 'Magyar',
+  'is': 'Íslenska',
+  'ga': 'Gaeilge',
+  'kn': 'ಕನ್ನಡ',
+  'kk': 'Қазақ',
+  'km': 'ខ្មែរ',
+  'rw': 'Kinyarwanda',
+  'ku': 'Kurdî',
+  'lo': 'ລາວ',
+  'la': 'Latina',
+  'lv': 'Latviešu',
+  'lt': 'Lietuvių',
+  'lb': 'Lëtzebuergesch',
+  'mk': 'Македонски',
+  'ms': 'Bahasa Melayu',
+  'ml': 'മലയാളം',
+  'mt': 'Malti',
+  'mi': 'Māori',
+  'mr': 'मराठी',
+  'mn': 'Монгол',
+  'ne': 'नेपाली',
+  'no': 'Norsk',
+  'nb': 'Norsk bokmål',
+  'nn': 'Norsk nynorsk',
+  'fa': 'فارسی',
+  'pa': 'ਪੰਜਾਬੀ',
+  'ro': 'Română',
+  'sr': 'Српски',
+  'sk': 'Slovenčina',
+  'sl': 'Slovenščina',
+  'so': 'Soomaali',
+  'sw': 'Kiswahili',
+  'sv': 'Svenska',
+  'ta': 'தமிழ்',
+  'te': 'తెలుగు',
+  'th': 'ไทย',
+  'bo': 'བོད་སྐད་',
+  'uk': 'Українська',
+  'ur': 'اردو',
+  'uz': 'Oʻzbek',
+  'vi': 'Tiếng Việt',
+  'cy': 'Cymraeg',
+  'yi': 'ייִדיש',
+  'yo': 'Yorùbá',
+  'zu': 'isiZulu',
+};
 
 /// Absence de préférence → toutes les langues. Une valeur inconnue est ignorée.
 List<String> normalizeDiscoverLanguages(List<String>? stored) {
@@ -457,8 +568,21 @@ List<String> normalizeDiscoverLanguages(List<String>? stored) {
   return kept;
 }
 
-/// Libellé du catalogue, ou le code s’il n’y est pas.
-String discoverLanguageLabel(String code) => _labels[code] ?? code;
+/// Nom dans la langue elle-même, ou le libellé du catalogue s’il n’est pas connu.
+String discoverLanguageLabel(String code) {
+  final normalized = code.trim().toLowerCase();
+  final stored = _labels[normalized];
+  if (stored == null) return code;
+  final base = normalized.split('-').first;
+  final endonym = _endonyms[base];
+  if (endonym == null) return stored;
+  if (normalized == base) return endonym;
+  final french = _labels[base];
+  if (french != null && stored.startsWith('$french (')) {
+    return endonym + stored.substring(french.length);
+  }
+  return stored;
+}
 
 /// Langue de base et ses variantes (`en`, puis `en-us`, `en-gb`…).
 class DiscoverLanguageGroup {
@@ -503,7 +627,7 @@ List<DiscoverLanguageGroup> _groupDiscoverLanguages() {
 
 String discoverLanguagesSummary(List<String> codes) {
   if (discoverLanguagesAreAll(codes)) return 'Toutes les langues';
-  final labels = [for (final code in codes) _labels[code] ?? code];
+  final labels = [for (final code in codes) discoverLanguageLabel(code)];
   if (labels.length <= 2) return labels.join(', ');
   return '${labels.length} langues';
 }

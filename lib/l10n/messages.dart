@@ -117,6 +117,7 @@ const _fr = <String, String>{
   'Chemistry': 'Chimie',
   'Choose a .sqlite or .db database file':
       'Choisissez un fichier de base .sqlite ou .db',
+  'Choose an .opml or .xml file': 'Choisissez un fichier .opml ou .xml',
   'Choose synchronization provider':
       'Choisir un fournisseur de synchronisation',
   'Choose the categories on the home screen':
@@ -152,6 +153,7 @@ const _fr = <String, String>{
       'Impossible de trouver l’APK installé sur cet appareil.',
   'Could not find this session.': 'Cette session est introuvable.',
   'Could not import the database': 'Impossible d’importer la base de données',
+  'Could not read this file': 'Impossible de lire ce fichier',
   'Could not start nearby sharing':
       'Impossible de démarrer le partage à proximité',
   'Could not start the session.': 'Impossible d’ouvrir la session.',
@@ -195,9 +197,10 @@ const _fr = <String, String>{
   'Downloads': 'Téléchargements',
   'Downloads use storage space, but are available offline.': 'Les téléchargements utilisent de l’espace de stockage, mais sont disponibles hors ligne.',
   'Drama': 'Drame',
+  'Each setting starts on Wi-Fi only. The first action on mobile data still asks for confirmation.': 'Chaque réglage commence en Wi-Fi uniquement. La première action sur le réseau mobile demande encore confirmation.',
   'Earth Sciences': 'Sciences de la Terre',
   'Eco mode': 'Mode éco',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Le mode éco limite les requêtes. Les jaquettes déjà enregistrées ou en cache restent visibles. Les autres ne sont pas téléchargées : le nom s’affiche en blanc dans un carré coloré à partir du nom du podcast. Dans les petites listes, une feuille est au centre. Le thème sombre et le noir pur s’activent et restent actifs. Le téléchargement automatique des jaquettes s’arrête, et le lecteur ne récupère plus une jaquette seulement pour teinter l’écran.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Le mode éco limite les requêtes. Les jaquettes déjà enregistrées ou en cache restent visibles. Les autres ne sont pas téléchargées : le nom s’affiche en blanc dans un carré coloré à partir du nom du podcast. Dans les petites listes, une feuille est au centre. Le thème sombre et le noir pur s’activent avec le mode éco et retrouvent leur réglage précédent quand on le coupe. Le téléchargement automatique des jaquettes s’arrête, et le lecteur ne récupère plus une jaquette seulement pour teinter l’écran.',
   'Eco mode skips new cover downloads. You can turn it off later.': 'Le mode éco n’ajoute pas de nouvelles jaquettes. Vous pourrez le désactiver plus tard.',
   'Education': 'Éducation',
   'Education for Kids': 'Éducation des enfants',
@@ -349,6 +352,7 @@ const _fr = <String, String>{
       'Aucun appareil sur ce compte pour le moment.',
   'No episodes to play': 'Aucun épisode à écouter',
   'No favorites to export': 'Aucun favori à exporter',
+  'No feeds found in this file': 'Aucun flux trouvé dans ce fichier',
   'No internet connection': 'Pas de connexion internet',
   'No limit between refreshes': 'Pas de limite entre deux actualisations',
   'No matching language': 'Aucune langue correspondante',
@@ -438,12 +442,14 @@ const _fr = <String, String>{
   'Refresh': 'Actualisation',
   'Refresh all subscriptions': 'Actualiser tous les abonnements',
   'Refresh interval': 'Intervalle d’actualisation',
+  'Refresh now': 'Actualiser',
   'Refreshing…': 'Actualisation en cours…',
   'Relationships': 'Relations',
   'Religion': 'Religion',
   'Religion & Spirituality': 'Religion et spiritualité',
   'Remove from favorites': 'Retirer des favoris',
   'Replaces the current database. Downloaded episodes must be re-downloaded.': 'Remplace la base actuelle. Les épisodes téléchargés devront être retéléchargés.',
+  'Replaces the library. Downloaded episodes stay when their files are still on this phone. App settings stay as they are.': 'Remplace la bibliothèque. Les épisodes téléchargés restent si leurs fichiers sont encore sur ce téléphone. Les réglages de l’application ne changent pas.',
   'Restore backup': 'Restaurer la sauvegarde',
   'Restore your library from a backup':
       'Restaurez votre bibliothèque depuis une sauvegarde',
@@ -522,6 +528,7 @@ const _fr = <String, String>{
   'Subscriptions exported as HTML': 'Abonnements exportés en HTML',
   'Subscriptions exported from another app':
       'Abonnements exportés depuis une autre application',
+  'Subscriptions, playlists, chapters, playback, and per-podcast settings. Audio files and app settings stay on the phone.': 'Abonnements, playlists, chapitres, progression et réglages de chaque podcast. Les fichiers audio et les réglages de l’application restent sur le téléphone.',
   'Subscriptions, queue, favorites, and playback progress. Not the downloaded audio files.': 'Abonnements, file d’attente, favoris et progression d’écoute. Pas les fichiers audio téléchargés.',
   'Swimming': 'Natation',
   'Synchronization': 'Synchronisation',
@@ -552,6 +559,7 @@ const _fr = <String, String>{
   'The update check failed': 'La vérification a échoué',
   'The wallpaper could not be read': 'Le fond d’écran n’a pas pu être lu',
   'These global settings can be changed later and customized for each podcast.': 'Ces réglages globaux peuvent être modifiés plus tard et personnalisés pour chaque podcast.',
+  'This OPML file is unreadable': 'Ce fichier OPML est illisible',
   'This address is not encrypted.': 'Cette adresse n’est pas chiffrée.',
   'This code cannot be used': 'Ce code ne peut pas être utilisé',
   'This download will use mobile data.':
@@ -559,7 +567,12 @@ const _fr = <String, String>{
   'This episode is not in your library.':
       'Cet épisode n’est pas dans votre bibliothèque.',
   'This install cannot be shared offline. Download Podavio once from podavio.com while online, then try again.': 'Cette installation ne peut pas être partagée hors ligne. Téléchargez Podavio une fois depuis podavio.com en étant en ligne, puis réessayez.',
+  'This refresh will use mobile data.':
+      'Cette actualisation utilisera les données mobiles.',
   'This replaces your current subscriptions, queue, favorites, and playback progress. Downloaded audio files are not restored. Continue?': 'Cela remplace vos abonnements, file d’attente, favoris et progression d’écoute. Les fichiers audio téléchargés ne sont pas restaurés. Continuer ?',
+  'This replaces your library: subscriptions, playlists, chapters, playback, and per-podcast settings. Downloaded episodes stay when their files are still on this phone. App settings stay as they are. Continue?': 'Ceci remplace la bibliothèque : abonnements, playlists, chapitres, progression et réglages de chaque podcast. Les épisodes téléchargés restent si leurs fichiers sont encore sur ce téléphone. Les réglages de l’application ne changent pas. Continuer ?',
+  'This stream will use mobile data.':
+      'Cette lecture utilisera les données mobiles.',
   'Time follows speed': 'Temps selon la vitesse',
   'Time remaining': 'Temps restant',
   'Time skip': 'Saut temporel',
@@ -578,6 +591,10 @@ const _fr = <String, String>{
   'Uploads the played state of episodes listened to on this device.':
       'Envoie l’état lu des épisodes déjà écoutés sur cet appareil.',
   'Use Podavio on another screen': 'Utilisez Podavio sur un autre écran',
+  'Use Wi-Fi and mobile data for future downloads': 'Utiliser le Wi-Fi et le réseau mobile pour les prochains téléchargements',
+  'Use Wi-Fi and mobile data for future refreshes': 'Utiliser le Wi-Fi et le réseau mobile pour les prochaines actualisations',
+  'Use Wi-Fi and mobile data for future streaming':
+      'Utiliser le Wi-Fi et le réseau mobile pour les prochaines lectures',
   'Use mobile data?': 'Utiliser les données mobiles ?',
   'Username': 'Nom d’utilisateur',
   'Version': 'Version',
@@ -780,7 +797,7 @@ const _de = <String, String>{
   'Drama': 'Drama',
   'Earth Sciences': 'Geowissenschaften',
   'Eco mode': 'Eco-Modus',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Der Eco-Modus begrenzt Netzwerkanfragen. Bereits gespeicherte oder zwischengespeicherte Cover bleiben sichtbar. Neue Cover werden nicht geladen: der Name steht weiß in einem Quadrat, das aus dem Podcastnamen gefärbt ist. In kurzen Listen sitzt ein Blatt in der Mitte. Dunkles Design und reines Schwarz werden aktiviert und bleiben an. Automatische Cover-Downloads stoppen, und der Player lädt kein Cover mehr nur zum Einfärben.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Der Eco-Modus begrenzt Netzwerkanfragen. Bereits gespeicherte oder zwischengespeicherte Cover bleiben sichtbar. Neue Cover werden nicht geladen: der Name steht weiß in einem Quadrat, das aus dem Podcastnamen gefärbt ist. In kurzen Listen sitzt ein Blatt in der Mitte. Dunkles Design und reines Schwarz schalten sich mit dem Eco-Modus ein und kehren zur vorherigen Einstellung zurück, wenn er aus ist. Automatische Cover-Downloads stoppen, und der Player lädt kein Cover mehr nur zum Einfärben.',
   'Education': 'Bildung',
   'Education for Kids': 'Bildung für Kinder',
   'Encrypted link to the browser': 'Verschlüsselte Verbindung zum Browser',
@@ -1293,7 +1310,7 @@ const _es = <String, String>{
   'Drama': 'Drama',
   'Earth Sciences': 'Ciencias de la Tierra',
   'Eco mode': 'Modo eco',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'El modo eco limita las peticiones. Las portadas ya guardadas o en caché siguen visibles. Las demás no se descargan: el nombre aparece en blanco en un cuadrado coloreado a partir del nombre del podcast. En las listas pequeñas, una hoja queda en el centro. El tema oscuro y el negro puro se activan y permanecen activos. Se detiene la descarga automática de portadas, y el reproductor ya no pide una portada solo para teñir la pantalla.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'El modo eco limita las peticiones. Las portadas ya guardadas o en caché siguen visibles. Las demás no se descargan: el nombre aparece en blanco en un cuadrado coloreado a partir del nombre del podcast. En las listas pequeñas, una hoja queda en el centro. El tema oscuro y el negro puro se activan con el modo eco y vuelven a su ajuste anterior al desactivarlo. Se detiene la descarga automática de portadas, y el reproductor ya no pide una portada solo para teñir la pantalla.',
   'Eco mode skips new cover downloads. You can turn it off later.':
       'El modo eco no descarga portadas nuevas. Puedes desactivarlo más tarde.',
   'Education': 'Educación',
@@ -1811,7 +1828,7 @@ const _it = <String, String>{
   'Drama': 'Dramma',
   'Earth Sciences': 'Scienze della Terra',
   'Eco mode': 'Modalità eco',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'La modalità eco limita le richieste. Le copertine già salvate o in cache restano visibili. Le altre non vengono scaricate: il nome appare in bianco in un quadrato colorato a partire dal nome del podcast. Nelle liste piccole, una foglia sta al centro. Il tema scuro e il nero puro si attivano e restano attivi. I download automatici delle copertine si fermano, e il lettore non scarica più una copertina solo per colorare lo schermo.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'La modalità eco limita le richieste. Le copertine già salvate o in cache restano visibili. Le altre non vengono scaricate: il nome appare in bianco in un quadrato colorato a partire dal nome del podcast. Nelle liste piccole, una foglia sta al centro. Il tema scuro e il nero puro si attivano con la modalità eco e tornano all’impostazione precedente quando la si disattiva. I download automatici delle copertine si fermano, e il lettore non scarica più una copertina solo per colorare lo schermo.',
   'Eco mode skips new cover downloads. You can turn it off later.': 'La modalità eco non scarica nuove copertine. Puoi disattivarla più tardi.',
   'Education': 'Istruzione',
   'Education for Kids': 'Educazione per bambini',
@@ -2322,7 +2339,7 @@ const _pt = <String, String>{
   'Drama': 'Drama',
   'Earth Sciences': 'Ciências da Terra',
   'Eco mode': 'Modo eco',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'O modo eco limita os pedidos. As capas já guardadas ou em cache continuam visíveis. As outras não são transferidas: o nome aparece a branco num quadrado colorido a partir do nome do podcast. Nas listas pequenas, uma folha fica ao centro. O tema escuro e o preto puro ativam-se e permanecem ativos. As transferências automáticas de capas param, e o leitor deixa de pedir uma capa só para colorir o ecrã.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'O modo eco limita os pedidos. As capas já guardadas ou em cache continuam visíveis. As outras não são transferidas: o nome aparece a branco num quadrado colorido a partir do nome do podcast. Nas listas pequenas, uma folha fica ao centro. O tema escuro e o preto puro ativam-se com o modo eco e voltam à definição anterior quando se desliga. As transferências automáticas de capas param, e o leitor deixa de pedir uma capa só para colorir o ecrã.',
   'Eco mode skips new cover downloads. You can turn it off later.':
       'O modo eco não transfere capas novas. Pode desativá-lo mais tarde.',
   'Education': 'Educação',
@@ -2841,7 +2858,7 @@ const _nl = <String, String>{
   'Drama': 'Drama',
   'Earth Sciences': 'Aardwetenschappen',
   'Eco mode': 'Eco-modus',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'De eco-modus beperkt verzoeken. Hoezen die al zijn opgeslagen of in de cache staan blijven zichtbaar. Nieuwe hoezen worden niet gedownload: de naam staat wit in een vierkant gekleurd vanuit de podcastnaam. In korte lijsten staat een blad in het midden. Donker thema en zuiver zwart gaan aan en blijven aan. Automatisch downloaden van hoezen stopt, en de speler haalt geen hoes meer op alleen om het scherm te kleuren.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'De eco-modus beperkt verzoeken. Hoezen die al zijn opgeslagen of in de cache staan blijven zichtbaar. Nieuwe hoezen worden niet gedownload: de naam staat wit in een vierkant gekleurd vanuit de podcastnaam. In korte lijsten staat een blad in het midden. Donker thema en zuiver zwart gaan aan met de eco-modus en keren terug naar de vorige instelling als die uitgaat. Automatisch downloaden van hoezen stopt, en de speler haalt geen hoes meer op alleen om het scherm te kleuren.',
   'Eco mode skips new cover downloads. You can turn it off later.':
       'De eco-modus downloadt geen nieuwe hoezen. Je kunt hem later uitzetten.',
   'Education': 'Onderwijs',
@@ -3348,7 +3365,7 @@ const _zh = <String, String>{
   'Drama': '戏剧',
   'Earth Sciences': '地球科学',
   'Eco mode': '省电模式',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': '省电模式会减少网络请求。已保存或已缓存的封面仍然显示。新封面不会下载：名称以白色显示在根据播客名称着色的方块中。小列表里，叶子在正中。深色主题和纯黑会打开并保持打开。自动封面下载会停止，播放器也不再仅为着色而获取封面。',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': '省电模式会减少网络请求。已保存或已缓存的封面仍然显示。新封面不会下载：名称以白色显示在根据播客名称着色的方块中。小列表里，叶子在正中。深色主题和纯黑会随省电模式打开，关闭后恢复之前的设置。自动封面下载会停止，播放器也不再仅为着色而获取封面。',
   'Eco mode skips new cover downloads. You can turn it off later.':
       '省电模式不会下载新封面。你可以稍后关闭它。',
   'Education': '教育',
@@ -3851,7 +3868,7 @@ const _hi = <String, String>{
   'Drama': 'नाटक',
   'Earth Sciences': 'पृथ्वी विज्ञान',
   'Eco mode': 'ईको मोड',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'ईको मोड अनुरोधों को कम करता है। पहले से सहेजे या कैश किए कवर दिखते रहते हैं। नए कवर डाउनलोड नहीं होते: नाम पॉडकास्ट के नाम से रंगे वर्ग में सफेद दिखता है। छोटी सूचियों में पत्ता बीच में रहता है। गहरा थीम और शुद्ध काला चालू होकर चालू रहते हैं। कवर की स्वचालित डाउनलोड रुक जाती है, और प्लेयर सिर्फ रंग के लिए कवर नहीं मंगाता।',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'ईको मोड अनुरोधों को कम करता है। पहले से सहेजे या कैश किए कवर दिखते रहते हैं। नए कवर डाउनलोड नहीं होते: नाम पॉडकास्ट के नाम से रंगे वर्ग में सफेद दिखता है। छोटी सूचियों में पत्ता बीच में रहता है। गहरा थीम और शुद्ध काला ईको मोड के साथ चालू होते हैं और बंद करने पर पिछली सेटिंग पर लौटते हैं। कवर की स्वचालित डाउनलोड रुक जाती है, और प्लेयर सिर्फ रंग के लिए कवर नहीं मंगाता।',
   'Eco mode skips new cover downloads. You can turn it off later.':
       'ईको मोड नए कवर डाउनलोड नहीं करता। आप इसे बाद में बंद कर सकते हैं।',
   'Education': 'शिक्षा',
@@ -4361,7 +4378,7 @@ const _id = <String, String>{
   'Drama': 'Drama',
   'Earth Sciences': 'Ilmu bumi',
   'Eco mode': 'Mode eko',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Mode eko membatasi permintaan. Sampul yang sudah tersimpan atau di cache tetap tampil. Sampul baru tidak diunduh: nama tampil putih di kotak yang diwarnai dari nama podcast. Di daftar kecil, daun berada di tengah. Tema gelap dan hitam pekat menyala dan tetap menyala. Unduhan sampul otomatis berhenti, dan pemutar tidak lagi mengambil sampul hanya untuk mewarnai layar.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Mode eko membatasi permintaan. Sampul yang sudah tersimpan atau di cache tetap tampil. Sampul baru tidak diunduh: nama tampil putih di kotak yang diwarnai dari nama podcast. Di daftar kecil, daun berada di tengah. Tema gelap dan hitam pekat menyala bersama mode eko dan kembali ke pengaturan sebelumnya saat dimatikan. Unduhan sampul otomatis berhenti, dan pemutar tidak lagi mengambil sampul hanya untuk mewarnai layar.',
   'Eco mode skips new cover downloads. You can turn it off later.':
       'Mode eko tidak mengunduh sampul baru. Anda bisa mematikannya nanti.',
   'Education': 'Pendidikan',
@@ -4872,7 +4889,7 @@ const _ja = <String, String>{
   'Drama': 'ドラマ',
   'Earth Sciences': '地球科学',
   'Eco mode': 'エコモード',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'エコモードは通信を減らします。保存済みまたはキャッシュ済みのジャケットはそのまま表示されます。新しいジャケットはダウンロードせず、名前はポッドキャスト名から色づいた四角の中に白で表示されます。小さい一覧では葉が中央にあります。ダークテーマと純黒がオンになり、オンのままです。ジャケットの自動ダウンロードは止まり、画面の色付けのためだけにジャケットを取得しなくなります。',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'エコモードは通信を減らします。保存済みまたはキャッシュ済みのジャケットはそのまま表示されます。新しいジャケットはダウンロードせず、名前はポッドキャスト名から色づいた四角の中に白で表示されます。小さい一覧では葉が中央にあります。ダークテーマと純黒はエコモードと一緒にオンになり、オフにすると以前の設定に戻ります。ジャケットの自動ダウンロードは止まり、画面の色付けのためだけにジャケットを取得しなくなります。',
   'Eco mode skips new cover downloads. You can turn it off later.':
       'エコモードは新しいジャケットをダウンロードしません。あとからオフにできます。',
   'Education': '教育',
@@ -5378,7 +5395,7 @@ const _ko = <String, String>{
   'Drama': '드라마',
   'Earth Sciences': '지구과학',
   'Eco mode': '에코 모드',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': '에코 모드는 요청을 줄입니다. 이미 저장되었거나 캐시된 표지는 그대로 보입니다. 새 표지는 받지 않습니다. 이름은 팟캐스트 이름에서 나온 색의 사각형에 흰색으로 표시됩니다. 작은 목록에서는 잎이 가운데 있습니다. 어두운 테마와 순수 검정이 켜지고 켜진 채로 남습니다. 표지 자동 다운로드가 멈추고, 화면 색을 위해 표지를 받지 않습니다.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': '에코 모드는 요청을 줄입니다. 이미 저장되었거나 캐시된 표지는 그대로 보입니다. 새 표지는 받지 않습니다. 이름은 팟캐스트 이름에서 나온 색의 사각형에 흰색으로 표시됩니다. 작은 목록에서는 잎이 가운데 있습니다. 어두운 테마와 순수 검정은 에코 모드와 함께 켜지고, 끄면 이전 설정으로 돌아갑니다. 표지 자동 다운로드가 멈추고, 화면 색을 위해 표지를 받지 않습니다.',
   'Eco mode skips new cover downloads. You can turn it off later.':
       '에코 모드는 새 표지를 받지 않습니다. 나중에 끌 수 있습니다.',
   'Education': '교육',
@@ -5889,7 +5906,7 @@ const _ru = <String, String>{
   'Drama': 'Драма',
   'Earth Sciences': 'Науки о Земле',
   'Eco mode': 'Эко-режим',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Эко-режим сокращает запросы. Уже сохранённые и кэшированные обложки остаются. Новые не загружаются: название показывается белым в квадрате, цвет которого взят из названия подкаста. В коротких списках лист в центре. Тёмная тема и чистый чёрный включаются и остаются включёнными. Автозагрузка обложек останавливается, и плеер больше не запрашивает обложку только ради оттенка экрана.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Эко-режим сокращает запросы. Уже сохранённые и кэшированные обложки остаются. Новые не загружаются: название показывается белым в квадрате, цвет которого взят из названия подкаста. В коротких списках лист в центре. Тёмная тема и чистый чёрный включаются вместе с эко-режимом и возвращаются к прежней настройке, когда его выключают. Автозагрузка обложек останавливается, и плеер больше не запрашивает обложку только ради оттенка экрана.',
   'Eco mode skips new cover downloads. You can turn it off later.':
       'Эко-режим не загружает новые обложки. Его можно выключить позже.',
   'Education': 'Образование',
@@ -6405,7 +6422,7 @@ const _tr = <String, String>{
   'Drama': 'Dram',
   'Earth Sciences': 'Yer bilimleri',
   'Eco mode': 'Eko mod',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Eko mod istekleri azaltır. Kayıtlı veya önbellekteki kapaklar görünür kalır. Yenileri indirilmez: ad, podcast adından renklendirilen bir karede beyaz görünür. Küçük listelerde yaprak ortadadır. Koyu tema ve saf siyah açılır ve açık kalır. Otomatik kapak indirmeleri durur ve oynatıcı yalnızca renk için kapak istemez.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Eko mod istekleri azaltır. Kayıtlı veya önbellekteki kapaklar görünür kalır. Yenileri indirilmez: ad, podcast adından renklendirilen bir karede beyaz görünür. Küçük listelerde yaprak ortadadır. Koyu tema ve saf siyah eko mod ile açılır ve kapatılınca önceki ayara döner. Otomatik kapak indirmeleri durur ve oynatıcı yalnızca renk için kapak istemez.',
   'Eco mode skips new cover downloads. You can turn it off later.':
       'Eko mod yeni kapak indirmez. Daha sonra kapatabilirsiniz.',
   'Education': 'Eğitim',
@@ -6918,7 +6935,7 @@ const _ar = <String, String>{
   'Drama': 'دراما',
   'Earth Sciences': 'علوم الأرض',
   'Eco mode': 'وضع التوفير',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'يقلل وضع التوفير الطلبات. الأغلفة المحفوظة أو المخزنة تبقى ظاهرة. الأغلفة الجديدة لا تُنزَّل: يظهر الاسم بالأبيض في مربع يُلوَّن من اسم البودكاست. في القوائم الصغيرة تكون الورقة في الوسط. يُفعَّل المظهر الداكن والأسود الخالص ويبقيان مفعّلين. يتوقف تنزيل الأغلفة التلقائي، ولا يجلب المشغّل غلافًا فقط لتلوين الشاشة.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'يقلل وضع التوفير الطلبات. الأغلفة المحفوظة أو المخزنة تبقى ظاهرة. الأغلفة الجديدة لا تُنزَّل: يظهر الاسم بالأبيض في مربع يُلوَّن من اسم البودكاست. في القوائم الصغيرة تكون الورقة في الوسط. يُفعَّل المظهر الداكن والأسود الخالص مع وضع التوفير ويعودان إلى الإعداد السابق عند إيقافه. يتوقف تنزيل الأغلفة التلقائي، ولا يجلب المشغّل غلافًا فقط لتلوين الشاشة.',
   'Eco mode skips new cover downloads. You can turn it off later.':
       'وضع التوفير لا ينزّل أغلفة جديدة. يمكنك إيقافه لاحقًا.',
   'Education': 'تعليم',
@@ -7430,7 +7447,7 @@ const _pl = <String, String>{
   'Drama': 'Dramat',
   'Earth Sciences': 'Nauki o Ziemi',
   'Eco mode': 'Tryb eko',
-  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Tryb eko ogranicza żądania. Okładki już zapisane lub w pamięci podręcznej zostają. Nowych nie pobiera: nazwa jest biała w kwadracie pokolorowanym od nazwy podcastu. Na krótkich listach liść jest na środku. Ciemny motyw i czysta czerń włączają się i pozostają włączone. Automatyczne pobieranie okładek się zatrzymuje, a odtwarzacz nie pobiera okładki tylko po to, by zabarwić ekran.',
+  'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.': 'Tryb eko ogranicza żądania. Okładki już zapisane lub w pamięci podręcznej zostają. Nowych nie pobiera: nazwa jest biała w kwadracie pokolorowanym od nazwy podcastu. Na krótkich listach liść jest na środku. Ciemny motyw i czysta czerń włączają się z trybem eko i wracają do poprzedniego ustawienia po wyłączeniu. Automatyczne pobieranie okładek się zatrzymuje, a odtwarzacz nie pobiera okładki tylko po to, by zabarwić ekran.',
   'Eco mode skips new cover downloads. You can turn it off later.':
       'Tryb eko nie pobiera nowych okładek. Możesz go wyłączyć później.',
   'Education': 'Edukacja',

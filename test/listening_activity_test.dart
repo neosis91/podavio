@@ -33,14 +33,24 @@ void main() {
     expect(activity.weekExtremes.calmest, [0]);
     expect(activity.weekDayIsFuture(2), isTrue);
     expect(activity.yearExtremes.busiest, [10]);
-    expect(activity.yearExtremes.calmest, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(activity.yearExtremes.calmest, isEmpty);
     expect(activity.yearExtremes.calmest, isNot(contains(11)));
     expect(activity.semesterStartMonth, 7);
     expect(activity.semesterEndMonth, 12);
     expect(activity.semesterSeconds, 420);
     expect(activity.categories.single.name, 'Comédie');
     expect(activity.weekdayExtremes.busiest, [1]);
-    expect(activity.weekdayExtremes.calmest, [0, 2, 3, 4, 5, 6]);
+    expect(activity.weekdayExtremes.calmest, [0]);
+  });
+
+  test('the quietest listened day is not grouped with empty days', () {
+    final activity = buildListeningActivity([
+      ListenSample(at: DateTime(2026, 11, 16, 12), seconds: 100),
+      ListenSample(at: DateTime(2026, 11, 17, 12), seconds: 50),
+    ], now: DateTime(2026, 11, 17, 18));
+
+    expect(activity.weekdayExtremes.busiest, [0]);
+    expect(activity.weekdayExtremes.calmest, [1]);
   });
 
   test('yesterday still counts, the day before does not', () {
@@ -108,7 +118,7 @@ void main() {
 
     await tester.scrollUntilVisible(find.text('Cette année'), 200);
     expect(find.text('novembre'), findsOneWidget);
-    expect(find.textContaining('janvier, février'), findsOneWidget);
+    expect(find.text('—'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.text('Catégories les plus populaires'),
@@ -126,10 +136,7 @@ void main() {
     expect(find.textContaining('juil.-déc.'), findsOneWidget);
     expect(find.text('Comédie'), findsOneWidget);
     expect(find.text('Mardi'), findsOneWidget);
-    expect(
-      find.text('Lundi, Mercredi, Jeudi, Vendredi, Samedi, Dimanche'),
-      findsOneWidget,
-    );
+    expect(find.text('Lundi'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.text('Temps total d’écoute'), 200);
     await tester.tap(find.text('Temps total d’écoute'));
@@ -150,8 +157,26 @@ void main() {
     );
 
     expect(find.text('Commencez votre aventure !'), findsOneWidget);
+    expect(find.text('0 minute'), findsWidgets);
     expect(find.text('0 jour'), findsOneWidget);
     expect(find.text('0 semaine'), findsOneWidget);
     expect(find.text('—'), findsWidgets);
+  });
+
+  testWidgets('a listen under one minute keeps its seconds', (tester) async {
+    final activity = buildListeningActivity([
+      ListenSample(at: DateTime(2026, 11, 17, 12), seconds: 45),
+    ], now: DateTime(2026, 11, 17, 18));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLightTheme(AppAccent.podavio),
+        home: Scaffold(body: ActivityTab(activity: activity)),
+      ),
+    );
+
+    expect(activity.totalSeconds, 45);
+    expect(activity.dailyStreak, 1);
+    expect(find.text('45 secondes'), findsWidgets);
+    expect(find.text('0 minute'), findsNothing);
   });
 }

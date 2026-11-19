@@ -32,7 +32,7 @@ class EcoModePage extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: Text(
               context.tr(
-                'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.',
+                'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.',
               ),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,

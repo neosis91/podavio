@@ -142,7 +142,7 @@
   "Drama": "Dram",
   "Earth Sciences": "Yer bilimleri",
   "Eco mode": "Eko mod",
-  "Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.": "Eko mod istekleri azaltır. Kayıtlı veya önbellekteki kapaklar görünür kalır. Yenileri indirilmez: ad, podcast adından renklendirilen bir karede beyaz görünür. Küçük listelerde yaprak ortadadır. Koyu tema ve saf siyah açılır ve açık kalır. Otomatik kapak indirmeleri durur ve oynatıcı yalnızca renk için kapak istemez.",
+  "Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.": "Eko mod istekleri azaltır. Kayıtlı veya önbellekteki kapaklar görünür kalır. Yenileri indirilmez: ad, podcast adından renklendirilen bir karede beyaz görünür. Küçük listelerde yaprak ortadadır. Koyu tema ve saf siyah eko mod ile açılır ve kapatılınca önceki ayara döner. Otomatik kapak indirmeleri durur ve oynatıcı yalnızca renk için kapak istemez.",
   "Eco mode skips new cover downloads. You can turn it off later.": "Eko mod yeni kapak indirmez. Daha sonra kapatabilirsiniz.",
   "Education": "Eğitim",
   "Education for Kids": "Çocuk eğitimi",

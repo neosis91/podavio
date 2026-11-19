@@ -19,7 +19,6 @@ class WelcomePage extends ConsumerStatefulWidget {
 class _WelcomePageState extends ConsumerState<WelcomePage> {
   var _restore = false;
   int? _setup;
-  var _offline = false;
 
   Future<void> _leave(String path) async {
     await ref.read(settingsProvider.notifier).setOnboardingComplete(true);
@@ -34,16 +33,11 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
     if (mounted) context.go(AppRoutes.home);
   }
 
-  void _chooseOffline(bool offline) {
-    setState(() => _offline = offline);
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_setup != null) {
       return _SetupFlow(
         step: _setup!,
-        offline: _offline,
         onBack: () => setState(() {
           if (_setup == 0) {
             _setup = null;
@@ -52,20 +46,18 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
           }
         }),
         onNext: () {
-          if (_setup! < 3) {
+          if (_setup! < 2) {
             setState(() => _setup = _setup! + 1);
           } else {
             _leave(AppRoutes.home);
           }
         },
         onImport: () => importOpmlFile(context, ref),
-        onOffline: _chooseOffline,
       );
     }
     if (_restore) {
       return _RestoreBackupPage(
         onBack: () => setState(() => _restore = false),
-        onNext: () => _leave(AppRoutes.home),
         onRestore: _restoreBackup,
       );
     }
@@ -149,19 +141,15 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
 class _SetupFlow extends ConsumerWidget {
   const _SetupFlow({
     required this.step,
-    required this.offline,
     required this.onBack,
     required this.onNext,
     required this.onImport,
-    required this.onOffline,
   });
 
   final int step;
-  final bool offline;
   final VoidCallback onBack;
   final VoidCallback onNext;
   final VoidCallback onImport;
-  final ValueChanged<bool> onOffline;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -187,12 +175,25 @@ class _SetupFlow extends ConsumerWidget {
       1 => (
         context.tr('Use mobile data?'),
         context.tr(
-          'Choose whether streaming and downloads can use mobile data.',
+          'Each setting starts on Wi-Fi only. The first action on mobile data still asks for confirmation.',
         ),
         Column(
           children: [
             _SwitchCard(
-              label: context.tr('Allow streaming on mobile data'),
+              label: context.tr('Episode downloads'),
+              subtitle: _networkModeLabel(context, settings.allowMobileData),
+              value: settings.allowMobileData,
+              onChanged: (enabled) => ref
+                  .read(settingsProvider.notifier)
+                  .setAllowMobileData(enabled),
+            ),
+            const SizedBox(height: 12),
+            _SwitchCard(
+              label: context.tr('Streaming'),
+              subtitle: _networkModeLabel(
+                context,
+                settings.allowMobileStreaming,
+              ),
               value: settings.allowMobileStreaming,
               onChanged: (enabled) => ref
                   .read(settingsProvider.notifier)
@@ -200,33 +201,13 @@ class _SetupFlow extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
             _SwitchCard(
-              label: context.tr('Allow downloads on mobile data'),
-              value: settings.allowMobileData,
+              label: context.tr('Refresh'),
+              subtitle: _networkModeLabel(context, settings.allowMobileRefresh),
+              value: settings.allowMobileRefresh,
               onChanged: (enabled) => ref
                   .read(settingsProvider.notifier)
-                  .setAllowMobileData(enabled),
+                  .setAllowMobileRefresh(enabled),
             ),
-          ],
-        ),
-      ),
-      2 => (
-        context.tr('How do you want to listen?'),
-        context.tr('Choose your default preference. You can change it later.'),
-        Column(
-          children: [
-            _ListenChoice(
-              label: context.tr('Streaming'),
-              selected: !offline,
-              onTap: () => onOffline(false),
-            ),
-            const SizedBox(height: 12),
-            _ListenChoice(
-              label: context.tr('Download to listen offline'),
-              selected: offline,
-              onTap: () => onOffline(true),
-            ),
-            const SizedBox(height: 28),
-            const _ListenNotes(),
           ],
         ),
       ),
@@ -246,7 +227,7 @@ class _SetupFlow extends ConsumerWidget {
             const SizedBox(height: 16),
             Text(
               context.tr(
-                'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.',
+                'Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.',
               ),
               style: title.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
@@ -274,7 +255,7 @@ class _SetupFlow extends ConsumerWidget {
                   CircleAvatar(
                     radius: 28,
                     backgroundColor: scheme.primaryContainer,
-                    child: step >= 3
+                    child: step >= 2
                         ? const EcoIcon(size: 34)
                         : const PodavioIcon(size: 34),
                   ),
@@ -342,17 +323,20 @@ class _SetupFlow extends ConsumerWidget {
 class _SwitchCard extends StatelessWidget {
   const _SwitchCard({
     required this.label,
+    this.subtitle,
     required this.value,
     required this.onChanged,
   });
 
   final String label;
+  final String? subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final caption = subtitle;
     return Material(
       color: scheme.surface,
       shape: RoundedRectangleBorder(
@@ -363,6 +347,7 @@ class _SwitchCard extends StatelessWidget {
       child: SwitchListTile(
         contentPadding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
         title: Text(label),
+        subtitle: caption == null ? null : Text(caption),
         value: value,
         onChanged: onChanged,
       ),
@@ -370,87 +355,14 @@ class _SwitchCard extends StatelessWidget {
   }
 }
 
-class _ListenChoice extends StatelessWidget {
-  const _ListenChoice({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton(
-        onPressed: onTap,
-        style: FilledButton.styleFrom(
-          elevation: 0,
-          backgroundColor: selected ? scheme.primaryContainer : scheme.surface,
-          foregroundColor: scheme.onSurface,
-          side: BorderSide(
-            color: selected ? scheme.primaryContainer : scheme.outlineVariant,
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: const StadiumBorder(),
-          textStyle: Theme.of(context).textTheme.titleMedium
-              ?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        child: Text(label),
-      ),
-    );
-  }
-}
-
-class _ListenNotes extends StatelessWidget {
-  const _ListenNotes();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final style = Theme.of(context).textTheme.bodyMedium
-        ?.copyWith(color: scheme.onSurfaceVariant);
-    return Column(
-      children: [
-        Text(
-          context.tr('Streaming needs an internet connection.'),
-          textAlign: TextAlign.center,
-          style: style,
-        ),
-        const SizedBox(height: 4),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.info_outline, size: 16, color: scheme.onSurfaceVariant),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                context.tr(
-                  'Downloads use storage space, but are available offline.',
-                ),
-                style: style,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+String _networkModeLabel(BuildContext context, bool unrestricted) {
+  return context.tr(unrestricted ? 'Wi-Fi and mobile data' : 'Wi-Fi only');
 }
 
 class _RestoreBackupPage extends StatelessWidget {
-  const _RestoreBackupPage({
-    required this.onBack,
-    required this.onNext,
-    required this.onRestore,
-  });
+  const _RestoreBackupPage({required this.onBack, required this.onRestore});
 
   final VoidCallback onBack;
-  final VoidCallback onNext;
   final VoidCallback onRestore;
 
   @override
@@ -510,33 +422,19 @@ class _RestoreBackupPage extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: onBack,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: scheme.primary,
-                            side: BorderSide(color: scheme.outlineVariant),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: const StadiumBorder(),
-                            backgroundColor: scheme.surface,
-                          ),
-                          child: Text(context.tr('Back')),
-                        ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: onBack,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: scheme.primary,
+                        side: BorderSide(color: scheme.outlineVariant),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: const StadiumBorder(),
+                        backgroundColor: scheme.surface,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: onNext,
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: const StadiumBorder(),
-                          ),
-                          child: Text(context.tr('Next')),
-                        ),
-                      ),
-                    ],
+                      child: Text(context.tr('Back')),
+                    ),
                   ),
                 ],
               ),

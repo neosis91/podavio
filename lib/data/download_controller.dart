@@ -33,10 +33,15 @@ class DownloadWaitingCountNotifier extends Notifier<int> {
 }
 
 class _QueuedDownload {
-  const _QueuedDownload({required this.episode, required this.automatic});
+  const _QueuedDownload({
+    required this.episode,
+    required this.automatic,
+    required this.allowMobileOnce,
+  });
 
   final Episode episode;
   final bool automatic;
+  final bool allowMobileOnce;
 }
 
 class _EpisodeLabel {
@@ -90,14 +95,24 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
 
   /// Met [episode] en file. Le futur se termine quand ce fichier est fini,
   /// pas quand un créneau se libère.
-  Future<void> download(Episode episode, {bool automatic = false}) {
+  Future<void> download(
+    Episode episode, {
+    bool automatic = false,
+    bool allowMobileOnce = false,
+  }) {
     if (episode.downloadPath != null) return Future.value();
     final existing = _pending[episode.id];
     if (existing != null) return existing.future;
     final done = Completer<void>();
     _pending[episode.id] = done;
     _labels[episode.id] = _EpisodeLabel(episode.title, null);
-    _waiting.add(_QueuedDownload(episode: episode, automatic: automatic));
+    _waiting.add(
+      _QueuedDownload(
+        episode: episode,
+        automatic: automatic,
+        allowMobileOnce: allowMobileOnce,
+      ),
+    );
     _publishWaiting();
     _pump();
     _publishDownloadNotice();
@@ -107,6 +122,7 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
   Future<void> _run(_QueuedDownload job) async {
     final episode = job.episode;
     if (job.automatic &&
+        !job.allowMobileOnce &&
         mobileDataBlocksDownload(
           allowMobileData: ref.read(settingsProvider).allowMobileData,
           mobileDataActive: await ref.read(mobileDataProbeProvider)(),
