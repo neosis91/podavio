@@ -31,7 +31,7 @@ for line in text.splitlines():
     if heading.fullmatch(title):
         print(title)
         raise SystemExit(0)
-raise SystemExit("CHANGELOG.md n'a pas de titre ## AAAA.M.N à publier. Renommez « ## Non publié » avant de fusionner develop dans main.")
+raise SystemExit("CHANGELOG.md n'a pas de titre ## AAAA.M.N à publier. Lancez python3 tool/changelog.py collect avant de fusionner develop dans main.")
 PY
 }
 
