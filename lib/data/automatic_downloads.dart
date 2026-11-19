@@ -10,6 +10,7 @@ import 'providers.dart';
 
 var _running = false;
 var _again = false;
+var _allowMobileOnce = false;
 
 final automaticDownloadRunProvider =
     NotifierProvider<AutomaticDownloadRun, void>(AutomaticDownloadRun.new);
@@ -19,14 +20,19 @@ class AutomaticDownloadRun extends Notifier<void> {
   @override
   void build() {}
 
-  Future<void> run() => runAutomaticDownloads(ref);
+  Future<void> run({bool allowMobileOnce = false}) =>
+      runAutomaticDownloads(ref, allowMobileOnce: allowMobileOnce);
 }
 
 /// Applique [decideAutomaticDownloads] et enfile les fichiers.
 ///
 /// Un appel pendant un passage est rejoué une fois à la fin. Sur les données
 /// mobiles refusées, rien n’est effacé ni téléchargé.
-Future<void> runAutomaticDownloads(Ref ref) async {
+Future<void> runAutomaticDownloads(
+  Ref ref, {
+  bool allowMobileOnce = false,
+}) async {
+  if (allowMobileOnce) _allowMobileOnce = true;
   if (_running) {
     _again = true;
     return;
@@ -39,6 +45,7 @@ Future<void> runAutomaticDownloads(Ref ref) async {
     } while (_again && ref.mounted);
   } finally {
     _running = false;
+    _allowMobileOnce = false;
   }
 }
 
@@ -47,10 +54,12 @@ Future<void> _runOnce(Ref ref) async {
   final settings = ref.read(settingsProvider);
   final onMobile = await ref.read(mobileDataProbeProvider)();
   if (!ref.mounted) return;
-  if (mobileDataBlocksDownload(
-    allowMobileData: settings.allowMobileData,
-    mobileDataActive: onMobile,
-  )) {
+  final allowMobileOnce = _allowMobileOnce;
+  if (!allowMobileOnce &&
+      mobileDataBlocksDownload(
+        allowMobileData: settings.allowMobileData,
+        mobileDataActive: onMobile,
+      )) {
     return;
   }
 
@@ -80,7 +89,7 @@ Future<void> _runOnce(Ref ref) async {
     if (episode == null) continue;
     unawaited(
       downloads
-          .download(episode, automatic: true)
+          .download(episode, automatic: true, allowMobileOnce: allowMobileOnce)
           .then<void>((_) {}, onError: (Object _, StackTrace _) {}),
     );
   }

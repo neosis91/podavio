@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:podcast_search/podcast_search.dart';
 import 'package:podavio/data/discover_languages.dart';
@@ -5,11 +6,18 @@ import 'package:podavio/data/discover_languages.dart';
 void main() {
   test('defaults to all languages and summarizes the selection', () {
     expect(normalizeDiscoverLanguages(null), const [discoverLanguagesAll]);
+    expect(discoverLanguageForLocale(const Locale('fr', 'FR')), 'fr');
+    expect(discoverLanguageForLocale(const Locale('en', 'GB')), 'en');
+    expect(discoverLanguageForLocale(const Locale('id')), 'in');
+    expect(discoverLanguageForLocale(const Locale('iw')), 'he');
+    expect(discoverLanguageForLocale(const Locale('xx')), isNull);
     expect(normalizeDiscoverLanguages(['inconnu']), const [
       discoverLanguagesAll,
     ]);
     expect(discoverLanguagesSummary(['fr']), 'Français');
-    expect(discoverLanguagesSummary(['fr', 'en']), 'Français, Anglais');
+    expect(discoverLanguagesSummary(['fr', 'en']), 'Français, English');
+    expect(discoverLanguageLabel('de'), 'Deutsch');
+    expect(discoverLanguageLabel('de-de'), 'Deutsch (Allemagne)');
     expect(discoverLanguagesSummary(['fr', 'en', 'de']), '3 langues');
     expect(
       discoverLanguagesSummary(const [discoverLanguagesAll]),
@@ -104,11 +112,25 @@ void main() {
       isTrue,
     );
     expect(appleStoresExceedLimit(const [discoverLanguagesAll]), isFalse);
-    expect(normalizeDiscoverLanguagesPicked(null), ['fr']);
-    expect(normalizeDiscoverLanguagesPicked(['en', 'de']), ['en', 'de']);
-    expect(normalizeDiscoverLanguagesPicked(const [discoverLanguagesAll]), [
-      'fr',
+    expect(normalizeDiscoverLanguagesPicked(null, system: const Locale('de')), [
+      'de',
     ]);
+    expect(normalizeDiscoverLanguagesPicked(null, system: const Locale('xx')), [
+      'en',
+    ]);
+    expect(
+      normalizeDiscoverLanguagesPicked([
+        'en',
+        'de',
+      ], system: const Locale('fr')),
+      ['en', 'de'],
+    );
+    expect(
+      normalizeDiscoverLanguagesPicked(const [
+        discoverLanguagesAll,
+      ], system: const Locale('de')),
+      ['de'],
+    );
   });
 
   test('maps a language to an Apple store', () {

@@ -880,6 +880,9 @@ String _duration(int seconds) {
   if (seconds <= 0) return '0 minute';
   final hours = seconds ~/ 3600;
   final minutes = (seconds % 3600) ~/ 60;
+  if (hours == 0 && minutes == 0) {
+    return _count(seconds, 'seconde', 'secondes');
+  }
   if (hours == 0) return _count(minutes, 'minute', 'minutes');
   if (minutes == 0) return _count(hours, 'heure', 'heures');
   return '$hours h $minutes min';

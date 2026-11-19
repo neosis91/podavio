@@ -38,10 +38,9 @@ import 'stats_page.dart';
 import 'sync_page.dart';
 import 'web_companion_page.dart';
 import 'activity_notices.dart';
+import 'root_navigator.dart';
 import 'welcome_page.dart';
 import 'widgets/app_bottom_sheet.dart';
-
-final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier<int>(0);

@@ -133,4 +133,75 @@ void main() {
             .episode;
     expect(safAfter.downloadPath, 'content://com.android.externalstorage/keep');
   });
+
+  test('backup names keep a manual export out of the automatic set', () {
+    final when = DateTime(2026, 11, 19, 8, 5, 9);
+    expect(
+      databaseBackupFileName(when),
+      'PodavioBackup-2026-11-19-080509.sqlite',
+    );
+    expect(
+      automaticDatabaseBackupFileName(when),
+      'PodavioAuto-2026-11-19-080509.sqlite',
+    );
+  });
+
+  test(
+    'replacing a database copies the file and rejects a non-sqlite',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('podavio-replace');
+      addTearDown(() async {
+        if (await dir.exists()) await dir.delete(recursive: true);
+      });
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final exported = await exportDatabaseFile(database, directory: dir);
+      addTearDown(() => deleteExportFile(exported));
+
+      final live = File('${dir.path}/live.sqlite');
+      await replaceDatabaseFile(live, exported);
+      final header = await live.openRead(0, 15).first;
+      expect(String.fromCharCodes(header), 'SQLite format 3');
+      expect(await live.length(), await exported.length());
+
+      final junk = File('${dir.path}/notes.txt');
+      await junk.writeAsString('pas une base');
+      expect(() => replaceDatabaseFile(live, junk), throwsStateError);
+      expect(await live.length(), await exported.length());
+    },
+  );
+
+  test(
+    'export writes a sqlite file without keeping it only in memory',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('podavio-export');
+      addTearDown(() async {
+        if (await dir.exists()) await dir.delete(recursive: true);
+      });
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.saveFeed(
+        const FeedDraft(
+          feedUrl: 'https://example.com/feed.xml',
+          title: 'Essai',
+          author: 'Auteur',
+          description: 'Description',
+          imageUrl: 'https://example.com/cover.jpg',
+          episodes: [],
+        ),
+      );
+
+      final exported = await exportDatabaseFile(database, directory: dir);
+      addTearDown(() => deleteExportFile(exported));
+      final header = await exported.openRead(0, 15).first;
+      expect(String.fromCharCodes(header), 'SQLite format 3');
+
+      final folder = Directory('${dir.path}/backups');
+      await writeBackupFile(folder.path, exported, 'PodavioBackup-test.sqlite');
+      final copy = File('${folder.path}/PodavioBackup-test.sqlite');
+      expect(await copy.length(), await exported.length());
+      final copyHeader = await copy.openRead(0, 15).first;
+      expect(String.fromCharCodes(copyHeader), 'SQLite format 3');
+    },
+  );
 }

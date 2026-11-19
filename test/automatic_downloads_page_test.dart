@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:podavio/data/app_database.dart';
 import 'package:podavio/data/models.dart';
+import 'package:podavio/data/online_status.dart';
 import 'package:podavio/data/providers.dart';
 import 'package:podavio/ui/automatic_downloads_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -44,6 +45,7 @@ void main() {
         overrides: [
           sharedPreferencesProvider.overrideWithValue(preferences),
           databaseProvider.overrideWithValue(database),
+          mobileDataProbeProvider.overrideWithValue(() async => false),
         ],
         child: const MaterialApp(home: AutomaticDownloadsPage()),
       ),
@@ -124,6 +126,125 @@ void main() {
     expect((await database.getPodcast(other))!.autoDownloadLimit, isNull);
     expect(find.byType(Checkbox), findsNothing);
     expect(find.byTooltip('Actions'), findsNWidgets(2));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+    await database.close();
+  });
+
+  testWidgets('enabling automatic downloads on mobile data asks first', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final database = AppDatabase(NativeDatabase.memory());
+    final podcastId = await _podcast(
+      database,
+      'https://example.com/a.xml',
+      'Alpha',
+    );
+
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
+          databaseProvider.overrideWithValue(database),
+          mobileDataProbeProvider.overrideWithValue(() async => true),
+        ],
+        child: const MaterialApp(home: AutomaticDownloadsPage()),
+      ),
+    );
+    await _frames(tester);
+
+    final alpha = find.ancestor(
+      of: find.text('Alpha'),
+      matching: find.byType(InkWell),
+    );
+    await tester.tap(
+      find.descendant(of: alpha, matching: find.byType(IconButton)),
+    );
+    await _frames(tester);
+    await tester.tap(find.byType(Switch));
+    await _frames(tester);
+
+    expect(
+      find.text(
+        'Le téléchargement automatique attend le Wi-Fi. Le lancer sur les données mobiles demande d’abord confirmation.',
+      ),
+      findsOneWidget,
+    );
+    expect(await _flag(database, podcastId), isFalse);
+    await tester.tap(find.text('Annuler'));
+    await _frames(tester);
+    expect(await _flag(database, podcastId), isFalse);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    expect(preferences.getBool('allowMobileData'), isNot(true));
+
+    await tester.tap(find.byType(Switch));
+    await _frames(tester);
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    await tester.tap(find.text('Télécharger'));
+    await _frames(tester);
+    expect(preferences.getBool('allowMobileData'), isTrue);
+    expect(await _flag(database, podcastId), isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+    await database.close();
+  });
+
+  testWidgets('changing the automatic limit on mobile data asks first', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final database = AppDatabase(NativeDatabase.memory());
+    final podcastId = await _podcast(
+      database,
+      'https://example.com/a.xml',
+      'Alpha',
+    );
+
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
+          databaseProvider.overrideWithValue(database),
+          mobileDataProbeProvider.overrideWithValue(() async => true),
+        ],
+        child: const MaterialApp(home: AutomaticDownloadsPage()),
+      ),
+    );
+    await _frames(tester);
+
+    final alpha = find.ancestor(
+      of: find.text('Alpha'),
+      matching: find.byType(InkWell),
+    );
+    await tester.tap(
+      find.descendant(of: alpha, matching: find.byType(IconButton)),
+    );
+    await _frames(tester);
+    await tester.tap(find.text('5 épisodes'));
+    await _frames(tester);
+
+    expect(
+      find.text(
+        'Le téléchargement automatique attend le Wi-Fi. Le lancer sur les données mobiles demande d’abord confirmation.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Annuler'));
+    await _frames(tester);
+    expect((await database.getPodcast(podcastId))!.autoDownloadLimit, 5);
+    expect(preferences.getBool('allowMobileData'), isNot(true));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));

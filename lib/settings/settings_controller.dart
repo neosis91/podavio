@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -128,6 +129,7 @@ class AppSettings {
     required this.refreshIntervalMinutes,
     required this.discoverLanguages,
     required this.discoverLanguagesPicked,
+    required this.discoverLanguagesFromSystem,
     required this.interfaceLanguage,
   });
 
@@ -253,6 +255,9 @@ class AppSettings {
   /// Dernière sélection précise, conservée quand « Toutes » est actif.
   final List<String> discoverLanguagesPicked;
 
+  /// Aucun choix enregistré : la langue d’écoute suit le téléphone.
+  final bool discoverLanguagesFromSystem;
+
   /// Code de langue de l’interface, ou `null` pour suivre le système.
   final String? interfaceLanguage;
 
@@ -311,6 +316,7 @@ class AppSettings {
     int? refreshIntervalMinutes,
     List<String>? discoverLanguages,
     List<String>? discoverLanguagesPicked,
+    bool? discoverLanguagesFromSystem,
     String? interfaceLanguage,
     bool clearInterfaceLanguage = false,
   }) {
@@ -380,6 +386,8 @@ class AppSettings {
       discoverLanguages: discoverLanguages ?? this.discoverLanguages,
       discoverLanguagesPicked:
           discoverLanguagesPicked ?? this.discoverLanguagesPicked,
+      discoverLanguagesFromSystem:
+          discoverLanguagesFromSystem ?? this.discoverLanguagesFromSystem,
       interfaceLanguage: clearInterfaceLanguage
           ? null
           : (interfaceLanguage ?? this.interfaceLanguage),
@@ -392,9 +400,16 @@ final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(
 );
 
 class SettingsNotifier extends Notifier<AppSettings> {
+  var _fromSystem = false;
+  List<String> _listeningLanguages = const [];
+
   @override
   AppSettings build() {
+    final observer = _ListeningLocaleRefresh(this);
+    WidgetsBinding.instance.addObserver(observer);
+    ref.onDispose(() => WidgetsBinding.instance.removeObserver(observer));
     final preferences = ref.watch(sharedPreferencesProvider);
+    final locale = WidgetsBinding.instance.platformDispatcher.locale;
     final themeName = preferences.getString('theme') ?? ThemeMode.system.name;
     final ecoMode = preferences.getBool('ecoMode') ?? false;
     return AppSettings(
@@ -481,25 +496,40 @@ class SettingsNotifier extends Notifier<AppSettings> {
       refreshIntervalMinutes: _refreshIntervalMinutes(
         preferences.getInt('refreshIntervalMinutes'),
       ),
-      discoverLanguages: _discoverLanguages(preferences),
-      discoverLanguagesPicked: _discoverLanguagesPicked(preferences),
+      discoverLanguages: _listeningLanguages = _discoverLanguages(
+        preferences,
+        locale,
+      ),
+      discoverLanguagesPicked: _discoverLanguagesPicked(preferences, locale),
+      discoverLanguagesFromSystem: _fromSystem =
+          preferences.getStringList('discoverLanguages') == null,
       interfaceLanguage: normalizeInterfaceLanguage(
         preferences.getString('interfaceLanguage'),
       ),
     );
   }
 
-  static List<String> _discoverLanguages(SharedPreferences preferences) {
-    return normalizeDiscoverLanguages(
-      preferences.getStringList('discoverLanguages'),
-    );
+  static List<String> _discoverLanguages(
+    SharedPreferences preferences,
+    Locale locale,
+  ) {
+    final stored = preferences.getStringList('discoverLanguages');
+    if (stored == null) return defaultDiscoverLanguages(locale);
+    return normalizeDiscoverLanguages(stored);
   }
 
-  static List<String> _discoverLanguagesPicked(SharedPreferences preferences) {
+  static List<String> _discoverLanguagesPicked(
+    SharedPreferences preferences,
+    Locale locale,
+  ) {
+    final languages = _discoverLanguages(preferences, locale);
     final stored = preferences.getStringList('discoverLanguagesPicked');
-    if (stored != null) return normalizeDiscoverLanguagesPicked(stored);
-    final languages = _discoverLanguages(preferences);
-    if (discoverLanguagesAreAll(languages)) return discoverLanguagesDefault;
+    if (stored != null) {
+      return normalizeDiscoverLanguagesPicked(stored, system: locale);
+    }
+    if (discoverLanguagesAreAll(languages)) {
+      return defaultDiscoverLanguages(locale);
+    }
     return languages;
   }
 
@@ -548,17 +578,24 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await ref.read(sharedPreferencesProvider).setBool('pureBlack', enabled);
   }
 
-  /// Active le noir pur et l’y maintient. Le désactiver laisse le noir pur tel quel.
+  /// Active le thème sombre et le noir pur. Les couper rend le réglage d’avant.
   Future<void> setEcoMode(bool enabled) async {
     final preferences = ref.read(sharedPreferencesProvider);
     if (enabled) {
+      if (!state.ecoMode) {
+        await preferences.setBool('pureBlackBeforeEco', state.pureBlack);
+      }
       state = state.copyWith(ecoMode: true, pureBlack: true);
       await preferences.setBool('ecoMode', true);
       await preferences.setBool('pureBlack', true);
       return;
     }
-    state = state.copyWith(ecoMode: false);
+    final previous = preferences.getBool('pureBlackBeforeEco');
+    final pureBlack = previous ?? state.pureBlack;
+    state = state.copyWith(ecoMode: false, pureBlack: pureBlack);
     await preferences.setBool('ecoMode', false);
+    await preferences.setBool('pureBlack', pureBlack);
+    if (previous != null) await preferences.remove('pureBlackBeforeEco');
   }
 
   Future<void> setOnboardingComplete(bool enabled) async {
@@ -877,13 +914,17 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final normalized = normalizeDiscoverLanguages(languages);
     final preferences = ref.read(sharedPreferencesProvider);
     if (discoverLanguagesAreAll(normalized)) {
-      state = state.copyWith(discoverLanguages: normalized);
+      state = state.copyWith(
+        discoverLanguages: normalized,
+        discoverLanguagesFromSystem: false,
+      );
       await preferences.setStringList('discoverLanguages', normalized);
       return;
     }
     state = state.copyWith(
       discoverLanguages: normalized,
       discoverLanguagesPicked: normalized,
+      discoverLanguagesFromSystem: false,
     );
     await preferences.setStringList('discoverLanguages', normalized);
     await preferences.setStringList('discoverLanguagesPicked', normalized);
@@ -894,15 +935,36 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final preferences = ref.read(sharedPreferencesProvider);
     final picked = state.discoverLanguagesPicked;
     if (all) {
-      state = state.copyWith(discoverLanguages: const [discoverLanguagesAll]);
+      state = state.copyWith(
+        discoverLanguages: const [discoverLanguagesAll],
+        discoverLanguagesFromSystem: false,
+      );
       await preferences.setStringList('discoverLanguages', const [
         discoverLanguagesAll,
       ]);
       await preferences.setStringList('discoverLanguagesPicked', picked);
       return;
     }
-    state = state.copyWith(discoverLanguages: picked);
+    state = state.copyWith(
+      discoverLanguages: picked,
+      discoverLanguagesFromSystem: false,
+    );
     await preferences.setStringList('discoverLanguages', picked);
+  }
+
+  /// Oublie le choix enregistré. La langue d’écoute suit de nouveau le téléphone.
+  Future<void> setDiscoverLanguagesFromSystem() async {
+    final preferences = ref.read(sharedPreferencesProvider);
+    await preferences.remove('discoverLanguages');
+    await preferences.remove('discoverLanguagesPicked');
+    final languages = defaultDiscoverLanguages(
+      WidgetsBinding.instance.platformDispatcher.locale,
+    );
+    state = state.copyWith(
+      discoverLanguages: languages,
+      discoverLanguagesPicked: languages,
+      discoverLanguagesFromSystem: true,
+    );
   }
 
   Future<void> setNavOrder(List<String> order) async {
@@ -911,5 +973,26 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await ref
         .read(sharedPreferencesProvider)
         .setStringList('navOrder', normalized);
+  }
+
+  void _onLocaleChanged(Locale locale) {
+    if (!_fromSystem) return;
+    final next = defaultDiscoverLanguages(locale);
+    if (listEquals(_listeningLanguages, next)) return;
+    ref.invalidateSelf();
+  }
+}
+
+class _ListeningLocaleRefresh extends WidgetsBindingObserver {
+  _ListeningLocaleRefresh(this._notifier);
+
+  final SettingsNotifier _notifier;
+
+  @override
+  void didChangeLocales(List<Locale>? locales) {
+    final locale = locales != null && locales.isNotEmpty
+        ? locales.first
+        : WidgetsBinding.instance.platformDispatcher.locale;
+    _notifier._onLocaleChanged(locale);
   }
 }

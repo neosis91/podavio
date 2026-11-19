@@ -942,6 +942,38 @@ void main() {
       });
     },
   );
+
+  test('marking an episode played counts it on that day', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final podcastId = (await database.saveFeed(
+      _feed('https://example.com/played-day.xml', [
+        EpisodeDraft(
+          guid: 'whole',
+          title: 'Entier',
+          description: '',
+          audioUrl: 'https://example.com/whole.mp3',
+          durationSeconds: 100,
+          publishedAt: DateTime.utc(2026, 11, 1),
+        ),
+      ]),
+    )).podcastId;
+    final episode = (await database.episodesForPodcast(podcastId)).single;
+    expect(episode.lastPlayedAt, isNull);
+
+    final before = DateTime.now().subtract(const Duration(seconds: 1));
+    await database.setPlayed(episode.id, played: true);
+    final marked = (await database.getEpisode(episode.id))!.episode;
+    final activity = (await database.libraryStats()).activity;
+
+    expect(marked.played, isTrue);
+    expect(marked.lastPlayedAt, isNotNull);
+    expect(marked.lastPlayedAt!.isBefore(before), isFalse);
+    expect(activity.totalSeconds, 100);
+    expect(activity.dailyStreak, 1);
+    expect(activity.secondsOn(DateTime.now()), 100);
+  });
 }
 
 FeedDraft _feed(String url, List<EpisodeDraft> episodes) {

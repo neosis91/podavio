@@ -499,20 +499,30 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
       enabled: item.autoDownload,
       selected: podcastAutoDownloadLimit(item.autoDownloadLimit) ?? 0,
       onEnabled: (enabled) async {
-        if (!mounted) return;
+        if (!mounted) return false;
+        if (!enabled) {
+          await ref
+              .read(databaseProvider)
+              .setPodcastAutoDownload(item.id, autoDownload: false);
+          return false;
+        }
+        final choice = await confirmAutomaticDownloads(context, ref);
+        if (!mounted || !choice.proceed) return false;
         await ref
             .read(databaseProvider)
-            .setPodcastAutoDownload(item.id, autoDownload: enabled);
-        if (!mounted || !enabled) return;
-        unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
+            .setPodcastAutoDownload(item.id, autoDownload: true);
+        launchAutomaticDownloads(ref, allowMobileOnce: choice.allowMobileOnce);
+        return true;
       },
-      onLimit: (choice) async {
+      onLimit: (limit) async {
+        if (!mounted) return;
+        final choice = await confirmAutomaticDownloads(context, ref);
         if (!mounted) return;
         await ref.read(databaseProvider).setPodcastsAutoDownloadLimit([
           item.id,
-        ], choice == 0 ? null : choice);
-        if (!mounted) return;
-        unawaited(ref.read(automaticDownloadRunProvider.notifier).run());
+        ], limit == 0 ? null : limit);
+        if (!mounted || !choice.proceed) return;
+        launchAutomaticDownloads(ref, allowMobileOnce: choice.allowMobileOnce);
       },
     );
   }

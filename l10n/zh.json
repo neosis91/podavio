@@ -142,7 +142,7 @@
   "Drama": "戏剧",
   "Earth Sciences": "地球科学",
   "Eco mode": "省电模式",
-  "Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.": "省电模式会减少网络请求。已保存或已缓存的封面仍然显示。新封面不会下载：名称以白色显示在根据播客名称着色的方块中。小列表里，叶子在正中。深色主题和纯黑会打开并保持打开。自动封面下载会停止，播放器也不再仅为着色而获取封面。",
+  "Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.": "省电模式会减少网络请求。已保存或已缓存的封面仍然显示。新封面不会下载：名称以白色显示在根据播客名称着色的方块中。小列表里，叶子在正中。深色主题和纯黑会随省电模式打开，关闭后恢复之前的设置。自动封面下载会停止，播放器也不再仅为着色而获取封面。",
   "Eco mode skips new cover downloads. You can turn it off later.": "省电模式不会下载新封面。你可以稍后关闭它。",
   "Education": "教育",
   "Education for Kids": "儿童教育",

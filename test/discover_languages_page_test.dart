@@ -11,6 +11,10 @@ void main() {
   testWidgets('search highlights a language like the subscriptions page', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
 
@@ -25,7 +29,7 @@ void main() {
     expect(find.byType(TextField), findsNothing);
     expect(find.text('Toutes les langues'), findsOneWidget);
 
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Système'));
     await tester.pump();
 
     expect(find.byIcon(Icons.search), findsOneWidget);
@@ -34,8 +38,14 @@ void main() {
     await tester.enterText(find.byType(TextField), 'alban');
     await tester.pump();
 
-    expect(find.text('Albanais'), findsOneWidget);
-    expect(find.text('Allemand'), findsNothing);
+    expect(find.text('Shqip'), findsOneWidget);
+    expect(find.text('Deutsch'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'shq');
+    await tester.pump();
+
+    expect(find.text('Shqip'), findsOneWidget);
+    expect(find.text('Deutsch'), findsNothing);
 
     final marks = <TextSpan>[];
     void collect(InlineSpan span) {
@@ -50,11 +60,11 @@ void main() {
     for (final rich in tester.widgetList<RichText>(find.byType(RichText))) {
       collect(rich.text);
     }
-    expect(marks.map((span) => span.text), ['Alban']);
+    expect(marks.map((span) => span.text), ['Shq']);
 
     await tester.enterText(find.byType(TextField), '');
     await tester.pump();
-    expect(find.text('Allemand'), findsOneWidget);
+    expect(find.text('Deutsch'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pump();
     expect(find.byIcon(Icons.search), findsOneWidget);

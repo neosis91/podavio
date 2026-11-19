@@ -91,19 +91,22 @@ class FeedRefreshNotifier extends Notifier<FeedRefreshState> {
   FeedRefreshState build() => const FeedRefreshState();
 
   /// Lance l'actualisation en arrière-plan (respecte l’intervalle des réglages).
-  Future<FeedRefreshStart> start({bool force = false}) async {
+  Future<FeedRefreshStart> start({
+    bool force = false,
+    bool allowMobileOnce = false,
+  }) async {
     if (state.isRunning) return const FeedRefreshStart.alreadyRunning();
-
-    if (!ref.read(settingsProvider).allowMobileRefresh) {
-      final onMobile = await ref.read(mobileDataProbeProvider)();
-      if (onMobile) return const FeedRefreshStart.mobileData();
-    }
 
     if (!force) {
       final throttled = _throttleRemaining();
       if (throttled != null) {
         return FeedRefreshStart.throttled(throttled);
       }
+    }
+
+    if (!allowMobileOnce && !ref.read(settingsProvider).allowMobileRefresh) {
+      final onMobile = await ref.read(mobileDataProbeProvider)();
+      if (onMobile) return const FeedRefreshStart.mobileData();
     }
 
     final podcasts = (await ref.read(databaseProvider).listPodcasts())

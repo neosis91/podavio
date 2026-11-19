@@ -142,7 +142,7 @@
   "Drama": "ドラマ",
   "Earth Sciences": "地球科学",
   "Eco mode": "エコモード",
-  "Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on and stay on. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.": "エコモードは通信を減らします。保存済みまたはキャッシュ済みのジャケットはそのまま表示されます。新しいジャケットはダウンロードせず、名前はポッドキャスト名から色づいた四角の中に白で表示されます。小さい一覧では葉が中央にあります。ダークテーマと純黒がオンになり、オンのままです。ジャケットの自動ダウンロードは止まり、画面の色付けのためだけにジャケットを取得しなくなります。",
+  "Eco mode limits network requests. Covers already saved or cached stay visible. New covers are not downloaded: the name appears in white on a square colored from the podcast name. In small lists a leaf sits in the center. Dark theme and pure black turn on with Eco mode and return to their previous setting when it is turned off. Automatic cover downloads stop, and the player no longer fetches a cover only to tint the screen.": "エコモードは通信を減らします。保存済みまたはキャッシュ済みのジャケットはそのまま表示されます。新しいジャケットはダウンロードせず、名前はポッドキャスト名から色づいた四角の中に白で表示されます。小さい一覧では葉が中央にあります。ダークテーマと純黒はエコモードと一緒にオンになり、オフにすると以前の設定に戻ります。ジャケットの自動ダウンロードは止まり、画面の色付けのためだけにジャケットを取得しなくなります。",
   "Eco mode skips new cover downloads. You can turn it off later.": "エコモードは新しいジャケットをダウンロードしません。あとからオフにできます。",
   "Education": "教育",
   "Education for Kids": "子どもの教育",

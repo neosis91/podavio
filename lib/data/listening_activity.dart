@@ -94,7 +94,7 @@ class ListeningActivity {
     final values = [
       for (var month = 1; month <= 12; month++) monthSeconds(month),
     ];
-    return _extremes(values, included);
+    return _listenedExtremes(values, included);
   }
 
   int monthSeconds(int month) {
@@ -114,15 +114,7 @@ class ListeningActivity {
     for (final entry in daySeconds.entries) {
       totals[entry.key.weekday - 1] += entry.value;
     }
-    final ranked = _extremes(totals, const [0, 1, 2, 3, 4, 5, 6]);
-    final busiest = ranked.busiest.toSet();
-    return IndexExtreme(
-      busiest: ranked.busiest,
-      calmest: [
-        for (var index = 0; index < 7; index++)
-          if (!busiest.contains(index)) index,
-      ],
-    );
+    return _listenedExtremes(totals, const [0, 1, 2, 3, 4, 5, 6]);
   }
 
   int get semesterSeconds {
@@ -272,6 +264,20 @@ bool _weekHasListening(Map<DateTime, int> days, DateTime monday) {
     if ((days[day] ?? 0) > 0) return true;
   }
   return false;
+}
+
+/// Le plus actif et le plus calme, parmi les périodes où il y a eu de
+/// l’écoute. Un seul niveau d’écoute n’est pas aussi « le plus calme ».
+IndexExtreme _listenedExtremes(List<int> values, List<int> included) {
+  final active = [
+    for (final index in included)
+      if (values[index] > 0) index,
+  ];
+  final ranked = _extremes(values, active);
+  if (ranked.busiest.length == active.length) {
+    return IndexExtreme(busiest: ranked.busiest, calmest: const []);
+  }
+  return ranked;
 }
 
 IndexExtreme _extremes(List<int> values, List<int> included) {
