@@ -13,6 +13,7 @@ import 'activity_notices.dart';
 import 'nav_catalog.dart';
 import 'router.dart';
 import 'widgets/brand.dart';
+import 'widgets/messages.dart';
 import 'widgets/expandable_player.dart';
 import 'widgets/update_prompt.dart';
 
@@ -72,6 +73,10 @@ class AppShell extends ConsumerWidget {
     ref.watch(coverPrefetchProvider);
     ref.watch(mojibakeRepairProvider);
     ref.watch(automaticDatabaseBackupProvider);
+    ref.listen(automaticBackupFailureProvider, (previous, next) {
+      if (next == 0 || next == previous) return;
+      showMessage(context, context.tr('Could not export the database'));
+    });
     ref.watch(syncStatusProvider);
     final path = GoRouterState.of(context).uri.path;
     final wide = MediaQuery.sizeOf(context).width >= 600;

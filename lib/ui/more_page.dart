@@ -48,7 +48,7 @@ Future<bool> importLibraryDatabase(
         title: Text(context.tr('Import database')),
         content: Text(
           context.tr(
-            'This replaces your current subscriptions, queue, favorites, and playback progress. Downloaded audio files are not restored. Continue?',
+            'This replaces your library: subscriptions, playlists, chapters, playback, and per-podcast settings. Downloaded episodes stay when their files are still on this phone. App settings stay as they are. Continue?',
           ),
         ),
         actions: [
@@ -87,9 +87,16 @@ Future<bool> importLibraryDatabase(
     barrierDismissible: false,
     builder: (context) => const Center(child: CircularProgressIndicator()),
   );
-  Uint8List bytes;
+  File? staged;
+  var ownsStaged = false;
   try {
-    bytes = await file.readAsBytes();
+    final path = file.path;
+    if (path != null && await File(path).exists()) {
+      staged = File(path);
+    } else {
+      staged = await stageDatabaseStream(file.readAsByteStream());
+      ownsStaged = true;
+    }
   } catch (error) {
     if (context.mounted) {
       showMessage(
@@ -101,11 +108,15 @@ Future<bool> importLibraryDatabase(
     }
     return false;
   }
-  if (!context.mounted) return false;
+  final source = staged;
+  if (!context.mounted) {
+    if (ownsStaged) await deleteExportFile(source);
+    return false;
+  }
   navigator.push(dialog);
   await WidgetsBinding.instance.endOfFrame;
   try {
-    await importDatabaseBytes(container, bytes);
+    await importDatabaseFile(container, source);
     if (context.mounted) {
       showMessage(context, context.tr('Database imported'));
     }
@@ -122,6 +133,26 @@ Future<bool> importLibraryDatabase(
     return false;
   } finally {
     await _dismissImportDialog(navigator, dialog);
+    if (ownsStaged) await deleteExportFile(source);
+  }
+}
+
+Future<T> _withProgress<T>(
+  BuildContext context,
+  Future<T> Function() action,
+) async {
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final route = DialogRoute<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => const Center(child: CircularProgressIndicator()),
+  );
+  navigator.push(route);
+  await WidgetsBinding.instance.endOfFrame;
+  try {
+    return await action();
+  } finally {
+    await _dismissImportDialog(navigator, route);
   }
 }
 
@@ -409,7 +440,7 @@ class BackupRestorePage extends ConsumerWidget {
             title: Text(context.tr('Export database')),
             subtitle: Text(
               context.tr(
-                'Subscriptions, queue, favorites, and playback progress. Not the downloaded audio files.',
+                'Subscriptions, playlists, chapters, playback, and per-podcast settings. Audio files and app settings stay on the phone.',
               ),
             ),
             onTap: () => _exportDatabase(context, ref),
@@ -435,12 +466,23 @@ class BackupRestorePage extends ConsumerWidget {
             onChanged: (enabled) =>
                 _setAutomaticDatabaseBackup(context, ref, enabled),
           ),
+          if (settings.automaticDatabaseBackup)
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: Text(context.tr('Backup folder')),
+              subtitle: Text(
+                autoFolder == null || autoFolder.isEmpty
+                    ? context.tr('Backup folder')
+                    : downloadDirectoryLabel(autoFolder),
+              ),
+              onTap: () => _changeAutomaticBackupFolder(context, ref),
+            ),
           ListTile(
             leading: const Icon(Icons.file_upload_outlined),
             title: Text(context.tr('Import database')),
             subtitle: Text(
               context.tr(
-                'Replaces the current database. Downloaded episodes must be re-downloaded.',
+                'Replaces the library. Downloaded episodes stay when their files are still on this phone. App settings stay as they are.',
               ),
             ),
             onTap: () => _importDatabase(context, ref),
@@ -463,7 +505,7 @@ class BackupRestorePage extends ConsumerWidget {
           const _SectionTitle('HTML'),
           ListTile(
             leading: const Icon(Icons.language_outlined),
-            title: Text(context.tr('Export subscriptions')),
+            title: Text(context.tr('Export subscriptions (HTML)')),
             subtitle: Text(
               context.tr('HTML page to open or share (cannot be re-imported)'),
             ),
@@ -488,17 +530,48 @@ class BackupRestorePage extends ConsumerWidget {
     final dialogTitle = context.tr('Export database');
     final doneMsg = context.tr('Database exported');
     final failedMsg = context.tr('Could not export the database');
-    try {
-      final bytes = await exportDatabaseBytes(ref.read(databaseProvider));
-      final saved = await FilePicker.saveFile(
-        dialogTitle: dialogTitle,
-        fileName: databaseBackupFileName(),
-        bytes: bytes,
-        mimeType: 'application/x-sqlite3',
+    final fileName = databaseBackupFileName();
+    final navigator = Navigator.of(context, rootNavigator: true);
+    DialogRoute<void>? dialog;
+    Future<void> showProgress() async {
+      if (!context.mounted) return;
+      final route = DialogRoute<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
       );
-      if (saved != null && context.mounted) {
-        showMessage(context, doneMsg);
+      dialog = route;
+      navigator.push(route);
+      await WidgetsBinding.instance.endOfFrame;
+    }
+
+    Future<void> hideProgress() async {
+      final route = dialog;
+      dialog = null;
+      if (route != null) await _dismissImportDialog(navigator, route);
+    }
+
+    await showProgress();
+    File? copy;
+    try {
+      copy = await exportDatabaseFile(ref.read(databaseProvider));
+      await hideProgress();
+      if (Platform.isAndroid) {
+        final uri = await pickDatabaseExportUri(fileName);
+        if (uri == null) return;
+        await showProgress();
+        await writeBackupToDocument(uri, copy);
+      } else {
+        final bytes = await copy.readAsBytes();
+        final saved = await FilePicker.saveFile(
+          dialogTitle: dialogTitle,
+          fileName: fileName,
+          bytes: bytes,
+          mimeType: 'application/x-sqlite3',
+        );
+        if (saved == null) return;
       }
+      if (context.mounted) showMessage(context, doneMsg);
     } catch (error) {
       if (context.mounted) {
         showMessage(
@@ -506,6 +579,10 @@ class BackupRestorePage extends ConsumerWidget {
           errorText(error).isEmpty ? failedMsg : errorText(error),
         );
       }
+    } finally {
+      await hideProgress();
+      final file = copy;
+      if (file != null) await deleteExportFile(file);
     }
   }
 
@@ -526,8 +603,52 @@ class BackupRestorePage extends ConsumerWidget {
         .read(settingsProvider.notifier)
         .setAutomaticDatabaseBackupFolder(folder);
     await ref.read(settingsProvider.notifier).setAutomaticDatabaseBackup(true);
-    if (context.mounted) {
+    if (!context.mounted) return;
+    final saved = await _writeAutomaticBackupNow(context, ref, folder);
+    if (saved && context.mounted) {
       showMessage(context, context.tr('Automatic database export is on'));
+    }
+  }
+
+  Future<void> _changeAutomaticBackupFolder(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final folder = await _pickBackupFolder(context, ref);
+    if (folder == null || !context.mounted) return;
+    await ref
+        .read(settingsProvider.notifier)
+        .setAutomaticDatabaseBackupFolder(folder);
+    if (!context.mounted) return;
+    final saved = await _writeAutomaticBackupNow(context, ref, folder);
+    if (saved && context.mounted) {
+      showMessage(context, context.tr('Database exported'));
+    }
+  }
+
+  Future<bool> _writeAutomaticBackupNow(
+    BuildContext context,
+    WidgetRef ref,
+    String folder,
+  ) async {
+    final failedMsg = context.tr('Could not export the database');
+    try {
+      await _withProgress(context, () {
+        return performAutomaticDatabaseBackup(
+          database: ref.read(databaseProvider),
+          preferences: ref.read(sharedPreferencesProvider),
+          folder: folder,
+        );
+      });
+      return true;
+    } catch (error) {
+      if (context.mounted) {
+        showMessage(
+          context,
+          errorText(error).isEmpty ? failedMsg : errorText(error),
+        );
+      }
+      return false;
     }
   }
 
@@ -645,14 +766,14 @@ Future<void> importOpmlFile(BuildContext context, WidgetRef ref) async {
   // (inconnu → seul text/xml reste). Les .opml s’affichent alors sans pouvoir
   // être sélectionnés. On laisse choisir n’importe quel fichier, puis on valide.
   final file = await FilePicker.pickFile(
-    dialogTitle: 'Importer un OPML',
+    dialogTitle: context.tr('Import an OPML file'),
     type: FileType.any,
   );
   if (file == null) return;
   final name = (file.name).toLowerCase();
   if (!name.endsWith('.opml') && !name.endsWith('.xml')) {
     if (context.mounted) {
-      showMessage(context, 'Choisissez un fichier .opml ou .xml');
+      showMessage(context, context.tr('Choose an .opml or .xml file'));
     }
     return;
   }
@@ -661,7 +782,7 @@ Future<void> importOpmlFile(BuildContext context, WidgetRef ref) async {
     bytes = await file.readAsBytes();
   } catch (_) {
     if (context.mounted) {
-      showMessage(context, 'Impossible de lire ce fichier');
+      showMessage(context, context.tr('Could not read this file'));
     }
     return;
   }
@@ -671,13 +792,13 @@ Future<void> importOpmlFile(BuildContext context, WidgetRef ref) async {
     entries = parseOpmlEntries(text);
   } catch (_) {
     if (context.mounted) {
-      showMessage(context, 'Ce fichier OPML est illisible');
+      showMessage(context, context.tr('This OPML file is unreadable'));
     }
     return;
   }
   if (entries.isEmpty) {
     if (context.mounted) {
-      showMessage(context, 'Aucun flux trouvé dans ce fichier');
+      showMessage(context, context.tr('No feeds found in this file'));
     }
     return;
   }

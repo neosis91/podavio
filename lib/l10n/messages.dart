@@ -117,6 +117,7 @@ const _fr = <String, String>{
   'Chemistry': 'Chimie',
   'Choose a .sqlite or .db database file':
       'Choisissez un fichier de base .sqlite ou .db',
+  'Choose an .opml or .xml file': 'Choisissez un fichier .opml ou .xml',
   'Choose synchronization provider':
       'Choisir un fournisseur de synchronisation',
   'Choose the categories on the home screen':
@@ -152,6 +153,7 @@ const _fr = <String, String>{
       'Impossible de trouver l’APK installé sur cet appareil.',
   'Could not find this session.': 'Cette session est introuvable.',
   'Could not import the database': 'Impossible d’importer la base de données',
+  'Could not read this file': 'Impossible de lire ce fichier',
   'Could not start nearby sharing':
       'Impossible de démarrer le partage à proximité',
   'Could not start the session.': 'Impossible d’ouvrir la session.',
@@ -350,6 +352,7 @@ const _fr = <String, String>{
       'Aucun appareil sur ce compte pour le moment.',
   'No episodes to play': 'Aucun épisode à écouter',
   'No favorites to export': 'Aucun favori à exporter',
+  'No feeds found in this file': 'Aucun flux trouvé dans ce fichier',
   'No internet connection': 'Pas de connexion internet',
   'No limit between refreshes': 'Pas de limite entre deux actualisations',
   'No matching language': 'Aucune langue correspondante',
@@ -446,6 +449,7 @@ const _fr = <String, String>{
   'Religion & Spirituality': 'Religion et spiritualité',
   'Remove from favorites': 'Retirer des favoris',
   'Replaces the current database. Downloaded episodes must be re-downloaded.': 'Remplace la base actuelle. Les épisodes téléchargés devront être retéléchargés.',
+  'Replaces the library. Downloaded episodes stay when their files are still on this phone. App settings stay as they are.': 'Remplace la bibliothèque. Les épisodes téléchargés restent si leurs fichiers sont encore sur ce téléphone. Les réglages de l’application ne changent pas.',
   'Restore backup': 'Restaurer la sauvegarde',
   'Restore your library from a backup':
       'Restaurez votre bibliothèque depuis une sauvegarde',
@@ -524,6 +528,7 @@ const _fr = <String, String>{
   'Subscriptions exported as HTML': 'Abonnements exportés en HTML',
   'Subscriptions exported from another app':
       'Abonnements exportés depuis une autre application',
+  'Subscriptions, playlists, chapters, playback, and per-podcast settings. Audio files and app settings stay on the phone.': 'Abonnements, playlists, chapitres, progression et réglages de chaque podcast. Les fichiers audio et les réglages de l’application restent sur le téléphone.',
   'Subscriptions, queue, favorites, and playback progress. Not the downloaded audio files.': 'Abonnements, file d’attente, favoris et progression d’écoute. Pas les fichiers audio téléchargés.',
   'Swimming': 'Natation',
   'Synchronization': 'Synchronisation',
@@ -554,6 +559,7 @@ const _fr = <String, String>{
   'The update check failed': 'La vérification a échoué',
   'The wallpaper could not be read': 'Le fond d’écran n’a pas pu être lu',
   'These global settings can be changed later and customized for each podcast.': 'Ces réglages globaux peuvent être modifiés plus tard et personnalisés pour chaque podcast.',
+  'This OPML file is unreadable': 'Ce fichier OPML est illisible',
   'This address is not encrypted.': 'Cette adresse n’est pas chiffrée.',
   'This code cannot be used': 'Ce code ne peut pas être utilisé',
   'This download will use mobile data.':
@@ -564,6 +570,7 @@ const _fr = <String, String>{
   'This refresh will use mobile data.':
       'Cette actualisation utilisera les données mobiles.',
   'This replaces your current subscriptions, queue, favorites, and playback progress. Downloaded audio files are not restored. Continue?': 'Cela remplace vos abonnements, file d’attente, favoris et progression d’écoute. Les fichiers audio téléchargés ne sont pas restaurés. Continuer ?',
+  'This replaces your library: subscriptions, playlists, chapters, playback, and per-podcast settings. Downloaded episodes stay when their files are still on this phone. App settings stay as they are. Continue?': 'Ceci remplace la bibliothèque : abonnements, playlists, chapitres, progression et réglages de chaque podcast. Les épisodes téléchargés restent si leurs fichiers sont encore sur ce téléphone. Les réglages de l’application ne changent pas. Continuer ?',
   'This stream will use mobile data.':
       'Cette lecture utilisera les données mobiles.',
   'Time follows speed': 'Temps selon la vitesse',
