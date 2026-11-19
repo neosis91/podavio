@@ -50,13 +50,14 @@ class _DiscoverLanguagesPageState extends ConsumerState<DiscoverLanguagesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final selected = ref.watch(
-      settingsProvider.select((settings) => settings.discoverLanguages),
-    );
+    final settings = ref.watch(settingsProvider);
+    final selected = settings.discoverLanguages;
+    final following = settings.discoverLanguagesFromSystem;
     final all = discoverLanguagesAreAll(selected);
+    final choosing = !all && !following;
     final groups = _shownGroups();
-    final warn = !all && appleStoresExceedLimit(selected);
-    final chips = !all && selected.isNotEmpty;
+    final warn = choosing && appleStoresExceedLimit(selected);
+    final chips = choosing && selected.isNotEmpty;
     final inset = belowFrostedBar(context, const EdgeInsets.only(bottom: 32));
 
     return FrostedScaffold(
@@ -82,7 +83,7 @@ class _DiscoverLanguagesPageState extends ConsumerState<DiscoverLanguagesPage> {
               )
             : null,
         actions: [
-          if (!all && _searching)
+          if (choosing && _searching)
             IconButton(
               tooltip: context.tr('Clear'),
               onPressed: _query.isEmpty
@@ -93,14 +94,14 @@ class _DiscoverLanguagesPageState extends ConsumerState<DiscoverLanguagesPage> {
                     },
               icon: const Icon(Icons.close),
             )
-          else if (!all)
+          else if (choosing)
             IconButton(
               tooltip: context.tr('Search for a language'),
               onPressed: _openSearch,
               icon: const Icon(Icons.search),
             ),
         ],
-        bottom: all || selected.isEmpty
+        bottom: !chips
             ? null
             : _SelectedLanguageChips(
                 codes: selected,
@@ -111,11 +112,30 @@ class _DiscoverLanguagesPageState extends ConsumerState<DiscoverLanguagesPage> {
         padding: chips
             ? inset.copyWith(top: inset.top + _SelectedLanguageChips.barHeight)
             : inset,
-        itemCount: all
-            ? 1
-            : 1 + (warn ? 1 : 0) + (groups.isEmpty ? 1 : groups.length),
+        itemCount: choosing
+            ? 2 + (warn ? 1 : 0) + (groups.isEmpty ? 1 : groups.length)
+            : 2,
         itemBuilder: (context, index) {
           if (index == 0) {
+            final system = defaultDiscoverLanguages(
+              View.of(context).platformDispatcher.locale,
+            );
+            return SwitchListTile(
+              value: following,
+              title: Text(context.tr('System')),
+              subtitle: Text(discoverLanguageLabel(system.first)),
+              onChanged: (checked) {
+                final notifier = ref.read(settingsProvider.notifier);
+                if (checked) {
+                  _closeSearch();
+                  notifier.setDiscoverLanguagesFromSystem();
+                } else {
+                  notifier.setDiscoverLanguages(selected);
+                }
+              },
+            );
+          }
+          if (index == 1) {
             return SwitchListTile(
               value: all,
               title: Text(context.tr('All languages')),
@@ -127,7 +147,7 @@ class _DiscoverLanguagesPageState extends ConsumerState<DiscoverLanguagesPage> {
               },
             );
           }
-          var cursor = 1;
+          var cursor = 2;
           if (warn) {
             if (index == cursor) return const _AppleLimitNote();
             cursor++;
@@ -171,12 +191,16 @@ class _DiscoverLanguagesPageState extends ConsumerState<DiscoverLanguagesPage> {
         continue;
       }
       final parentMatches = searchMatch(
-        '${group.language.label} ${group.language.code}',
+        '${discoverLanguageLabel(group.language.code)} ${group.language.label} ${group.language.code}',
         _query,
       );
       final variants = [
         for (final variant in group.variants)
-          if (searchMatch('${variant.label} ${variant.code}', _query)) variant,
+          if (searchMatch(
+            '${discoverLanguageLabel(variant.code)} ${variant.label} ${variant.code}',
+            _query,
+          ))
+            variant,
       ];
       if (!parentMatches && variants.isEmpty) continue;
       shown.add(
@@ -306,7 +330,7 @@ class _LanguageGroupTile extends StatelessWidget {
     return Column(
       children: [
         _LanguageCheckRow(
-          label: language.label,
+          label: discoverLanguageLabel(language.code),
           code: language.code,
           query: query,
           checked: baseChecked,
@@ -317,7 +341,7 @@ class _LanguageGroupTile extends StatelessWidget {
         if (open)
           for (final variant in shown.variants)
             _LanguageCheckRow(
-              label: variant.label,
+              label: discoverLanguageLabel(variant.code),
               code: variant.code,
               query: query,
               checked: baseChecked || selected.contains(variant.code),

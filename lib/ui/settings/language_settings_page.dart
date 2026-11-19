@@ -37,7 +37,13 @@ class LanguageSettingsPage extends ConsumerWidget {
           ),
           ListTile(
             title: Text(context.tr('Listening language')),
-            subtitle: Text(_discoverLanguagesSubtitle(context, languages)),
+            subtitle: Text(
+              _discoverLanguagesSubtitle(
+                context,
+                languages,
+                fromSystem: settings.discoverLanguagesFromSystem,
+              ),
+            ),
             trailing: _SelectedLanguageFlags(
               discoverLanguagesAreAll(languages) ? const [] : languages,
             ),
@@ -112,8 +118,12 @@ class _SelectedLanguageFlags extends StatelessWidget {
 
 String _discoverLanguagesSubtitle(
   BuildContext context,
-  List<String> languages,
-) {
+  List<String> languages, {
+  bool fromSystem = false,
+}) {
+  if (fromSystem && languages.isNotEmpty) {
+    return '${context.tr('System')} · ${discoverLanguageLabel(languages.first)}';
+  }
   if (discoverLanguagesAreAll(languages)) {
     return context.tr('All languages');
   }

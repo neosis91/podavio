@@ -26,6 +26,65 @@ void main() {
     expect(find.text('Suivant'), findsNothing);
   });
 
+  testWidgets('listening language follows the phone until a choice is saved', (
+    tester,
+  ) async {
+    tester.platformDispatcher.localeTestValue = const Locale('de', 'DE');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
+        child: const MaterialApp(home: SizedBox.shrink()),
+      ),
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SizedBox)),
+    );
+    expect(container.read(settingsProvider).discoverLanguages, ['de']);
+    expect(
+      container.read(settingsProvider).discoverLanguagesFromSystem,
+      isTrue,
+    );
+    expect(preferences.getStringList('discoverLanguages'), isNull);
+
+    tester.platformDispatcher.localeTestValue = const Locale('fr', 'FR');
+    await tester.pump();
+    expect(container.read(settingsProvider).discoverLanguages, ['fr']);
+    expect(preferences.getStringList('discoverLanguages'), isNull);
+
+    await container
+        .read(settingsProvider.notifier)
+        .setDiscoverAllLanguages(true);
+    await container
+        .read(settingsProvider.notifier)
+        .setDiscoverAllLanguages(false);
+    expect(container.read(settingsProvider).discoverLanguages, ['fr']);
+    expect(
+      container.read(settingsProvider).discoverLanguagesFromSystem,
+      isFalse,
+    );
+  });
+
+  testWidgets('a saved listening language stays in place', (tester) async {
+    tester.platformDispatcher.localeTestValue = const Locale('de', 'DE');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    SharedPreferences.setMockInitialValues({
+      'discoverLanguages': ['*'],
+    });
+    final preferences = await SharedPreferences.getInstance();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
+        child: const MaterialApp(home: WelcomePage()),
+      ),
+    );
+    await tester.pump();
+
+    expect(preferences.getStringList('discoverLanguages'), ['*']);
+  });
+
   testWidgets('turning eco mode off restores the previous pure black', (
     tester,
   ) async {
