@@ -9,6 +9,10 @@ La fusion de `develop` dans `main` publie cette version.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 
+## 2026.11.12
+
+- Downloaded episodes can skip confirmed ad, sponsor, and jingle passages. The review is in the podcast settings, and a chapter title that looks like an ad is suggested on its own. Detecting those passages from the audio is not active yet.
+
 ## 2026.11.11
 
 - Changelog fragments are gathered when a pull request is merged into develop. The develop to main merge publishes that version.
