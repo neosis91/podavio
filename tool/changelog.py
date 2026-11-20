@@ -147,6 +147,57 @@ def render_section(version, notes):
     return "\n".join(lines) + "\n\n"
 
 
+def release_notes(text):
+    notes = []
+    for line in text.splitlines():
+        bullet = BULLET_RE.fullmatch(line.strip())
+        if bullet:
+            notes.append(bullet.group(1).strip())
+    return notes
+
+
+def rewrite_section(path, version, notes):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    start = None
+    for index, line in enumerate(lines):
+        if line == f"## {version}":
+            start = index
+            break
+    if start is None:
+        fail(f"CHANGELOG.md n'a pas de titre ## {version}.")
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        if lines[index].startswith("## "):
+            end = index
+            break
+    block = [f"## {version}", ""]
+    block.extend(f"- {note}" for note in notes)
+    block.append("")
+    lines[start:end] = block
+    path.write_text("\n".join(lines).rstrip("\n") + "\n", encoding="utf-8")
+
+
+def carry_unpublished(path, published_text, today=None):
+    """Move notes absent from an already published release into the next version."""
+    today = today or dt.date.today()
+    releases = load(path)
+    if not releases:
+        return None
+    version, notes = releases[0]
+    published = release_notes(published_text)
+    if not published:
+        return None
+    fresh = [note for note in notes if note not in set(published)]
+    if not fresh:
+        return None
+    kept = [note for note in notes if note in set(published)]
+    rewrite_section(path, version, kept)
+    new_version = next_version([(version, kept)], today, True)
+    write_release(path, new_version, fresh, False)
+    print(f"## {new_version} : {len(fresh)} puce(s).")
+    return new_version
+
+
 def write_release(path, version, notes, append):
     text = path.read_text(encoding="utf-8")
     if not text.endswith("\n"):
@@ -276,6 +327,9 @@ def main():
 
     sub.add_parser("collect")
     sub.add_parser("pending")
+    sub.add_parser("top")
+    carry = sub.add_parser("carry")
+    carry.add_argument("published", type=Path)
 
     pr = sub.add_parser("check-pr")
     pr.add_argument("--base", required=True)
@@ -297,6 +351,14 @@ def main():
     if args.command == "pending":
         for path in fragment_paths():
             print(path.name)
+        return
+    if args.command == "top":
+        releases = load()
+        if releases:
+            print(releases[0][0])
+        return
+    if args.command == "carry":
+        carry_unpublished(CHANGELOG, args.published.read_text(encoding="utf-8"))
         return
     if args.command == "check-pr":
         labels = [label for label in args.labels.split(",") if label.strip()]

@@ -104,6 +104,31 @@ class ChangelogTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             changelog.fragment_paths(self.fragments)
 
+    def test_notes_missing_from_a_published_release_open_the_next_version(self):
+        write(
+            self.changelog,
+            "# Journal\n\n## 2026.11.10\n\n- Kept.\n- Fresh.\n\n## 2026.11.9\n\n- Older.\n",
+        )
+        version = changelog.carry_unpublished(
+            self.changelog,
+            "- Kept.\n",
+            dt.date(2026, 11, 20),
+        )
+        self.assertEqual(version, "2026.11.11")
+        releases = changelog.load(self.changelog)
+        self.assertEqual(releases[0], ("2026.11.11", ["Fresh."]))
+        self.assertEqual(releases[1], ("2026.11.10", ["Kept."]))
+
+    def test_an_unchanged_published_release_stays_put(self):
+        write(self.changelog, "# Journal\n\n## 2026.11.10\n\n- Kept.\n")
+        version = changelog.carry_unpublished(
+            self.changelog,
+            "- Kept.\n",
+            dt.date(2026, 11, 20),
+        )
+        self.assertIsNone(version)
+        self.assertEqual(changelog.load(self.changelog)[0][0], "2026.11.10")
+
     def test_check_release_names_the_fragments_still_there(self):
         self.add("export.md", "Export.")
         changelog.check_release(self.fragments)
