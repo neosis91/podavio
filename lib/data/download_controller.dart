@@ -22,12 +22,37 @@ final downloadWaitingCountProvider =
       DownloadWaitingCountNotifier.new,
     );
 
+/// Identifiants des épisodes qui attendent un créneau de téléchargement.
+final downloadWaitingIdsProvider =
+    NotifierProvider<DownloadWaitingIdsNotifier, Set<int>>(
+      DownloadWaitingIdsNotifier.new,
+    );
+
 class DownloadWaitingCountNotifier extends Notifier<int> {
   @override
   int build() => 0;
 
   void setCount(int value) {
     if (state == value) return;
+    state = value;
+  }
+}
+
+/// Vrai si un nouvel ordre ne doit pas relancer cet épisode.
+bool downloadAlreadyRequested(
+  int episodeId, {
+  required Map<int, double> running,
+  required Set<int> waiting,
+}) {
+  return running.containsKey(episodeId) || waiting.contains(episodeId);
+}
+
+class DownloadWaitingIdsNotifier extends Notifier<Set<int>> {
+  @override
+  Set<int> build() => const {};
+
+  void setIds(Set<int> value) {
+    if (state.length == value.length && state.containsAll(value)) return;
     state = value;
   }
 }
@@ -193,6 +218,9 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
 
   void _publishWaiting() {
     ref.read(downloadWaitingCountProvider.notifier).setCount(_waiting.length);
+    ref.read(downloadWaitingIdsProvider.notifier).setIds({
+      for (final job in _waiting) job.episode.id,
+    });
   }
 
   void _publishDownloadNotice({bool force = false}) {

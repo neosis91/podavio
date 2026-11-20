@@ -252,15 +252,22 @@ class EpisodeSelectionAppBar extends ConsumerWidget
           }
         case _BulkMenuAction.download:
           final downloads = ref.read(downloadProgressProvider.notifier);
-          final inFlight = ref.read(downloadProgressProvider);
+          final running = ref.read(downloadProgressProvider);
+          final waiting = ref.read(downloadWaitingIdsProvider);
           var started = 0;
           for (final entry in selected) {
             final episode = entry.episode;
             if (episode.downloadPath != null) continue;
-            if (inFlight.containsKey(episode.id)) continue;
+            if (downloadAlreadyRequested(
+              episode.id,
+              running: running,
+              waiting: waiting,
+            )) {
+              continue;
+            }
             started++;
-            // Lancement parallèle : l’anneau autour de chaque pochette
-            // (style mini-lecteur) affiche la progression.
+            // Lancement parallèle : l’anneau s’affiche tout de suite,
+            // y compris pour les épisodes qui attendent un créneau.
             unawaited(() async {
               try {
                 await downloads.download(episode);

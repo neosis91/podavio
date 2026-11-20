@@ -118,9 +118,13 @@ class _EpisodeDetailState extends ConsumerState<_EpisodeDetail> {
     final player = ref.watch(playerProvider);
     final current = player.episodeId == episode.id;
     final playing = current && player.playing;
-    final progress = ref.watch(
+    final active = ref.watch(
       downloadProgressProvider.select((items) => items[episode.id]),
     );
+    final waiting = ref.watch(
+      downloadWaitingIdsProvider.select((ids) => ids.contains(episode.id)),
+    );
+    final progress = active ?? (waiting ? 0.0 : null);
     final preferPodcastCover = ref.watch(
       settingsProvider.select((settings) => settings.preferPodcastCover),
     );
@@ -254,20 +258,20 @@ class _EpisodeDetailState extends ConsumerState<_EpisodeDetail> {
                   onPlay: () => _togglePlayback(current),
                   onDownload: () => _onDownload(progress),
                   onPlaylist: () =>
-                        showPlaylistMembershipSheet(context, ref, entry),
+                      showPlaylistMembershipSheet(context, ref, entry),
                   onPlayed: () => runEpisodeAction(
-                      context,
-                      ref,
-                      entry,
-                      EpisodeMenuAction.played,
-                    ),
-                  onShare: () => runEpisodeAction(
-                      context,
-                      ref,
-                      entry,
-                      EpisodeMenuAction.share,
-                    ),
+                    context,
+                    ref,
+                    entry,
+                    EpisodeMenuAction.played,
                   ),
+                  onShare: () => runEpisodeAction(
+                    context,
+                    ref,
+                    entry,
+                    EpisodeMenuAction.share,
+                  ),
+                ),
               ),
               if (fraction != null && position > Duration.zero)
                 SliverToBoxAdapter(
@@ -734,24 +738,24 @@ class _PlayPill extends StatelessWidget {
         shape: const StadiumBorder(),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-      onTap: onPressed,
+          onTap: onPressed,
           customBorder: const StadiumBorder(),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 110, minHeight: 48),
-        child: Padding(
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+                children: [
                   Icon(
                     playing ? Icons.pause : Icons.play_arrow,
                     size: 22,
                     color: Colors.black,
                   ),
                   const SizedBox(width: 4),
-              Text(
-                label,
+                  Text(
+                    label,
                     style: Theme.of(context).textTheme.labelLarge
                         ?.copyWith(color: Colors.black),
                   ),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +14,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('a queued episode is not counted as a new download', () {
+    expect(
+      downloadAlreadyRequested(2, running: const {1: 0}, waiting: const {2, 3}),
+      isTrue,
+    );
+    expect(
+      downloadAlreadyRequested(1, running: const {1: 0.4}, waiting: const {}),
+      isTrue,
+    );
+    expect(
+      downloadAlreadyRequested(4, running: const {1: 0.2}, waiting: const {2}),
+      isFalse,
+    );
+  });
 
   test('a batch is one notice, whether it holds one episode or several', () {
     expect(
@@ -152,6 +169,41 @@ void main() {
       '2 épisodes téléchargés',
     );
   });
+
+  test('episodes waiting for a slot stay listed', () async {
+    final gate = Completer<void>();
+    final harness = await _Harness.open(
+      episodeCount: 3,
+      simultaneousDownloads: 1,
+      onDownload: (_) => gate.future,
+    );
+    addTearDown(harness.close);
+
+    final pending = [
+      for (final episode in harness.episodes)
+        harness.notifier.download(episode),
+    ];
+
+    expect(harness.container.read(downloadProgressProvider).keys, {
+      harness.episodes.first.id,
+    });
+    expect(harness.container.read(downloadWaitingIdsProvider), {
+      harness.episodes[1].id,
+      harness.episodes[2].id,
+    });
+
+    harness.notifier.cancel(harness.episodes[2].id);
+    expect(harness.container.read(downloadWaitingIdsProvider), {
+      harness.episodes[1].id,
+    });
+
+    gate.complete();
+    await expectLater(pending[2], throwsA(isA<DownloadCancelled>()));
+    await pending[0];
+    await pending[1];
+    expect(harness.container.read(downloadWaitingIdsProvider), isEmpty);
+    expect(harness.container.read(downloadProgressProvider), isEmpty);
+  });
 }
 
 class _Harness {
@@ -171,11 +223,13 @@ class _Harness {
     required Future<void> Function(void Function(double progress)? onProgress)
     onDownload,
     int episodeCount = 1,
+    int simultaneousDownloads = 2,
   }) async {
     SharedPreferences.setMockInitialValues({
       'enqueueDownloads': false,
       'notifyDownloadActivity': true,
       'notifyDownloadErrors': true,
+      'simultaneousDownloads': simultaneousDownloads,
     });
     final preferences = await SharedPreferences.getInstance();
     final database = AppDatabase(NativeDatabase.memory());
