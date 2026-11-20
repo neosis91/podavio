@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:xml/xml.dart';
 
+import '../core/search.dart';
 import 'feed_text.dart';
+import 'skip_segments.dart';
 
 class ChapterDraft {
   const ChapterDraft({
@@ -137,4 +139,32 @@ String? _blankToNull(String? value) {
   final trimmed = value?.trim() ?? '';
   if (trimmed.isEmpty) return null;
   return trimmed;
+}
+
+// Titres de chapitres qui annoncent une pub ou un sponsor.
+// Le texte est déjà plié (minuscules, sans accent).
+final _selfPromoTitle = RegExp(
+  r'(self[-\s]?promo\w*|auto[-\s]?promo\w*|autopub\w*)',
+);
+final _sponsorTitle = RegExp(
+  r'(sponsor\w*|parrain\w*|partenariat|partenaire|gesponsert|gesponsord|'
+  r'patrocin\w*|brought to you by|host[\s-]?read|спонсор|スポンサー|رعاية|راعي)',
+);
+final _adTitle = RegExp(
+  r'(\bads?\b|\badvert\w*|\bcommercials?\b|\bpub\b|\bpubs\b|'
+  r'publicit\w*|pubblicit\w*|publicidad\w*|\banuncios?\b|'
+  r'\bwerbung\b|\banzeige\b|\breclame\b|'
+  r'pre[\s-]?roll|mid[\s-]?roll|post[\s-]?roll|'
+  r'реклам\w*|広告|إعلان)',
+);
+
+/// `null` si le titre ne ressemble pas à une pub, un sponsor ou une
+/// auto-promo. Insensible à la casse et aux accents.
+SkipSegmentKind? skipKindForChapterTitle(String title) {
+  final folded = foldForSearch(title).trim();
+  if (folded.isEmpty) return null;
+  if (_selfPromoTitle.hasMatch(folded)) return SkipSegmentKind.selfPromo;
+  if (_sponsorTitle.hasMatch(folded)) return SkipSegmentKind.sponsor;
+  if (_adTitle.hasMatch(folded)) return SkipSegmentKind.ad;
+  return null;
 }

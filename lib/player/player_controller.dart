@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:audio_session/audio_session.dart';
 import 'package:cast/device.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -14,7 +15,10 @@ import '../data/feed_service.dart';
 import '../data/http_auth.dart';
 import '../data/online_status.dart';
 import '../data/providers.dart';
+import '../data/skip_segments.dart';
+import '../l10n/l10n.dart';
 import '../settings/settings_controller.dart';
+import '../ui/root_navigator.dart';
 import '../ui/widgets/mobile_data_prompt.dart';
 import '../sync/sync_hooks.dart';
 import '../web_companion/web_remote.dart';
@@ -25,6 +29,7 @@ import 'playback_handler.dart';
 import 'playback_source.dart';
 import 'player_sheet_controller.dart';
 import 'queue_cursor.dart';
+import 'segment_skip.dart';
 import 'sleep_timer.dart';
 import 'stream_cache.dart';
 import 'stream_quality.dart';
@@ -191,6 +196,16 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   Duration _skipIntro = Duration.zero;
   Duration _skipOutro = Duration.zero;
   int? _outroSkippedEpisodeId;
+  var _playingFromDownload = false;
+  var _autoSkipAds = false;
+  Set<SkipSegmentKind> _autoSkipKinds = const {};
+  List<SkipCandidate> _skipWindows = const [];
+  final Set<int> _heldSegmentIds = {};
+  int? _segmentWatchMs;
+  int? _skipInFlightTarget;
+  DateTime? _skipInFlightSince;
+  int? _previewHoldId;
+  Duration? _previewSeek;
   AndroidLoudnessEnhancer? _loudness;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration?>? _durationSub;
@@ -223,6 +238,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
         handler.skipBack = Duration(seconds: settings.skipBackSeconds);
         handler.skipForward = Duration(seconds: settings.skipForwardSeconds);
         handler.onDirectionalSkip = skipOutside;
+        handler.onUserSeek = seek;
         handler.attach(_player);
       }
       _bind();
@@ -233,6 +249,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
           session.skipBack = Duration(seconds: next.skipBackSeconds);
           session.skipForward = Duration(seconds: next.skipForwardSeconds);
           session.onDirectionalSkip = skipOutside;
+          session.onUserSeek = seek;
         }
         if (previous != null && previous.speed != next.speed) {
           unawaited(_applyDefaultSpeedIfNoPodcastOverride(next.speed));
@@ -355,6 +372,23 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     return _play(entry.episode, entry.podcast, autoplay: autoplay);
   }
 
+  /// Lit un passage précis (aperçu d’une pub). Le segment est tenu pour
+  /// ne pas être sauté tout de suite.
+  Future<void> previewPassage(
+    EpisodeEntry entry, {
+    required Duration position,
+    int? segmentId,
+  }) async {
+    _previewHoldId = segmentId;
+    _previewSeek = position;
+    try {
+      await playEntry(entry);
+    } finally {
+      _previewHoldId = null;
+      _previewSeek = null;
+    }
+  }
+
   /// La playlist n’est plus remplie par la lecture. Le lecteur conserve l’appel
   /// au défilement, sans rien ajouter.
   Future<void> extendQueue() async {}
@@ -466,6 +500,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   }
 
   Future<void> seek(Duration position) async {
+    _noteUserSeek(position);
     if (_remote) {
       if (!_ui.hasEpisode) return;
       _emit(_ui.copyWith(position: position));
@@ -867,6 +902,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     _skipIntro = Duration(seconds: podcast.skipIntroSeconds);
     _skipOutro = Duration(seconds: podcast.skipOutroSeconds);
     _outroSkippedEpisodeId = null;
+    _resetSegmentSkip(podcast, fromDownload: downloaded);
     start = _applyIntroSkip(start, duration);
     final speed = podcast.playbackSpeed ?? settings.speed;
     final preferPodcastCover = settings.preferPodcastCover;
@@ -976,7 +1012,32 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       );
       await _player.setSpeed(_ui.speed);
       await _player.setVolume(_ui.volume);
-      if (start > Duration.zero) await _player.seek(start);
+      if (downloaded && podcast.autoSkipAds) {
+        final rows = await db.listSkipSegments(episode.id);
+        if (!ref.mounted || _disposed || _ui.episodeId != episode.id) return;
+        _skipWindows = [
+          for (final row in rows)
+            SkipCandidate(
+              id: row.id,
+              startMs: row.startMs,
+              endMs: row.endMs,
+              kind: row.kind,
+              confirmed: row.confirmed,
+            ),
+        ];
+      }
+      final preview = _previewSeek;
+      if (preview != null && _ui.episodeId == episode.id) {
+        start = preview;
+        _previewSeek = null;
+        _emit(_ui.copyWith(position: start));
+      }
+      if (_previewHoldId != null) _heldSegmentIds.add(_previewHoldId!);
+      _segmentWatchMs = start.inMilliseconds;
+      if (start > Duration.zero) {
+        _armSkipTarget(start.inMilliseconds);
+        await _player.seek(start);
+      }
       if (!ref.mounted || _disposed) return;
       if (_cast.active) {
         await _player.pause();
@@ -1184,6 +1245,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       final id = _ui.episodeId;
       if (id == null) return;
       _maybeSkipOutro(position);
+      _maybeSkipSegment(position);
       _maybeSleepAtChapter(position);
       if (now.difference(_lastPersist) < const Duration(seconds: 5)) return;
       _lastPersist = now;
@@ -1229,6 +1291,116 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (position < limit) return;
     _outroSkippedEpisodeId = id;
     unawaited(_onCompleted());
+  }
+
+  void _resetSegmentSkip(Podcast podcast, {required bool fromDownload}) {
+    _playingFromDownload = fromDownload;
+    _autoSkipAds = podcast.autoSkipAds;
+    _autoSkipKinds = decodeAutoSkipKinds(podcast.autoSkipKinds).toSet();
+    _skipWindows = const [];
+    _heldSegmentIds.clear();
+    _segmentWatchMs = null;
+    _skipInFlightTarget = null;
+    _skipInFlightSince = null;
+  }
+
+  void _armSkipTarget(int targetMs) {
+    _skipInFlightTarget = targetMs;
+    _skipInFlightSince = DateTime.now();
+  }
+
+  /// Seek manuel : un retour dans un passage le tient, pour ne pas le
+  /// resauter. Le flux de position est ignoré jusqu’à l’arrivée.
+  void _noteUserSeek(Duration position) {
+    final target = position.inMilliseconds;
+    final previous = _segmentWatchMs;
+    if (previous != null && target + 1500 < previous) {
+      _holdSegmentsAt(target);
+    }
+    _segmentWatchMs = target;
+    _armSkipTarget(target);
+  }
+
+  void _holdSegmentsAt(int positionMs) {
+    for (final segment in _skipWindows) {
+      if (segment.contains(positionMs)) _heldSegmentIds.add(segment.id);
+    }
+  }
+
+  /// Saute un passage détecté quand l’épisode vient d’un fichier local.
+  /// Le Cast lit l’URL distante : ce n’est pas un fichier téléchargé, donc
+  /// on ne saute pas depuis [_onCastUpdate]. Un seek de la notification
+  /// passe par [seek] (`PlaybackHandler.onUserSeek`).
+  void _maybeSkipSegment(Duration position) {
+    if (_cast.active || _remote || _advancing) return;
+    final pos = position.inMilliseconds;
+    final inflight = _skipInFlightTarget;
+    if (inflight != null) {
+      final close = (pos - inflight).abs() <= 800;
+      final since = _skipInFlightSince;
+      final stale =
+          since != null &&
+          DateTime.now().difference(since) > const Duration(seconds: 2);
+      if (!close && !stale) return;
+      _skipInFlightTarget = null;
+      _skipInFlightSince = null;
+      // Seek resté dans le passage : ne pas le relancer en boucle.
+      if (pos < inflight) _holdSegmentsAt(pos);
+    }
+    final decision = decideSkipSegment(
+      positionMs: pos,
+      previousMs: _segmentWatchMs,
+      playing: _ui.playing,
+      fromDownload: _playingFromDownload,
+      autoSkipAds: _autoSkipAds,
+      autoSkipKinds: _autoSkipKinds,
+      segments: _skipWindows,
+      heldIds: _heldSegmentIds,
+    );
+    _segmentWatchMs = pos;
+    if (decision == null) return;
+    _segmentWatchMs = decision.seekToMs;
+    _armSkipTarget(decision.seekToMs);
+    unawaited(_applySegmentSkip(decision));
+  }
+
+  Future<void> _applySegmentSkip(SkipDecision decision) async {
+    try {
+      await _player.seek(Duration(milliseconds: decision.seekToMs));
+      if (_disposed || !ref.mounted) return;
+      _emit(_ui.copyWith(position: Duration(milliseconds: decision.seekToMs)));
+      _showSegmentSkipped(decision);
+    } catch (error, stack) {
+      _skipInFlightTarget = null;
+      _skipInFlightSince = null;
+      _heldSegmentIds.add(decision.segmentId);
+      debugPrint('Saut de passage impossible: $error\n$stack');
+    }
+  }
+
+  void _showSegmentSkipped(SkipDecision decision) {
+    final context = rootNavigatorKey.currentContext;
+    if (context == null) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final label = context.tr('Segment skipped');
+    if (messenger == null) return;
+    messenger
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(label),
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: context.tr('Undo'),
+            onPressed: () {
+              if (_disposed) return;
+              _heldSegmentIds.add(decision.segmentId);
+              unawaited(seek(Duration(milliseconds: decision.returnToMs)));
+            },
+          ),
+        ),
+      );
   }
 
   Future<void> _onCompleted() async {

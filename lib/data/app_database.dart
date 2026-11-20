@@ -2,17 +2,20 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import '../core/search.dart';
+import 'chapters_parser.dart';
 import 'feed_text.dart';
 import '../sync/sync_hooks.dart';
 import 'download_policy.dart';
 import 'listening_activity.dart';
 import 'models.dart';
+import 'skip_segments.dart';
 
 part 'app_database.g.dart';
 part 'db/chapter_queries.dart';
 part 'db/episode_queries.dart';
 part 'db/playlist_queries.dart';
 part 'db/podcast_queries.dart';
+part 'db/skip_segment_queries.dart';
 part 'db/stats_queries.dart';
 
 class Podcasts extends Table {
@@ -67,6 +70,12 @@ class Podcasts extends Table {
 
   /// Genres du flux (`itunes:category`, `podcast:category`). `null` : pas encore lus.
   TextColumn get categoriesJson => text().nullable()();
+
+  /// Saute pubs et jingles détectés dans les épisodes téléchargés.
+  BoolColumn get autoSkipAds => boolean().withDefault(const Constant(false))();
+
+  /// JSON : noms de [SkipSegmentKind] sautés quand [autoSkipAds] est actif.
+  TextColumn get autoSkipKinds => text().withDefault(const Constant('[]'))();
 }
 
 @TableIndex(name: 'episodes_podcast_id', columns: {#podcastId})
@@ -154,6 +163,67 @@ class PlaylistEpisodes extends Table {
   Set<Column<Object>> get primaryKey => {playlistId, episodeId};
 }
 
+/// Empreinte Chromaprint d’un épisode téléchargé (uint32 little-endian).
+class EpisodeFingerprints extends Table {
+  IntColumn get episodeId =>
+      integer().references(Episodes, #id, onDelete: KeyAction.cascade)();
+
+  /// Valeurs uint32, little-endian. Voir [encodeFingerprint].
+  BlobColumn get data => blob()();
+
+  /// Écart entre deux valeurs, en microsecondes (~125000 pour 8/s).
+  IntColumn get hopMicros => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {episodeId};
+}
+
+/// Motif répété d’un podcast, classé une fois et appliqué à ses épisodes.
+@TableIndex(name: 'segment_templates_podcast_id', columns: {#podcastId})
+class SegmentTemplates extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get podcastId =>
+      integer().references(Podcasts, #id, onDelete: KeyAction.cascade)();
+  TextColumn get kind => textEnum<SkipSegmentKind>()();
+  TextColumn get label => text().nullable()();
+
+  /// Tranche Chromaprint du motif (uint32 little-endian).
+  /// Les épisodes suivants ne sont comparés qu’à ce gabarit.
+  BlobColumn get fingerprint => blob()();
+
+  /// Gabarit log-mel (float32 little-endian, 40 bandes). `null` tant
+  /// que l’analyseur ne l’a pas calculé. Sons < 3 s et frontières.
+  BlobColumn get logMel => blob().nullable()();
+  IntColumn get durationMs => integer()();
+  IntColumn get occurrences => integer().withDefault(const Constant(1))();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
+/// Passage à sauter dans un épisode.
+@TableIndex(name: 'skip_segments_episode_id', columns: {#episodeId})
+@TableIndex(name: 'skip_segments_template_id', columns: {#templateId})
+class SkipSegments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get episodeId =>
+      integer().references(Episodes, #id, onDelete: KeyAction.cascade)();
+  IntColumn get startMs => integer()();
+  IntColumn get endMs => integer()();
+  TextColumn get kind => textEnum<SkipSegmentKind>()();
+  TextColumn get source => textEnum<SkipSegmentSource>()();
+
+  /// Nombre d’épisodes du podcast qui partagent ce passage.
+  IntColumn get matches => integer().withDefault(const Constant(1))();
+
+  /// `null` : pas revu. `true` : confirmé. `false` : ignoré.
+  BoolColumn get confirmed => boolean().nullable()();
+  IntColumn get templateId => integer().nullable().references(
+    SegmentTemplates,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+}
+
 class EpisodeEntry {
   const EpisodeEntry({required this.episode, required this.podcast});
 
@@ -200,10 +270,14 @@ class EpisodeEntry {
     PlaybackPositions,
     Playlists,
     PlaylistEpisodes,
+    EpisodeFingerprints,
+    SegmentTemplates,
+    SkipSegments,
   ],
 )
 class AppDatabase extends _$AppDatabase
     with
+        _SkipSegmentQueries,
         _ChapterQueries,
         _EpisodeQueries,
         _PlaylistQueries,
@@ -214,7 +288,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -309,6 +383,13 @@ class AppDatabase extends _$AppDatabase
           podcasts,
           podcasts.autoDownloadLimit,
         );
+      }
+      if (from < 20) {
+        await _createTableIfMissing(migrator, episodeFingerprints);
+        await _createTableIfMissing(migrator, segmentTemplates);
+        await _createTableIfMissing(migrator, skipSegments);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.autoSkipAds);
+        await _addColumnIfMissing(migrator, podcasts, podcasts.autoSkipKinds);
       }
     },
     beforeOpen: (details) async {

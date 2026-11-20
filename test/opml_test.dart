@@ -60,6 +60,8 @@ void main() {
       skipOutroSeconds: 0,
       personsJson: '[]',
       fundingJson: '[]',
+      autoSkipAds: false,
+      autoSkipKinds: '[]',
     );
     final entries = parseOpmlEntries(buildOpml([podcast]));
     expect(entries, hasLength(1));
