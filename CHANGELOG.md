@@ -2,10 +2,9 @@
 
 Chaque changement visible ajoute un fichier `changelog.d/*.md` :
 une puce en anglais, une ou deux phrases. Le nom du fichier, en minuscules
-et avec des tirets, fixe l’ordre. `python3 tool/changelog.py collect`
-rassemble ces fichiers sous un titre `## AAAA.M.N` et les retire.
-Lancez-le avant de fusionner `develop` dans `main`.
-La publication GitHub refuse de publier si ce titre manque.
+et avec des tirets, fixe l’ordre. La fusion de `develop` dans `main`
+rassemble ces fichiers sous un titre `## AAAA.M.N`, les retire, puis publie
+cette version. `python3 tool/changelog.py collect` fait le même rassemblement.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 

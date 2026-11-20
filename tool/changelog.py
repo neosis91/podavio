@@ -80,10 +80,7 @@ def notes_for(version, path=CHANGELOG):
         fail(f"Version invalide : {version}")
     releases = dict(load(path))
     if version not in releases:
-        fail(
-            f"CHANGELOG.md n'a pas de titre ## {version}. "
-            "Lancez python3 tool/changelog.py collect avant de fusionner develop dans main."
-        )
+        fail(f"CHANGELOG.md n'a pas de titre ## {version}.")
     notes = releases[version]
     if not notes:
         fail(f"CHANGELOG.md : ## {version} n'a aucune puce.")
@@ -261,9 +258,9 @@ def check_release(directory=FRAGMENTS):
         print("Journal déjà rassemblé.")
         return
     names = ", ".join(path.name for path in paths)
-    fail(
-        f"Fragments encore présents ({names}). "
-        "Lancez python3 tool/changelog.py collect avant de fusionner develop dans main."
+    print(
+        f"Fragments présents ({names}). "
+        "La publication les rassemblera en fusionnant develop dans main."
     )
 
 
@@ -278,6 +275,7 @@ def main():
     notes.add_argument("version")
 
     sub.add_parser("collect")
+    sub.add_parser("pending")
 
     pr = sub.add_parser("check-pr")
     pr.add_argument("--base", required=True)
@@ -295,6 +293,10 @@ def main():
         return
     if args.command == "collect":
         collect()
+        return
+    if args.command == "pending":
+        for path in fragment_paths():
+            print(path.name)
         return
     if args.command == "check-pr":
         labels = [label for label in args.labels.split(",") if label.strip()]

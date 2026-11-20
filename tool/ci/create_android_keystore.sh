@@ -83,5 +83,5 @@ echo "Empreinte SHA-256 (à conserver pour vérifier les APK) :"
 keytool -list -v -keystore "${KEYSTORE}" -storepass "${STORE_PASS}" -alias "${ALIAS}" \
   | grep -E 'SHA256:|SHA1:' || true
 echo "Sauvegarde le .jks et les mots de passe hors Git (coffre / gestionnaire)."
-echo "Release : python3 tool/changelog.py collect, puis fusionner develop dans main."
+echo "Release : fusionner develop dans main. Le journal est rassemblé à ce moment-là."
 echo "Doc : docs/android-signing.md"
