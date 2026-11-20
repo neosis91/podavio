@@ -9,6 +9,17 @@ La publication GitHub refuse de publier si ce titre manque.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 
+## 2026.11.10
+
+- Importing a database no longer closes the app when podcast covers were about to be downloaded, or while a cover download was already running.
+- Podcast and episode titles sit under the cover, and the artwork is no longer faded at the bottom.
+- The download progress keeps every episode in the batch until the batch ends, and the count changes when an episode is added or removed. A failed download keeps the part already received and is shown in the count. An automatic download skipped on mobile data stays in that count.
+- Download notifications show how many episodes are already saved out of the batch. The notification button shows how many are still left.
+- Unfinished audio is dropped when a download is cancelled or its podcast is removed, and a replaced episode is fetched again instead of being mixed with the old file.
+- A failed download keeps the audio already received and continues from there on the next attempt.
+- Failed downloads stay in Notifications and can be retried, all at once or one by one.
+- A streamed episode that loses its connection while it is being cached, for example when the phone moves from Wi-Fi to mobile data, no longer closes the app. The partial file is not kept as a finished download.
+
 ## 2026.11.9
 
 - Activity counts an episode on the day it was marked played, including when that mark did not move the playback position. A listen under a minute is shown in seconds. Busiest and calmest compare only days, months, or weekdays that have listening. A single listening level is not also called the calmest.
