@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/theme.dart';
 import '../data/activity_messages.dart';
 import '../data/download_controller.dart';
+import '../data/download_notifications.dart';
 import '../data/feed_refresh_controller.dart';
 import '../data/online_status.dart';
 import '../data/opml_import_controller.dart';
@@ -50,16 +51,25 @@ IconData activityNoticeIcon(List<ActivityNotice> order) {
   };
 }
 
-/// Épisodes encore à récupérer, et part déjà écrite des fichiers en cours.
-/// Les fichiers en attente comptent dans le reste, avec une progression nulle.
-({int remaining, double progress}) downloadActivityProgress({
-  required Iterable<double> running,
-  required int waiting,
+/// Épisodes déjà enregistrés sur la taille du lot, avec les échecs.
+String downloadBatchDetail(
+  BuildContext context, {
+  required int done,
+  required int total,
+  required int failed,
 }) {
-  final remaining = running.length + waiting;
-  if (remaining == 0) return (remaining: 0, progress: 0);
-  final written = running.fold<double>(0, (sum, value) => sum + value);
-  return (remaining: remaining, progress: written / remaining);
+  final ratio = '$done/$total';
+  if (failed <= 0) return ratio;
+  final failures = failed == 1
+      ? context.tr('1 failure')
+      : context.tr('{count} failures', {'count': '$failed'});
+  return '$ratio · $failures';
+}
+
+/// Ce qu’il reste à télécharger, pour le bouton des notifications.
+String downloadsLeftDetail(BuildContext context, {required int remaining}) {
+  if (remaining == 1) return context.tr('1 episode left');
+  return context.tr('{count} episodes left', {'count': '$remaining'});
 }
 
 /// Podcasts pas encore traités dans l’actualisation en cours.
@@ -264,15 +274,21 @@ class _ActivityPageState extends ConsumerState<ActivityPage> {
   }
 
   Widget _downloadLine() {
+    final tally = ref.watch(downloadBatchTallyProvider);
     final activity = downloadActivityProgress(
       running: ref.watch(downloadProgressProvider).values,
       waiting: ref.watch(downloadWaitingCountProvider),
+      finished: tally.finished,
+      failed: tally.failed,
+      failedWritten: tally.failedWritten,
+      skipped: tally.skipped,
     );
-    final detail = activity.remaining == 1
-        ? context.tr('1 episode left')
-        : context.tr('{count} episodes left', {
-            'count': '${activity.remaining}',
-          });
+    final detail = downloadBatchDetail(
+      context,
+      done: activity.done,
+      total: activity.total,
+      failed: tally.failed,
+    );
     return _textLine(
       icon: Icons.download_outlined,
       accent: _accent(ActivityNotice.downloads),
@@ -492,9 +508,14 @@ class ActivityButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final order = activityNoticesOf(ref);
+    final tally = ref.watch(downloadBatchTallyProvider);
     final downloads = downloadActivityProgress(
       running: ref.watch(downloadProgressProvider).values,
       waiting: ref.watch(downloadWaitingCountProvider),
+      finished: tally.finished,
+      failed: tally.failed,
+      failedWritten: tally.failedWritten,
+      skipped: tally.skipped,
     );
     final refresh = ref.watch(feedRefreshProvider);
     final podcastsLeft = podcastsLeftToRefresh(
@@ -527,11 +548,7 @@ class ActivityButton extends ConsumerWidget {
         : null;
     final notes = <String>[
       if (downloads.remaining > 0)
-        downloads.remaining == 1
-            ? context.tr('1 episode left')
-            : context.tr('{count} episodes left', {
-                'count': '${downloads.remaining}',
-              }),
+        downloadsLeftDetail(context, remaining: downloads.remaining),
       if (refresh.isRunning && podcastsLeft > 0)
         podcastsLeft == 1
             ? context.tr('1 podcast to refresh')

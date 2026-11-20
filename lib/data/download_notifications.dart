@@ -15,7 +15,7 @@ class DownloadBatch {
     this.failureMessage,
   });
 
-  /// Fichiers encore en cours ou en attente.
+  /// Épisodes du lot, y compris ceux déjà terminés.
   final int remaining;
 
   /// Part déjà écrite du lot, entre 0 et 1.
@@ -38,6 +38,34 @@ abstract class DownloadNotifications {
   Future<void> dismiss();
 }
 
+/// Taille du lot et part déjà écrite, du premier fichier au dernier.
+/// Un épisode terminé reste dans le total. Un ajout ou un retrait
+/// de la file change ce total.
+({int total, int done, int remaining, double progress})
+downloadActivityProgress({
+  required Iterable<double> running,
+  required int waiting,
+  int finished = 0,
+  int failed = 0,
+  double failedWritten = 0,
+  int skipped = 0,
+}) {
+  final active = running.length + waiting;
+  final total = active + finished + failed + skipped;
+  if (total == 0) return (total: 0, done: 0, remaining: 0, progress: 0);
+  final written =
+      finished +
+      failedWritten +
+      running.fold<double>(0, (sum, value) => sum + value);
+  final progress = written / total;
+  return (
+    total: total,
+    done: finished,
+    remaining: active,
+    progress: progress > 1 ? 1 : progress,
+  );
+}
+
 String downloadBatchProgressTitle(DownloadBatch batch) {
   if (batch.remaining == 1) {
     final title = _name(batch.title);
@@ -48,12 +76,11 @@ String downloadBatchProgressTitle(DownloadBatch batch) {
 
 String downloadBatchProgressBody(DownloadBatch batch) {
   final percent = (batch.progress.clamp(0, 1) * 100).round();
+  final ratio = '${batch.succeeded}/${batch.remaining}';
   final podcast = _name(batch.podcast);
   final head = batch.remaining == 1 && podcast != null
-      ? '$podcast · $percent %'
-      : batch.remaining == 1
-      ? '$percent %'
-      : '${batch.remaining} épisodes · $percent %';
+      ? '$podcast · $ratio · $percent %'
+      : '$ratio · $percent %';
   if (batch.failed <= 0) return head;
   final failures = batch.failed == 1 ? '1 échec' : '${batch.failed} échecs';
   return '$head · $failures';

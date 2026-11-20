@@ -28,6 +28,65 @@ final downloadWaitingIdsProvider =
       DownloadWaitingIdsNotifier.new,
     );
 
+/// Épisodes déjà traités dans le lot en cours. Ils restent dans le total
+/// jusqu’à la fin, ou jusqu’à un ajout ou un retrait.
+final downloadBatchTallyProvider =
+    NotifierProvider<DownloadBatchTallyNotifier, DownloadBatchTally>(
+      DownloadBatchTallyNotifier.new,
+    );
+
+class DownloadBatchTally {
+  const DownloadBatchTally({
+    this.finished = 0,
+    this.failed = 0,
+    this.failedWritten = 0,
+    this.skipped = 0,
+  });
+
+  final int finished;
+  final int failed;
+
+  /// Part déjà écrite des épisodes qui ont échoué.
+  final double failedWritten;
+
+  /// Téléchargements automatiques laissés de côté, par exemple sur le
+  /// réseau mobile. Ils restent dans le total.
+  final int skipped;
+
+  @override
+  bool operator ==(Object other) {
+    return other is DownloadBatchTally &&
+        other.finished == finished &&
+        other.failed == failed &&
+        other.failedWritten == failedWritten &&
+        other.skipped == skipped;
+  }
+
+  @override
+  int get hashCode => Object.hash(finished, failed, failedWritten, skipped);
+}
+
+class DownloadBatchTallyNotifier extends Notifier<DownloadBatchTally> {
+  @override
+  DownloadBatchTally build() => const DownloadBatchTally();
+
+  void setCounts({
+    required int finished,
+    required int failed,
+    required double failedWritten,
+    required int skipped,
+  }) {
+    final next = DownloadBatchTally(
+      finished: finished,
+      failed: failed,
+      failedWritten: failedWritten,
+      skipped: skipped,
+    );
+    if (state == next) return;
+    state = next;
+  }
+}
+
 class DownloadWaitingCountNotifier extends Notifier<int> {
   @override
   int build() => 0;
@@ -83,6 +142,8 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
   var _batchOpen = false;
   var _succeeded = 0;
   var _failed = 0;
+  var _failedWritten = 0.0;
+  var _skipped = 0;
   String? _failureMessage;
   String? _successTitle;
   String? _successPodcast;
@@ -153,6 +214,7 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
           mobileDataActive: await ref.read(mobileDataProbeProvider)(),
         )) {
       _labels.remove(episode.id);
+      _skipped += 1;
       _finish(episode.id, null);
       _publishDownloadNotice();
       return;
@@ -182,13 +244,16 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
             },
           );
       final label = _labels.remove(episode.id);
-      _succeeded += 1;
       _successTitle = label?.title ?? episode.title;
       _successPodcast = label?.podcast;
       if (ref.read(settingsProvider).enqueueDownloads) {
         await ref.read(databaseProvider).addToQueue(episode.id);
       }
+      // L'épisode reste dans la carte pendant l'ajout à la file. Le compter
+      // seulement après l'avoir retirée, sinon un progrès concurrent le
+      // compte deux fois et l'anneau redescend.
       _finish(episode.id, null);
+      _succeeded += 1;
       _publishDownloadNotice();
     } on DownloadCancelled {
       _labels.remove(episode.id);
@@ -197,6 +262,7 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
     } catch (error) {
       final label = _labels.remove(episode.id);
       _failed += 1;
+      _failedWritten += state[episode.id] ?? 0;
       _failureMessage ??= downloadErrorText(error);
       _failureTitle = label?.title ?? episode.title;
       _failurePodcast = label?.podcast;
@@ -224,8 +290,8 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
   }
 
   void _publishDownloadNotice({bool force = false}) {
-    final remaining = state.length + _waiting.length;
-    if (remaining == 0) {
+    final active = state.length + _waiting.length;
+    if (active == 0) {
       _closeDownloadBatch();
       return;
     }
@@ -233,6 +299,8 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
       _batchOpen = true;
       _succeeded = 0;
       _failed = 0;
+      _failedWritten = 0;
+      _skipped = 0;
       _failureMessage = null;
       _successTitle = null;
       _successPodcast = null;
@@ -242,31 +310,51 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
       _postedRemaining = null;
       _postedFailed = null;
     }
+    _publishTally();
     if (!ref.read(settingsProvider).notifyDownloadActivity) return;
-    final batch = _progressBatch(remaining);
+    final batch = _progressBatch();
     final percent = (batch.progress * 100).round();
     if (!force &&
         percent == _postedPercent &&
-        remaining == _postedRemaining &&
+        batch.remaining == _postedRemaining &&
         _failed == _postedFailed) {
       return;
     }
     _postedPercent = percent;
-    _postedRemaining = remaining;
+    _postedRemaining = batch.remaining;
     _postedFailed = _failed;
     unawaited(ref.read(downloadNotificationsProvider).showProgress(batch));
   }
 
-  DownloadBatch _progressBatch(int remaining) {
-    final written = state.values.fold<double>(0, (sum, value) => sum + value);
-    final focus = _focusLabel();
+  DownloadBatch _progressBatch() {
+    final batch = downloadActivityProgress(
+      running: state.values,
+      waiting: _waiting.length,
+      finished: _succeeded,
+      failed: _failed,
+      failedWritten: _failedWritten,
+      skipped: _skipped,
+    );
+    final focus = batch.total == 1 ? _focusLabel() : null;
     return DownloadBatch(
-      remaining: remaining,
-      progress: written / remaining,
+      remaining: batch.total,
+      progress: batch.progress,
       title: focus?.title,
       podcast: focus?.podcast,
+      succeeded: _succeeded,
       failed: _failed,
     );
+  }
+
+  void _publishTally() {
+    ref
+        .read(downloadBatchTallyProvider.notifier)
+        .setCounts(
+          finished: _succeeded,
+          failed: _failed,
+          failedWritten: _failedWritten,
+          skipped: _skipped,
+        );
   }
 
   _EpisodeLabel? _focusLabel() {
@@ -291,6 +379,9 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
     final failurePodcast = _failurePodcast;
     _succeeded = 0;
     _failed = 0;
+    _failedWritten = 0;
+    _skipped = 0;
+    _publishTally();
     _failureMessage = null;
     _successTitle = null;
     _successPodcast = null;

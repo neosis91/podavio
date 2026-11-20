@@ -1,0 +1,1 @@
+- The download progress keeps every episode in the batch until the batch ends, and the count changes when an episode is added or removed. A failed download keeps the part already received and is shown in the count. An automatic download skipped on mobile data stays in that count.

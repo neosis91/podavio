@@ -9,6 +9,7 @@ import 'package:podavio/data/download_controller.dart';
 import 'package:podavio/data/download_notifications.dart';
 import 'package:podavio/data/download_service.dart';
 import 'package:podavio/data/models.dart';
+import 'package:podavio/data/online_status.dart';
 import 'package:podavio/data/providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,7 +36,7 @@ void main() {
       downloadBatchProgressBody(
         const DownloadBatch(remaining: 1, progress: 0.42, podcast: 'Essai'),
       ),
-      'Essai · 42 %',
+      'Essai · 0/1 · 42 %',
     );
     expect(
       downloadBatchProgressTitle(
@@ -45,9 +46,14 @@ void main() {
     );
     expect(
       downloadBatchProgressBody(
-        const DownloadBatch(remaining: 4, progress: 0.2, failed: 1),
+        const DownloadBatch(
+          remaining: 5,
+          progress: 0.5,
+          succeeded: 2,
+          failed: 1,
+        ),
       ),
-      '4 épisodes · 20 % · 1 échec',
+      '2/5 · 50 % · 1 échec',
     );
     expect(
       downloadBatchOutcomeBody(
@@ -170,6 +176,122 @@ void main() {
     );
   });
 
+  test('a finished episode stays in the batch total', () async {
+    final first = Completer<void>();
+    final second = Completer<void>();
+    var started = 0;
+    final harness = await _Harness.open(
+      episodeCount: 3,
+      simultaneousDownloads: 1,
+      onDownload: (onProgress) async {
+        final gate = started == 0 ? first : second;
+        started++;
+        await gate.future;
+        onProgress?.call(1);
+      },
+    );
+    addTearDown(harness.close);
+
+    final pending = [
+      for (final episode in harness.episodes.take(2))
+        harness.notifier.download(episode),
+    ];
+    first.complete();
+    await pending[0];
+
+    expect(harness.notifications.events, contains('progress:2:0.5'));
+    expect(harness.container.read(downloadBatchTallyProvider).finished, 1);
+
+    final third = harness.notifier.download(harness.episodes[2]);
+    expect(harness.notifications.events.last, 'progress:3:${1 / 3}');
+
+    final cancelled = expectLater(third, throwsA(isA<DownloadCancelled>()));
+    harness.notifier.cancel(harness.episodes[2].id);
+    expect(harness.notifications.events.last, 'progress:2:0.5');
+    expect(harness.container.read(downloadBatchTallyProvider).finished, 1);
+    await cancelled;
+
+    second.complete();
+    await pending[1];
+    expect(harness.container.read(downloadBatchTallyProvider).finished, 0);
+  });
+
+  test('a failure keeps the bytes already received', () async {
+    final gate = Completer<void>();
+    var calls = 0;
+    final harness = await _Harness.open(
+      episodeCount: 2,
+      simultaneousDownloads: 2,
+      onDownload: (onProgress) async {
+        final index = calls++;
+        if (index == 0) {
+          onProgress?.call(0.5);
+          throw Exception('coupé');
+        }
+        await gate.future;
+      },
+    );
+    addTearDown(harness.close);
+
+    final pending = [
+      for (final episode in harness.episodes)
+        harness.notifier.download(episode),
+    ];
+    final failed = expectLater(pending[0], throwsA(isA<Exception>()));
+    await failed;
+
+    final tally = harness.container.read(downloadBatchTallyProvider);
+    final activity = downloadActivityProgress(
+      running: harness.container.read(downloadProgressProvider).values,
+      waiting: harness.container.read(downloadWaitingCountProvider),
+      finished: tally.finished,
+      failed: tally.failed,
+      failedWritten: tally.failedWritten,
+      skipped: tally.skipped,
+    );
+    expect(activity.total, 2);
+    expect(activity.progress, closeTo(0.25, 0.0001));
+    expect(harness.notifications.events.last, 'progress:2:0.25');
+
+    gate.complete();
+    await pending[1];
+  });
+
+  test('a mobile skip stays in the batch total', () async {
+    final gate = Completer<void>();
+    final harness = await _Harness.open(
+      episodeCount: 2,
+      simultaneousDownloads: 2,
+      mobileData: true,
+      onDownload: (_) => gate.future,
+    );
+    addTearDown(harness.close);
+
+    final manual = harness.notifier.download(harness.episodes[0]);
+    final skipped = harness.notifier.download(
+      harness.episodes[1],
+      automatic: true,
+    );
+    await skipped;
+
+    final tally = harness.container.read(downloadBatchTallyProvider);
+    final activity = downloadActivityProgress(
+      running: harness.container.read(downloadProgressProvider).values,
+      waiting: harness.container.read(downloadWaitingCountProvider),
+      finished: tally.finished,
+      failed: tally.failed,
+      failedWritten: tally.failedWritten,
+      skipped: tally.skipped,
+    );
+    expect(tally.skipped, 1);
+    expect(activity.total, 2);
+    expect(activity.progress, 0);
+    expect(harness.container.read(downloadProgressProvider), hasLength(1));
+
+    gate.complete();
+    await manual;
+  });
+
   test('episodes waiting for a slot stay listed', () async {
     final gate = Completer<void>();
     final harness = await _Harness.open(
@@ -224,6 +346,7 @@ class _Harness {
     onDownload,
     int episodeCount = 1,
     int simultaneousDownloads = 2,
+    bool mobileData = false,
   }) async {
     SharedPreferences.setMockInitialValues({
       'enqueueDownloads': false,
@@ -261,6 +384,8 @@ class _Harness {
         sharedPreferencesProvider.overrideWithValue(preferences),
         databaseProvider.overrideWithValue(database),
         downloadNotificationsProvider.overrideWithValue(notifications),
+        if (mobileData)
+          mobileDataProbeProvider.overrideWithValue(() async => true),
         downloadServiceProvider.overrideWith(
           (ref) => _ScriptedDownloadService(
             ref.watch(databaseProvider),
