@@ -9,6 +9,13 @@ La fusion de `develop` dans `main` publie cette version.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 
+## 2026.11.11
+
+- Changelog fragments are gathered when a pull request is merged into develop. The develop to main merge publishes that version.
+
+- A develop to main merge publishes notes that arrived after that version was already released, as the next version.
+
+
 ## 2026.11.10
 
 - Importing a database no longer closes the app when podcast covers were about to be downloaded, or while a cover download was already running.
@@ -20,9 +27,6 @@ dans son titre, ou l’étiquette `skip-changelog`.
 - A failed download keeps the audio already received and continues from there on the next attempt.
 - Failed downloads stay in Notifications and can be retried, all at once or one by one.
 - A streamed episode that loses its connection while it is being cached, for example when the phone moves from Wi-Fi to mobile data, no longer closes the app. The partial file is not kept as a finished download.
-
-- Changelog fragments are gathered when a pull request is merged into develop. The develop to main merge publishes that version.
-
 
 ## 2026.11.9
 
