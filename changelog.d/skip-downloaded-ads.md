@@ -1,1 +1,0 @@
-- Downloaded episodes can skip confirmed ad, sponsor, and jingle passages. The review is in the podcast settings, and a chapter title that looks like an ad is suggested on its own. Detecting those passages from the audio is not active yet.
