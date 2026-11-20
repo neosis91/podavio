@@ -21,6 +21,7 @@ class CoverService {
   final _inflight = <String, Future<String?>>{};
   Directory? _coversDir;
   var _syncRunning = false;
+  var _disposed = false;
   Timer? _debounce;
 
   /// Faux en mode éco : aucun nouveau téléchargement de jaquette.
@@ -57,8 +58,16 @@ class CoverService {
     return '.jpg';
   }
 
+  /// Arrête toute sync : la base associée va être fermée (import, dispose).
+  void dispose() {
+    _disposed = true;
+    _debounce?.cancel();
+    _debounce = null;
+  }
+
   /// Planifie une sync (évite les rafales quand la liste des podcasts change).
   void schedulePodcastSync() {
+    if (_disposed) return;
     if (!downloadsEnabled) {
       _debounce?.cancel();
       return;
@@ -128,16 +137,17 @@ class CoverService {
   }
 
   Future<void> syncMissingPodcastCovers() async {
-    if (!downloadsEnabled || _syncRunning) return;
+    if (_disposed || !downloadsEnabled || _syncRunning) return;
     _syncRunning = true;
     try {
       final items = await _database.podcastsMissingCovers();
-      if (items.isEmpty) return;
+      if (items.isEmpty || _disposed) return;
 
       // Parallelisme limité pour ne pas saturer le réseau / le disque.
       const concurrency = 3;
       final updates = <({int id, String path})>[];
       for (var i = 0; i < items.length; i += concurrency) {
+        if (_disposed) return;
         final chunk = items.skip(i).take(concurrency).toList();
         final paths = await Future.wait([
           for (final podcast in chunk)
@@ -155,9 +165,14 @@ class CoverService {
       }
 
       // Une seule transaction → un seul refresh des streams Drift.
-      if (updates.isNotEmpty) {
+      // La base a pu être fermée pendant les téléchargements.
+      if (updates.isNotEmpty && !_disposed) {
         await _database.setPodcastImagePaths(updates);
       }
+    } catch (error, stack) {
+      // L’import a fermé la base pendant la requête déjà lancée.
+      if (_disposed) return;
+      Error.throwWithStackTrace(error, stack);
     } finally {
       _syncRunning = false;
     }

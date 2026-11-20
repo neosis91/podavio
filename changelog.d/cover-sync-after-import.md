@@ -1,0 +1,1 @@
+- Importing a database no longer closes the app when podcast covers were about to be downloaded, or while a cover download was already running.

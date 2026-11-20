@@ -1,0 +1,1 @@
+- A streamed episode that loses its connection while it is being cached, for example when the phone moves from Wi-Fi to mobile data, no longer closes the app. The partial file is not kept as a finished download.

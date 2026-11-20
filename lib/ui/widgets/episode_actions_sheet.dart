@@ -149,7 +149,10 @@ class _EpisodeActionsSheet extends ConsumerWidget {
     final progress = ref.watch(
       downloadProgressProvider.select((items) => items[episode.id]),
     );
-    final downloading = progress != null;
+    final waiting = ref.watch(
+      downloadWaitingIdsProvider.select((ids) => ids.contains(episode.id)),
+    );
+    final downloading = progress != null || waiting;
     final preferPodcastCover = ref.watch(
       settingsProvider.select((settings) => settings.preferPodcastCover),
     );

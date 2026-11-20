@@ -10,6 +10,7 @@ import 'package:saf_util/saf_util.dart';
 import '../core/format.dart';
 import '../sync/sync_hooks.dart';
 import 'app_database.dart';
+import 'download_resume.dart';
 import 'feed_service.dart';
 import 'http_auth.dart';
 import 'playback_file.dart';
@@ -44,9 +45,10 @@ bool sameDownloadLocation(String a, String b) {
 }
 
 class DownloadService {
-  DownloadService(this._database);
+  DownloadService(this._database, {this.partials});
 
   final AppDatabase _database;
+  final Directory? partials;
   final _clients = <int, http.Client>{};
   final _cancelled = <int>{};
   SafStream? _safStream;
@@ -87,6 +89,7 @@ class DownloadService {
         location: location,
         onProgress: onProgress,
       );
+      await forgetPartials([stored.id]);
       return;
     }
     final name = downloadFileName(
@@ -96,98 +99,44 @@ class DownloadService {
     );
     final client = http.Client();
     _clients[episode.id] = client;
-    File? file;
-    String? contentUri;
-    String? session;
+    final partial = await _partialFile(episode.id);
+    String? published;
     try {
       final headers = podcastRequestHeaders(
         userAgent: podavioUserAgent,
         username: podcast?.authUsername,
         password: podcast?.authPassword,
       );
-      final request = http.Request('GET', Uri.parse(episode.audioUrl));
-      request.headers.addAll(headers);
-      final response = headers.containsKey('Authorization')
-          ? await sendKeepingAuthorization(
-              client,
-              request..followRedirects = false,
-            )
-          : await client.send(request);
+      await _downloadToPartial(
+        client: client,
+        episode: episode,
+        headers: headers,
+        partial: partial,
+        onProgress: onProgress,
+      );
       if (_cancelled.contains(episode.id)) throw const DownloadCancelled();
-      if (response.statusCode == 401) {
-        throw Exception(
-          'Téléchargement refusé. Vérifiez l’identifiant dans les paramètres du podcast.',
-        );
-      }
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Téléchargement impossible (${response.statusCode}).');
-      }
-      final total = response.contentLength ?? 0;
-      var received = 0;
-      if (isContentUri(location)) {
-        final info = await _saf.startWriteStream(
-          location,
-          name,
-          _mime(episode),
-          overwrite: true,
-        );
-        session = info.session;
-        contentUri = info.fileResult.uri.toString();
-        await for (final chunk in response.stream) {
-          if (_cancelled.contains(episode.id)) throw const DownloadCancelled();
-          final bytes = Uint8List.fromList(chunk);
-          await _saf.writeChunk(session, bytes);
-          received += bytes.length;
-          if (total > 0) onProgress?.call(received / total);
-        }
-        await _saf.endWriteStream(session);
-        session = null;
-      } else {
-        final folder = Directory(location);
-        await folder.create(recursive: true);
-        file = File(p.join(folder.path, name));
-        final sink = file.openWrite();
-        try {
-          await for (final chunk in response.stream) {
-            if (_cancelled.contains(episode.id)) {
-              throw const DownloadCancelled();
-            }
-            sink.add(chunk);
-            received += chunk.length;
-            if (total > 0) onProgress?.call(received / total);
-          }
-          await sink.flush();
-        } finally {
-          await sink.close();
-        }
-      }
-      if (_cancelled.contains(episode.id)) throw const DownloadCancelled();
+      published = await _publishPartial(
+        partial: partial,
+        location: location,
+        name: name,
+        episode: episode,
+      );
       await _commitDownload(
         episode: episode,
         podcast: podcast,
-        path: contentUri ?? file!.path,
+        path: published,
       );
-      file = null;
-      contentUri = null;
+      published = null;
+      await _forgetPartial(partial);
     } catch (error) {
-      if (session != null) {
-        try {
-          await _saf.endWriteStream(session);
-        } catch (_) {}
-        session = null;
-      }
-      await _discardPartial(file);
-      if (contentUri != null) await _deleteContent(contentUri);
+      if (published != null) await _deletePublished(published);
       if (_cancelled.contains(episode.id) || error is DownloadCancelled) {
+        await _forgetPartial(partial);
         throw const DownloadCancelled();
       }
+      if (await _partialLength(partial) == 0) await _forgetPartial(partial);
       rethrow;
     } finally {
-      if (session != null) {
-        try {
-          await _saf.endWriteStream(session);
-        } catch (_) {}
-      }
       _clients.remove(episode.id);
       _cancelled.remove(episode.id);
       client.close();
@@ -225,6 +174,7 @@ class DownloadService {
   Future<void> deleteDownload(Episode episode) async {
     final path = episode.downloadPath;
     if (path != null) await deleteStored(path);
+    await _forgetPartial(await _partialFile(episode.id));
     await _database.setDownloadPath(episode.id, null);
     final podcast = await _database.getPodcast(episode.podcastId);
     if (podcast != null) {
@@ -524,8 +474,334 @@ class DownloadService {
     } catch (_) {}
   }
 
-  Future<void> _discardPartial(File? file) async {
-    if (file != null && await file.exists()) await file.delete();
+  /// Efface les morceaux de ces épisodes. Rien n’est fait s’ils n’existent pas.
+  Future<void> forgetPartials(Iterable<int> episodeIds) async {
+    try {
+      for (final id in episodeIds) {
+        await _forgetPartial(await _partialFile(id));
+      }
+    } catch (_) {}
+  }
+
+  Future<Directory> _partialDirectory() async {
+    final root = partials ?? await getApplicationSupportDirectory();
+    final folder = Directory(p.join(root.path, 'download-partials'));
+    await folder.create(recursive: true);
+    return folder;
+  }
+
+  Future<File> _partialFile(int episodeId) async {
+    final folder = await _partialDirectory();
+    return File(p.join(folder.path, '$episodeId.part'));
+  }
+
+  Future<int> _partialLength(File partial) async {
+    if (!await partial.exists()) return 0;
+    return partial.length();
+  }
+
+  /// Garde l’adresse et l’identité du fichier. Une autre adresse repart de zéro.
+  Future<({int length, String? validator})> _openPartial(
+    File partial,
+    String audioUrl,
+  ) async {
+    final marker = File('${partial.path}.url');
+    final previous = await _readPartialMark(marker);
+    if (previous.url.isNotEmpty &&
+        previous.url != audioUrl &&
+        await partial.exists()) {
+      await partial.delete();
+      if (await marker.exists()) await marker.delete();
+    }
+    if (previous.url != audioUrl) {
+      await _writePartialMark(partial, audioUrl, null);
+      return (length: await _partialLength(partial), validator: null);
+    }
+    return (
+      length: await _partialLength(partial),
+      validator: previous.validator,
+    );
+  }
+
+  Future<({String url, String? validator})> _readPartialMark(
+    File marker,
+  ) async {
+    if (!await marker.exists()) return (url: '', validator: null);
+    final lines = (await marker.readAsString()).split('\n');
+    final url = lines.isEmpty ? '' : lines.first;
+    final validator = lines.length > 1 && lines[1].isNotEmpty ? lines[1] : null;
+    return (url: url, validator: validator);
+  }
+
+  Future<void> _writePartialMark(
+    File partial,
+    String audioUrl,
+    String? validator,
+  ) async {
+    final marker = File('${partial.path}.url');
+    await marker.parent.create(recursive: true);
+    await marker.writeAsString('$audioUrl\n${validator ?? ''}\n');
+  }
+
+  Future<void> _forgetPartial(File partial) async {
+    if (await partial.exists()) {
+      try {
+        await partial.delete();
+      } catch (_) {}
+    }
+    final marker = File('${partial.path}.url');
+    if (await marker.exists()) {
+      try {
+        await marker.delete();
+      } catch (_) {}
+    }
+  }
+
+  Future<http.StreamedResponse> _sendAudio(
+    http.Client client,
+    Episode episode,
+    Map<String, String> headers,
+    int offset,
+    String? validator,
+  ) {
+    final request = http.Request('GET', Uri.parse(episode.audioUrl));
+    request.headers.addAll(headers);
+    if (offset > 0) {
+      request.headers['Range'] = 'bytes=$offset-';
+      if (validator != null && validator.isNotEmpty) {
+        request.headers['If-Range'] = validator;
+      }
+    }
+    if (headers.containsKey('Authorization')) {
+      request.followRedirects = false;
+      return sendKeepingAuthorization(client, request);
+    }
+    return client.send(request);
+  }
+
+  Future<void> _downloadToPartial({
+    required http.Client client,
+    required Episode episode,
+    required Map<String, String> headers,
+    required File partial,
+    required void Function(double progress)? onProgress,
+  }) async {
+    final opened = await _openPartial(partial, episode.audioUrl);
+    var offset = opened.length;
+    var validator = opened.validator;
+    final resumedFrom = offset;
+    var response = await _sendAudio(
+      client,
+      episode,
+      headers,
+      offset,
+      validator,
+    );
+    var plan = planDownloadBody(
+      statusCode: response.statusCode,
+      partialBytes: offset,
+      contentLength: response.contentLength,
+      contentRange: response.headers['content-range'],
+    );
+    if (plan.mode == DownloadBodyMode.restart) {
+      await response.stream.drain<void>();
+      response = await _sendAudio(client, episode, headers, 0, null);
+      plan = planDownloadBody(
+        statusCode: response.statusCode,
+        partialBytes: 0,
+        contentLength: response.contentLength,
+        contentRange: response.headers['content-range'],
+      );
+      offset = 0;
+      validator = null;
+    }
+    if (plan.mode == DownloadBodyMode.complete) {
+      await response.stream.drain<void>();
+      if (plan.total > 0) onProgress?.call(1);
+      return;
+    }
+    if (plan.mode == DownloadBodyMode.restart) {
+      await response.stream.drain<void>();
+      throw Exception('Téléchargement impossible (${response.statusCode}).');
+    }
+    final nextValidator = downloadValidator(response.headers);
+    final changed =
+        resumedFrom > 0 &&
+        validator != null &&
+        nextValidator != null &&
+        validator != nextValidator;
+    if (changed && plan.mode == DownloadBodyMode.append) {
+      await response.stream.drain<void>();
+      response = await _sendAudio(client, episode, headers, 0, null);
+      plan = planDownloadBody(
+        statusCode: response.statusCode,
+        partialBytes: 0,
+        contentLength: response.contentLength,
+        contentRange: response.headers['content-range'],
+      );
+      offset = 0;
+    }
+    await _rejectFailed(response);
+    await _writePartial(
+      episodeId: episode.id,
+      partial: partial,
+      audioUrl: episode.audioUrl,
+      validator: downloadValidator(response.headers) ?? validator,
+      preferIncoming: changed,
+      response: response,
+      plan: plan,
+      onProgress: onProgress,
+    );
+  }
+
+  Future<void> _rejectFailed(http.StreamedResponse response) async {
+    final status = response.statusCode;
+    if (status == 401) {
+      await response.stream.drain<void>();
+      throw Exception(
+        'Téléchargement refusé. Vérifiez l’identifiant dans les paramètres du podcast.',
+      );
+    }
+    if (status >= 200 && status < 300) return;
+    await response.stream.drain<void>();
+    throw Exception('Téléchargement impossible ($status).');
+  }
+
+  Future<void> _writePartial({
+    required int episodeId,
+    required File partial,
+    required String audioUrl,
+    required String? validator,
+    required bool preferIncoming,
+    required http.StreamedResponse response,
+    required DownloadBodyPlan plan,
+    required void Function(double progress)? onProgress,
+  }) async {
+    final replacing = plan.mode == DownloadBodyMode.replace;
+    final target = replacing ? File('${partial.path}.incoming') : partial;
+    if (replacing && await target.exists()) await target.delete();
+    final sink = target.openWrite(
+      mode: replacing ? FileMode.write : FileMode.append,
+    );
+    var received = plan.already;
+    var sinceFlush = 0;
+    var closed = false;
+    try {
+      if (plan.total > 0 && received > 0) {
+        onProgress?.call(received / plan.total);
+      }
+      await for (final chunk in response.stream) {
+        if (_cancelled.contains(episodeId)) throw const DownloadCancelled();
+        sink.add(chunk);
+        received += chunk.length;
+        sinceFlush += chunk.length;
+        if (plan.total > 0) {
+          final fraction = received / plan.total;
+          onProgress?.call(fraction > 1 ? 1 : fraction);
+        }
+        if (sinceFlush >= 256 * 1024) {
+          await sink.flush();
+          sinceFlush = 0;
+        }
+      }
+      await sink.flush();
+      await sink.close();
+      closed = true;
+      final length = await _partialLength(target);
+      if (plan.total > 0 && length != plan.total) {
+        throw Exception('Téléchargement interrompu.');
+      }
+      if (replacing) await _moveLocalFile(target, partial);
+      await _writePartialMark(partial, audioUrl, validator);
+    } catch (_) {
+      if (!closed) {
+        try {
+          await sink.close();
+        } catch (_) {}
+        closed = true;
+      }
+      if (replacing) {
+        final length = await _partialLength(target);
+        if (plan.total > 0 && length > plan.total) {
+          if (await target.exists()) await target.delete();
+        } else if (preferIncoming) {
+          await _preferIncoming(target, partial);
+          if (await partial.exists()) {
+            await _writePartialMark(partial, audioUrl, validator);
+          }
+        } else {
+          await _keepLongerPartial(target, partial);
+        }
+      } else if (plan.total > 0 && await _partialLength(partial) > plan.total) {
+        await _forgetPartial(partial);
+      }
+      rethrow;
+    } finally {
+      if (!closed) await sink.close();
+    }
+  }
+
+  /// Le nouveau fichier remplace l’ancien, même s’il est encore plus court.
+  Future<void> _preferIncoming(File incoming, File partial) async {
+    final incomingLength = await _partialLength(incoming);
+    try {
+      if (incomingLength > 0) {
+        await _moveLocalFile(incoming, partial);
+      } else {
+        if (await incoming.exists()) await incoming.delete();
+        await _forgetPartial(partial);
+      }
+    } catch (_) {}
+  }
+
+  /// Garde le préfixe le plus long quand une réponse complète s’interrompt.
+  Future<void> _keepLongerPartial(File incoming, File partial) async {
+    final incomingLength = await _partialLength(incoming);
+    final kept = await _partialLength(partial);
+    try {
+      if (incomingLength > kept) {
+        await _moveLocalFile(incoming, partial);
+      } else if (await incoming.exists()) {
+        await incoming.delete();
+      }
+    } catch (_) {}
+  }
+
+  Future<String> _publishPartial({
+    required File partial,
+    required String location,
+    required String name,
+    required Episode episode,
+  }) async {
+    if (isContentUri(location)) {
+      final created = await _saf.pasteLocalFile(
+        partial.path,
+        location,
+        name,
+        _mime(episode),
+        overwrite: true,
+      );
+      return created.uri.toString();
+    }
+    final folder = Directory(location);
+    await folder.create(recursive: true);
+    final dest = File(p.join(folder.path, name));
+    if (await dest.exists()) await dest.delete();
+    await partial.copy(dest.path);
+    return dest.path;
+  }
+
+  Future<void> _deletePublished(String path) async {
+    if (isContentUri(path)) {
+      await _deleteContent(path);
+      return;
+    }
+    final file = File(path);
+    if (await file.exists()) {
+      try {
+        await file.delete();
+      } catch (_) {}
+    }
   }
 
   String _mime(Episode episode) {

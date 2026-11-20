@@ -70,9 +70,14 @@ class EpisodeTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final episode = entry.episode;
-    final progress = ref.watch(
+    final active = ref.watch(
       downloadProgressProvider.select((items) => items[episode.id]),
     );
+    final waiting = ref.watch(
+      downloadWaitingIdsProvider.select((ids) => ids.contains(episode.id)),
+    );
+    // 0 : anneau indéterminé, comme avant le premier octet reçu.
+    final progress = active ?? (waiting ? 0.0 : null);
     final playing = ref.watch(
       playerProvider.select((state) => state.episodeId == episode.id),
     );

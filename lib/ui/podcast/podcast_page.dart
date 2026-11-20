@@ -358,7 +358,6 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                           episodes: episodes,
                           pullToRefresh: true,
                           background: listBackground,
-                          fadeColor: background,
                           showPause: playingHere,
                           onPlay: first == null
                               ? null
@@ -371,7 +370,6 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                         episodes: episodes,
                         pullToRefresh: false,
                         background: listBackground,
-                        fadeColor: background,
                         showPause: playingHere,
                         onPlay: first == null
                             ? null
@@ -546,7 +544,6 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     required AsyncValue<EpisodeWindow> episodes,
     required bool pullToRefresh,
     required Color background,
-    required Color fadeColor,
     required bool showPause,
     required VoidCallback? onPlay,
   }) {
@@ -566,7 +563,6 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         episodes: episodes,
         pullToRefresh: pullToRefresh,
         background: background,
-        fadeColor: fadeColor,
         showPause: showPause,
         onPlay: onPlay,
       ),
@@ -579,7 +575,6 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     required AsyncValue<EpisodeWindow> episodes,
     required bool pullToRefresh,
     required Color background,
-    required Color fadeColor,
     required bool showPause,
     required VoidCallback? onPlay,
   }) {
@@ -603,7 +598,6 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                 podcastListReversedProvider(widget.podcastId),
               ),
               onAutomaticDownload: () => _showAutoDownload(item),
-              fadeColor: fadeColor,
             ),
           ),
         if (landscape)
@@ -805,8 +799,15 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    final paths = await ref.read(databaseProvider).deletePodcast(item.id);
-    await ref.read(downloadServiceProvider).deleteFiles(paths);
+    final database = ref.read(databaseProvider);
+    final episodeIds = [
+      for (final episode in await database.episodesForPodcast(item.id))
+        episode.id,
+    ];
+    final paths = await database.deletePodcast(item.id);
+    final downloads = ref.read(downloadServiceProvider);
+    await downloads.deleteFiles(paths);
+    await downloads.forgetPartials(episodeIds);
     if (context.mounted) Navigator.pop(context);
   }
 }

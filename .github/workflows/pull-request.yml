@@ -17,3 +17,28 @@ jobs:
           CI_MERGE_REQUEST_SOURCE_BRANCH_NAME: ${{ github.head_ref }}
           CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
         run: tool/ci/check_mr_target.sh
+
+  journal:
+    name: check:changelog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Fragments
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          python3 tool/changelog_test.py
+          git fetch origin "${{ github.base_ref }}"
+          if [ "${{ github.base_ref }}" = "develop" ]; then
+            python3 tool/changelog.py check-pr \
+              --base "origin/${{ github.base_ref }}" \
+              --title "$PR_TITLE" \
+              --labels "$PR_LABELS"
+          fi
+          if [ "${{ github.head_ref }}" = "develop" ] && [ "${{ github.base_ref }}" = "main" ]; then
+            python3 tool/changelog.py check-release
+          fi

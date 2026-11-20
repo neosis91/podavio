@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:podavio/data/download_notifications.dart';
 import 'package:podavio/ui/activity_notices.dart';
 
 void main() {
@@ -44,17 +45,20 @@ void main() {
     );
   });
 
-  test('download progress counts episodes still to fetch', () {
+  test('download progress keeps finished episodes in the batch', () {
     final activity = downloadActivityProgress(
-      running: const [0.5, 1],
-      waiting: 2,
+      running: const [0.5],
+      waiting: 1,
+      finished: 2,
+      failed: 1,
+      failedWritten: 0.4,
+      skipped: 1,
     );
-    expect(activity.remaining, 4);
-    expect(activity.progress, closeTo(1.5 / 4, 0.0001));
-    expect(
-      downloadActivityProgress(running: const [], waiting: 0).remaining,
-      0,
-    );
+    expect(activity.total, 6);
+    expect(activity.done, 2);
+    expect(activity.remaining, 2);
+    expect(activity.progress, closeTo(2.9 / 6, 0.0001));
+    expect(downloadActivityProgress(running: const [], waiting: 0).total, 0);
   });
 
   test('refresh counts podcasts still to update', () {

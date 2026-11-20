@@ -110,6 +110,26 @@ void main() {
     await phone.close(tester);
   });
 
+  testWidgets('a queued episode shows the waiting spinner', (tester) async {
+    final harness = await _pumpTile(
+      tester,
+      width: 400,
+      entry: _entry(),
+      waitingIds: {1},
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.byType(DownloadProgressRing), findsOneWidget);
+    expect(
+      tester
+          .widget<CircularProgressIndicator>(
+            find.byType(CircularProgressIndicator),
+          )
+          .value,
+      isNull,
+    );
+    await harness.close(tester);
+  });
+
   testWidgets('playing row uses a highlight background', (tester) async {
     final harness = await _pumpTile(
       tester,
@@ -375,6 +395,15 @@ class _StubDownloads extends DownloadProgressNotifier {
   Map<int, double> build() => _progress;
 }
 
+class _StubWaiting extends DownloadWaitingIdsNotifier {
+  _StubWaiting(this._ids);
+
+  final Set<int> _ids;
+
+  @override
+  Set<int> build() => _ids;
+}
+
 Future<_Harness> _pumpTile(
   WidgetTester tester, {
   required double width,
@@ -387,6 +416,7 @@ Future<_Harness> _pumpTile(
   String highlightQuery = '',
   int? playingEpisodeId,
   Map<int, double> downloadProgress = const {},
+  Set<int> waitingIds = const {},
 }) async {
   SharedPreferences.setMockInitialValues({'episodeListDensity': density.id});
   final preferences = await SharedPreferences.getInstance();
@@ -445,6 +475,7 @@ Future<_Harness> _pumpTile(
         downloadProgressProvider.overrideWith(
           () => _StubDownloads(downloadProgress),
         ),
+        downloadWaitingIdsProvider.overrideWith(() => _StubWaiting(waitingIds)),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
