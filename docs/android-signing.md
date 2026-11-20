@@ -28,7 +28,7 @@ la même identité de signature (désinstall / réinstall obligatoire).
 
 ## Release
 
-La fusion de `develop` dans `main` compile Android, Windows et Linux, puis les joint à la release GitHub. Avant cette fusion, `python3 tool/changelog.py collect` écrit le titre `## AAAA.M.N` dans `CHANGELOG.md`.
+La fusion de `develop` dans `main` rassemble les fragments du journal, compile Android, Windows et Linux, puis les joint à la release GitHub.
 
 ## Migration depuis les APK debug
 

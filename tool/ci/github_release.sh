@@ -31,8 +31,15 @@ for line in text.splitlines():
     if heading.fullmatch(title):
         print(title)
         raise SystemExit(0)
-raise SystemExit("CHANGELOG.md n'a pas de titre ## AAAA.M.N à publier. Lancez python3 tool/changelog.py collect avant de fusionner develop dans main.")
+raise SystemExit("CHANGELOG.md n'a pas de titre ## AAAA.M.N à publier.")
 PY
+}
+
+prepare_release_notes() {
+  TZ=Europe/Paris python3 tool/changelog.py collect
+  VERSION="$(changelog_version)"
+  python3 tool/changelog.py check "${VERSION}"
+  python3 tool/changelog.py notes "${VERSION}" > release-notes.md
 }
 
 build_ids() {
@@ -83,7 +90,7 @@ case "${1:-}" in
       echo "release=false" >> "${GITHUB_OUTPUT:?}"
       exit 0
     fi
-    VERSION="$(changelog_version)"
+    prepare_release_notes
     remote="$(git ls-remote --tags origin "refs/tags/${VERSION}" | awk 'END { print $1 }')"
     if [ -n "${remote}" ] && [ "${remote}" != "${SHA_FULL}" ]; then
       if gh release view "${VERSION}" >/dev/null 2>&1; then
@@ -98,7 +105,6 @@ case "${1:-}" in
       echo "release=false" >> "${GITHUB_OUTPUT:?}"
       exit 0
     fi
-    python3 tool/changelog.py check "${VERSION}"
     echo "release=true" >> "${GITHUB_OUTPUT:?}"
     echo "version=${VERSION}" >> "${GITHUB_OUTPUT:?}"
     echo "sha=${SHA_FULL}" >> "${GITHUB_OUTPUT:?}"
@@ -111,8 +117,7 @@ case "${1:-}" in
     [ -n "${sha}" ] || fail "Run ${PODAVIO_RUN_ID} introuvable."
     git fetch origin "${sha}"
     git checkout --detach "${sha}"
-    VERSION="$(changelog_version)"
-    python3 tool/changelog.py check "${VERSION}"
+    prepare_release_notes
     echo "release=true" >> "${GITHUB_OUTPUT:?}"
     echo "version=${VERSION}" >> "${GITHUB_OUTPUT:?}"
     echo "sha=${sha}" >> "${GITHUB_OUTPUT:?}"
@@ -234,13 +239,17 @@ EOF
       export GH_TOKEN="${GITHUB_TOKEN}"
     fi
     [ -n "${GH_TOKEN:-}" ] || fail "GH_TOKEN manquant."
-    python3 tool/changelog.py check "${VERSION}"
+    if [ -f release-notes.md ]; then
+      notes="$(cat release-notes.md)"
+    else
+      python3 tool/changelog.py check "${VERSION}"
+      notes="$(python3 tool/changelog.py notes "${VERSION}")"
+    fi
     if ! git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
       git -c user.name="neosis91" -c user.email="bertrand.jaunet@posteo.net" \
         tag -a "${VERSION}" -m "Podavio ${VERSION}"
     fi
     git push origin "refs/tags/${VERSION}"
-    notes="$(python3 tool/changelog.py notes "${VERSION}")"
     if gh release view "${VERSION}" >/dev/null 2>&1; then
       echo "Release GitHub ${VERSION} déjà présente."
     else

@@ -13,6 +13,8 @@ on:
 permissions:
   contents: write
   actions: read
+  pull-requests: write
+  checks: write
 
 env:
   GH_TOKEN: ${{ github.token }}
@@ -45,6 +47,22 @@ jobs:
           else
             tool/ci/github_release.sh gate
           fi
+      - uses: actions/upload-artifact@v7
+        if: steps.decide.outputs.release == 'true'
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  journal:
+    needs: gate
+    if: github.event_name == 'push' && needs.gate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Reporter le journal sur develop
+        run: tool/ci/sync_changelog.sh
 
   android:
     needs: gate
@@ -178,6 +196,10 @@ jobs:
         with:
           name: windows
           path: dist/windows
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: .
       - name: Tag et release
         env:
           PODAVIO_RELEASE_VERSION: ${{ needs.gate.outputs.version }}
