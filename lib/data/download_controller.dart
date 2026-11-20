@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../settings/settings_controller.dart';
@@ -7,6 +9,7 @@ import 'activity_messages.dart';
 import 'app_database.dart';
 import 'download_notifications.dart';
 import 'download_service.dart';
+import 'episode_audio_analyzer.dart';
 import 'online_status.dart';
 import 'providers.dart';
 
@@ -337,6 +340,7 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
       _finish(episode.id, null);
       _succeeded += 1;
       _publishDownloadNotice();
+      unawaited(_analyzeDownloaded(episode.id));
     } on DownloadCancelled {
       _labels.remove(episode.id);
       _finish(episode.id, const DownloadCancelled());
@@ -360,6 +364,37 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
       _failurePodcast = label?.podcast;
       _finish(episode.id, error);
       _publishDownloadNotice();
+    }
+  }
+
+  /// Empreinte du fichier terminé, puis recherche des passages du podcast.
+  /// L’analyseur actuel est un placeholder : l’appel est en place.
+  Future<void> _analyzeDownloaded(int episodeId) async {
+    try {
+      if (!ref.mounted) return;
+      final stored = await ref.read(databaseProvider).episodeById(episodeId);
+      if (stored == null || !ref.mounted) return;
+      final analyzer = ref.read(episodeAudioAnalyzerProvider);
+      final path = stored.downloadPath?.trim() ?? '';
+      if (path.isNotEmpty && !path.startsWith('content:')) {
+        final file = File(path);
+        if (await file.exists()) {
+          final data = await analyzer.computeFingerprint(file);
+          if (data != null && data.isNotEmpty && ref.mounted) {
+            await ref
+                .read(databaseProvider)
+                .upsertEpisodeFingerprint(
+                  episodeId: stored.id,
+                  data: data,
+                  hopMicros: chromaprintHopMicros,
+                );
+          }
+        }
+      }
+      if (!ref.mounted) return;
+      await analyzer.findSegments(stored.podcastId);
+    } catch (error, stack) {
+      debugPrint('Analyse audio: $error\n$stack');
     }
   }
 

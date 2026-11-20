@@ -32,8 +32,54 @@ void main() {
         await reopened
             .customSelect('SELECT auto_download_limit FROM podcasts')
             .get();
+        await reopened.customSelect('SELECT auto_skip_ads FROM podcasts').get();
+        await reopened.customSelect('SELECT id FROM skip_segments').get();
         expect(await _userVersion(reopened), reopened.schemaVersion);
       },
     );
   }
+
+  test('upgrades a v19 file that has no skip tables yet', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-migration-v19');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    await created.customSelect('SELECT 1').get();
+    await created.customStatement('PRAGMA foreign_keys = OFF');
+    await created.customStatement('DROP TABLE skip_segments');
+    await created.customStatement('DROP TABLE segment_templates');
+    await created.customStatement('DROP TABLE episode_fingerprints');
+    await created.customStatement(
+      'ALTER TABLE podcasts DROP COLUMN auto_skip_ads',
+    );
+    await created.customStatement(
+      'ALTER TABLE podcasts DROP COLUMN auto_skip_kinds',
+    );
+    await created.customStatement('PRAGMA user_version = 19');
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    await reopened
+        .customSelect('SELECT data, hop_micros FROM episode_fingerprints')
+        .get();
+    await reopened
+        .customSelect(
+          'SELECT kind, fingerprint, log_mel FROM segment_templates',
+        )
+        .get();
+    await reopened
+        .customSelect(
+          'SELECT start_ms, end_ms, kind, source, matches, confirmed, template_id '
+          'FROM skip_segments',
+        )
+        .get();
+    final columns = await reopened
+        .customSelect('PRAGMA table_info(podcasts)')
+        .get();
+    final names = columns.map((row) => row.read<String>('name')).toSet();
+    expect(names, containsAll(['auto_skip_ads', 'auto_skip_kinds']));
+    expect(await _userVersion(reopened), 20);
+  });
 }

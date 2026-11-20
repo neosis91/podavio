@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_database.dart';
 import 'cover_service.dart';
+import 'episode_audio_analyzer.dart';
 import 'download_notifications.dart';
 import 'status_notifications.dart';
 import 'download_service.dart';
@@ -78,6 +79,11 @@ final feedServiceProvider = Provider<FeedService>((ref) {
 
 final downloadServiceProvider = Provider<DownloadService>((ref) {
   return DownloadService(ref.watch(databaseProvider));
+});
+
+/// Empreintes et passages répétés. Le remplaçant réel se branche ici.
+final episodeAudioAnalyzerProvider = Provider<EpisodeAudioAnalyzer>((ref) {
+  return const PlaceholderEpisodeAudioAnalyzer();
 });
 
 final downloadNotificationsProvider = Provider<DownloadNotifications>((ref) {

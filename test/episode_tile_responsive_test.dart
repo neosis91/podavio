@@ -361,6 +361,8 @@ EpisodeEntry _entry({
       skipOutroSeconds: 0,
       personsJson: '[]',
       fundingJson: '[]',
+      autoSkipAds: false,
+      autoSkipKinds: '[]',
     ),
   );
 }

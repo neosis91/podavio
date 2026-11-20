@@ -297,6 +297,8 @@ mixin _EpisodeQueries on _$AppDatabase {
         podcasts.skipOutroSeconds,
         podcasts.authUsername,
         podcasts.authPassword,
+        podcasts.autoSkipAds,
+        podcasts.autoSkipKinds,
       ])
       ..join([innerJoin(podcasts, podcasts.id.equalsExp(episodes.podcastId))]);
     if (playlistId != null) {
@@ -505,6 +507,8 @@ mixin _EpisodeQueries on _$AppDatabase {
           authPassword: row.read(podcasts.authPassword),
           personsJson: '[]',
           fundingJson: '[]',
+          autoSkipAds: row.read(podcasts.autoSkipAds)!,
+          autoSkipKinds: row.read(podcasts.autoSkipKinds)!,
         ),
       ),
     );

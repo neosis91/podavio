@@ -15,6 +15,9 @@ enum PlaybackDirection { backward, forward }
 /// Décision de saut ou de changement d’épisode, lue à chaque appui.
 typedef DirectionalSkip = Future<void> Function(PlaybackDirection direction);
 
+/// Seek demandé par la notification ou l’écran de verrouillage.
+typedef MediaSeek = Future<void> Function(Duration position);
+
 class PlaybackHandler {
   PlaybackHandler(this._session) {
     // flutter_media_session : Android, iOS, macOS, Windows, Web — pas Linux.
@@ -36,6 +39,11 @@ class PlaybackHandler {
 
   /// Appelé par précédent, suivant, retour et avance (notification et casque).
   DirectionalSkip? onDirectionalSkip;
+
+  /// Seek de la session média. S’il est défini, il remplace le seek direct
+  /// du lecteur : le contrôleur peut alors tenir un passage (pas de re-saut)
+  /// et transmettre la position au Cast.
+  MediaSeek? onUserSeek;
 
   Duration get skipBack => _skipBack;
 
@@ -127,7 +135,14 @@ class PlaybackHandler {
         onPlay: () => unawaited(_player?.play()),
         onPause: () => unawaited(_player?.pause()),
         onStop: () => unawaited(_stop()),
-        onSeekTo: (position) => unawaited(_player?.seek(position)),
+        onSeekTo: (position) {
+          final seek = onUserSeek;
+          if (seek != null) {
+            unawaited(seek(position));
+            return;
+          }
+          unawaited(_player?.seek(position));
+        },
         onSkipToNext: () => unawaited(_directional(PlaybackDirection.forward)),
         onSkipToPrevious: () =>
             unawaited(_directional(PlaybackDirection.backward)),

@@ -1,6 +1,6 @@
 part of '../app_database.dart';
 
-mixin _ChapterQueries on _$AppDatabase {
+mixin _ChapterQueries on _$AppDatabase, _SkipSegmentQueries {
   Stream<List<EpisodeChapter>> watchChapters(int episodeId) {
     final query = select(episodeChapters)
       ..where((row) => row.episodeId.equals(episodeId) & row.toc.equals(true))
@@ -32,6 +32,7 @@ mixin _ChapterQueries on _$AppDatabase {
       }
       await (update(episodes)..where((table) => table.id.equals(episodeId)))
           .write(const EpisodesCompanion(chaptersFetched: Value(true)));
+      await seedChapterSkipSegments(episodeId);
     });
   }
 
@@ -39,5 +40,4 @@ mixin _ChapterQueries on _$AppDatabase {
     return (update(episodes)..where((table) => table.id.equals(episodeId)))
         .write(const EpisodesCompanion(chaptersFetched: Value(true)));
   }
-
 }
