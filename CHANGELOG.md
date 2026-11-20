@@ -21,6 +21,9 @@ dans son titre, ou l’étiquette `skip-changelog`.
 - Failed downloads stay in Notifications and can be retried, all at once or one by one.
 - A streamed episode that loses its connection while it is being cached, for example when the phone moves from Wi-Fi to mobile data, no longer closes the app. The partial file is not kept as a finished download.
 
+- Changelog fragments are gathered when a pull request is merged into develop. The develop to main merge publishes that version.
+
+
 ## 2026.11.9
 
 - Activity counts an episode on the day it was marked played, including when that mark did not move the playback position. A listen under a minute is shown in seconds. Busiest and calmest compare only days, months, or weekdays that have listening. A single listening level is not also called the calmest.
