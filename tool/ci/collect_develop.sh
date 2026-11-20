@@ -13,12 +13,15 @@ repo="${GITHUB_REPOSITORY:?}"
 
 git fetch origin develop
 git checkout -B changelog-collect origin/develop
-if [ -z "$(python3 tool/changelog.py pending)" ]; then
-  echo "Aucun fragment."
-  exit 0
+top="$(python3 tool/changelog.py top)"
+if [ -n "${top}" ] && gh release view "${top}" >/dev/null 2>&1; then
+  gh release view "${top}" --json body --jq .body > published-notes.md
+  TZ=Europe/Paris python3 tool/changelog.py carry published-notes.md
+  rm -f published-notes.md
 fi
-
-TZ=Europe/Paris python3 tool/changelog.py collect
+if [ -n "$(python3 tool/changelog.py pending)" ]; then
+  TZ=Europe/Paris python3 tool/changelog.py collect
+fi
 git add CHANGELOG.md changelog.d
 if git diff --cached --quiet; then
   echo "Rien à écrire."
