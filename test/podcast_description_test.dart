@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:podavio/data/app_database.dart';
+import 'package:podavio/data/providers.dart';
 import 'package:podavio/ui/podcast/podcast_album_header.dart';
+import 'package:podavio/ui/widgets/cover.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   testWidgets('la description se replie sur trois lignes', (tester) async {
@@ -104,13 +109,61 @@ void main() {
     expect(inset, 47);
   });
 
-  test('la rampe de la jaquette s’adoucit vers le bas', () {
-    const color = Color(0xFF224466);
-    final gradient = artworkScrim(color);
-    expect(gradient.colors.first, color.withValues(alpha: 0));
-    expect(gradient.colors.last, color);
-    // t = 6/24 = 0,25 → t² (3 − 2t) = 0,15625, sous la rampe droite.
-    expect(gradient.colors[6].a, closeTo(0.15625, 0.002));
-    expect(gradient.colors[12].a, closeTo(0.5, 0.002));
+  testWidgets('le titre du podcast est sous la pochette', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
+          podcastEpisodeCountProvider.overrideWith(
+            (ref, id) => Stream.value(3),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: 240,
+                child: PodcastAlbumHeader(
+                  podcast: Podcast(
+                    id: 1,
+                    feedUrl: 'https://example.com/feed.xml',
+                    title: 'Sous la pochette',
+                    titleFold: '',
+                    author: 'Auteur',
+                    description: '',
+                    subscribedAt: DateTime(2025, 1, 1),
+                    preferred: false,
+                    autoDownload: false,
+                    keepUpdated: true,
+                    episodeNotification: false,
+                    subscribed: true,
+                    skipIntroSeconds: 0,
+                    skipOutroSeconds: 0,
+                    personsJson: '[]',
+                    fundingJson: '[]',
+                  ),
+                  showPause: false,
+                  onPlay: () {},
+                  onBack: () {},
+                  onMore: () {},
+                  onReverse: () {},
+                  reversed: false,
+                  onAutomaticDownload: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final cover = tester.getRect(find.byType(PodcastCover));
+    final title = tester.getRect(find.text('Sous la pochette'));
+    expect(title.top, greaterThanOrEqualTo(cover.bottom));
+    expect(find.text('3 épisodes'), findsOneWidget);
   });
 }

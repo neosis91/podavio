@@ -248,7 +248,6 @@ class _EpisodeDetailState extends ConsumerState<_EpisodeDetail> {
                   entry: entry,
                   imageUrl: imageUrl,
                   imagePath: imagePath,
-                  fadeColor: background,
                   meta: meta,
                   playLabel: playLabel,
                   playing: playing,
@@ -431,7 +430,6 @@ class _EpisodeCover extends StatelessWidget {
     required this.entry,
     required this.imageUrl,
     required this.imagePath,
-    required this.fadeColor,
     required this.meta,
     required this.playLabel,
     required this.playing,
@@ -448,7 +446,6 @@ class _EpisodeCover extends StatelessWidget {
   final EpisodeEntry entry;
   final String? imageUrl;
   final String? imagePath;
-  final Color fadeColor;
   final String meta;
   final String playLabel;
   final bool playing;
@@ -493,60 +490,6 @@ class _EpisodeCover extends StatelessWidget {
                   ecoTintFromImage: true,
                 ),
                 Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: side * 0.7,
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: artworkScrim(fadeColor),
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 20,
-                  right: 20,
-                  bottom: 16,
-                  child: Column(
-                    children: [
-                      Text(
-                        episode.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleLarge
-                            ?.copyWith(color: Colors.white),
-                      ),
-                      const SizedBox(height: 4),
-                      GestureDetector(
-                        onTap: () =>
-                            context.push(AppRoutes.podcast(entry.podcast.id)),
-                        child: Text(
-                          entry.podcast.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(color: Colors.white),
-                        ),
-                      ),
-                      if (meta.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          meta,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: const Color(0xC4FFFFFF)),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                Positioned(
                   top: top + 12,
                   left: 12,
                   child: _CoverIconButton(
@@ -567,6 +510,38 @@ class _EpisodeCover extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+          child: Column(
+            children: [
+              Text(
+                episode.title,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(color: Colors.white),
+              ),
+              const SizedBox(height: 4),
+              GestureDetector(
+                onTap: () => context.push(AppRoutes.podcast(entry.podcast.id)),
+                child: Text(
+                  entry.podcast.title,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleSmall
+                      ?.copyWith(color: Colors.white),
+                ),
+              ),
+              if (meta.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  meta,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: const Color(0xC4FFFFFF)),
+                ),
+              ],
+            ],
           ),
         ),
         Padding(
