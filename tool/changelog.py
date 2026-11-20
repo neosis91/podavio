@@ -260,7 +260,7 @@ def check_release(directory=FRAGMENTS):
     names = ", ".join(path.name for path in paths)
     print(
         f"Fragments présents ({names}). "
-        "La publication les rassemblera en fusionnant develop dans main."
+        "Ils seront rassemblés quand cette pull request sera fusionnée dans develop."
     )
 
 

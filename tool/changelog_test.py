@@ -110,7 +110,7 @@ class ChangelogTest(unittest.TestCase):
 
     def test_the_repository_changelog_still_parses(self):
         releases = changelog.load()
-        self.assertEqual(releases[0][0], "2026.11.9")
+        self.assertEqual(releases[0][0], "2026.11.10")
         self.assertGreaterEqual(len(releases[0][1]), 1)
 
 
