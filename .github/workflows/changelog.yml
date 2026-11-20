@@ -1,0 +1,27 @@
+name: Journal
+
+on:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: changelog-develop
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: develop
+          fetch-depth: 0
+      - name: Rassembler les fragments
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: tool/ci/collect_develop.sh
