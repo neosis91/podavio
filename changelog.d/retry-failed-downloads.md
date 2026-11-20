@@ -1,1 +1,0 @@
-- Failed downloads stay in Notifications and can be retried, all at once or one by one.
