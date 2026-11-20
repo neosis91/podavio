@@ -147,6 +147,7 @@ class CoverService {
       const concurrency = 3;
       final updates = <({int id, String path})>[];
       for (var i = 0; i < items.length; i += concurrency) {
+        if (_disposed) return;
         final chunk = items.skip(i).take(concurrency).toList();
         final paths = await Future.wait([
           for (final podcast in chunk)
@@ -168,6 +169,10 @@ class CoverService {
       if (updates.isNotEmpty && !_disposed) {
         await _database.setPodcastImagePaths(updates);
       }
+    } catch (error, stack) {
+      // L’import a fermé la base pendant la requête déjà lancée.
+      if (_disposed) return;
+      Error.throwWithStackTrace(error, stack);
     } finally {
       _syncRunning = false;
     }

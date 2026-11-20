@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../data/download_service.dart';
 import '../data/playback_file.dart';
@@ -15,9 +14,9 @@ class StreamCache {
   final DownloadService _downloads;
   StreamSubscription<double>? _progress;
 
-  /// Zone où just_audio démarre son proxy local de cache, au premier
-  /// flux mis en cache. Le serveur garde cette zone : une coupure
-  /// réseau en cours de réponse y arrive au lieu de faire planter l'app.
+  /// Zone où just_audio démarre son proxy local, au premier flux distant.
+  /// Le serveur garde cette zone : une réponse fermée trop tôt y arrive
+  /// au lieu de faire planter l'app.
   Zone? _proxyZone;
   int? _proxyEpisodeId;
 
@@ -73,7 +72,10 @@ class StreamCache {
     await _progress?.cancel();
     _progress = null;
     if (episodeId == null) {
-      await player.setAudioSource(AudioSource.uri(uri, headers: headers));
+      await _setSourceInProxyZone(
+        player,
+        AudioSource.uri(uri, headers: headers),
+      );
       return;
     }
     try {
@@ -101,7 +103,10 @@ class StreamCache {
     } catch (error, stack) {
       debugPrint('Cache de lecture indisponible: $error\n$stack');
       if (!isUsable()) return;
-      await player.setAudioSource(AudioSource.uri(uri, headers: headers));
+      await _setSourceInProxyZone(
+        player,
+        AudioSource.uri(uri, headers: headers),
+      );
     }
   }
 
@@ -119,31 +124,7 @@ class StreamCache {
   }
 
   void _reportAbort(HttpException error, StackTrace stack) {
-    final episodeId = _proxyEpisodeId;
-    debugPrint('Flux du cache interrompu: $error');
-    Sentry.addBreadcrumb(
-      Breadcrumb(
-        category: 'stream_cache',
-        level: SentryLevel.warning,
-        message: 'Cache proxy response aborted',
-        data: {'uri': error.uri?.toString(), 'episodeId': episodeId},
-      ),
-    );
-    unawaited(
-      Sentry.captureException(
-        error,
-        stackTrace: stack,
-        withScope: (scope) {
-          scope.level = SentryLevel.warning;
-          scope.setTag('stream_cache.proxy_abort', 'true');
-          scope.setContexts('stream_cache', {
-            'message': error.message,
-            'uri': error.uri?.toString(),
-            'episodeId': episodeId,
-          });
-        },
-      ),
-    );
+    debugPrint('Flux du cache interrompu ($_proxyEpisodeId): $error\n$stack');
   }
 
   Future<void> _remember(
@@ -167,11 +148,16 @@ class StreamCache {
   }
 }
 
-/// Erreur du proxy local de just_audio (URI `/id/<uuid>`), par exemple une
-/// réponse coupée avant son `Content-Length` quand le réseau change.
+/// Fermeture du proxy local de just_audio avant la taille annoncée.
+/// Le lecteur la provoque aussi en changeant d’épisode ou en cherchant
+/// dans le flux : ce n’est pas un plantage à signaler.
 @visibleForTesting
-bool isCacheProxyAbort(Object error) =>
-    error is HttpException && (error.uri?.path.startsWith('/id/') ?? false);
+bool isCacheProxyAbort(Object error) {
+  if (error is! HttpException) return false;
+  final path = error.uri?.path;
+  if (path == null || !path.startsWith('/id/')) return false;
+  return error.message.contains('Content size below specified contentLength');
+}
 
 /// Zone durable qui capte les coupures du proxy de cache et transmet les
 /// autres erreurs à la zone parente, donc au rapport de plantage habituel.
