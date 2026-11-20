@@ -89,7 +89,10 @@ final statusNotificationsProvider = Provider<StatusNotifications>((ref) {
 });
 
 final coverServiceProvider = Provider<CoverService>((ref) {
-  return CoverService(ref.watch(databaseProvider));
+  final service = CoverService(ref.watch(databaseProvider));
+  // L’ancienne base est fermée juste après (import) : plus aucune requête.
+  ref.onDispose(service.dispose);
+  return service;
 });
 
 final defaultDownloadDirectoryProvider = FutureProvider<String>((ref) {
