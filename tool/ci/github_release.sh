@@ -35,7 +35,21 @@ raise SystemExit("CHANGELOG.md n'a pas de titre ## AAAA.M.N à publier.")
 PY
 }
 
+carry_published() {
+  top="$(python3 tool/changelog.py top)"
+  if [ -z "${top}" ]; then
+    return 0
+  fi
+  if ! gh release view "${top}" >/dev/null 2>&1; then
+    return 0
+  fi
+  gh release view "${top}" --json body --jq .body > published-notes.md
+  TZ=Europe/Paris python3 tool/changelog.py carry published-notes.md
+  rm -f published-notes.md
+}
+
 prepare_release_notes() {
+  carry_published
   TZ=Europe/Paris python3 tool/changelog.py collect
   VERSION="$(changelog_version)"
   python3 tool/changelog.py check "${VERSION}"
