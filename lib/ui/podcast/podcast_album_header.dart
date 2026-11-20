@@ -26,7 +26,6 @@ class PodcastAlbumHeader extends ConsumerWidget {
     required this.onReverse,
     required this.reversed,
     required this.onAutomaticDownload,
-    required this.fadeColor,
   });
 
   final Podcast podcast;
@@ -37,7 +36,6 @@ class PodcastAlbumHeader extends ConsumerWidget {
   final VoidCallback onReverse;
   final bool reversed;
   final VoidCallback onAutomaticDownload;
-  final Color fadeColor;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -72,45 +70,6 @@ class PodcastAlbumHeader extends ConsumerWidget {
                     fit: BoxFit.contain,
                   ),
                   Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    height: side * 0.7,
-                    child: IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: artworkScrim(fadeColor),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 20,
-                    right: 20,
-                    bottom: 16,
-                    child: Column(
-                      children: [
-                        Text(
-                          podcast.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(color: Colors.white),
-                        ),
-                        if (count != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            _episodeCountLabel(count),
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: const Color(0xC4FFFFFF)),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  Positioned(
                     top: top + 12,
                     left: 12,
                     child: _CoverIconButton(
@@ -134,6 +93,28 @@ class PodcastAlbumHeader extends ConsumerWidget {
                       onMore: onMore,
                     ),
                   ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+              child: Column(
+                children: [
+                  Text(
+                    podcast.title,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleLarge
+                        ?.copyWith(color: Colors.white),
+                  ),
+                  if (count != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      _episodeCountLabel(count),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: const Color(0xC4FFFFFF)),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -588,27 +569,6 @@ class _RoundButton extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Fondu du bas de jaquette. Vingt-quatre pas, progression `t² (3 − 2t)` :
-/// le haut de la zone reste clair, la teinte n’est opaque qu’au bord bas.
-LinearGradient artworkScrim(Color color) {
-  const steps = 24;
-  final from = color.withValues(alpha: 0);
-  final colors = <Color>[];
-  final stops = <double>[];
-  for (var i = 0; i <= steps; i++) {
-    final t = i / steps;
-    final eased = t * t * (3 - 2 * t);
-    stops.add(t);
-    colors.add(Color.lerp(from, color, eased)!);
-  }
-  return LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: colors,
-    stops: stops,
-  );
 }
 
 /// Hauteur de la barre d’état. Le scaffold qui porte une [AppBar] met

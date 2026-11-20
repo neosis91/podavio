@@ -1,0 +1,1 @@
+- Download notifications show how many episodes are already saved out of the batch. The notification button shows how many are still left.

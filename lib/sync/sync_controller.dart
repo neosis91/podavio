@@ -332,8 +332,14 @@ class SyncController extends Notifier<SyncStatus> {
         if (addedQueue.contains(url)) continue;
         final existing = await database.findByFeedUrl(url);
         if (existing == null || !existing.subscribed) continue;
+        final episodeIds = [
+          for (final episode in await database.episodesForPodcast(existing.id))
+            episode.id,
+        ];
         final paths = await database.deletePodcast(existing.id);
-        await ref.read(downloadServiceProvider).deleteFiles(paths);
+        final downloads = ref.read(downloadServiceProvider);
+        await downloads.deleteFiles(paths);
+        await downloads.forgetPartials(episodeIds);
       }
     } finally {
       SyncHooks.applying = false;
