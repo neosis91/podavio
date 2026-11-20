@@ -307,6 +307,33 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _autoSkipAdsMeta = const VerificationMeta(
+    'autoSkipAds',
+  );
+  @override
+  late final GeneratedColumn<bool> autoSkipAds = GeneratedColumn<bool>(
+    'auto_skip_ads',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("auto_skip_ads" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _autoSkipKindsMeta = const VerificationMeta(
+    'autoSkipKinds',
+  );
+  @override
+  late final GeneratedColumn<String> autoSkipKinds = GeneratedColumn<String>(
+    'auto_skip_kinds',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -334,6 +361,8 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
     personsJson,
     fundingJson,
     categoriesJson,
+    autoSkipAds,
+    autoSkipKinds,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -545,6 +574,24 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         ),
       );
     }
+    if (data.containsKey('auto_skip_ads')) {
+      context.handle(
+        _autoSkipAdsMeta,
+        autoSkipAds.isAcceptableOrUnknown(
+          data['auto_skip_ads']!,
+          _autoSkipAdsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('auto_skip_kinds')) {
+      context.handle(
+        _autoSkipKindsMeta,
+        autoSkipKinds.isAcceptableOrUnknown(
+          data['auto_skip_kinds']!,
+          _autoSkipKindsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -654,6 +701,14 @@ class $PodcastsTable extends Podcasts with TableInfo<$PodcastsTable, Podcast> {
         DriftSqlType.string,
         data['${effectivePrefix}categories_json'],
       ),
+      autoSkipAds: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}auto_skip_ads'],
+      )!,
+      autoSkipKinds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}auto_skip_kinds'],
+      )!,
     );
   }
 
@@ -713,6 +768,12 @@ class Podcast extends DataClass implements Insertable<Podcast> {
 
   /// Genres du flux (`itunes:category`, `podcast:category`). `null` : pas encore lus.
   final String? categoriesJson;
+
+  /// Saute pubs et jingles détectés dans les épisodes téléchargés.
+  final bool autoSkipAds;
+
+  /// JSON : noms de [SkipSegmentKind] sautés quand [autoSkipAds] est actif.
+  final String autoSkipKinds;
   const Podcast({
     required this.id,
     required this.feedUrl,
@@ -739,6 +800,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     required this.personsJson,
     required this.fundingJson,
     this.categoriesJson,
+    required this.autoSkipAds,
+    required this.autoSkipKinds,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -786,6 +849,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     if (!nullToAbsent || categoriesJson != null) {
       map['categories_json'] = Variable<String>(categoriesJson);
     }
+    map['auto_skip_ads'] = Variable<bool>(autoSkipAds);
+    map['auto_skip_kinds'] = Variable<String>(autoSkipKinds);
     return map;
   }
 
@@ -832,6 +897,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       categoriesJson: categoriesJson == null && nullToAbsent
           ? const Value.absent()
           : Value(categoriesJson),
+      autoSkipAds: Value(autoSkipAds),
+      autoSkipKinds: Value(autoSkipKinds),
     );
   }
 
@@ -868,6 +935,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       personsJson: serializer.fromJson<String>(json['personsJson']),
       fundingJson: serializer.fromJson<String>(json['fundingJson']),
       categoriesJson: serializer.fromJson<String?>(json['categoriesJson']),
+      autoSkipAds: serializer.fromJson<bool>(json['autoSkipAds']),
+      autoSkipKinds: serializer.fromJson<String>(json['autoSkipKinds']),
     );
   }
   @override
@@ -899,6 +968,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       'personsJson': serializer.toJson<String>(personsJson),
       'fundingJson': serializer.toJson<String>(fundingJson),
       'categoriesJson': serializer.toJson<String?>(categoriesJson),
+      'autoSkipAds': serializer.toJson<bool>(autoSkipAds),
+      'autoSkipKinds': serializer.toJson<String>(autoSkipKinds),
     };
   }
 
@@ -928,6 +999,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     String? personsJson,
     String? fundingJson,
     Value<String?> categoriesJson = const Value.absent(),
+    bool? autoSkipAds,
+    String? autoSkipKinds,
   }) => Podcast(
     id: id ?? this.id,
     feedUrl: feedUrl ?? this.feedUrl,
@@ -960,6 +1033,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     categoriesJson: categoriesJson.present
         ? categoriesJson.value
         : this.categoriesJson,
+    autoSkipAds: autoSkipAds ?? this.autoSkipAds,
+    autoSkipKinds: autoSkipKinds ?? this.autoSkipKinds,
   );
   Podcast copyWithCompanion(PodcastsCompanion data) {
     return Podcast(
@@ -1020,6 +1095,12 @@ class Podcast extends DataClass implements Insertable<Podcast> {
       categoriesJson: data.categoriesJson.present
           ? data.categoriesJson.value
           : this.categoriesJson,
+      autoSkipAds: data.autoSkipAds.present
+          ? data.autoSkipAds.value
+          : this.autoSkipAds,
+      autoSkipKinds: data.autoSkipKinds.present
+          ? data.autoSkipKinds.value
+          : this.autoSkipKinds,
     );
   }
 
@@ -1050,7 +1131,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           ..write('authPassword: $authPassword, ')
           ..write('personsJson: $personsJson, ')
           ..write('fundingJson: $fundingJson, ')
-          ..write('categoriesJson: $categoriesJson')
+          ..write('categoriesJson: $categoriesJson, ')
+          ..write('autoSkipAds: $autoSkipAds, ')
+          ..write('autoSkipKinds: $autoSkipKinds')
           ..write(')'))
         .toString();
   }
@@ -1082,6 +1165,8 @@ class Podcast extends DataClass implements Insertable<Podcast> {
     personsJson,
     fundingJson,
     categoriesJson,
+    autoSkipAds,
+    autoSkipKinds,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -1111,7 +1196,9 @@ class Podcast extends DataClass implements Insertable<Podcast> {
           other.authPassword == this.authPassword &&
           other.personsJson == this.personsJson &&
           other.fundingJson == this.fundingJson &&
-          other.categoriesJson == this.categoriesJson);
+          other.categoriesJson == this.categoriesJson &&
+          other.autoSkipAds == this.autoSkipAds &&
+          other.autoSkipKinds == this.autoSkipKinds);
 }
 
 class PodcastsCompanion extends UpdateCompanion<Podcast> {
@@ -1140,6 +1227,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
   final Value<String> personsJson;
   final Value<String> fundingJson;
   final Value<String?> categoriesJson;
+  final Value<bool> autoSkipAds;
+  final Value<String> autoSkipKinds;
   const PodcastsCompanion({
     this.id = const Value.absent(),
     this.feedUrl = const Value.absent(),
@@ -1166,6 +1255,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.personsJson = const Value.absent(),
     this.fundingJson = const Value.absent(),
     this.categoriesJson = const Value.absent(),
+    this.autoSkipAds = const Value.absent(),
+    this.autoSkipKinds = const Value.absent(),
   });
   PodcastsCompanion.insert({
     this.id = const Value.absent(),
@@ -1193,6 +1284,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     this.personsJson = const Value.absent(),
     this.fundingJson = const Value.absent(),
     this.categoriesJson = const Value.absent(),
+    this.autoSkipAds = const Value.absent(),
+    this.autoSkipKinds = const Value.absent(),
   }) : feedUrl = Value(feedUrl),
        title = Value(title),
        subscribedAt = Value(subscribedAt);
@@ -1222,6 +1315,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Expression<String>? personsJson,
     Expression<String>? fundingJson,
     Expression<String>? categoriesJson,
+    Expression<bool>? autoSkipAds,
+    Expression<String>? autoSkipKinds,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1250,6 +1345,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       if (personsJson != null) 'persons_json': personsJson,
       if (fundingJson != null) 'funding_json': fundingJson,
       if (categoriesJson != null) 'categories_json': categoriesJson,
+      if (autoSkipAds != null) 'auto_skip_ads': autoSkipAds,
+      if (autoSkipKinds != null) 'auto_skip_kinds': autoSkipKinds,
     });
   }
 
@@ -1279,6 +1376,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     Value<String>? personsJson,
     Value<String>? fundingJson,
     Value<String?>? categoriesJson,
+    Value<bool>? autoSkipAds,
+    Value<String>? autoSkipKinds,
   }) {
     return PodcastsCompanion(
       id: id ?? this.id,
@@ -1306,6 +1405,8 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
       personsJson: personsJson ?? this.personsJson,
       fundingJson: fundingJson ?? this.fundingJson,
       categoriesJson: categoriesJson ?? this.categoriesJson,
+      autoSkipAds: autoSkipAds ?? this.autoSkipAds,
+      autoSkipKinds: autoSkipKinds ?? this.autoSkipKinds,
     );
   }
 
@@ -1387,6 +1488,12 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
     if (categoriesJson.present) {
       map['categories_json'] = Variable<String>(categoriesJson.value);
     }
+    if (autoSkipAds.present) {
+      map['auto_skip_ads'] = Variable<bool>(autoSkipAds.value);
+    }
+    if (autoSkipKinds.present) {
+      map['auto_skip_kinds'] = Variable<String>(autoSkipKinds.value);
+    }
     return map;
   }
 
@@ -1417,7 +1524,9 @@ class PodcastsCompanion extends UpdateCompanion<Podcast> {
           ..write('authPassword: $authPassword, ')
           ..write('personsJson: $personsJson, ')
           ..write('fundingJson: $fundingJson, ')
-          ..write('categoriesJson: $categoriesJson')
+          ..write('categoriesJson: $categoriesJson, ')
+          ..write('autoSkipAds: $autoSkipAds, ')
+          ..write('autoSkipKinds: $autoSkipKinds')
           ..write(')'))
         .toString();
   }
@@ -3877,6 +3986,1465 @@ class PlaylistEpisodesCompanion extends UpdateCompanion<PlaylistEpisode> {
   }
 }
 
+class $EpisodeFingerprintsTable extends EpisodeFingerprints
+    with TableInfo<$EpisodeFingerprintsTable, EpisodeFingerprint> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EpisodeFingerprintsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _episodeIdMeta = const VerificationMeta(
+    'episodeId',
+  );
+  @override
+  late final GeneratedColumn<int> episodeId = GeneratedColumn<int>(
+    'episode_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES episodes (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _dataMeta = const VerificationMeta('data');
+  @override
+  late final GeneratedColumn<Uint8List> data = GeneratedColumn<Uint8List>(
+    'data',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hopMicrosMeta = const VerificationMeta(
+    'hopMicros',
+  );
+  @override
+  late final GeneratedColumn<int> hopMicros = GeneratedColumn<int>(
+    'hop_micros',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [episodeId, data, hopMicros, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'episode_fingerprints';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<EpisodeFingerprint> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('episode_id')) {
+      context.handle(
+        _episodeIdMeta,
+        episodeId.isAcceptableOrUnknown(data['episode_id']!, _episodeIdMeta),
+      );
+    }
+    if (data.containsKey('data')) {
+      context.handle(
+        _dataMeta,
+        this.data.isAcceptableOrUnknown(data['data']!, _dataMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dataMeta);
+    }
+    if (data.containsKey('hop_micros')) {
+      context.handle(
+        _hopMicrosMeta,
+        hopMicros.isAcceptableOrUnknown(data['hop_micros']!, _hopMicrosMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hopMicrosMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {episodeId};
+  @override
+  EpisodeFingerprint map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EpisodeFingerprint(
+      episodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}episode_id'],
+      )!,
+      data: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}data'],
+      )!,
+      hopMicros: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}hop_micros'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $EpisodeFingerprintsTable createAlias(String alias) {
+    return $EpisodeFingerprintsTable(attachedDatabase, alias);
+  }
+}
+
+class EpisodeFingerprint extends DataClass
+    implements Insertable<EpisodeFingerprint> {
+  final int episodeId;
+
+  /// Valeurs uint32, little-endian. Voir [encodeFingerprint].
+  final Uint8List data;
+
+  /// Écart entre deux valeurs, en microsecondes (~125000 pour 8/s).
+  final int hopMicros;
+  final DateTime createdAt;
+  const EpisodeFingerprint({
+    required this.episodeId,
+    required this.data,
+    required this.hopMicros,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['episode_id'] = Variable<int>(episodeId);
+    map['data'] = Variable<Uint8List>(data);
+    map['hop_micros'] = Variable<int>(hopMicros);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  EpisodeFingerprintsCompanion toCompanion(bool nullToAbsent) {
+    return EpisodeFingerprintsCompanion(
+      episodeId: Value(episodeId),
+      data: Value(data),
+      hopMicros: Value(hopMicros),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory EpisodeFingerprint.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EpisodeFingerprint(
+      episodeId: serializer.fromJson<int>(json['episodeId']),
+      data: serializer.fromJson<Uint8List>(json['data']),
+      hopMicros: serializer.fromJson<int>(json['hopMicros']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'episodeId': serializer.toJson<int>(episodeId),
+      'data': serializer.toJson<Uint8List>(data),
+      'hopMicros': serializer.toJson<int>(hopMicros),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  EpisodeFingerprint copyWith({
+    int? episodeId,
+    Uint8List? data,
+    int? hopMicros,
+    DateTime? createdAt,
+  }) => EpisodeFingerprint(
+    episodeId: episodeId ?? this.episodeId,
+    data: data ?? this.data,
+    hopMicros: hopMicros ?? this.hopMicros,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  EpisodeFingerprint copyWithCompanion(EpisodeFingerprintsCompanion data) {
+    return EpisodeFingerprint(
+      episodeId: data.episodeId.present ? data.episodeId.value : this.episodeId,
+      data: data.data.present ? data.data.value : this.data,
+      hopMicros: data.hopMicros.present ? data.hopMicros.value : this.hopMicros,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EpisodeFingerprint(')
+          ..write('episodeId: $episodeId, ')
+          ..write('data: $data, ')
+          ..write('hopMicros: $hopMicros, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    episodeId,
+    $driftBlobEquality.hash(data),
+    hopMicros,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EpisodeFingerprint &&
+          other.episodeId == this.episodeId &&
+          $driftBlobEquality.equals(other.data, this.data) &&
+          other.hopMicros == this.hopMicros &&
+          other.createdAt == this.createdAt);
+}
+
+class EpisodeFingerprintsCompanion extends UpdateCompanion<EpisodeFingerprint> {
+  final Value<int> episodeId;
+  final Value<Uint8List> data;
+  final Value<int> hopMicros;
+  final Value<DateTime> createdAt;
+  const EpisodeFingerprintsCompanion({
+    this.episodeId = const Value.absent(),
+    this.data = const Value.absent(),
+    this.hopMicros = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  EpisodeFingerprintsCompanion.insert({
+    this.episodeId = const Value.absent(),
+    required Uint8List data,
+    required int hopMicros,
+    required DateTime createdAt,
+  }) : data = Value(data),
+       hopMicros = Value(hopMicros),
+       createdAt = Value(createdAt);
+  static Insertable<EpisodeFingerprint> custom({
+    Expression<int>? episodeId,
+    Expression<Uint8List>? data,
+    Expression<int>? hopMicros,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (episodeId != null) 'episode_id': episodeId,
+      if (data != null) 'data': data,
+      if (hopMicros != null) 'hop_micros': hopMicros,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  EpisodeFingerprintsCompanion copyWith({
+    Value<int>? episodeId,
+    Value<Uint8List>? data,
+    Value<int>? hopMicros,
+    Value<DateTime>? createdAt,
+  }) {
+    return EpisodeFingerprintsCompanion(
+      episodeId: episodeId ?? this.episodeId,
+      data: data ?? this.data,
+      hopMicros: hopMicros ?? this.hopMicros,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (episodeId.present) {
+      map['episode_id'] = Variable<int>(episodeId.value);
+    }
+    if (data.present) {
+      map['data'] = Variable<Uint8List>(data.value);
+    }
+    if (hopMicros.present) {
+      map['hop_micros'] = Variable<int>(hopMicros.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EpisodeFingerprintsCompanion(')
+          ..write('episodeId: $episodeId, ')
+          ..write('data: $data, ')
+          ..write('hopMicros: $hopMicros, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SegmentTemplatesTable extends SegmentTemplates
+    with TableInfo<$SegmentTemplatesTable, SegmentTemplate> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SegmentTemplatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _podcastIdMeta = const VerificationMeta(
+    'podcastId',
+  );
+  @override
+  late final GeneratedColumn<int> podcastId = GeneratedColumn<int>(
+    'podcast_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES podcasts (id) ON DELETE CASCADE',
+    ),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<SkipSegmentKind, String> kind =
+      GeneratedColumn<String>(
+        'kind',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<SkipSegmentKind>($SegmentTemplatesTable.$converterkind);
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _fingerprintMeta = const VerificationMeta(
+    'fingerprint',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> fingerprint =
+      GeneratedColumn<Uint8List>(
+        'fingerprint',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _logMelMeta = const VerificationMeta('logMel');
+  @override
+  late final GeneratedColumn<Uint8List> logMel = GeneratedColumn<Uint8List>(
+    'log_mel',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
+  @override
+  late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
+    'duration_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _occurrencesMeta = const VerificationMeta(
+    'occurrences',
+  );
+  @override
+  late final GeneratedColumn<int> occurrences = GeneratedColumn<int>(
+    'occurrences',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    podcastId,
+    kind,
+    label,
+    fingerprint,
+    logMel,
+    durationMs,
+    occurrences,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'segment_templates';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SegmentTemplate> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('podcast_id')) {
+      context.handle(
+        _podcastIdMeta,
+        podcastId.isAcceptableOrUnknown(data['podcast_id']!, _podcastIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_podcastIdMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('fingerprint')) {
+      context.handle(
+        _fingerprintMeta,
+        fingerprint.isAcceptableOrUnknown(
+          data['fingerprint']!,
+          _fingerprintMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_fingerprintMeta);
+    }
+    if (data.containsKey('log_mel')) {
+      context.handle(
+        _logMelMeta,
+        logMel.isAcceptableOrUnknown(data['log_mel']!, _logMelMeta),
+      );
+    }
+    if (data.containsKey('duration_ms')) {
+      context.handle(
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['duration_ms']!, _durationMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_durationMsMeta);
+    }
+    if (data.containsKey('occurrences')) {
+      context.handle(
+        _occurrencesMeta,
+        occurrences.isAcceptableOrUnknown(
+          data['occurrences']!,
+          _occurrencesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SegmentTemplate map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SegmentTemplate(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      podcastId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}podcast_id'],
+      )!,
+      kind: $SegmentTemplatesTable.$converterkind.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}kind'],
+        )!,
+      ),
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      fingerprint: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}fingerprint'],
+      )!,
+      logMel: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}log_mel'],
+      ),
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}duration_ms'],
+      )!,
+      occurrences: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}occurrences'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SegmentTemplatesTable createAlias(String alias) {
+    return $SegmentTemplatesTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<SkipSegmentKind, String, String> $converterkind =
+      const EnumNameConverter<SkipSegmentKind>(SkipSegmentKind.values);
+}
+
+class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
+  final int id;
+  final int podcastId;
+  final SkipSegmentKind kind;
+  final String? label;
+
+  /// Tranche Chromaprint du motif (uint32 little-endian).
+  /// Les épisodes suivants ne sont comparés qu’à ce gabarit.
+  final Uint8List fingerprint;
+
+  /// Gabarit log-mel (float32 little-endian, 40 bandes). `null` tant
+  /// que l’analyseur ne l’a pas calculé. Sons < 3 s et frontières.
+  final Uint8List? logMel;
+  final int durationMs;
+  final int occurrences;
+  final DateTime createdAt;
+  const SegmentTemplate({
+    required this.id,
+    required this.podcastId,
+    required this.kind,
+    this.label,
+    required this.fingerprint,
+    this.logMel,
+    required this.durationMs,
+    required this.occurrences,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['podcast_id'] = Variable<int>(podcastId);
+    {
+      map['kind'] = Variable<String>(
+        $SegmentTemplatesTable.$converterkind.toSql(kind),
+      );
+    }
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    map['fingerprint'] = Variable<Uint8List>(fingerprint);
+    if (!nullToAbsent || logMel != null) {
+      map['log_mel'] = Variable<Uint8List>(logMel);
+    }
+    map['duration_ms'] = Variable<int>(durationMs);
+    map['occurrences'] = Variable<int>(occurrences);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  SegmentTemplatesCompanion toCompanion(bool nullToAbsent) {
+    return SegmentTemplatesCompanion(
+      id: Value(id),
+      podcastId: Value(podcastId),
+      kind: Value(kind),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      fingerprint: Value(fingerprint),
+      logMel: logMel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(logMel),
+      durationMs: Value(durationMs),
+      occurrences: Value(occurrences),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory SegmentTemplate.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SegmentTemplate(
+      id: serializer.fromJson<int>(json['id']),
+      podcastId: serializer.fromJson<int>(json['podcastId']),
+      kind: $SegmentTemplatesTable.$converterkind.fromJson(
+        serializer.fromJson<String>(json['kind']),
+      ),
+      label: serializer.fromJson<String?>(json['label']),
+      fingerprint: serializer.fromJson<Uint8List>(json['fingerprint']),
+      logMel: serializer.fromJson<Uint8List?>(json['logMel']),
+      durationMs: serializer.fromJson<int>(json['durationMs']),
+      occurrences: serializer.fromJson<int>(json['occurrences']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'podcastId': serializer.toJson<int>(podcastId),
+      'kind': serializer.toJson<String>(
+        $SegmentTemplatesTable.$converterkind.toJson(kind),
+      ),
+      'label': serializer.toJson<String?>(label),
+      'fingerprint': serializer.toJson<Uint8List>(fingerprint),
+      'logMel': serializer.toJson<Uint8List?>(logMel),
+      'durationMs': serializer.toJson<int>(durationMs),
+      'occurrences': serializer.toJson<int>(occurrences),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  SegmentTemplate copyWith({
+    int? id,
+    int? podcastId,
+    SkipSegmentKind? kind,
+    Value<String?> label = const Value.absent(),
+    Uint8List? fingerprint,
+    Value<Uint8List?> logMel = const Value.absent(),
+    int? durationMs,
+    int? occurrences,
+    DateTime? createdAt,
+  }) => SegmentTemplate(
+    id: id ?? this.id,
+    podcastId: podcastId ?? this.podcastId,
+    kind: kind ?? this.kind,
+    label: label.present ? label.value : this.label,
+    fingerprint: fingerprint ?? this.fingerprint,
+    logMel: logMel.present ? logMel.value : this.logMel,
+    durationMs: durationMs ?? this.durationMs,
+    occurrences: occurrences ?? this.occurrences,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  SegmentTemplate copyWithCompanion(SegmentTemplatesCompanion data) {
+    return SegmentTemplate(
+      id: data.id.present ? data.id.value : this.id,
+      podcastId: data.podcastId.present ? data.podcastId.value : this.podcastId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      label: data.label.present ? data.label.value : this.label,
+      fingerprint: data.fingerprint.present
+          ? data.fingerprint.value
+          : this.fingerprint,
+      logMel: data.logMel.present ? data.logMel.value : this.logMel,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
+      occurrences: data.occurrences.present
+          ? data.occurrences.value
+          : this.occurrences,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SegmentTemplate(')
+          ..write('id: $id, ')
+          ..write('podcastId: $podcastId, ')
+          ..write('kind: $kind, ')
+          ..write('label: $label, ')
+          ..write('fingerprint: $fingerprint, ')
+          ..write('logMel: $logMel, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('occurrences: $occurrences, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    podcastId,
+    kind,
+    label,
+    $driftBlobEquality.hash(fingerprint),
+    $driftBlobEquality.hash(logMel),
+    durationMs,
+    occurrences,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SegmentTemplate &&
+          other.id == this.id &&
+          other.podcastId == this.podcastId &&
+          other.kind == this.kind &&
+          other.label == this.label &&
+          $driftBlobEquality.equals(other.fingerprint, this.fingerprint) &&
+          $driftBlobEquality.equals(other.logMel, this.logMel) &&
+          other.durationMs == this.durationMs &&
+          other.occurrences == this.occurrences &&
+          other.createdAt == this.createdAt);
+}
+
+class SegmentTemplatesCompanion extends UpdateCompanion<SegmentTemplate> {
+  final Value<int> id;
+  final Value<int> podcastId;
+  final Value<SkipSegmentKind> kind;
+  final Value<String?> label;
+  final Value<Uint8List> fingerprint;
+  final Value<Uint8List?> logMel;
+  final Value<int> durationMs;
+  final Value<int> occurrences;
+  final Value<DateTime> createdAt;
+  const SegmentTemplatesCompanion({
+    this.id = const Value.absent(),
+    this.podcastId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.label = const Value.absent(),
+    this.fingerprint = const Value.absent(),
+    this.logMel = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.occurrences = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  SegmentTemplatesCompanion.insert({
+    this.id = const Value.absent(),
+    required int podcastId,
+    required SkipSegmentKind kind,
+    this.label = const Value.absent(),
+    required Uint8List fingerprint,
+    this.logMel = const Value.absent(),
+    required int durationMs,
+    this.occurrences = const Value.absent(),
+    required DateTime createdAt,
+  }) : podcastId = Value(podcastId),
+       kind = Value(kind),
+       fingerprint = Value(fingerprint),
+       durationMs = Value(durationMs),
+       createdAt = Value(createdAt);
+  static Insertable<SegmentTemplate> custom({
+    Expression<int>? id,
+    Expression<int>? podcastId,
+    Expression<String>? kind,
+    Expression<String>? label,
+    Expression<Uint8List>? fingerprint,
+    Expression<Uint8List>? logMel,
+    Expression<int>? durationMs,
+    Expression<int>? occurrences,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (podcastId != null) 'podcast_id': podcastId,
+      if (kind != null) 'kind': kind,
+      if (label != null) 'label': label,
+      if (fingerprint != null) 'fingerprint': fingerprint,
+      if (logMel != null) 'log_mel': logMel,
+      if (durationMs != null) 'duration_ms': durationMs,
+      if (occurrences != null) 'occurrences': occurrences,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  SegmentTemplatesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? podcastId,
+    Value<SkipSegmentKind>? kind,
+    Value<String?>? label,
+    Value<Uint8List>? fingerprint,
+    Value<Uint8List?>? logMel,
+    Value<int>? durationMs,
+    Value<int>? occurrences,
+    Value<DateTime>? createdAt,
+  }) {
+    return SegmentTemplatesCompanion(
+      id: id ?? this.id,
+      podcastId: podcastId ?? this.podcastId,
+      kind: kind ?? this.kind,
+      label: label ?? this.label,
+      fingerprint: fingerprint ?? this.fingerprint,
+      logMel: logMel ?? this.logMel,
+      durationMs: durationMs ?? this.durationMs,
+      occurrences: occurrences ?? this.occurrences,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (podcastId.present) {
+      map['podcast_id'] = Variable<int>(podcastId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(
+        $SegmentTemplatesTable.$converterkind.toSql(kind.value),
+      );
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (fingerprint.present) {
+      map['fingerprint'] = Variable<Uint8List>(fingerprint.value);
+    }
+    if (logMel.present) {
+      map['log_mel'] = Variable<Uint8List>(logMel.value);
+    }
+    if (durationMs.present) {
+      map['duration_ms'] = Variable<int>(durationMs.value);
+    }
+    if (occurrences.present) {
+      map['occurrences'] = Variable<int>(occurrences.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SegmentTemplatesCompanion(')
+          ..write('id: $id, ')
+          ..write('podcastId: $podcastId, ')
+          ..write('kind: $kind, ')
+          ..write('label: $label, ')
+          ..write('fingerprint: $fingerprint, ')
+          ..write('logMel: $logMel, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('occurrences: $occurrences, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SkipSegmentsTable extends SkipSegments
+    with TableInfo<$SkipSegmentsTable, SkipSegment> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SkipSegmentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _episodeIdMeta = const VerificationMeta(
+    'episodeId',
+  );
+  @override
+  late final GeneratedColumn<int> episodeId = GeneratedColumn<int>(
+    'episode_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES episodes (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _startMsMeta = const VerificationMeta(
+    'startMs',
+  );
+  @override
+  late final GeneratedColumn<int> startMs = GeneratedColumn<int>(
+    'start_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _endMsMeta = const VerificationMeta('endMs');
+  @override
+  late final GeneratedColumn<int> endMs = GeneratedColumn<int>(
+    'end_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<SkipSegmentKind, String> kind =
+      GeneratedColumn<String>(
+        'kind',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<SkipSegmentKind>($SkipSegmentsTable.$converterkind);
+  @override
+  late final GeneratedColumnWithTypeConverter<SkipSegmentSource, String>
+  source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  ).withConverter<SkipSegmentSource>($SkipSegmentsTable.$convertersource);
+  static const VerificationMeta _matchesMeta = const VerificationMeta(
+    'matches',
+  );
+  @override
+  late final GeneratedColumn<int> matches = GeneratedColumn<int>(
+    'matches',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _confirmedMeta = const VerificationMeta(
+    'confirmed',
+  );
+  @override
+  late final GeneratedColumn<bool> confirmed = GeneratedColumn<bool>(
+    'confirmed',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("confirmed" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _templateIdMeta = const VerificationMeta(
+    'templateId',
+  );
+  @override
+  late final GeneratedColumn<int> templateId = GeneratedColumn<int>(
+    'template_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES segment_templates (id) ON DELETE SET NULL',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    episodeId,
+    startMs,
+    endMs,
+    kind,
+    source,
+    matches,
+    confirmed,
+    templateId,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'skip_segments';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SkipSegment> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('episode_id')) {
+      context.handle(
+        _episodeIdMeta,
+        episodeId.isAcceptableOrUnknown(data['episode_id']!, _episodeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_episodeIdMeta);
+    }
+    if (data.containsKey('start_ms')) {
+      context.handle(
+        _startMsMeta,
+        startMs.isAcceptableOrUnknown(data['start_ms']!, _startMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_startMsMeta);
+    }
+    if (data.containsKey('end_ms')) {
+      context.handle(
+        _endMsMeta,
+        endMs.isAcceptableOrUnknown(data['end_ms']!, _endMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_endMsMeta);
+    }
+    if (data.containsKey('matches')) {
+      context.handle(
+        _matchesMeta,
+        matches.isAcceptableOrUnknown(data['matches']!, _matchesMeta),
+      );
+    }
+    if (data.containsKey('confirmed')) {
+      context.handle(
+        _confirmedMeta,
+        confirmed.isAcceptableOrUnknown(data['confirmed']!, _confirmedMeta),
+      );
+    }
+    if (data.containsKey('template_id')) {
+      context.handle(
+        _templateIdMeta,
+        templateId.isAcceptableOrUnknown(data['template_id']!, _templateIdMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SkipSegment map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SkipSegment(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      episodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}episode_id'],
+      )!,
+      startMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}start_ms'],
+      )!,
+      endMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}end_ms'],
+      )!,
+      kind: $SkipSegmentsTable.$converterkind.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}kind'],
+        )!,
+      ),
+      source: $SkipSegmentsTable.$convertersource.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}source'],
+        )!,
+      ),
+      matches: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}matches'],
+      )!,
+      confirmed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}confirmed'],
+      ),
+      templateId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}template_id'],
+      ),
+    );
+  }
+
+  @override
+  $SkipSegmentsTable createAlias(String alias) {
+    return $SkipSegmentsTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<SkipSegmentKind, String, String> $converterkind =
+      const EnumNameConverter<SkipSegmentKind>(SkipSegmentKind.values);
+  static JsonTypeConverter2<SkipSegmentSource, String, String>
+  $convertersource = const EnumNameConverter<SkipSegmentSource>(
+    SkipSegmentSource.values,
+  );
+}
+
+class SkipSegment extends DataClass implements Insertable<SkipSegment> {
+  final int id;
+  final int episodeId;
+  final int startMs;
+  final int endMs;
+  final SkipSegmentKind kind;
+  final SkipSegmentSource source;
+
+  /// Nombre d’épisodes du podcast qui partagent ce passage.
+  final int matches;
+
+  /// `null` : pas revu. `true` : confirmé. `false` : ignoré.
+  final bool? confirmed;
+  final int? templateId;
+  const SkipSegment({
+    required this.id,
+    required this.episodeId,
+    required this.startMs,
+    required this.endMs,
+    required this.kind,
+    required this.source,
+    required this.matches,
+    this.confirmed,
+    this.templateId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['episode_id'] = Variable<int>(episodeId);
+    map['start_ms'] = Variable<int>(startMs);
+    map['end_ms'] = Variable<int>(endMs);
+    {
+      map['kind'] = Variable<String>(
+        $SkipSegmentsTable.$converterkind.toSql(kind),
+      );
+    }
+    {
+      map['source'] = Variable<String>(
+        $SkipSegmentsTable.$convertersource.toSql(source),
+      );
+    }
+    map['matches'] = Variable<int>(matches);
+    if (!nullToAbsent || confirmed != null) {
+      map['confirmed'] = Variable<bool>(confirmed);
+    }
+    if (!nullToAbsent || templateId != null) {
+      map['template_id'] = Variable<int>(templateId);
+    }
+    return map;
+  }
+
+  SkipSegmentsCompanion toCompanion(bool nullToAbsent) {
+    return SkipSegmentsCompanion(
+      id: Value(id),
+      episodeId: Value(episodeId),
+      startMs: Value(startMs),
+      endMs: Value(endMs),
+      kind: Value(kind),
+      source: Value(source),
+      matches: Value(matches),
+      confirmed: confirmed == null && nullToAbsent
+          ? const Value.absent()
+          : Value(confirmed),
+      templateId: templateId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(templateId),
+    );
+  }
+
+  factory SkipSegment.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SkipSegment(
+      id: serializer.fromJson<int>(json['id']),
+      episodeId: serializer.fromJson<int>(json['episodeId']),
+      startMs: serializer.fromJson<int>(json['startMs']),
+      endMs: serializer.fromJson<int>(json['endMs']),
+      kind: $SkipSegmentsTable.$converterkind.fromJson(
+        serializer.fromJson<String>(json['kind']),
+      ),
+      source: $SkipSegmentsTable.$convertersource.fromJson(
+        serializer.fromJson<String>(json['source']),
+      ),
+      matches: serializer.fromJson<int>(json['matches']),
+      confirmed: serializer.fromJson<bool?>(json['confirmed']),
+      templateId: serializer.fromJson<int?>(json['templateId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'episodeId': serializer.toJson<int>(episodeId),
+      'startMs': serializer.toJson<int>(startMs),
+      'endMs': serializer.toJson<int>(endMs),
+      'kind': serializer.toJson<String>(
+        $SkipSegmentsTable.$converterkind.toJson(kind),
+      ),
+      'source': serializer.toJson<String>(
+        $SkipSegmentsTable.$convertersource.toJson(source),
+      ),
+      'matches': serializer.toJson<int>(matches),
+      'confirmed': serializer.toJson<bool?>(confirmed),
+      'templateId': serializer.toJson<int?>(templateId),
+    };
+  }
+
+  SkipSegment copyWith({
+    int? id,
+    int? episodeId,
+    int? startMs,
+    int? endMs,
+    SkipSegmentKind? kind,
+    SkipSegmentSource? source,
+    int? matches,
+    Value<bool?> confirmed = const Value.absent(),
+    Value<int?> templateId = const Value.absent(),
+  }) => SkipSegment(
+    id: id ?? this.id,
+    episodeId: episodeId ?? this.episodeId,
+    startMs: startMs ?? this.startMs,
+    endMs: endMs ?? this.endMs,
+    kind: kind ?? this.kind,
+    source: source ?? this.source,
+    matches: matches ?? this.matches,
+    confirmed: confirmed.present ? confirmed.value : this.confirmed,
+    templateId: templateId.present ? templateId.value : this.templateId,
+  );
+  SkipSegment copyWithCompanion(SkipSegmentsCompanion data) {
+    return SkipSegment(
+      id: data.id.present ? data.id.value : this.id,
+      episodeId: data.episodeId.present ? data.episodeId.value : this.episodeId,
+      startMs: data.startMs.present ? data.startMs.value : this.startMs,
+      endMs: data.endMs.present ? data.endMs.value : this.endMs,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      source: data.source.present ? data.source.value : this.source,
+      matches: data.matches.present ? data.matches.value : this.matches,
+      confirmed: data.confirmed.present ? data.confirmed.value : this.confirmed,
+      templateId: data.templateId.present
+          ? data.templateId.value
+          : this.templateId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SkipSegment(')
+          ..write('id: $id, ')
+          ..write('episodeId: $episodeId, ')
+          ..write('startMs: $startMs, ')
+          ..write('endMs: $endMs, ')
+          ..write('kind: $kind, ')
+          ..write('source: $source, ')
+          ..write('matches: $matches, ')
+          ..write('confirmed: $confirmed, ')
+          ..write('templateId: $templateId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    episodeId,
+    startMs,
+    endMs,
+    kind,
+    source,
+    matches,
+    confirmed,
+    templateId,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SkipSegment &&
+          other.id == this.id &&
+          other.episodeId == this.episodeId &&
+          other.startMs == this.startMs &&
+          other.endMs == this.endMs &&
+          other.kind == this.kind &&
+          other.source == this.source &&
+          other.matches == this.matches &&
+          other.confirmed == this.confirmed &&
+          other.templateId == this.templateId);
+}
+
+class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
+  final Value<int> id;
+  final Value<int> episodeId;
+  final Value<int> startMs;
+  final Value<int> endMs;
+  final Value<SkipSegmentKind> kind;
+  final Value<SkipSegmentSource> source;
+  final Value<int> matches;
+  final Value<bool?> confirmed;
+  final Value<int?> templateId;
+  const SkipSegmentsCompanion({
+    this.id = const Value.absent(),
+    this.episodeId = const Value.absent(),
+    this.startMs = const Value.absent(),
+    this.endMs = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.source = const Value.absent(),
+    this.matches = const Value.absent(),
+    this.confirmed = const Value.absent(),
+    this.templateId = const Value.absent(),
+  });
+  SkipSegmentsCompanion.insert({
+    this.id = const Value.absent(),
+    required int episodeId,
+    required int startMs,
+    required int endMs,
+    required SkipSegmentKind kind,
+    required SkipSegmentSource source,
+    this.matches = const Value.absent(),
+    this.confirmed = const Value.absent(),
+    this.templateId = const Value.absent(),
+  }) : episodeId = Value(episodeId),
+       startMs = Value(startMs),
+       endMs = Value(endMs),
+       kind = Value(kind),
+       source = Value(source);
+  static Insertable<SkipSegment> custom({
+    Expression<int>? id,
+    Expression<int>? episodeId,
+    Expression<int>? startMs,
+    Expression<int>? endMs,
+    Expression<String>? kind,
+    Expression<String>? source,
+    Expression<int>? matches,
+    Expression<bool>? confirmed,
+    Expression<int>? templateId,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (episodeId != null) 'episode_id': episodeId,
+      if (startMs != null) 'start_ms': startMs,
+      if (endMs != null) 'end_ms': endMs,
+      if (kind != null) 'kind': kind,
+      if (source != null) 'source': source,
+      if (matches != null) 'matches': matches,
+      if (confirmed != null) 'confirmed': confirmed,
+      if (templateId != null) 'template_id': templateId,
+    });
+  }
+
+  SkipSegmentsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? episodeId,
+    Value<int>? startMs,
+    Value<int>? endMs,
+    Value<SkipSegmentKind>? kind,
+    Value<SkipSegmentSource>? source,
+    Value<int>? matches,
+    Value<bool?>? confirmed,
+    Value<int?>? templateId,
+  }) {
+    return SkipSegmentsCompanion(
+      id: id ?? this.id,
+      episodeId: episodeId ?? this.episodeId,
+      startMs: startMs ?? this.startMs,
+      endMs: endMs ?? this.endMs,
+      kind: kind ?? this.kind,
+      source: source ?? this.source,
+      matches: matches ?? this.matches,
+      confirmed: confirmed ?? this.confirmed,
+      templateId: templateId ?? this.templateId,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (episodeId.present) {
+      map['episode_id'] = Variable<int>(episodeId.value);
+    }
+    if (startMs.present) {
+      map['start_ms'] = Variable<int>(startMs.value);
+    }
+    if (endMs.present) {
+      map['end_ms'] = Variable<int>(endMs.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(
+        $SkipSegmentsTable.$converterkind.toSql(kind.value),
+      );
+    }
+    if (source.present) {
+      map['source'] = Variable<String>(
+        $SkipSegmentsTable.$convertersource.toSql(source.value),
+      );
+    }
+    if (matches.present) {
+      map['matches'] = Variable<int>(matches.value);
+    }
+    if (confirmed.present) {
+      map['confirmed'] = Variable<bool>(confirmed.value);
+    }
+    if (templateId.present) {
+      map['template_id'] = Variable<int>(templateId.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SkipSegmentsCompanion(')
+          ..write('id: $id, ')
+          ..write('episodeId: $episodeId, ')
+          ..write('startMs: $startMs, ')
+          ..write('endMs: $endMs, ')
+          ..write('kind: $kind, ')
+          ..write('source: $source, ')
+          ..write('matches: $matches, ')
+          ..write('confirmed: $confirmed, ')
+          ..write('templateId: $templateId')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3891,6 +5459,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PlaylistEpisodesTable playlistEpisodes = $PlaylistEpisodesTable(
     this,
   );
+  late final $EpisodeFingerprintsTable episodeFingerprints =
+      $EpisodeFingerprintsTable(this);
+  late final $SegmentTemplatesTable segmentTemplates = $SegmentTemplatesTable(
+    this,
+  );
+  late final $SkipSegmentsTable skipSegments = $SkipSegmentsTable(this);
   late final Index episodesPodcastId = Index(
     'episodes_podcast_id',
     'CREATE INDEX episodes_podcast_id ON episodes (podcast_id)',
@@ -3923,6 +5497,18 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'playlist_episodes_playlist_id',
     'CREATE INDEX playlist_episodes_playlist_id ON playlist_episodes (playlist_id)',
   );
+  late final Index segmentTemplatesPodcastId = Index(
+    'segment_templates_podcast_id',
+    'CREATE INDEX segment_templates_podcast_id ON segment_templates (podcast_id)',
+  );
+  late final Index skipSegmentsEpisodeId = Index(
+    'skip_segments_episode_id',
+    'CREATE INDEX skip_segments_episode_id ON skip_segments (episode_id)',
+  );
+  late final Index skipSegmentsTemplateId = Index(
+    'skip_segments_template_id',
+    'CREATE INDEX skip_segments_template_id ON skip_segments (template_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3934,6 +5520,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     playbackPositions,
     playlists,
     playlistEpisodes,
+    episodeFingerprints,
+    segmentTemplates,
+    skipSegments,
     episodesPodcastId,
     episodesPublishedAt,
     episodesPlayed,
@@ -3942,6 +5531,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     episodesFavorite,
     episodesDownloadPath,
     playlistEpisodesPlaylistId,
+    segmentTemplatesPodcastId,
+    skipSegmentsEpisodeId,
+    skipSegmentsTemplateId,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -3980,6 +5572,34 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       ),
       result: [TableUpdate('playlist_episodes', kind: UpdateKind.delete)],
     ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'episodes',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('episode_fingerprints', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'podcasts',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('segment_templates', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'episodes',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('skip_segments', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'segment_templates',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('skip_segments', kind: UpdateKind.update)],
+    ),
   ]);
 }
 
@@ -4009,6 +5629,8 @@ typedef $$PodcastsTableCreateCompanionBuilder = PodcastsCompanion Function({
   Value<String> personsJson,
   Value<String> fundingJson,
   Value<String?> categoriesJson,
+  Value<bool> autoSkipAds,
+  Value<String> autoSkipKinds,
 });
 typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<int> id,
@@ -4036,6 +5658,8 @@ typedef $$PodcastsTableUpdateCompanionBuilder = PodcastsCompanion Function({
   Value<String> personsJson,
   Value<String> fundingJson,
   Value<String?> categoriesJson,
+  Value<bool> autoSkipAds,
+  Value<String> autoSkipKinds,
 });
 
 final class $$PodcastsTableReferences
@@ -4056,6 +5680,26 @@ final class $$PodcastsTableReferences
     ).filter((f) => f.podcastId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_episodesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SegmentTemplatesTable, List<SegmentTemplate>>
+  _segmentTemplatesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.segmentTemplates,
+    aliasName: 'podcasts__id__segment_templates__podcast_id',
+  );
+
+  $$SegmentTemplatesTableProcessedTableManager get segmentTemplatesRefs {
+    final manager = $$SegmentTemplatesTableTableManager(
+      $_db,
+      $_db.segmentTemplates,
+    ).filter((f) => f.podcastId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _segmentTemplatesRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -4196,6 +5840,16 @@ class $$PodcastsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get autoSkipAds => $composableBuilder(
+    column: $table.autoSkipAds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get autoSkipKinds => $composableBuilder(
+    column: $table.autoSkipKinds,
+    builder: (column) => ColumnFilters(column),
+  );
+
   Expression<bool> episodesRefs(
     Expression<bool> Function($$EpisodesTableFilterComposer f) f,
   ) {
@@ -4212,6 +5866,31 @@ class $$PodcastsTableFilterComposer
           }) => $$EpisodesTableFilterComposer(
             $db: $db,
             $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> segmentTemplatesRefs(
+    Expression<bool> Function($$SegmentTemplatesTableFilterComposer f) f,
+  ) {
+    final $$SegmentTemplatesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.segmentTemplates,
+      getReferencedColumn: (t) => t.podcastId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SegmentTemplatesTableFilterComposer(
+            $db: $db,
+            $table: $db.segmentTemplates,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -4355,6 +6034,16 @@ class $$PodcastsTableOrderingComposer
     column: $table.categoriesJson,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get autoSkipAds => $composableBuilder(
+    column: $table.autoSkipAds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get autoSkipKinds => $composableBuilder(
+    column: $table.autoSkipKinds,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PodcastsTableAnnotationComposer
@@ -4473,6 +6162,16 @@ class $$PodcastsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get autoSkipAds => $composableBuilder(
+    column: $table.autoSkipAds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get autoSkipKinds => $composableBuilder(
+    column: $table.autoSkipKinds,
+    builder: (column) => column,
+  );
+
   Expression<T> episodesRefs<T extends Object>(
     Expression<T> Function($$EpisodesTableAnnotationComposer a) f,
   ) {
@@ -4497,6 +6196,31 @@ class $$PodcastsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> segmentTemplatesRefs<T extends Object>(
+    Expression<T> Function($$SegmentTemplatesTableAnnotationComposer a) f,
+  ) {
+    final $$SegmentTemplatesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.segmentTemplates,
+      getReferencedColumn: (t) => t.podcastId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SegmentTemplatesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.segmentTemplates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$PodcastsTableTableManager
@@ -4512,7 +6236,7 @@ class $$PodcastsTableTableManager
           $$PodcastsTableUpdateCompanionBuilder,
           (Podcast, $$PodcastsTableReferences),
           Podcast,
-          PrefetchHooks Function({bool episodesRefs})
+          PrefetchHooks Function({bool episodesRefs, bool segmentTemplatesRefs})
         > {
   $$PodcastsTableTableManager(_$AppDatabase db, $PodcastsTable table)
     : super(
@@ -4552,6 +6276,8 @@ class $$PodcastsTableTableManager
                 Value<String> personsJson = const Value.absent(),
                 Value<String> fundingJson = const Value.absent(),
                 Value<String?> categoriesJson = const Value.absent(),
+                Value<bool> autoSkipAds = const Value.absent(),
+                Value<String> autoSkipKinds = const Value.absent(),
               }) => PodcastsCompanion(
                 id: id,
                 feedUrl: feedUrl,
@@ -4578,6 +6304,8 @@ class $$PodcastsTableTableManager
                 personsJson: personsJson,
                 fundingJson: fundingJson,
                 categoriesJson: categoriesJson,
+                autoSkipAds: autoSkipAds,
+                autoSkipKinds: autoSkipKinds,
               ),
           createCompanionCallback:
               ({
@@ -4606,6 +6334,8 @@ class $$PodcastsTableTableManager
                 Value<String> personsJson = const Value.absent(),
                 Value<String> fundingJson = const Value.absent(),
                 Value<String?> categoriesJson = const Value.absent(),
+                Value<bool> autoSkipAds = const Value.absent(),
+                Value<String> autoSkipKinds = const Value.absent(),
               }) => PodcastsCompanion.insert(
                 id: id,
                 feedUrl: feedUrl,
@@ -4632,6 +6362,8 @@ class $$PodcastsTableTableManager
                 personsJson: personsJson,
                 fundingJson: fundingJson,
                 categoriesJson: categoriesJson,
+                autoSkipAds: autoSkipAds,
+                autoSkipKinds: autoSkipKinds,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -4641,33 +6373,61 @@ class $$PodcastsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({episodesRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [if (episodesRefs) db.episodes],
-              addJoins: null,
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (episodesRefs)
-                    await $_getPrefetchedDataByColumns<
-                      Podcast,
-                      $PodcastsTable,
-                      Episode,
-                      $EpisodesTable
-                    >(
-                      currentTable: table,
-                      referencedTable: $$PodcastsTableReferences
-                          ._episodesRefsTable(db),
-                      managerFromTypedResult: (p0) =>
-                          $$PodcastsTableReferences(db, table, p0).episodesRefs,
-                      currentColumn: 'id',
-                      referencedColumn: 'podcast_id',
-                      typedResults: items,
-                    ),
-                ];
+          prefetchHooksCallback:
+              ({episodesRefs = false, segmentTemplatesRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (episodesRefs) db.episodes,
+                    if (segmentTemplatesRefs) db.segmentTemplates,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (episodesRefs)
+                        await $_getPrefetchedDataByColumns<
+                          Podcast,
+                          $PodcastsTable,
+                          Episode,
+                          $EpisodesTable
+                        >(
+                          currentTable: table,
+                          referencedTable: $$PodcastsTableReferences
+                              ._episodesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$PodcastsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).episodesRefs,
+                          currentColumn: 'id',
+                          referencedColumn: 'podcast_id',
+                          typedResults: items,
+                        ),
+                      if (segmentTemplatesRefs)
+                        await $_getPrefetchedDataByColumns<
+                          Podcast,
+                          $PodcastsTable,
+                          SegmentTemplate,
+                          $SegmentTemplatesTable
+                        >(
+                          currentTable: table,
+                          referencedTable: $$PodcastsTableReferences
+                              ._segmentTemplatesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$PodcastsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).segmentTemplatesRefs,
+                          currentColumn: 'id',
+                          referencedColumn: 'podcast_id',
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -4684,7 +6444,7 @@ typedef $$PodcastsTableProcessedTableManager =
       $$PodcastsTableUpdateCompanionBuilder,
       (Podcast, $$PodcastsTableReferences),
       Podcast,
-      PrefetchHooks Function({bool episodesRefs})
+      PrefetchHooks Function({bool episodesRefs, bool segmentTemplatesRefs})
     >;
 typedef $$EpisodesTableCreateCompanionBuilder = EpisodesCompanion Function({
   Value<int> id,
@@ -4812,6 +6572,48 @@ final class $$EpisodesTableReferences
     final cache = $_typedResult.readTableOrNull(
       _playlistEpisodesRefsTable($_db),
     );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $EpisodeFingerprintsTable,
+    List<EpisodeFingerprint>
+  >
+  _episodeFingerprintsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.episodeFingerprints,
+        aliasName: 'episodes__id__episode_fingerprints__episode_id',
+      );
+
+  $$EpisodeFingerprintsTableProcessedTableManager get episodeFingerprintsRefs {
+    final manager = $$EpisodeFingerprintsTableTableManager(
+      $_db,
+      $_db.episodeFingerprints,
+    ).filter((f) => f.episodeId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _episodeFingerprintsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SkipSegmentsTable, List<SkipSegment>>
+  _skipSegmentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.skipSegments,
+    aliasName: 'episodes__id__skip_segments__episode_id',
+  );
+
+  $$SkipSegmentsTableProcessedTableManager get skipSegmentsRefs {
+    final manager = $$SkipSegmentsTableTableManager(
+      $_db,
+      $_db.skipSegments,
+    ).filter((f) => f.episodeId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_skipSegmentsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -5021,6 +6823,56 @@ class $$EpisodesTableFilterComposer
           }) => $$PlaylistEpisodesTableFilterComposer(
             $db: $db,
             $table: $db.playlistEpisodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> episodeFingerprintsRefs(
+    Expression<bool> Function($$EpisodeFingerprintsTableFilterComposer f) f,
+  ) {
+    final $$EpisodeFingerprintsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.episodeFingerprints,
+      getReferencedColumn: (t) => t.episodeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodeFingerprintsTableFilterComposer(
+            $db: $db,
+            $table: $db.episodeFingerprints,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> skipSegmentsRefs(
+    Expression<bool> Function($$SkipSegmentsTableFilterComposer f) f,
+  ) {
+    final $$SkipSegmentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.skipSegments,
+      getReferencedColumn: (t) => t.episodeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SkipSegmentsTableFilterComposer(
+            $db: $db,
+            $table: $db.skipSegments,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -5359,6 +7211,57 @@ class $$EpisodesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> episodeFingerprintsRefs<T extends Object>(
+    Expression<T> Function($$EpisodeFingerprintsTableAnnotationComposer a) f,
+  ) {
+    final $$EpisodeFingerprintsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.episodeFingerprints,
+          getReferencedColumn: (t) => t.episodeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$EpisodeFingerprintsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.episodeFingerprints,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> skipSegmentsRefs<T extends Object>(
+    Expression<T> Function($$SkipSegmentsTableAnnotationComposer a) f,
+  ) {
+    final $$SkipSegmentsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.skipSegments,
+      getReferencedColumn: (t) => t.episodeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SkipSegmentsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.skipSegments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$EpisodesTableTableManager
@@ -5379,6 +7282,8 @@ class $$EpisodesTableTableManager
             bool episodeChaptersRefs,
             bool playbackPositionsRefs,
             bool playlistEpisodesRefs,
+            bool episodeFingerprintsRefs,
+            bool skipSegmentsRefs,
           })
         > {
   $$EpisodesTableTableManager(_$AppDatabase db, $EpisodesTable table)
@@ -5502,6 +7407,8 @@ class $$EpisodesTableTableManager
                 episodeChaptersRefs = false,
                 playbackPositionsRefs = false,
                 playlistEpisodesRefs = false,
+                episodeFingerprintsRefs = false,
+                skipSegmentsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -5509,6 +7416,8 @@ class $$EpisodesTableTableManager
                     if (episodeChaptersRefs) db.episodeChapters,
                     if (playbackPositionsRefs) db.playbackPositions,
                     if (playlistEpisodesRefs) db.playlistEpisodes,
+                    if (episodeFingerprintsRefs) db.episodeFingerprints,
+                    if (skipSegmentsRefs) db.skipSegments,
                   ],
                   addJoins:
                       <
@@ -5602,6 +7511,46 @@ class $$EpisodesTableTableManager
                           referencedColumn: 'episode_id',
                           typedResults: items,
                         ),
+                      if (episodeFingerprintsRefs)
+                        await $_getPrefetchedDataByColumns<
+                          Episode,
+                          $EpisodesTable,
+                          EpisodeFingerprint,
+                          $EpisodeFingerprintsTable
+                        >(
+                          currentTable: table,
+                          referencedTable: $$EpisodesTableReferences
+                              ._episodeFingerprintsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$EpisodesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).episodeFingerprintsRefs,
+                          currentColumn: 'id',
+                          referencedColumn: 'episode_id',
+                          typedResults: items,
+                        ),
+                      if (skipSegmentsRefs)
+                        await $_getPrefetchedDataByColumns<
+                          Episode,
+                          $EpisodesTable,
+                          SkipSegment,
+                          $SkipSegmentsTable
+                        >(
+                          currentTable: table,
+                          referencedTable: $$EpisodesTableReferences
+                              ._skipSegmentsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$EpisodesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).skipSegmentsRefs,
+                          currentColumn: 'id',
+                          referencedColumn: 'episode_id',
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -5627,6 +7576,8 @@ typedef $$EpisodesTableProcessedTableManager =
         bool episodeChaptersRefs,
         bool playbackPositionsRefs,
         bool playlistEpisodesRefs,
+        bool episodeFingerprintsRefs,
+        bool skipSegmentsRefs,
       })
     >;
 typedef $$EpisodeChaptersTableCreateCompanionBuilder =
@@ -6898,6 +8849,1278 @@ typedef $$PlaylistEpisodesTableProcessedTableManager =
       PlaylistEpisode,
       PrefetchHooks Function({bool playlistId, bool episodeId})
     >;
+typedef $$EpisodeFingerprintsTableCreateCompanionBuilder =
+    EpisodeFingerprintsCompanion Function({
+      Value<int> episodeId,
+      required Uint8List data,
+      required int hopMicros,
+      required DateTime createdAt,
+    });
+typedef $$EpisodeFingerprintsTableUpdateCompanionBuilder =
+    EpisodeFingerprintsCompanion Function({
+      Value<int> episodeId,
+      Value<Uint8List> data,
+      Value<int> hopMicros,
+      Value<DateTime> createdAt,
+    });
+
+final class $$EpisodeFingerprintsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $EpisodeFingerprintsTable,
+          EpisodeFingerprint
+        > {
+  $$EpisodeFingerprintsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $EpisodesTable _episodeIdTable(_$AppDatabase db) =>
+      db.episodes.createAlias('episode_fingerprints__episode_id__episodes__id');
+
+  $$EpisodesTableProcessedTableManager get episodeId {
+    final $_column = $_itemColumn<int>('episode_id')!;
+
+    final manager = $$EpisodesTableTableManager(
+      $_db,
+      $_db.episodes,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_episodeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$EpisodeFingerprintsTableFilterComposer
+    extends Composer<_$AppDatabase, $EpisodeFingerprintsTable> {
+  $$EpisodeFingerprintsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<Uint8List> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get hopMicros => $composableBuilder(
+    column: $table.hopMicros,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$EpisodesTableFilterComposer get episodeId {
+    final $$EpisodesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableFilterComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EpisodeFingerprintsTableOrderingComposer
+    extends Composer<_$AppDatabase, $EpisodeFingerprintsTable> {
+  $$EpisodeFingerprintsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<Uint8List> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get hopMicros => $composableBuilder(
+    column: $table.hopMicros,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$EpisodesTableOrderingComposer get episodeId {
+    final $$EpisodesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableOrderingComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EpisodeFingerprintsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EpisodeFingerprintsTable> {
+  $$EpisodeFingerprintsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<Uint8List> get data =>
+      $composableBuilder(column: $table.data, builder: (column) => column);
+
+  GeneratedColumn<int> get hopMicros =>
+      $composableBuilder(column: $table.hopMicros, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$EpisodesTableAnnotationComposer get episodeId {
+    final $$EpisodesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EpisodeFingerprintsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $EpisodeFingerprintsTable,
+          EpisodeFingerprint,
+          $$EpisodeFingerprintsTableFilterComposer,
+          $$EpisodeFingerprintsTableOrderingComposer,
+          $$EpisodeFingerprintsTableAnnotationComposer,
+          $$EpisodeFingerprintsTableCreateCompanionBuilder,
+          $$EpisodeFingerprintsTableUpdateCompanionBuilder,
+          (EpisodeFingerprint, $$EpisodeFingerprintsTableReferences),
+          EpisodeFingerprint,
+          PrefetchHooks Function({bool episodeId})
+        > {
+  $$EpisodeFingerprintsTableTableManager(
+    _$AppDatabase db,
+    $EpisodeFingerprintsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EpisodeFingerprintsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EpisodeFingerprintsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$EpisodeFingerprintsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> episodeId = const Value.absent(),
+                Value<Uint8List> data = const Value.absent(),
+                Value<int> hopMicros = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => EpisodeFingerprintsCompanion(
+                episodeId: episodeId,
+                data: data,
+                hopMicros: hopMicros,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> episodeId = const Value.absent(),
+                required Uint8List data,
+                required int hopMicros,
+                required DateTime createdAt,
+              }) => EpisodeFingerprintsCompanion.insert(
+                episodeId: episodeId,
+                data: data,
+                hopMicros: hopMicros,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$EpisodeFingerprintsTable, EpisodeFingerprint>(
+                    table,
+                  ),
+                  $$EpisodeFingerprintsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({episodeId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (episodeId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.episodeId,
+                        referencedTable: $$EpisodeFingerprintsTableReferences
+                            ._episodeIdTable(db),
+                        referencedColumn: $$EpisodeFingerprintsTableReferences
+                            ._episodeIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$EpisodeFingerprintsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $EpisodeFingerprintsTable,
+      EpisodeFingerprint,
+      $$EpisodeFingerprintsTableFilterComposer,
+      $$EpisodeFingerprintsTableOrderingComposer,
+      $$EpisodeFingerprintsTableAnnotationComposer,
+      $$EpisodeFingerprintsTableCreateCompanionBuilder,
+      $$EpisodeFingerprintsTableUpdateCompanionBuilder,
+      (EpisodeFingerprint, $$EpisodeFingerprintsTableReferences),
+      EpisodeFingerprint,
+      PrefetchHooks Function({bool episodeId})
+    >;
+typedef $$SegmentTemplatesTableCreateCompanionBuilder =
+    SegmentTemplatesCompanion Function({
+      Value<int> id,
+      required int podcastId,
+      required SkipSegmentKind kind,
+      Value<String?> label,
+      required Uint8List fingerprint,
+      Value<Uint8List?> logMel,
+      required int durationMs,
+      Value<int> occurrences,
+      required DateTime createdAt,
+    });
+typedef $$SegmentTemplatesTableUpdateCompanionBuilder =
+    SegmentTemplatesCompanion Function({
+      Value<int> id,
+      Value<int> podcastId,
+      Value<SkipSegmentKind> kind,
+      Value<String?> label,
+      Value<Uint8List> fingerprint,
+      Value<Uint8List?> logMel,
+      Value<int> durationMs,
+      Value<int> occurrences,
+      Value<DateTime> createdAt,
+    });
+
+final class $$SegmentTemplatesTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $SegmentTemplatesTable, SegmentTemplate> {
+  $$SegmentTemplatesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $PodcastsTable _podcastIdTable(_$AppDatabase db) =>
+      db.podcasts.createAlias('segment_templates__podcast_id__podcasts__id');
+
+  $$PodcastsTableProcessedTableManager get podcastId {
+    final $_column = $_itemColumn<int>('podcast_id')!;
+
+    final manager = $$PodcastsTableTableManager(
+      $_db,
+      $_db.podcasts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_podcastIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$SkipSegmentsTable, List<SkipSegment>>
+  _skipSegmentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.skipSegments,
+    aliasName: 'segment_templates__id__skip_segments__template_id',
+  );
+
+  $$SkipSegmentsTableProcessedTableManager get skipSegmentsRefs {
+    final manager = $$SkipSegmentsTableTableManager(
+      $_db,
+      $_db.skipSegments,
+    ).filter((f) => f.templateId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_skipSegmentsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$SegmentTemplatesTableFilterComposer
+    extends Composer<_$AppDatabase, $SegmentTemplatesTable> {
+  $$SegmentTemplatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<SkipSegmentKind, SkipSegmentKind, String>
+  get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get fingerprint => $composableBuilder(
+    column: $table.fingerprint,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get logMel => $composableBuilder(
+    column: $table.logMel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get occurrences => $composableBuilder(
+    column: $table.occurrences,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$PodcastsTableFilterComposer get podcastId {
+    final $$PodcastsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.podcastId,
+      referencedTable: $db.podcasts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PodcastsTableFilterComposer(
+            $db: $db,
+            $table: $db.podcasts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> skipSegmentsRefs(
+    Expression<bool> Function($$SkipSegmentsTableFilterComposer f) f,
+  ) {
+    final $$SkipSegmentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.skipSegments,
+      getReferencedColumn: (t) => t.templateId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SkipSegmentsTableFilterComposer(
+            $db: $db,
+            $table: $db.skipSegments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SegmentTemplatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $SegmentTemplatesTable> {
+  $$SegmentTemplatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get fingerprint => $composableBuilder(
+    column: $table.fingerprint,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get logMel => $composableBuilder(
+    column: $table.logMel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get occurrences => $composableBuilder(
+    column: $table.occurrences,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$PodcastsTableOrderingComposer get podcastId {
+    final $$PodcastsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.podcastId,
+      referencedTable: $db.podcasts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PodcastsTableOrderingComposer(
+            $db: $db,
+            $table: $db.podcasts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SegmentTemplatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SegmentTemplatesTable> {
+  $$SegmentTemplatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<SkipSegmentKind, String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get fingerprint => $composableBuilder(
+    column: $table.fingerprint,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get logMel =>
+      $composableBuilder(column: $table.logMel, builder: (column) => column);
+
+  GeneratedColumn<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get occurrences => $composableBuilder(
+    column: $table.occurrences,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$PodcastsTableAnnotationComposer get podcastId {
+    final $$PodcastsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.podcastId,
+      referencedTable: $db.podcasts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PodcastsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.podcasts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> skipSegmentsRefs<T extends Object>(
+    Expression<T> Function($$SkipSegmentsTableAnnotationComposer a) f,
+  ) {
+    final $$SkipSegmentsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.skipSegments,
+      getReferencedColumn: (t) => t.templateId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SkipSegmentsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.skipSegments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SegmentTemplatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SegmentTemplatesTable,
+          SegmentTemplate,
+          $$SegmentTemplatesTableFilterComposer,
+          $$SegmentTemplatesTableOrderingComposer,
+          $$SegmentTemplatesTableAnnotationComposer,
+          $$SegmentTemplatesTableCreateCompanionBuilder,
+          $$SegmentTemplatesTableUpdateCompanionBuilder,
+          (SegmentTemplate, $$SegmentTemplatesTableReferences),
+          SegmentTemplate,
+          PrefetchHooks Function({bool podcastId, bool skipSegmentsRefs})
+        > {
+  $$SegmentTemplatesTableTableManager(
+    _$AppDatabase db,
+    $SegmentTemplatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SegmentTemplatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SegmentTemplatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SegmentTemplatesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> podcastId = const Value.absent(),
+                Value<SkipSegmentKind> kind = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<Uint8List> fingerprint = const Value.absent(),
+                Value<Uint8List?> logMel = const Value.absent(),
+                Value<int> durationMs = const Value.absent(),
+                Value<int> occurrences = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => SegmentTemplatesCompanion(
+                id: id,
+                podcastId: podcastId,
+                kind: kind,
+                label: label,
+                fingerprint: fingerprint,
+                logMel: logMel,
+                durationMs: durationMs,
+                occurrences: occurrences,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int podcastId,
+                required SkipSegmentKind kind,
+                Value<String?> label = const Value.absent(),
+                required Uint8List fingerprint,
+                Value<Uint8List?> logMel = const Value.absent(),
+                required int durationMs,
+                Value<int> occurrences = const Value.absent(),
+                required DateTime createdAt,
+              }) => SegmentTemplatesCompanion.insert(
+                id: id,
+                podcastId: podcastId,
+                kind: kind,
+                label: label,
+                fingerprint: fingerprint,
+                logMel: logMel,
+                durationMs: durationMs,
+                occurrences: occurrences,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SegmentTemplatesTable, SegmentTemplate>(table),
+                  $$SegmentTemplatesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({podcastId = false, skipSegmentsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (skipSegmentsRefs) db.skipSegments,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (podcastId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.podcastId,
+                            referencedTable: $$SegmentTemplatesTableReferences
+                                ._podcastIdTable(db),
+                            referencedColumn: $$SegmentTemplatesTableReferences
+                                ._podcastIdTable(db)
+                                .id,
+                          ) as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (skipSegmentsRefs)
+                        await $_getPrefetchedDataByColumns<
+                          SegmentTemplate,
+                          $SegmentTemplatesTable,
+                          SkipSegment,
+                          $SkipSegmentsTable
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SegmentTemplatesTableReferences
+                              ._skipSegmentsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SegmentTemplatesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).skipSegmentsRefs,
+                          currentColumn: 'id',
+                          referencedColumn: 'template_id',
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$SegmentTemplatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SegmentTemplatesTable,
+      SegmentTemplate,
+      $$SegmentTemplatesTableFilterComposer,
+      $$SegmentTemplatesTableOrderingComposer,
+      $$SegmentTemplatesTableAnnotationComposer,
+      $$SegmentTemplatesTableCreateCompanionBuilder,
+      $$SegmentTemplatesTableUpdateCompanionBuilder,
+      (SegmentTemplate, $$SegmentTemplatesTableReferences),
+      SegmentTemplate,
+      PrefetchHooks Function({bool podcastId, bool skipSegmentsRefs})
+    >;
+typedef $$SkipSegmentsTableCreateCompanionBuilder =
+    SkipSegmentsCompanion Function({
+      Value<int> id,
+      required int episodeId,
+      required int startMs,
+      required int endMs,
+      required SkipSegmentKind kind,
+      required SkipSegmentSource source,
+      Value<int> matches,
+      Value<bool?> confirmed,
+      Value<int?> templateId,
+    });
+typedef $$SkipSegmentsTableUpdateCompanionBuilder =
+    SkipSegmentsCompanion Function({
+      Value<int> id,
+      Value<int> episodeId,
+      Value<int> startMs,
+      Value<int> endMs,
+      Value<SkipSegmentKind> kind,
+      Value<SkipSegmentSource> source,
+      Value<int> matches,
+      Value<bool?> confirmed,
+      Value<int?> templateId,
+    });
+
+final class $$SkipSegmentsTableReferences
+    extends BaseReferences<_$AppDatabase, $SkipSegmentsTable, SkipSegment> {
+  $$SkipSegmentsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $EpisodesTable _episodeIdTable(_$AppDatabase db) =>
+      db.episodes.createAlias('skip_segments__episode_id__episodes__id');
+
+  $$EpisodesTableProcessedTableManager get episodeId {
+    final $_column = $_itemColumn<int>('episode_id')!;
+
+    final manager = $$EpisodesTableTableManager(
+      $_db,
+      $_db.episodes,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_episodeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SegmentTemplatesTable _templateIdTable(_$AppDatabase db) => db
+      .segmentTemplates
+      .createAlias('skip_segments__template_id__segment_templates__id');
+
+  $$SegmentTemplatesTableProcessedTableManager? get templateId {
+    final $_column = $_itemColumn<int>('template_id');
+    if ($_column == null) return null;
+    final manager = $$SegmentTemplatesTableTableManager(
+      $_db,
+      $_db.segmentTemplates,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_templateIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SkipSegmentsTableFilterComposer
+    extends Composer<_$AppDatabase, $SkipSegmentsTable> {
+  $$SkipSegmentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get startMs => $composableBuilder(
+    column: $table.startMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get endMs => $composableBuilder(
+    column: $table.endMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<SkipSegmentKind, SkipSegmentKind, String>
+  get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<SkipSegmentSource, SkipSegmentSource, String>
+  get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<int> get matches => $composableBuilder(
+    column: $table.matches,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get confirmed => $composableBuilder(
+    column: $table.confirmed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$EpisodesTableFilterComposer get episodeId {
+    final $$EpisodesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableFilterComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SegmentTemplatesTableFilterComposer get templateId {
+    final $$SegmentTemplatesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.templateId,
+      referencedTable: $db.segmentTemplates,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SegmentTemplatesTableFilterComposer(
+            $db: $db,
+            $table: $db.segmentTemplates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SkipSegmentsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SkipSegmentsTable> {
+  $$SkipSegmentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get startMs => $composableBuilder(
+    column: $table.startMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get endMs => $composableBuilder(
+    column: $table.endMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get matches => $composableBuilder(
+    column: $table.matches,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get confirmed => $composableBuilder(
+    column: $table.confirmed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$EpisodesTableOrderingComposer get episodeId {
+    final $$EpisodesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableOrderingComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SegmentTemplatesTableOrderingComposer get templateId {
+    final $$SegmentTemplatesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.templateId,
+      referencedTable: $db.segmentTemplates,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SegmentTemplatesTableOrderingComposer(
+            $db: $db,
+            $table: $db.segmentTemplates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SkipSegmentsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SkipSegmentsTable> {
+  $$SkipSegmentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get startMs =>
+      $composableBuilder(column: $table.startMs, builder: (column) => column);
+
+  GeneratedColumn<int> get endMs =>
+      $composableBuilder(column: $table.endMs, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<SkipSegmentKind, String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<SkipSegmentSource, String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<int> get matches =>
+      $composableBuilder(column: $table.matches, builder: (column) => column);
+
+  GeneratedColumn<bool> get confirmed =>
+      $composableBuilder(column: $table.confirmed, builder: (column) => column);
+
+  $$EpisodesTableAnnotationComposer get episodeId {
+    final $$EpisodesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SegmentTemplatesTableAnnotationComposer get templateId {
+    final $$SegmentTemplatesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.templateId,
+      referencedTable: $db.segmentTemplates,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SegmentTemplatesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.segmentTemplates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SkipSegmentsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SkipSegmentsTable,
+          SkipSegment,
+          $$SkipSegmentsTableFilterComposer,
+          $$SkipSegmentsTableOrderingComposer,
+          $$SkipSegmentsTableAnnotationComposer,
+          $$SkipSegmentsTableCreateCompanionBuilder,
+          $$SkipSegmentsTableUpdateCompanionBuilder,
+          (SkipSegment, $$SkipSegmentsTableReferences),
+          SkipSegment,
+          PrefetchHooks Function({bool episodeId, bool templateId})
+        > {
+  $$SkipSegmentsTableTableManager(_$AppDatabase db, $SkipSegmentsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SkipSegmentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SkipSegmentsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SkipSegmentsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> episodeId = const Value.absent(),
+                Value<int> startMs = const Value.absent(),
+                Value<int> endMs = const Value.absent(),
+                Value<SkipSegmentKind> kind = const Value.absent(),
+                Value<SkipSegmentSource> source = const Value.absent(),
+                Value<int> matches = const Value.absent(),
+                Value<bool?> confirmed = const Value.absent(),
+                Value<int?> templateId = const Value.absent(),
+              }) => SkipSegmentsCompanion(
+                id: id,
+                episodeId: episodeId,
+                startMs: startMs,
+                endMs: endMs,
+                kind: kind,
+                source: source,
+                matches: matches,
+                confirmed: confirmed,
+                templateId: templateId,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int episodeId,
+                required int startMs,
+                required int endMs,
+                required SkipSegmentKind kind,
+                required SkipSegmentSource source,
+                Value<int> matches = const Value.absent(),
+                Value<bool?> confirmed = const Value.absent(),
+                Value<int?> templateId = const Value.absent(),
+              }) => SkipSegmentsCompanion.insert(
+                id: id,
+                episodeId: episodeId,
+                startMs: startMs,
+                endMs: endMs,
+                kind: kind,
+                source: source,
+                matches: matches,
+                confirmed: confirmed,
+                templateId: templateId,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SkipSegmentsTable, SkipSegment>(table),
+                  $$SkipSegmentsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({episodeId = false, templateId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (episodeId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.episodeId,
+                        referencedTable: $$SkipSegmentsTableReferences
+                            ._episodeIdTable(db),
+                        referencedColumn: $$SkipSegmentsTableReferences
+                            ._episodeIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+                    if (templateId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.templateId,
+                        referencedTable: $$SkipSegmentsTableReferences
+                            ._templateIdTable(db),
+                        referencedColumn: $$SkipSegmentsTableReferences
+                            ._templateIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SkipSegmentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SkipSegmentsTable,
+      SkipSegment,
+      $$SkipSegmentsTableFilterComposer,
+      $$SkipSegmentsTableOrderingComposer,
+      $$SkipSegmentsTableAnnotationComposer,
+      $$SkipSegmentsTableCreateCompanionBuilder,
+      $$SkipSegmentsTableUpdateCompanionBuilder,
+      (SkipSegment, $$SkipSegmentsTableReferences),
+      SkipSegment,
+      PrefetchHooks Function({bool episodeId, bool templateId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6914,4 +10137,10 @@ class $AppDatabaseManager {
       $$PlaylistsTableTableManager(_db, _db.playlists);
   $$PlaylistEpisodesTableTableManager get playlistEpisodes =>
       $$PlaylistEpisodesTableTableManager(_db, _db.playlistEpisodes);
+  $$EpisodeFingerprintsTableTableManager get episodeFingerprints =>
+      $$EpisodeFingerprintsTableTableManager(_db, _db.episodeFingerprints);
+  $$SegmentTemplatesTableTableManager get segmentTemplates =>
+      $$SegmentTemplatesTableTableManager(_db, _db.segmentTemplates);
+  $$SkipSegmentsTableTableManager get skipSegments =>
+      $$SkipSegmentsTableTableManager(_db, _db.skipSegments);
 }

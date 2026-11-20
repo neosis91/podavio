@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../data/app_database.dart';
 import '../../data/feed_service.dart';
@@ -7,6 +8,7 @@ import '../../data/providers.dart';
 import '../../l10n/l10n.dart';
 import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
+import '../router.dart';
 import '../podcasts/podcast_feed_actions.dart';
 import '../widgets/choice_dialog.dart';
 import '../widgets/empty_state.dart';
@@ -94,6 +96,17 @@ class PodcastSettingsPage extends ConsumerWidget {
                 onChanged: (seconds) => ref
                     .read(databaseProvider)
                     .setPodcastSkipBounds(item.id, skipOutroSeconds: seconds),
+              ),
+              ListTile(
+                title: Text(context.tr('Skip ads and jingles')),
+                subtitle: Text(
+                  context.tr(
+                    'Review detected segments and choose what to skip',
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    context.push(AppRoutes.podcastSkipSegments(item.id)),
               ),
               _PodcastSettingsSection(context.tr('Notifications')),
               SwitchListTile(

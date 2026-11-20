@@ -50,6 +50,7 @@ const _fr = <String, String>{
   '7 days after listening': '7 jours après l’écoute',
   'About': 'À propos',
   'Actions': 'Actions',
+  'Ad': 'Publicité',
   'Add a subscription to fill the home screen.':
       'Ajoutez un abonnement pour remplir l’accueil.',
   'Add to favorites': 'Ajouter aux favoris',
@@ -113,6 +114,7 @@ const _fr = <String, String>{
   'Careers': 'Carrières',
   'Cast search unavailable': 'Recherche Cast impossible',
   'Categories': 'Catégories',
+  'Change kind': 'Changer le type',
   'Chapters': 'Chapitres',
   'Check for an application update': 'Vérifier la mise à jour de l’application',
   'Chemistry': 'Chimie',
@@ -140,6 +142,8 @@ const _fr = <String, String>{
   'Comedy Interviews': 'Interviews d’humour',
   'Comfortable': 'Confortable',
   'Compact': 'Compact',
+  'Confirm': 'Confirmer',
+  'Confirmed': 'Confirmé',
   'Connect a device': 'Connecter un appareil',
   'Connect a synchronization service to enable this.':
       'Reliez un service de synchronisation pour l’activer.',
@@ -175,8 +179,10 @@ const _fr = <String, String>{
   'Database imported': 'Base de données importée',
   'Delete': 'Supprimer',
   'Delete after playback': 'Supprimer après la lecture',
+  'Delete this passage?': 'Supprimer ce passage ?',
   'Deletes the file when playback finishes. Favorites are kept.': 'Supprime le fichier quand la lecture se termine. Les favoris sont conservés.',
   'Design': 'Design',
+  'Detected segments': 'Passages détectés',
   'Device name': 'Nom de l’appareil',
   'Device status': 'Statut de l’appareil',
   'Devices need a central server to share subscriptions and listening progress. Podavio does not host that server. Connect one of the services below. Others can be added later.': 'Les appareils ont besoin d’un serveur pour partager les abonnements et la progression d’écoute. Podavio n’héberge pas ce serveur. Reliez l’un des services ci-dessous. D’autres pourront s’ajouter.',
@@ -190,6 +196,8 @@ const _fr = <String, String>{
   'Download manager': 'Gestion des téléchargements',
   'Download progress': 'Progression du téléchargement',
   'Download settings': 'Paramètres de téléchargement',
+  'Download the episode to preview this passage.':
+      'Téléchargez l’épisode pour écouter ce passage.',
   'Download to listen offline': 'Télécharger pour écouter hors ligne',
   'Downloaded': 'Téléchargés',
   'Downloaded and unplayed': 'Téléchargés et non lus',
@@ -271,6 +279,8 @@ const _fr = <String, String>{
   'I am new to Podavio': 'Je découvre Podavio',
   'If you do not recognize this browser, disconnect it.':
       'Si vous ne reconnaissez pas ce navigateur, dissociez-le.',
+  'Ignore': 'Ignorer',
+  'Ignored': 'Ignoré',
   'Import': 'Importer',
   'Import an OPML file': 'Importer un fichier OPML',
   'Import an OPML file exported from another podcast app.': 'Importez un fichier OPML exporté depuis une autre application de podcasts.',
@@ -285,8 +295,10 @@ const _fr = <String, String>{
       'Installer sur un autre téléphone en Wi‑Fi, sans internet',
   'Interface': 'Interface utilisateur',
   'Interface language': 'Langue de l’interface',
+  'Intro start': 'Début (intro)',
   'Investing': 'Investissement',
   'Islam': 'Islam',
+  'Jingle': 'Jingle',
   'Join': 'Rejoindre',
   'Judaism': 'Judaïsme',
   'Keep at least one language, or turn on All languages.':
@@ -294,6 +306,8 @@ const _fr = <String, String>{
   'Keep at most': 'Conserver au plus',
   'Keep screen on': 'Écran allumé',
   'Kids & Family': 'Enfants et famille',
+  'Kinds to skip': 'Types à sauter',
+  'Label': 'Libellé',
   'Language': 'Langue',
   'Language Learning': 'Langues',
   'Languages': 'Langues',
@@ -388,6 +402,8 @@ const _fr = <String, String>{
   'Orange': 'Orange',
   'Order and hide the home shelves':
       'Ordre et masquage des étagères de l’accueil',
+  'Other': 'Autre',
+  'Outro end': 'Fin (outro)',
   'Outside the app': 'Hors de l’application',
   'Parallel downloads': 'Téléchargements en parallèle',
   'Parenting': 'Parentalité',
@@ -423,6 +439,7 @@ const _fr = <String, String>{
   'Preparing Podavio…': 'Préparation de Podavio…',
   'Prevents sleep during playback':
       'Empêche la mise en veille pendant la lecture',
+  'Preview': 'Écouter',
   'Previous and next episode': 'Épisode précédent et suivant',
   'Previous episode': 'Épisode précédent',
   'Proceed': 'Continuer',
@@ -449,12 +466,16 @@ const _fr = <String, String>{
   'Religion': 'Religion',
   'Religion & Spirituality': 'Religion et spiritualité',
   'Remove from favorites': 'Retirer des favoris',
+  'Rename': 'Renommer',
+  'Rename label': 'Renommer le libellé',
   'Replaces the current database. Downloaded episodes must be re-downloaded.': 'Remplace la base actuelle. Les épisodes téléchargés devront être retéléchargés.',
   'Replaces the library. Downloaded episodes stay when their files are still on this phone. App settings stay as they are.': 'Remplace la bibliothèque. Les épisodes téléchargés restent si leurs fichiers sont encore sur ce téléphone. Les réglages de l’application ne changent pas.',
   'Restore backup': 'Restaurer la sauvegarde',
   'Restore your library from a backup':
       'Restaurez votre bibliothèque depuis une sauvegarde',
   'Retry': 'Réessayer',
+  'Review detected segments and choose what to skip':
+      'Passez en revue les passages détectés et choisissez ceux à sauter',
   'Rewind': 'Retour rapide',
   'Rewind {seconds} s (J)': 'Reculer de {seconds} s (J)',
   'Rugby': 'Rugby',
@@ -471,8 +492,11 @@ const _fr = <String, String>{
   'Science Fiction': 'Science-fiction',
   'Search': 'Rechercher',
   'Search for a language': 'Rechercher une langue',
+  'Segment skipped': 'Passage ignoré',
+  'Segments show up after a download is analyzed, or when a chapter title looks like an ad.': 'Les passages apparaissent après l’analyse d’un téléchargement, ou quand un titre de chapitre ressemble à une pub.',
   'Select all': 'Tout sélectionner',
   'Self-Improvement': 'Développement personnel',
+  'Self-promo': 'Auto-promo',
   'Server address': 'Adresse du serveur',
   'Set up the app in a few quick steps':
       'Configurez l’application en quelques étapes rapides',
@@ -500,6 +524,10 @@ const _fr = <String, String>{
       'Affiche la couverture du podcast plutôt que celle de l’épisode',
   'Shows the remaining time on the right of the progress bar':
       'Affiche le temps restant à droite de la barre de lecture',
+  'Skip ads and jingles': 'Sauter pubs et jingles',
+  'Skip automatically': 'Saut automatique',
+  'Skips confirmed passages in downloaded episodes':
+      'Saute les passages confirmés des épisodes téléchargés',
   'Sky blue': 'Bleu ciel',
   'Slate': 'Ardoise',
   'Sleep timer': 'Minuteur',
@@ -512,6 +540,7 @@ const _fr = <String, String>{
       'Espace entre les lignes des listes d’épisodes',
   'Speed': 'Vitesse',
   'Spirituality': 'Spiritualité',
+  'Sponsor': 'Sponsor',
   'Sports': 'Sports',
   'Sports News': 'Actualités sportives',
   'Stand-Up': 'Stand-up',
@@ -584,9 +613,12 @@ const _fr = <String, String>{
   'Turn on a hotspot or join the same Wi-Fi, then try again':
       'Activez un hotspot ou rejoignez le même Wi‑Fi, puis réessayez',
   'Turn on a hotspot or join the same Wi-Fi. The other phone scans the QR code, opens the page, and installs Podavio. No internet needed.': 'Activez un hotspot ou rejoignez le même Wi‑Fi. L’autre téléphone scanne le QR, ouvre la page et installe Podavio. Pas besoin d’internet.',
+  'Undo': 'Annuler',
   'Unlimited': 'Illimité',
+  'Unnamed pattern': 'Motif sans nom',
   'Unplayed': 'Non lus',
   'Unplayed episodes': 'Épisodes non lus',
+  'Unreviewed': 'À revoir',
   'Until you choose, the home follows the most played categories this month.':
       'Sans choix, l’accueil suit les catégories les plus écoutées du mois.',
   'Uploads the played state of episodes listened to on this device.':

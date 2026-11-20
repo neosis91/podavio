@@ -133,6 +133,18 @@ final routerProvider = Provider<GoRouter>((ref) {
                       if (id == null) return const PodcastsPage();
                       return PodcastSettingsPage(podcastId: id);
                     },
+                    routes: [
+                      GoRoute(
+                        path: 'segments',
+                        builder: (context, state) {
+                          final id = int.tryParse(
+                            state.pathParameters['id'] ?? '',
+                          );
+                          if (id == null) return const PodcastsPage();
+                          return SkipClassificationPage(podcastId: id);
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),

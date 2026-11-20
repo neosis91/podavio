@@ -144,6 +144,25 @@ mixin _PodcastQueries on _$AppDatabase, _ChapterQueries {
     );
   }
 
+  /// Active le saut des passages détectés, et quels types sauter.
+  /// Un argument `null` laisse la colonne en place.
+  Future<void> setPodcastAutoSkip(
+    int id, {
+    bool? autoSkipAds,
+    List<SkipSegmentKind>? autoSkipKinds,
+  }) {
+    return (update(podcasts)..where((table) => table.id.equals(id))).write(
+      PodcastsCompanion(
+        autoSkipAds: autoSkipAds == null
+            ? const Value.absent()
+            : Value(autoSkipAds),
+        autoSkipKinds: autoSkipKinds == null
+            ? const Value.absent()
+            : Value(encodeAutoSkipKinds(autoSkipKinds)),
+      ),
+    );
+  }
+
   /// `null` = utiliser le défaut global des réglages.
   Future<void> setPodcastPlaybackSpeed(int id, double? speed) {
     return (update(podcasts)..where((table) => table.id.equals(id))).write(

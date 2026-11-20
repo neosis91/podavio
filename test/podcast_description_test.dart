@@ -144,6 +144,8 @@ void main() {
                     skipOutroSeconds: 0,
                     personsJson: '[]',
                     fundingJson: '[]',
+                    autoSkipAds: false,
+                    autoSkipKinds: '[]',
                   ),
                   showPause: false,
                   onPlay: () {},
