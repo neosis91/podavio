@@ -805,8 +805,15 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    final paths = await ref.read(databaseProvider).deletePodcast(item.id);
-    await ref.read(downloadServiceProvider).deleteFiles(paths);
+    final database = ref.read(databaseProvider);
+    final episodeIds = [
+      for (final episode in await database.episodesForPodcast(item.id))
+        episode.id,
+    ];
+    final paths = await database.deletePodcast(item.id);
+    final downloads = ref.read(downloadServiceProvider);
+    await downloads.deleteFiles(paths);
+    await downloads.forgetPartials(episodeIds);
     if (context.mounted) Navigator.pop(context);
   }
 }

@@ -66,6 +66,12 @@ String downloadBatchDetail(
   return '$ratio · $failures';
 }
 
+/// Échecs encore relançables, pour le bouton et la page des notifications.
+String downloadFailuresDetail(BuildContext context, int count) {
+  if (count == 1) return context.tr('1 failure');
+  return context.tr('{count} failures', {'count': '$count'});
+}
+
 /// Ce qu’il reste à télécharger, pour le bouton des notifications.
 String downloadsLeftDetail(BuildContext context, {required int remaining}) {
   if (remaining == 1) return context.tr('1 episode left');
@@ -82,7 +88,8 @@ List<ActivityNotice> activityNoticesOf(WidgetRef ref) {
   final refresh = ref.watch(feedRefreshProvider).isVisible;
   final downloads =
       ref.watch(downloadProgressProvider).isNotEmpty ||
-      ref.watch(downloadWaitingCountProvider) > 0;
+      ref.watch(downloadWaitingCountProvider) > 0 ||
+      ref.watch(downloadFailuresProvider).isNotEmpty;
   final opml = ref.watch(opmlImportProvider).isVisible;
   final messages = ref.watch(activityMessagesProvider).isNotEmpty;
   return activityNoticeOrder(
@@ -103,6 +110,7 @@ class ActivityPage extends ConsumerStatefulWidget {
 
 class _ActivityPageState extends ConsumerState<ActivityPage> {
   var _refreshOpen = false;
+  var _downloadsOpen = false;
   var _opmlOpen = false;
   var _hadNotices = false;
   var _closing = false;
@@ -190,6 +198,17 @@ class _ActivityPageState extends ConsumerState<ActivityPage> {
                 key: 'opml',
                 clear: () => ref.read(opmlImportProvider.notifier).dismiss(),
               ),
+      ActivityNotice.downloads =>
+        ref.watch(downloadProgressProvider).isNotEmpty ||
+                ref.watch(downloadWaitingCountProvider) > 0 ||
+                ref.watch(downloadFailuresProvider).isEmpty
+            ? null
+            : (
+                key: 'downloads',
+                clear: () => ref
+                    .read(downloadProgressProvider.notifier)
+                    .dismissFailures(),
+              ),
       _ => null,
     };
   }
@@ -212,7 +231,12 @@ class _ActivityPageState extends ConsumerState<ActivityPage> {
     final scheme = Theme.of(context).colorScheme;
     return switch (notice) {
       ActivityNotice.offline => podavioRed,
-      ActivityNotice.downloads => scheme.primary,
+      ActivityNotice.downloads =>
+        ref.watch(downloadFailuresProvider).isNotEmpty &&
+                ref.watch(downloadProgressProvider).isEmpty &&
+                ref.watch(downloadWaitingCountProvider) == 0
+            ? scheme.error
+            : scheme.primary,
       ActivityNotice.refresh =>
         ref.watch(feedRefreshProvider).failures.isNotEmpty &&
                 !ref.watch(feedRefreshProvider).isRunning
@@ -275,26 +299,75 @@ class _ActivityPageState extends ConsumerState<ActivityPage> {
 
   Widget _downloadLine() {
     final tally = ref.watch(downloadBatchTallyProvider);
+    final running = ref.watch(downloadProgressProvider);
+    final waiting = ref.watch(downloadWaitingCountProvider);
+    final failures = ref.watch(downloadFailuresProvider);
+    final active = running.isNotEmpty || waiting > 0;
     final activity = downloadActivityProgress(
-      running: ref.watch(downloadProgressProvider).values,
-      waiting: ref.watch(downloadWaitingCountProvider),
+      running: running.values,
+      waiting: waiting,
       finished: tally.finished,
       failed: tally.failed,
       failedWritten: tally.failedWritten,
       skipped: tally.skipped,
     );
-    final detail = downloadBatchDetail(
-      context,
-      done: activity.done,
-      total: activity.total,
-      failed: tally.failed,
-    );
+    final detail = active
+        ? downloadBatchDetail(
+            context,
+            done: activity.done,
+            total: activity.total,
+            failed: tally.failed,
+          )
+        : downloadFailuresDetail(context, failures.length);
+    final scheme = Theme.of(context).colorScheme;
     return _textLine(
-      icon: Icons.download_outlined,
+      icon: !active && failures.isNotEmpty
+          ? Icons.error_outline
+          : Icons.download_outlined,
       accent: _accent(ActivityNotice.downloads),
       title: 'Téléchargement',
       subtitle: detail,
-      progress: activity.progress,
+      progress: active ? activity.progress : null,
+      onTap: failures.isEmpty
+          ? null
+          : () => setState(() => _downloadsOpen = !_downloadsOpen),
+      trailing: failures.isEmpty
+          ? null
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton(
+                  onPressed: () => ref
+                      .read(downloadProgressProvider.notifier)
+                      .retryFailures(),
+                  child: Text(context.tr('Retry')),
+                ),
+                Icon(
+                  _downloadsOpen ? Icons.expand_less : Icons.expand_more,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+      details: _downloadsOpen
+          ? [for (final failure in failures) _downloadFailure(failure)]
+          : const [],
+    );
+  }
+
+  Widget _downloadFailure(DownloadFailure failure) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _failure(failure.episode.title, failure.message)),
+        IconButton(
+          tooltip: context.tr('Retry'),
+          onPressed: () => ref
+              .read(downloadProgressProvider.notifier)
+              .retryFailures(episodeId: failure.episode.id),
+          icon: Icon(Icons.refresh, color: scheme.onSurfaceVariant),
+        ),
+      ],
     );
   }
 
@@ -509,6 +582,7 @@ class ActivityButton extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final order = activityNoticesOf(ref);
     final tally = ref.watch(downloadBatchTallyProvider);
+    final failureCount = ref.watch(downloadFailuresProvider).length;
     final downloads = downloadActivityProgress(
       running: ref.watch(downloadProgressProvider).values,
       waiting: ref.watch(downloadWaitingCountProvider),
@@ -525,12 +599,18 @@ class ActivityButton extends ConsumerWidget {
     final messageCount = ref.watch(activityMessagesProvider).length;
     final idle = order.isEmpty;
     final offline = order.contains(ActivityNotice.offline);
+    final primary = order.isEmpty ? null : order.first;
+    final failedOnly =
+        primary == ActivityNotice.downloads &&
+        failureCount > 0 &&
+        downloads.remaining == 0;
     final color = idle
         ? scheme.onSurfaceVariant
         : offline
         ? podavioRed
+        : failedOnly
+        ? scheme.error
         : scheme.primary;
-    final primary = order.isEmpty ? null : order.first;
     final showDownloadRing =
         primary == ActivityNotice.downloads && downloads.remaining > 0;
     final showRefreshRing =
@@ -539,6 +619,8 @@ class ActivityButton extends ConsumerWidget {
         primary == ActivityNotice.messages && messageCount > 0;
     final badge = showDownloadRing
         ? downloads.remaining
+        : failedOnly
+        ? failureCount
         : showRefreshRing && podcastsLeft > 0
         ? podcastsLeft
         : showMessageCount
@@ -548,7 +630,9 @@ class ActivityButton extends ConsumerWidget {
         : null;
     final notes = <String>[
       if (downloads.remaining > 0)
-        downloadsLeftDetail(context, remaining: downloads.remaining),
+        downloadsLeftDetail(context, remaining: downloads.remaining)
+      else if (failureCount > 0)
+        downloadFailuresDetail(context, failureCount),
       if (refresh.isRunning && podcastsLeft > 0)
         podcastsLeft == 1
             ? context.tr('1 podcast to refresh')

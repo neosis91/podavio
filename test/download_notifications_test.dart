@@ -253,8 +253,51 @@ void main() {
     expect(activity.progress, closeTo(0.25, 0.0001));
     expect(harness.notifications.events.last, 'progress:2:0.25');
 
+    final remembered = harness.container.read(downloadFailuresProvider);
+    expect(remembered, hasLength(1));
+    expect(remembered.single.message, 'coupé');
+    harness.notifier.dismissFailures();
+    expect(harness.container.read(downloadFailuresProvider), hasLength(1));
+
+    final retry = harness.notifier.retryFailures().single;
+    expect(harness.container.read(downloadFailuresProvider), isEmpty);
+    expect(harness.container.read(downloadBatchTallyProvider).failed, 0);
+    final retried = harness.container.read(downloadBatchTallyProvider);
+    final activityAfterRetry = downloadActivityProgress(
+      running: harness.container.read(downloadProgressProvider).values,
+      waiting: harness.container.read(downloadWaitingCountProvider),
+      finished: retried.finished,
+      failed: retried.failed,
+      failedWritten: retried.failedWritten,
+      skipped: retried.skipped,
+    );
+    expect(activityAfterRetry.total, 2);
+
     gate.complete();
     await pending[1];
+    await retry;
+    expect(harness.container.read(downloadFailuresProvider), isEmpty);
+  });
+
+  test('failed downloads stay until they are retried or dismissed', () async {
+    final harness = await _Harness.open(
+      episodeCount: 1,
+      onDownload: (_) async {
+        throw Exception('coupé');
+      },
+    );
+    addTearDown(harness.close);
+
+    await expectLater(
+      harness.notifier.download(harness.episode),
+      throwsA(isA<Exception>()),
+    );
+
+    expect(harness.container.read(downloadBatchTallyProvider).failed, 0);
+    expect(harness.container.read(downloadFailuresProvider), hasLength(1));
+
+    harness.notifier.dismissFailures();
+    expect(harness.container.read(downloadFailuresProvider), isEmpty);
   });
 
   test('a mobile skip stays in the batch total', () async {
@@ -408,6 +451,9 @@ class _ScriptedDownloadService extends DownloadService {
 
   final Future<void> Function(void Function(double progress)? onProgress)
   onDownload;
+
+  @override
+  Future<void> forgetPartials(Iterable<int> episodeIds) async {}
 
   @override
   Future<void> download(

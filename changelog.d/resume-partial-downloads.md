@@ -1,0 +1,1 @@
+- A failed download keeps the audio already received and continues from there on the next attempt.
