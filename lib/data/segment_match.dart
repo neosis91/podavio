@@ -29,6 +29,10 @@ const stableOffsetSlackMs = 2000;
 /// Fin d’épisode : un motif toujours dans cette fenêtre est un outro.
 const outroWindowMs = 60000;
 
+/// Auto-comparaison : on ignore les décalages plus courts (le motif
+/// collé à lui-même). Au-delà, un refrain reste un candidat non sauté.
+const selfMatchMinOffsetMs = 20000;
+
 /// Log-mel : 8 kHz, 40 bandes, hop 10 ms, corrélation après normalisation.
 const logMelSampleRate = 8000;
 

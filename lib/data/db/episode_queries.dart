@@ -1,6 +1,6 @@
 part of '../app_database.dart';
 
-mixin _EpisodeQueries on _$AppDatabase {
+mixin _EpisodeQueries on _$AppDatabase, _SkipSegmentQueries {
   Stream<List<EpisodeEntry>> watchInProgress({int limit = 15}) {
     return _episodeWindow(inProgressOnly: true, limit: limit).watch();
   }
@@ -676,13 +676,14 @@ mixin _EpisodeQueries on _$AppDatabase {
     );
   }
 
-  Future<void> setDownloadPath(int id, String? path) {
-    return (update(episodes)..where((table) => table.id.equals(id))).write(
+  Future<void> setDownloadPath(int id, String? path) async {
+    await (update(episodes)..where((table) => table.id.equals(id))).write(
       EpisodesCompanion(
         downloadPath: Value(path),
         downloadedAt: Value(path == null ? null : DateTime.now()),
       ),
     );
+    if (path == null) await clearDownloadAnalysis(id);
   }
 
   /// Mémorise ou retire le fichier gardé pendant le streaming.

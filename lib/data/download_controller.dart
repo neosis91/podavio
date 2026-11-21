@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../settings/settings_controller.dart';
 import 'activity_messages.dart';
 import 'app_database.dart';
+import 'audio_analysis.dart';
 import 'download_notifications.dart';
 import 'download_service.dart';
-import 'episode_audio_analyzer.dart';
 import 'online_status.dart';
 import 'providers.dart';
 
@@ -368,31 +367,13 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
   }
 
   /// Empreinte du fichier terminé, puis recherche des passages du podcast.
-  /// L’analyseur actuel est un placeholder : l’appel est en place.
+  /// La file traite un épisode à la fois, y compris les URI `content:`.
   Future<void> _analyzeDownloaded(int episodeId) async {
     try {
       if (!ref.mounted) return;
-      final stored = await ref.read(databaseProvider).episodeById(episodeId);
-      if (stored == null || !ref.mounted) return;
-      final analyzer = ref.read(episodeAudioAnalyzerProvider);
-      final path = stored.downloadPath?.trim() ?? '';
-      if (path.isNotEmpty && !path.startsWith('content:')) {
-        final file = File(path);
-        if (await file.exists()) {
-          final data = await analyzer.computeFingerprint(file);
-          if (data != null && data.isNotEmpty && ref.mounted) {
-            await ref
-                .read(databaseProvider)
-                .upsertEpisodeFingerprint(
-                  episodeId: stored.id,
-                  data: data,
-                  hopMicros: chromaprintHopMicros,
-                );
-          }
-        }
-      }
-      if (!ref.mounted) return;
-      await analyzer.findSegments(stored.podcastId);
+      await ref
+          .read(audioAnalysisProvider.notifier)
+          .enqueueEpisode(episodeId, force: true);
     } catch (error, stack) {
       debugPrint('Analyse audio: $error\n$stack');
     }
