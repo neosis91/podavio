@@ -61,6 +61,7 @@ const _fr = <String, String>{
       'Place l’épisode dans la playlist dès la fin du téléchargement',
   'Adjusts the displayed position and duration to the playback speed':
       'Ajuste la position et la durée affichées selon la vitesse de lecture',
+  'Ads and jingles': 'Pubs et jingles',
   'Advanced': 'Avancé',
   'After Shows': 'Après-émissions',
   'After listening': 'Après l’écoute',
@@ -77,6 +78,8 @@ const _fr = <String, String>{
   'Always shown': 'Toujours affiché',
   'Amber': 'Ambre',
   'Analyze downloaded episodes': 'Analyser les épisodes téléchargés',
+  'Analyze downloads automatically':
+      'Analyser automatiquement les téléchargements',
   'Analyzing episodes ({count} left)': 'Analyse en cours ({count} restants)',
   'Animation & Manga': 'Animation et manga',
   'Appearance': 'Apparence',
@@ -250,6 +253,7 @@ const _fr = <String, String>{
   'Film Interviews': 'Interviews cinéma',
   'Film Reviews': 'Critiques de films',
   'Filter': 'Filtrer',
+  'Finds repeated ads and jingles in downloaded episodes. Turn this off if the app stops responding.': 'Repère les pubs et les jingles dans les épisodes téléchargés. À couper si l’application ne répond plus.',
   'Fitness': 'Fitness',
   'Food': 'Cuisine',
   'Football': 'Football américain',

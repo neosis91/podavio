@@ -54,24 +54,26 @@ const _classifiers = <_Classifier>[
 /// Fonction de premier niveau pour l’isolate : le chemin est le seul
 /// argument, le fichier n’est pas chargé d’un bloc.
 List<int> fingerprintPcmFileSync(String path) {
-  final bytes = File(path).readAsBytesSync();
-  final view = ByteData.sublistView(bytes);
-  final count = bytes.lengthInBytes ~/ 2;
+  final input = File(path).openSync();
   final hasher = ChromaprintHasher();
-  const chunk = 16384;
+  const chunk = 8192;
+  final raw = Uint8List(chunk * 2);
   final piece = Int16List(chunk);
-  var offset = 0;
-  while (offset < count) {
-    final take = math.min(chunk, count - offset);
-    for (var i = 0; i < take; i++) {
-      piece[i] = view.getInt16((offset + i) * 2, Endian.little);
+  try {
+    while (true) {
+      final read = input.readIntoSync(raw);
+      if (read < 2) break;
+      final samples = read ~/ 2;
+      final view = ByteData.sublistView(raw, 0, samples * 2);
+      for (var i = 0; i < samples; i++) {
+        piece[i] = view.getInt16(i * 2, Endian.little);
+      }
+      hasher.add(
+        samples == chunk ? piece : Int16List.sublistView(piece, 0, samples),
+      );
     }
-    if (take == chunk) {
-      hasher.add(piece);
-    } else {
-      hasher.add(Int16List.sublistView(piece, 0, take));
-    }
-    offset += take;
+  } finally {
+    input.closeSync();
   }
   return hasher.finish();
 }
@@ -140,6 +142,9 @@ class ChromaprintHasher {
       }
     }
   }
+
+  /// Valeurs déjà émises. Le tampon d’une trame n’est pas compté.
+  int get valueCount => _fingerprint.length;
 
   List<int> finish() => List<int>.unmodifiable(_fingerprint);
 

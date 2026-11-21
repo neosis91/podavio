@@ -79,6 +79,9 @@ void main() {
         .customSelect('SELECT speech FROM episode_fingerprints')
         .get();
     await reopened
+        .customSelect('SELECT status FROM episode_fingerprints')
+        .get();
+    await reopened
         .customSelect('SELECT confidence FROM segment_templates')
         .get();
     final columns = await reopened
@@ -112,6 +115,9 @@ void main() {
     addTearDown(reopened.close);
     await reopened
         .customSelect('SELECT speech FROM episode_fingerprints')
+        .get();
+    await reopened
+        .customSelect('SELECT status FROM episode_fingerprints')
         .get();
     await reopened
         .customSelect('SELECT confidence FROM segment_templates')

@@ -329,7 +329,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -453,9 +453,11 @@ class AppDatabase extends _$AppDatabase
           skipSegments.confidence,
         );
       }
+      if (from < 23) await _ensureFingerprintStatus();
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
+      await _ensureFingerprintStatus();
       // Idempotent : v8 a pu être appliqué avant l’ajout des indexes.
       await _createEpisodeIndexes();
       await _ensureDefaultPlaylist();
@@ -502,6 +504,20 @@ class AppDatabase extends _$AppDatabase
         isDefault: const Value(true),
         createdAt: DateTime.now(),
       ),
+    );
+  }
+
+  /// `running` pendant le calcul, `failed` après délai ou arrêt,
+  /// `done` quand l’empreinte est enregistrée. Colonne hors du schéma
+  /// Drift : un défaut SQL, pour ne pas régénérer toute la base.
+  Future<void> _ensureFingerprintStatus() async {
+    final rows = await customSelect('PRAGMA table_info(episode_fingerprints)')
+        .get();
+    if (rows.isEmpty) return;
+    if (rows.any((row) => row.read<String>('name') == 'status')) return;
+    await customStatement(
+      "ALTER TABLE episode_fingerprints "
+      "ADD COLUMN status TEXT NOT NULL DEFAULT 'done'",
     );
   }
 

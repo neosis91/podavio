@@ -137,6 +137,17 @@ class PlaybackPage extends ConsumerWidget {
                   notifier.setEpisodeListDensity(selection.first),
             ),
           ),
+          SettingsSectionTitle(context.tr('Ads and jingles')),
+          SwitchListTile(
+            title: Text(context.tr('Analyze downloads automatically')),
+            subtitle: Text(
+              context.tr(
+                'Finds repeated ads and jingles in downloaded episodes. Turn this off if the app stops responding.',
+              ),
+            ),
+            value: settings.automaticAudioAnalysis,
+            onChanged: notifier.setAutomaticAudioAnalysis,
+          ),
           SettingsSectionTitle(context.tr('Refresh')),
           ListTile(
             title: Text(context.tr('Refresh interval')),

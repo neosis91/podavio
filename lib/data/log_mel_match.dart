@@ -1,5 +1,11 @@
+import 'dart:typed_data';
+
 import 'segment_match.dart';
 import 'log_mel.dart';
+
+/// Spectrogrammes chargés ensemble pour la recherche des jingles courts.
+/// Au-delà, seuls les épisodes les plus récents sont comparés.
+const logMelCompareEpisodeCap = 12;
 
 /// Au-dessus, un son court partagé par plusieurs podcasts devient
 /// une virgule de réseau apprise sur l’appareil.
@@ -304,6 +310,214 @@ bool _acceptShort(List<SegmentOccurrence> hits) {
   }
   if (episodes.length < jingleMinEpisodes) return false;
   return comparableJinglePositions(hits);
+}
+
+/// Recherche log-mel hors de l’isolate d’interface.
+///
+/// Le message ne contient que des octets. Le décodage en trames se fait ici.
+Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
+  final episodes = <EpisodeMel>[];
+  for (final raw in message['episodes']! as List) {
+    final row = (raw as List).cast<Object?>();
+    episodes.add(
+      EpisodeMel(
+        episodeId: row[0]! as int,
+        podcastId: row[1]! as int,
+        clip: _clipAll(row[2]! as Uint8List),
+        durationMs: row[3]! as int,
+        preRollEndMs: row[4] as int?,
+      ),
+    );
+  }
+  final templates = <({int id, LogMelClip? clip})>[];
+  for (final raw in message['templates']! as List) {
+    final row = (raw as List).cast<Object?>();
+    final bytes = row[1] as Uint8List?;
+    templates.add((
+      id: row[0]! as int,
+      clip: bytes == null || bytes.isEmpty ? null : _clipAll(bytes),
+    ));
+  }
+  final stings = <NamedLogMel>[];
+  for (final raw in message['stings']! as List) {
+    final row = (raw as List).cast<Object?>();
+    stings.add(
+      NamedLogMel(
+        name: row[0]! as String,
+        clip: _clipAll(row[1]! as Uint8List),
+      ),
+    );
+  }
+  final segments = <List<Object?>>[];
+  for (final raw in message['segments']! as List) {
+    segments.add((raw as List).cast<Object?>());
+  }
+
+  final jingles = <Map<String, Object?>>[];
+  for (final jingle in discoverShortJingles(episodes)) {
+    final bytes = encodeLogMel(jingle.clip.frames.cast<List<double>>());
+    final known = _knownTemplate(jingle.clip, templates);
+    jingles.add({
+      'bytes': bytes,
+      'durationMs': jingle.clip.durationMs,
+      'templateId': known?.id,
+      'fillLogMel': known != null && known.clip == null,
+      'hits': [
+        for (final hit in jingle.hits)
+          <String, Object?>{
+            'episodeId': hit.episodeId,
+            'startMs': hit.startMs,
+            'endMs': hit.endMs,
+          },
+      ],
+    });
+  }
+
+  final refinedEnds = <int, int>{};
+  final refinements = <Map<String, Object?>>[];
+  for (final segment in segments) {
+    final startMs = segment[2]! as int;
+    final endMs = segment[3]! as int;
+    if (endMs - startMs < jingleMinDurationMs) continue;
+    if (startMs > logMelSearchWindowMs) continue;
+    final episodeId = segment[1]! as int;
+    final episode = episodes
+        .where((item) => item.episodeId == episodeId)
+        .firstOrNull;
+    if (episode == null) continue;
+    final refined = refineLogMelBoundary(
+      episode: episode.clip,
+      roughStartMs: startMs,
+      roughEndMs: endMs,
+    );
+    if (refined == null) continue;
+    final templateId = segment[5] as int?;
+    Uint8List? templateBytes;
+    if (templateId != null) {
+      final template = templates
+          .where((item) => item.id == templateId)
+          .firstOrNull;
+      if (template != null && template.clip == null) {
+        final slice = sliceLogMel(episode.clip, refined.startMs, refined.endMs);
+        if (slice.frames.length >= 8) {
+          templateBytes = encodeLogMel(slice.frames.cast<List<double>>());
+        }
+      }
+    }
+    refinedEnds[segment[0]! as int] = refined.endMs;
+    refinements.add({
+      'segmentId': segment[0],
+      'startMs': refined.startMs,
+      'endMs': refined.endMs,
+      'matches': segment[4],
+      'templateId': templateId,
+      'templateBytes': templateBytes,
+    });
+  }
+
+  final spans = <Map<String, Object?>>[];
+  for (final episode in episodes) {
+    for (final span in stingDelimitedSpans(episode: episode, stings: stings)) {
+      spans.add({
+        'episodeId': span.episodeId,
+        'startMs': span.startMs,
+        'endMs': span.endMs,
+      });
+    }
+  }
+
+  final slices = <EpisodeMelBoundary>[];
+  for (final raw in message['boundaries']! as List) {
+    final row = (raw as List).cast<Object?>();
+    final id = row[0]! as int;
+    final endMs = refinedEnds[id] ?? row[4]! as int;
+    final clip = _clipRange(row[3]! as Uint8List, endMs - 1300, endMs);
+    if (clip.frames.length < 8) continue;
+    slices.add(
+      EpisodeMelBoundary(
+        podcastId: row[1]! as int,
+        episodeId: row[2]! as int,
+        clip: clip,
+      ),
+    );
+  }
+  final existing = <({int id, LogMelClip clip})>[];
+  for (final raw in message['learned']! as List) {
+    final row = (raw as List).cast<Object?>();
+    existing.add((id: row[0]! as int, clip: _clipAll(row[1]! as Uint8List)));
+  }
+  final learned = <Map<String, Object?>>[];
+  for (final sting in learnNetworkStings(slices)) {
+    int? prior;
+    for (final row in existing) {
+      final score = searchLogMel(
+        sting.clip,
+        row.clip,
+        threshold: networkStingLearnThreshold,
+      );
+      if (score.isNotEmpty) {
+        prior = row.id;
+        break;
+      }
+    }
+    learned.add({
+      'priorId': prior,
+      'bytes': prior == null
+          ? encodeLogMel(sting.clip.frames.cast<List<double>>())
+          : null,
+      'durationMs': sting.clip.durationMs,
+      'episodes': sting.episodes,
+      'podcasts': sting.podcasts,
+    });
+  }
+
+  return {
+    'jingles': jingles,
+    'refinements': refinements,
+    'spans': spans,
+    'learned': learned,
+  };
+}
+
+({int id, LogMelClip? clip})? _knownTemplate(
+  LogMelClip clip,
+  List<({int id, LogMelClip? clip})> templates,
+) {
+  for (final template in templates) {
+    final known = template.clip;
+    if (known == null || known.frames.length < 8) continue;
+    if (searchLogMel(clip, known, threshold: 0.95).isNotEmpty ||
+        searchLogMel(known, clip, threshold: 0.95).isNotEmpty) {
+      return template;
+    }
+  }
+  return null;
+}
+
+LogMelClip _clipAll(Uint8List bytes) {
+  return _clipRange(bytes, 0, 1 << 30);
+}
+
+LogMelClip _clipRange(Uint8List bytes, int startMs, int endMs) {
+  final width = logMelBandCount * 4;
+  if (bytes.lengthInBytes < width) return const LogMelClip([]);
+  final frameCount = bytes.lengthInBytes ~/ width;
+  var start = (startMs / logMelHopMs).floor();
+  var end = (endMs / logMelHopMs).ceil();
+  if (start < 0) start = 0;
+  if (end > frameCount) end = frameCount;
+  if (end <= start) return const LogMelClip([]);
+  final view = ByteData.sublistView(bytes);
+  final frames = <Float64List>[];
+  for (var frame = start; frame < end; frame++) {
+    final row = Float64List(logMelBandCount);
+    final offset = frame * width;
+    for (var band = 0; band < logMelBandCount; band++) {
+      row[band] = view.getFloat32(offset + band * 4, Endian.little);
+    }
+    frames.add(row);
+  }
+  return LogMelClip(frames);
 }
 
 double _bestScore(LogMelClip left, LogMelClip right) {

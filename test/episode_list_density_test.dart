@@ -77,9 +77,7 @@ void main() {
   });
 
   testWidgets('saved compact density is restored on load', (tester) async {
-    SharedPreferences.setMockInitialValues({
-      'episodeListDensity': 'compact',
-    });
+    SharedPreferences.setMockInitialValues({'episodeListDensity': 'compact'});
     final preferences = await SharedPreferences.getInstance();
     final database = AppDatabase(NativeDatabase.memory());
 
@@ -140,6 +138,47 @@ void main() {
     );
     expect(preferences.getString('outsideApp'), 'episode');
     expect(find.text('Épisode précédent et suivant'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+    await database.close();
+  });
+
+  testWidgets('Lecture settings can turn automatic analysis off', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final database = AppDatabase(NativeDatabase.memory());
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
+          databaseProvider.overrideWithValue(database),
+        ],
+        child: const MaterialApp(home: PlaybackPage()),
+      ),
+    );
+    await tester.pump();
+
+    await tester.scrollUntilVisible(
+      find.text('Analyser automatiquement les téléchargements'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(PlaybackPage)),
+    );
+    expect(container.read(settingsProvider).automaticAudioAnalysis, isTrue);
+
+    await tester.tap(find.text('Analyser automatiquement les téléchargements'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(settingsProvider).automaticAudioAnalysis, isFalse);
+    expect(preferences.getBool('automaticAudioAnalysis'), isFalse);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));

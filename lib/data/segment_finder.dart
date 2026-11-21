@@ -9,6 +9,10 @@ import 'speech_music.dart';
 /// échantillon pour le vote, sinon chaque décalage ramasse des voix.
 const _commonValueCap = 48;
 
+/// Décalages suivis au plus pendant un vote. Au-delà, on ne garde que
+/// ceux qui ont déjà plusieurs voix : une pub s’accumule, le bruit non.
+const _maxVoteKeys = 8192;
+
 /// Voix exactes minimum pour retenir un décalage.
 const _minVotes = 4;
 
@@ -125,6 +129,7 @@ class AnalysisPlan {
 AnalysisPlan buildAnalysisPlan({
   required List<FingerprintEpisode> episodes,
   required List<KnownTemplate> templates,
+  int? focusEpisodeId,
 }) {
   final usable = [
     for (final episode in episodes)
@@ -132,6 +137,9 @@ AnalysisPlan buildAnalysisPlan({
   ];
   final hop = usable.isEmpty ? 0 : usable.first.hopMicros;
   final byId = {for (final episode in usable) episode.episodeId: episode};
+  final indexes = {
+    for (final episode in usable) episode.episodeId: _Index(episode.values),
+  };
   final patterns = <PlannedPattern>[];
   final claimed = <int, List<_Range>>{};
 
@@ -144,6 +152,7 @@ AnalysisPlan buildAnalysisPlan({
         template.fingerprint,
         episode.values,
         requireTemplateShape: true,
+        index: indexes[episode.episodeId],
       );
       for (final range in ranges) {
         final startMs = _indexMs(range.start, episode.hopMicros);
@@ -179,7 +188,11 @@ AnalysisPlan buildAnalysisPlan({
     );
   }
 
-  for (final found in discoverPatterns(usable)) {
+  for (final found in _discoverPatterns(
+    usable,
+    focusEpisodeId: focusEpisodeId,
+    indexes: indexes,
+  )) {
     final similar = _similarTemplate(found, templates);
     if (similar != null) {
       final extras = [
@@ -290,13 +303,43 @@ class DiscoveredPattern {
 }
 
 /// Index inversé et vote par décalage, sur les empreintes données.
-List<DiscoveredPattern> discoverPatterns(List<FingerprintEpisode> episodes) {
+///
+/// [focusEpisodeId] ne compare que les paires qui contiennent cet
+/// épisode. Les motifs déjà posés en gabarit sont réappliqués à part.
+/// L’index de chaque épisode n’est construit qu’une fois.
+List<DiscoveredPattern> discoverPatterns(
+  List<FingerprintEpisode> episodes, {
+  int? focusEpisodeId,
+}) {
+  return _discoverPatterns(episodes, focusEpisodeId: focusEpisodeId);
+}
+
+List<DiscoveredPattern> _discoverPatterns(
+  List<FingerprintEpisode> episodes, {
+  int? focusEpisodeId,
+  Map<int, _Index>? indexes,
+}) {
   if (episodes.isEmpty) return const [];
   final byId = {for (final episode in episodes) episode.episodeId: episode};
+  final built =
+      indexes ??
+      {
+        for (final episode in episodes)
+          episode.episodeId: _Index(episode.values),
+      };
   final clusters = _Clusters();
   for (var i = 0; i < episodes.length; i++) {
     for (var j = i; j < episodes.length; j++) {
-      _compare(episodes[i], episodes[j], clusters, self: i == j);
+      final left = episodes[i].episodeId;
+      final right = episodes[j].episodeId;
+      if (focusEpisodeId != null &&
+          left != focusEpisodeId &&
+          right != focusEpisodeId) {
+        continue;
+      }
+      final index = built[right];
+      if (index == null) continue;
+      _compare(episodes[i], episodes[j], clusters, self: i == j, index: index);
     }
   }
   return _materialize(clusters, byId);
@@ -337,13 +380,14 @@ Map<String, Object?> planAnalysisMessage(Map<String, Object?> message) {
   final episodes = <FingerprintEpisode>[];
   for (final raw in message['episodes']! as List) {
     final row = raw! as List;
+    final blob = _bytes(row[4]) ?? Uint8List(0);
     episodes.add(
       FingerprintEpisode(
         episodeId: row[0]! as int,
         hopMicros: row[1]! as int,
         durationMs: row[2]! as int,
         preRollEndMs: row[3] as int?,
-        values: (row[4]! as List).cast<int>(),
+        values: decodeFingerprint(blob),
         speech: row.length > 5 ? _bytes(row[5]) : null,
       ),
     );
@@ -357,13 +401,17 @@ Map<String, Object?> planAnalysisMessage(Map<String, Object?> message) {
         kind: _kindOf(row[1]! as String),
         confirmed: row[2] as bool?,
         durationMs: row[3]! as int,
-        fingerprint: (row[4]! as List).cast<int>(),
+        fingerprint: decodeFingerprint(_bytes(row[4]) ?? Uint8List(0)),
         confidence: row.length > 5 ? row[5] as int? : null,
       ),
     );
   }
   return _encodePlan(
-    buildAnalysisPlan(episodes: episodes, templates: templates),
+    buildAnalysisPlan(
+      episodes: episodes,
+      templates: templates,
+      focusEpisodeId: message['focus'] as int?,
+    ),
   );
 }
 
@@ -438,13 +486,13 @@ void _compare(
   FingerprintEpisode b,
   _Clusters clusters, {
   required bool self,
+  required _Index index,
 }) {
   if (a.hopMicros != b.hopMicros || a.values.isEmpty || b.values.isEmpty) {
     return;
   }
   final hop = a.hopMicros;
   final minDelta = self ? _pointsForMs(selfMatchMinOffsetMs, hop) : null;
-  final index = _Index(b.values);
   final votes = <int, int>{};
   for (var i = 0; i < a.values.length; i++) {
     final hits = index.offsets[a.values[i]];
@@ -452,7 +500,7 @@ void _compare(
     for (final j in hits) {
       final delta = i - j;
       if (minDelta != null && delta < minDelta) continue;
-      votes[delta] = (votes[delta] ?? 0) + 1;
+      _vote(votes, delta);
     }
   }
   final candidates = [
@@ -550,20 +598,36 @@ List<_Range> _runs(List<int> a, List<int> b, int delta) {
   return found;
 }
 
+void _vote(Map<int, int> votes, int delta) {
+  final current = votes[delta];
+  if (current != null) {
+    votes[delta] = current + 1;
+    return;
+  }
+  if (votes.length < _maxVoteKeys) {
+    votes[delta] = 1;
+    return;
+  }
+  votes.removeWhere((_, count) => count < 2);
+  if (votes.length >= _maxVoteKeys) return;
+  votes[delta] = 1;
+}
+
 List<_Range> _matchNeedle(
   List<int> needle,
   List<int> haystack, {
   required bool requireTemplateShape,
+  _Index? index,
 }) {
   if (needle.length < 8 || haystack.isEmpty) return const [];
-  final index = _Index(haystack);
+  final built = index ?? _Index(haystack);
   final votes = <int, int>{};
   for (var j = 0; j < needle.length; j++) {
-    final hits = index.offsets[needle[j]];
+    final hits = built.offsets[needle[j]];
     if (hits == null) continue;
     for (final i in hits) {
       final delta = i - j;
-      votes[delta] = (votes[delta] ?? 0) + 1;
+      _vote(votes, delta);
     }
   }
   final candidates = [
