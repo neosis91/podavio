@@ -16,13 +16,15 @@ enum AudioDecodePlugin {
       let args = call.arguments as? [String: Any]
       let path = (args?["path"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       let rate = args?["sampleRate"] as? Int ?? 11025
+      let deadlineMs = args?["deadlineMs"] as? Int ?? 360_000
       guard !path.isEmpty else {
         result(nil)
         return
       }
-      Task {
+      let deadline = Date().addingTimeInterval(Double(deadlineMs) / 1000)
+      Task.detached(priority: .userInitiated) {
         do {
-          let decoded = try await decode(path: path, sampleRate: rate)
+          let decoded = try await decode(path: path, sampleRate: rate, deadline: deadline)
           DispatchQueue.main.async { result(decoded) }
         } catch {
           DispatchQueue.main.async {
@@ -39,7 +41,11 @@ enum AudioDecodePlugin {
     }
   }
 
-  private static func decode(path: String, sampleRate: Int) async throws -> [String: Any]? {
+  private static func decode(
+    path: String,
+    sampleRate: Int,
+    deadline: Date
+  ) async throws -> [String: Any]? {
     let asset = AVURLAsset(url: URL(fileURLWithPath: path))
     let tracks: [AVAssetTrack]
     if #available(macOS 13.0, *) {
@@ -70,7 +76,14 @@ enum AudioDecodePlugin {
     FileManager.default.createFile(atPath: file.path, contents: nil)
     let handle = try FileHandle(forWritingTo: file)
     var samples = 0
-    while let buffer = output.copyNextSampleBuffer() {
+    var timedOut = false
+    while true {
+      if Date() >= deadline {
+        timedOut = true
+        reader.cancelReading()
+        break
+      }
+      guard let buffer = output.copyNextSampleBuffer() else { break }
       defer { CMSampleBufferInvalidate(buffer) }
       guard let block = CMSampleBufferGetDataBuffer(buffer) else { continue }
       let length = CMBlockBufferGetDataLength(block)
@@ -89,6 +102,10 @@ enum AudioDecodePlugin {
       samples += length / 2
     }
     try handle.close()
+    if timedOut {
+      try? FileManager.default.removeItem(at: file)
+      throw decodeError("Délai de décodage dépassé.")
+    }
     if reader.status == .failed {
       try? FileManager.default.removeItem(at: file)
       throw reader.error ?? decodeError("Décodage audio interrompu.")

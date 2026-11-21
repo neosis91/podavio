@@ -73,10 +73,20 @@ Pour les sons de moins de 3 s, et pour caler la frontière au dixième :
 Mesuré sur un gabarit RTL de 2 s : 0,96–0,97 au bon endroit, ≤ 0,50 sur
 les autres podcasts.
 
-C’est branché. Le PCM 11 025 Hz déjà décodé pour Chromaprint est
-rééchantillonné à 8 kHz dans le même isolate : on ne décode pas le
-fichier une seconde fois. On ne garde que les 180 premières secondes
-(`episode_log_mels`).
+C’est branché. Le PCM 11 025 Hz est rééchantillonné à 8 kHz pendant
+la lecture du fichier, dans l’isolate d’empreinte : on ne décode pas
+le fichier une seconde fois, et on ne garde que les 180 premières
+secondes (`episode_log_mels`).
+
+La recherche (jingles courts, recalage, virgules) ne tourne pas sur
+l’isolate d’interface, qui est le thread principal Android. Elle part
+dans un isolate annulable. Le décodage des trames écrit directement
+des `Float64List`, sans liste de `double` intermédiaire. On ne compare
+que les 12 épisodes les plus récents (`logMelCompareEpisodeCap`) et au
+plus 24 frontières de bloc. Les écritures tiennent dans une
+transaction, pour ne pas reconstruire l’écran de classement à chaque
+ligne. Un jingle déjà enregistré sur un épisode plus ancien n’est pas
+effacé : il n’est simplement plus repris dans cette fenêtre.
 
 - Un passage Chromaprint d’au moins 3 s, dans cette fenêtre, est recalé
   sur le log-mel (début et fin au pas de 10 ms).
@@ -169,10 +179,18 @@ Règle, seulement si le motif ne sort pas de l’épisode :
 
 Sans chronologie (empreinte calculée avant cette note), seule la
 période décide. Le candidat ancien, non périodique, reste en base
-jusqu’à la prochaine analyse. Au démarrage et via le bouton de
-l’écran, un épisode dont `episode_fingerprints.speech` est NULL est
-repassé. Un blob de longueur nulle (fichier trop court pour une
+jusqu’à la prochaine analyse. Une chronologie absente (`speech` NULL)
+ne relance plus le décodage toute seule : c’est ce qui rejouait
+l’analyse à chaque ouverture, y compris après un force-stop. Le bouton
+« Analyser les épisodes téléchargés » recalcule encore une chronologie
+manquante. Un blob de longueur nulle (fichier trop court pour une
 seconde) compte comme déjà calculé.
+
+La note est faite seconde par seconde (`SpeechTimelineBuilder`) : une
+seconde de PCM à la fois, pas une seconde copie de l’épisode. Le
+fichier PCM est effacé à la fin de l’analyse, donc la chronologie est
+gardée en base. La recalculer seulement sur les plages candidates
+demanderait un second décodage.
 
 La confiance (0–100) est stockée sur `skip_segments.confidence` et
 `segment_templates.confidence` (schéma 22). Un motif inter-épisodes
@@ -209,24 +227,68 @@ machine, plus environ 0,7 s pour la note parole/musique (voir plus
 haut). L’estimation téléphone, 10 à 20 s par heure, n’a pas été
 remesurée sur un appareil.
 
+Fichier silencieux de 2 h (158,8 Mo, 11 025 Hz, mono, 16 bits), même
+machine. L’ancien chemin gardait le fichier et une copie `Int16` :
+318 Mo de RSS. Le chemin par blocs finit en 5,7 s (empreinte 4,9 s,
+parole 0,47 s, log-mel des 180 premières secondes 0,08 s), avec 12 Mo
+retenus par les tampons et +36 Mo de RSS. Le silence est un plancher
+pour le temps CPU : le gain visé est la mémoire, et le fait que ce
+travail n’est plus sur l’isolate d’interface.
+
 ## Décodage
 
 Branché.
 
-- Android : MediaExtractor et MediaCodec, mono 11025 Hz, écrit au fil
-  de l’eau. Les URI `content:` passent par le ContentResolver.
-- iOS et macOS : AVFoundation, même format.
+- Android : MediaExtractor et MediaCodec, sur un thread de fond (pas
+  le thread principal), mono 11025 Hz, écrit au fil de l’eau. Les URI
+  `content:` passent par le ContentResolver. La boucle s’arrête si la
+  fin de flux n’arrive pas : 8 lectures vides comptent comme une fin,
+  200 attentes après la fin d’entrée, 500 si l’entrée ne se termine
+  pas, et un délai de 6 minutes (`deadlineMs`). Un dépassement efface
+  le fichier partiel et renvoie un échec, pour ne pas enregistrer une
+  empreinte tronquée.
+- iOS et macOS : AVFoundation, même format, hors du thread principal,
+  avec le même délai. Un appel `copyNextSampleBuffer` qui ne revient
+  pas peut dépasser ce délai ; le délai Dart, lui, libère la file.
 - Linux et Windows : `ffmpeg` s’il est installé (`-ac 1 -ar 11025`),
-  sinon un message dans le journal et pas d’empreinte.
+  lancé avec `Process.start` et tué au bout de 6 minutes. Sinon un
+  message dans le journal et pas d’empreinte.
+
+Le fichier PCM n’est pas renvoyé dans le canal de plateforme : seul le
+chemin, le taux, le nombre d’échantillons et la durée traversent. Le
+fichier est ensuite lu par blocs de 8192 échantillons. Chromaprint, la
+note parole et le rééchantillonnage 8 kHz avancent ensemble. Le log-mel
+ne conserve que les 180 premières secondes.
 
 L’empreinte et l’appariement tournent dans un isolate, un épisode à
-la fois. Après un téléchargement, au démarrage, et à l’ouverture de
-l’écran de classement, les épisodes téléchargés sans empreinte sont
-mis en file. Le même écran a le bouton « Analyser les épisodes
-téléchargés ». Effacer un téléchargement retire l’empreinte et les
-passages `fingerprint`. Un avis déjà posé (`confirmed`) est conservé
-si l’analyse retrouve le passage. Un gabarit ignoré (`confirmed`
-false) le reste, y compris pour un épisode nouveau.
+la fois. L’isolate est tué si l’épisode dépasse 8 minutes
+(`audioAnalysisBudget`), ou si l’analyse automatique est coupée. Une
+fin en retard ne réécrit pas une ligne déjà marquée en échec.
+
+La file dédoublonne : le même épisode demandé deux fois (démarrage,
+écran, fin de téléchargement) n’est décodé qu’une fois. Un second
+`force` pendant l’analyse en cours est rejoué une fois à la suite.
+
+Après un téléchargement, au démarrage, et à l’ouverture de l’écran de
+classement, les épisodes téléchargés **sans ligne**
+`episode_fingerprints` sont mis en file, si le réglage « Analyser
+automatiquement les téléchargements » est allumé (activé par défaut,
+écran de classement et réglages de lecture). Le même écran a le bouton
+« Analyser les épisodes téléchargés », qui reste disponible quand le
+réglage est coupé.
+
+Une analyse qui n’a pas fini (`running` au redémarrage, délai dépassé,
+décodage nul) est marquée `failed` dans `episode_fingerprints.status`
+(colonne SQL hors schéma Drift, défaut `done`). Le démarrage ne la
+reprend pas. Le bouton, lui, la reprend. Effacer un téléchargement
+retire la ligne, donc un nouveau téléchargement peut être analysé.
+
+Un avis déjà posé (`confirmed`) est conservé si l’analyse retrouve le
+passage. Un gabarit ignoré (`confirmed` false) le reste, y compris
+pour un épisode nouveau. L’index inversé d’un épisode n’est construit
+qu’une fois, les votes de décalage sont bornés (8192 clés), et un
+épisode nouveau n’est comparé qu’aux autres : les paires déjà connues
+restent couvertes par les gabarits.
 
 ## Chapitres
 
@@ -238,7 +300,9 @@ La fin du passage est le chapitre suivant, ou la durée de l’épisode.
 ## Lecture
 
 `_maybeSkipSegment` (à côté de `_maybeSkipOutro`) avance à la fin du
-passage si :
+passage. La liste des passages est lue une fois au démarrage de la
+lecture d’un fichier téléchargé (`listSkipSegments` vers `_skipWindows`)
+et le test de position ne refait pas de requête. Le saut a lieu si :
 
 - la lecture vient d’un fichier téléchargé ;
 - `autoSkipAds` est actif sur le podcast ;

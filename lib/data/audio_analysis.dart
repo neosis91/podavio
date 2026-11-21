@@ -14,6 +14,7 @@ import 'log_mel_match.dart';
 import 'network_stings.dart';
 import 'pcm_decoder.dart';
 import 'providers.dart';
+import '../settings/settings_controller.dart';
 import 'segment_finder.dart';
 import 'segment_match.dart';
 import 'skip_segments.dart';
@@ -30,16 +31,43 @@ final episodeAudioAnalyzerProvider = Provider<EpisodeAudioAnalyzer>((ref) {
   );
 });
 
-/// File d’analyse. Une empreinte à la fois, pour ne pas figer l’interface.
+/// Durée max d’un épisode. Au-delà, il est marqué en échec et la file avance.
+const audioAnalysisBudget = Duration(minutes: 8);
+
+/// Le décodeur natif s’arrête avant le délai Dart, pour rendre la main.
+const nativeDecodeBudget = Duration(minutes: 6);
+
+final audioAnalysisBudgetProvider = Provider<Duration>(
+  (ref) => audioAnalysisBudget,
+);
+
+/// `--dart-define=PODAVIO_ANALYSIS_TRACE=true` journalise durée et RSS.
+const audioAnalysisTraceFromEnvironment = bool.fromEnvironment(
+  'PODAVIO_ANALYSIS_TRACE',
+);
+
+bool audioAnalysisTrace = audioAnalysisTraceFromEnvironment;
+
+/// File d’analyse. Une empreinte à la fois, hors de l’isolate d’interface.
 final audioAnalysisProvider =
     NotifierProvider<AudioAnalysisController, AudioAnalysisProgress>(
       AudioAnalysisController.new,
     );
 
-/// Au démarrage : épisodes déjà téléchargés, encore sans empreinte.
+/// Au démarrage : les analyses interrompues deviennent des échecs, puis
+/// les épisodes jamais empreintés sont mis en file si l’automatisme est actif.
 final audioAnalysisBootstrapProvider = Provider<void>((ref) {
   if (ref.watch(databasePhaseProvider) != DatabasePhase.open) return;
-  unawaited(ref.read(audioAnalysisProvider.notifier).enqueueMissing());
+  final notifier = ref.read(audioAnalysisProvider.notifier);
+  unawaited(notifier.recoverInterrupted());
+  final automatic = ref.watch(
+    settingsProvider.select((settings) => settings.automaticAudioAnalysis),
+  );
+  if (!automatic) {
+    notifier.cancelAutomatic();
+    return;
+  }
+  unawaited(notifier.enqueueMissing());
 });
 
 /// À l’ouverture de l’écran de classement, pour ce podcast.
@@ -48,6 +76,11 @@ final podcastAnalysisKickProvider = Provider.family<void, int>((
   podcastId,
 ) {
   if (ref.watch(databasePhaseProvider) != DatabasePhase.open) return;
+  if (!ref.watch(
+    settingsProvider.select((settings) => settings.automaticAudioAnalysis),
+  )) {
+    return;
+  }
   unawaited(
     ref
         .read(audioAnalysisProvider.notifier)
@@ -77,65 +110,200 @@ class AudioAnalysisProgress {
 }
 
 class _Job {
-  _Job({required this.episodeId, required this.podcastId, required this.force});
+  _Job({
+    required this.episodeId,
+    required this.podcastId,
+    required this.force,
+    required this.automatic,
+  });
 
   final int episodeId;
   final int podcastId;
-  final bool force;
+  bool force;
+  final bool automatic;
   final done = Completer<void>();
+  final followers = <Completer<void>>[];
+  var again = false;
 }
 
 class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   final _wait = <_Job>[];
+  final _reserved = <int>{};
+  final _joiners = <int, List<Completer<void>>>{};
+  final _joinForce = <int>{};
+  _Job? _running;
   Future<void>? _pumpFuture;
+  Isolate? _worker;
+  Timer? _budgetTimer;
+  var _epoch = 0;
 
   @override
-  AudioAnalysisProgress build() => const AudioAnalysisProgress();
+  AudioAnalysisProgress build() {
+    ref.onDispose(_abandon);
+    return const AudioAnalysisProgress();
+  }
 
-  /// [force] recalcule l’empreinte. C’est le cas juste après un téléchargement.
-  Future<void> enqueueEpisode(int episodeId, {bool force = false}) async {
+  /// Annule le délai tout de suite : un test qui ferme l’arbre ne doit pas
+  /// garder un timer de 8 minutes, et l’interface non plus.
+  void _abandon() {
+    _budgetTimer?.cancel();
+    _budgetTimer = null;
+    _epoch++;
+    _worker?.kill(priority: Isolate.immediate);
+    final running = _running;
+    if (running != null) _complete(running);
+    for (final job in _wait) {
+      _complete(job);
+    }
+    _wait.clear();
+    _reserved.clear();
+  }
+
+  bool get _automaticAllowed {
+    try {
+      return ref.read(settingsProvider).automaticAudioAnalysis;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Duration get _budget {
+    try {
+      return ref.read(audioAnalysisBudgetProvider);
+    } catch (_) {
+      return audioAnalysisBudget;
+    }
+  }
+
+  /// Les analyses tuées au milieu (force-stop) ne sont pas relancées.
+  Future<void> recoverInterrupted() async {
     try {
       if (!ref.mounted) return;
+      await ref.read(databaseProvider).failInterruptedFingerprints();
+    } catch (error, stack) {
+      debugPrint('Analyse audio: $error\n$stack');
+    }
+  }
+
+  /// Vide la file automatique et abandonne l’épisode en cours s’il l’est.
+  void cancelAutomatic() {
+    if (_running?.automatic == true) {
+      _running!.again = false;
+      _epoch++;
+      _worker?.kill(priority: Isolate.immediate);
+    }
+    final dropped = [
+      for (final job in _wait)
+        if (job.automatic) job,
+    ];
+    _wait.removeWhere((job) => job.automatic);
+    for (final job in dropped) {
+      _reserved.remove(job.episodeId);
+      _complete(job);
+    }
+    _publish();
+  }
+
+  /// [force] recalcule l’empreinte. [automatic] respecte le réglage.
+  Future<void> enqueueEpisode(
+    int episodeId, {
+    bool force = false,
+    bool automatic = false,
+  }) async {
+    try {
+      if (!ref.mounted) return;
+      if (automatic && !_automaticAllowed) return;
+      if (_reserved.contains(episodeId)) {
+        await _join(episodeId, force: force);
+        return;
+      }
+      _reserved.add(episodeId);
       final episode = await ref.read(databaseProvider).episodeById(episodeId);
-      if (!ref.mounted || episode == null) return;
+      if (!ref.mounted || episode == null || _dropped(episodeId)) {
+        _release(episodeId);
+        return;
+      }
       final path = episode.downloadPath?.trim() ?? '';
-      if (path.isEmpty) return;
-      final queued = _wait.any((job) => job.episodeId == episodeId);
-      if (queued || state.runningEpisodeId == episodeId) {
-        if (force) {
-          _wait.removeWhere((job) => job.episodeId == episodeId);
-        } else {
-          return;
-        }
+      if (path.isEmpty) {
+        _release(episodeId);
+        return;
       }
       final job = _Job(
         episodeId: episode.id,
         podcastId: episode.podcastId,
-        force: force,
+        force: force || _joinForce.remove(episodeId),
+        automatic: automatic,
       );
+      final waiting = _joiners.remove(episodeId);
+      if (waiting != null) job.followers.addAll(waiting);
       _wait.add(job);
       _publish();
       unawaited(_ensurePump());
       await job.done.future;
     } catch (error, stack) {
+      _release(episodeId);
       debugPrint('Analyse audio: $error\n$stack');
     }
   }
 
   Future<void> enqueueMissing({int? podcastId}) async {
     try {
-      if (!ref.mounted) return;
+      if (!ref.mounted || !_automaticAllowed) return;
       final rows = await ref
           .read(databaseProvider)
           .downloadedEpisodesMissingFingerprint(podcastId: podcastId);
       if (!ref.mounted) return;
+      final pending = <Future<void>>[];
       for (final row in rows) {
-        await enqueueEpisode(row.id);
-        if (!ref.mounted) return;
+        pending.add(enqueueEpisode(row.id, automatic: true));
       }
+      await Future.wait(pending);
     } catch (error, stack) {
       debugPrint('Analyse audio: $error\n$stack');
     }
+  }
+
+  Future<void> _join(int episodeId, {required bool force}) {
+    final running = _running;
+    if (running != null && running.episodeId == episodeId) {
+      if (force) {
+        running.force = true;
+        running.again = true;
+        final follower = Completer<void>();
+        running.followers.add(follower);
+        return follower.future;
+      }
+      return running.done.future;
+    }
+    for (final job in _wait) {
+      if (job.episodeId != episodeId) continue;
+      if (force) job.force = true;
+      return job.done.future;
+    }
+    final follower = Completer<void>();
+    (_joiners[episodeId] ??= []).add(follower);
+    if (force) _joinForce.add(episodeId);
+    return follower.future;
+  }
+
+  bool _dropped(int episodeId) => !_reserved.contains(episodeId);
+
+  void _release(int episodeId) {
+    _reserved.remove(episodeId);
+    _joinForce.remove(episodeId);
+    final waiting = _joiners.remove(episodeId);
+    if (waiting == null) return;
+    for (final follower in waiting) {
+      if (!follower.isCompleted) follower.complete();
+    }
+  }
+
+  void _complete(_Job job) {
+    if (!job.done.isCompleted) job.done.complete();
+    for (final follower in job.followers) {
+      if (!follower.isCompleted) follower.complete();
+    }
+    job.followers.clear();
   }
 
   /// Bouton de l’écran de classement. Recalcule les empreintes manquantes,
@@ -151,10 +319,13 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         if (path.isEmpty) continue;
         final stored = await database.fingerprintForEpisode(episode.id);
         final mel = await database.logMelForEpisode(episode.id);
+        final status = await database.fingerprintStatus(episode.id);
         if (stored == null ||
             stored.data.isEmpty ||
             stored.speech == null ||
-            mel == null) {
+            mel == null ||
+            status == 'failed' ||
+            status == 'running') {
           queued = true;
           await enqueueEpisode(episode.id);
         }
@@ -187,6 +358,12 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     try {
       while (_wait.isNotEmpty && ref.mounted) {
         final job = _wait.removeAt(0);
+        if (job.automatic && !_automaticAllowed) {
+          _reserved.remove(job.episodeId);
+          _complete(job);
+          continue;
+        }
+        _running = job;
         state = AudioAnalysisProgress(
           runningEpisodeId: job.episodeId,
           runningPodcastId: job.podcastId,
@@ -200,7 +377,24 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         } catch (error, stack) {
           debugPrint('Analyse audio: $error\n$stack');
         } finally {
-          if (!job.done.isCompleted) job.done.complete();
+          _running = null;
+          if (job.again &&
+              ref.mounted &&
+              (!job.automatic || _automaticAllowed)) {
+            final next = _Job(
+              episodeId: job.episodeId,
+              podcastId: job.podcastId,
+              force: true,
+              automatic: job.automatic,
+            );
+            next.followers.addAll(job.followers);
+            job.followers.clear();
+            _wait.insert(0, next);
+            job.again = false;
+          } else {
+            _reserved.remove(job.episodeId);
+          }
+          _complete(job);
         }
       }
     } finally {
@@ -220,58 +414,145 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   }
 
   Future<void> _analyze(_Job job) async {
+    final done = Completer<void>();
+    unawaited(() async {
+      try {
+        await _analyzeBody(job);
+        if (!done.isCompleted) done.complete();
+      } catch (error, stack) {
+        if (!done.isCompleted) done.completeError(error, stack);
+      }
+    }());
+    var timedOut = false;
+    _budgetTimer?.cancel();
+    _budgetTimer = Timer(_budget, () {
+      if (done.isCompleted) return;
+      timedOut = true;
+      _epoch++;
+      _worker?.kill(priority: Isolate.immediate);
+      done.complete();
+    });
+    try {
+      await done.future;
+    } finally {
+      _budgetTimer?.cancel();
+      _budgetTimer = null;
+    }
+    if (!timedOut) return;
+    debugPrint('Analyse audio: délai dépassé pour l’épisode ${job.episodeId}.');
     if (!ref.mounted) return;
+    await ref.read(databaseProvider).markFingerprintFailed(job.episodeId);
+  }
+
+  Future<void> _analyzeBody(_Job job) async {
+    final epoch = _epoch;
+    bool live() => epoch == _epoch && ref.mounted;
+    if (!live()) return;
     final database = ref.read(databaseProvider);
-    final episode = await database.episodeById(job.episodeId);
-    if (!ref.mounted || episode == null) return;
-    final path = episode.downloadPath?.trim() ?? '';
-    if (path.isEmpty) return;
-    final existing = job.force
-        ? null
-        : await database.fingerprintForEpisode(episode.id);
-    final mel = job.force ? null : await database.logMelForEpisode(episode.id);
-    final needPrint = existing == null || existing.data.isEmpty;
-    final needSpeech = existing == null || existing.speech == null;
-    if (needPrint || mel == null || needSpeech) {
+    try {
+      final episode = await database.episodeById(job.episodeId);
+      if (!live() || episode == null) return;
+      final path = episode.downloadPath?.trim() ?? '';
+      if (path.isEmpty) return;
+      final existing = job.force
+          ? null
+          : await database.fingerprintForEpisode(episode.id);
+      final mel = job.force
+          ? null
+          : await database.logMelForEpisode(episode.id);
+      if (!live()) return;
+      final needPrint = existing == null || existing.data.isEmpty;
+      final needSpeech = existing == null || existing.speech == null;
       final watch = Stopwatch()..start();
-      final analyzed = await _analyzeDecoded(
-        ref.read(pcmDecoderProvider),
-        path,
-      );
-      if (!ref.mounted) return;
-      if (analyzed == null) {
+      if (needPrint || mel == null || needSpeech) {
+        await database.markFingerprintRunning(episode.id);
+        if (!live()) return;
+        final analyzed = await _analyzeDecoded(
+          ref.read(pcmDecoderProvider),
+          path,
+          offUi: _offUi,
+        );
+        if (!live()) return;
+        if (analyzed == null) {
+          await database.markFingerprintFailed(episode.id);
+          debugPrint(
+            'Analyse audio: pas d’empreinte pour l’épisode ${episode.id}.',
+          );
+          return;
+        }
         debugPrint(
-          'Analyse audio: pas d’empreinte pour l’épisode ${episode.id}.',
+          'Analyse audio: épisode ${episode.id}, '
+          '${analyzed.fingerprint.length} valeurs, '
+          '${analyzed.elapsedMs} ms.',
         );
-        return;
+        traceAnalysis(
+          'épisode ${episode.id} empreinte ${analyzed.fingerprintMs} ms, '
+          'log-mel ${analyzed.logMelMs} ms, parole ${analyzed.speechMs} ms, '
+          'rss ${analyzed.peakRss} o, retenu ${analyzed.retainedBytes} o',
+        );
+        if (!live()) return;
+        if (needPrint || job.force || needSpeech) {
+          await database.upsertEpisodeFingerprint(
+            episodeId: episode.id,
+            data: encodeFingerprint(analyzed.fingerprint),
+            hopMicros: chromaprintStoredHopMicros,
+            speech: analyzed.speech,
+          );
+        }
+        if (!live()) return;
+        if (analyzed.logMel != null) {
+          await database.upsertEpisodeLogMel(
+            episodeId: episode.id,
+            data: analyzed.logMel!,
+          );
+        }
+        if (!live()) return;
+        await database.markFingerprintDone(episode.id);
       }
-      debugPrint(
-        'Analyse audio: épisode ${episode.id}, '
-        '${analyzed.fingerprint.length} valeurs, '
-        '${watch.elapsedMilliseconds} ms.',
+      if (!live()) return;
+      final match = Stopwatch()..start();
+      await syncPodcastAnalysis(
+        database,
+        episode.podcastId,
+        focusEpisodeId: episode.id,
+        offUi: _offUi,
       );
-      if (needPrint || job.force || needSpeech) {
-        await database.upsertEpisodeFingerprint(
-          episodeId: episode.id,
-          data: encodeFingerprint(analyzed.fingerprint),
-          hopMicros: chromaprintStoredHopMicros,
-          speech: analyzed.speech,
-        );
-      }
-      if (analyzed.logMel != null) {
-        await database.upsertEpisodeLogMel(
-          episodeId: episode.id,
-          data: analyzed.logMel!,
-        );
+      debugPrint(
+        'Analyse audio: podcast ${episode.podcastId}, '
+        'rapprochement ${match.elapsedMilliseconds} ms '
+        '(décodage compris ${watch.elapsedMilliseconds} ms).',
+      );
+    } finally {
+      if (!live() && ref.mounted) {
+        final status = await database.fingerprintStatus(job.episodeId);
+        if (status == 'running') {
+          await database.markFingerprintFailed(job.episodeId);
+        }
       }
     }
-    if (!ref.mounted) return;
-    final match = Stopwatch()..start();
-    await syncPodcastAnalysis(database, episode.podcastId);
-    debugPrint(
-      'Analyse audio: podcast ${episode.podcastId}, '
-      'rapprochement ${match.elapsedMilliseconds} ms.',
-    );
+  }
+
+  Future<Object?> _offUi(
+    void Function(List<Object?> message) entry,
+    Object? message,
+  ) async {
+    final port = ReceivePort();
+    final isolate = await Isolate.spawn(entry, <Object?>[
+      port.sendPort,
+      message,
+    ], debugName: 'podavio-analysis');
+    _worker = isolate;
+    try {
+      final result = await port.first;
+      if (result is List && result.isNotEmpty && result.first == 'error') {
+        throw StateError('${result[1]}');
+      }
+      return result;
+    } finally {
+      if (identical(_worker, isolate)) _worker = null;
+      isolate.kill(priority: Isolate.immediate);
+      port.close();
+    }
   }
 }
 
@@ -297,9 +578,12 @@ class ChromaprintEpisodeAudioAnalyzer implements EpisodeAudioAnalyzer {
   }
 }
 
-Future<({List<int> fingerprint, Uint8List? logMel, Uint8List speech})?>
-_analyzeDecoded(PcmDecoder decoder, String path) async {
-  final decoded = await decoder.decode(path);
+Future<PcmAnalysis?> _analyzeDecoded(
+  PcmDecoder decoder,
+  String path, {
+  Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
+}) async {
+  final decoded = await decoder.decode(path, budget: nativeDecodeBudget);
   if (decoded == null) return null;
   try {
     if (decoded.sampleRate != chromaprintSampleRate) {
@@ -308,10 +592,83 @@ _analyzeDecoded(PcmDecoder decoder, String path) async {
       );
       return null;
     }
-    return await Isolate.run(() => analyzePcmFileSync(decoded.path));
+    final raw = await (offUi ?? _spawn)(analyzePcmEntry, decoded.path);
+    if (raw is! List || raw.length < 9 || raw.first == 'error') return null;
+    return PcmAnalysis(
+      fingerprint: (raw[0]! as List).cast<int>(),
+      logMel: raw[1] as Uint8List?,
+      speech: raw[2]! as Uint8List,
+      peakRss: raw[3]! as int,
+      retainedBytes: raw[4]! as int,
+      elapsedMs: raw[5]! as int,
+      fingerprintMs: raw[6]! as int,
+      logMelMs: raw[7]! as int,
+      speechMs: raw[8]! as int,
+    );
   } finally {
     await _deleteDecoded(decoded.path);
   }
+}
+
+/// Isolate annulable. Le premier élément `error` signale un échec.
+Future<Object?> _spawn(
+  void Function(List<Object?> message) entry,
+  Object? message,
+) async {
+  final port = ReceivePort();
+  final isolate = await Isolate.spawn(entry, <Object?>[
+    port.sendPort,
+    message,
+  ], debugName: 'podavio-analysis');
+  try {
+    return await port.first;
+  } finally {
+    isolate.kill(priority: Isolate.immediate);
+    port.close();
+  }
+}
+
+void analyzePcmEntry(List<Object?> args) {
+  final send = args[0]! as SendPort;
+  try {
+    final result = analyzePcmFileSync(args[1]! as String);
+    send.send(<Object?>[
+      result.fingerprint,
+      result.logMel,
+      result.speech,
+      result.peakRss,
+      result.retainedBytes,
+      result.elapsedMs,
+      result.fingerprintMs,
+      result.logMelMs,
+      result.speechMs,
+    ]);
+  } catch (error, stack) {
+    send.send(<Object?>['error', '$error', '$stack']);
+  }
+}
+
+void planAnalysisEntry(List<Object?> args) {
+  final send = args[0]! as SendPort;
+  try {
+    send.send(planAnalysisMessage(Map<String, Object?>.from(args[1]! as Map)));
+  } catch (error, stack) {
+    send.send(<Object?>['error', '$error', '$stack']);
+  }
+}
+
+void planLogMelEntry(List<Object?> args) {
+  final send = args[0]! as SendPort;
+  try {
+    send.send(planLogMelMessage(Map<String, Object?>.from(args[1]! as Map)));
+  } catch (error, stack) {
+    send.send(<Object?>['error', '$error', '$stack']);
+  }
+}
+
+void traceAnalysis(String message) {
+  if (!audioAnalysisTrace) return;
+  debugPrint('Analyse audio: $message');
 }
 
 Future<void> _deleteDecoded(String path) async {
@@ -326,49 +683,68 @@ Future<void> _deleteDecoded(String path) async {
 ///
 /// Un second appel avec les mêmes empreintes ne duplique pas les lignes
 /// et ne revient pas sur un avis déjà posé.
-Future<void> syncPodcastAnalysis(AppDatabase database, int podcastId) async {
+Future<void> syncPodcastAnalysis(
+  AppDatabase database,
+  int podcastId, {
+  int? focusEpisodeId,
+  Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
+}) async {
   final stored = await database.fingerprintedDownloads(podcastId);
-  final episodes = <FingerprintEpisode>[];
+  final episodes = <Object?>[];
   for (final row in stored) {
-    final values = decodeFingerprint(row.fingerprint.data);
-    if (values.length < 8) continue;
-    final fromFingerprint = _indexMs(values.length, row.fingerprint.hopMicros);
+    final bytes = row.fingerprint.data;
+    if (bytes.length < 32) continue;
+    final count = bytes.lengthInBytes ~/ 4;
+    final fromFingerprint = _indexMs(count, row.fingerprint.hopMicros);
     final fromRss = (row.episode.durationSeconds ?? 0) * 1000;
     final durationMs = fromFingerprint > fromRss ? fromFingerprint : fromRss;
     final preRoll = approximateInsertedAdMs(
       rssDurationMs: fromRss > 0 ? fromRss : null,
       fileDurationMs: fromFingerprint,
     );
-    episodes.add(
-      FingerprintEpisode(
-        episodeId: row.episode.id,
-        values: values,
-        hopMicros: row.fingerprint.hopMicros,
-        durationMs: durationMs,
-        preRollEndMs: preRoll,
-        speech: row.fingerprint.speech,
-      ),
-    );
+    episodes.add(<Object?>[
+      row.episode.id,
+      row.fingerprint.hopMicros,
+      durationMs,
+      preRoll,
+      bytes,
+      row.fingerprint.speech,
+    ]);
   }
-  final known = <KnownTemplate>[];
+  final templates = <Object?>[];
   final reviews = await database.templateReviews(podcastId);
   for (final template in await database.listSegmentTemplates(podcastId)) {
-    known.add(
-      KnownTemplate(
-        id: template.id,
-        kind: template.kind,
-        fingerprint: decodeFingerprint(template.fingerprint),
-        durationMs: template.durationMs,
-        confirmed: reviews[template.id],
-        confidence: template.confidence,
-      ),
-    );
+    templates.add(<Object?>[
+      template.id,
+      template.kind.name,
+      reviews[template.id],
+      template.durationMs,
+      template.fingerprint,
+      template.confidence,
+    ]);
   }
-  final message = encodeAnalysisInput(episodes: episodes, templates: known);
-  final raw = await Isolate.run(() => planAnalysisMessage(message));
+  final message = <String, Object?>{
+    'episodes': episodes,
+    'templates': templates,
+    'focus': focusEpisodeId,
+  };
+  final raw = offUi == null
+      ? await _runPlanAnalysis(message)
+      : await offUi(planAnalysisEntry, message);
+  if (raw is! Map) return;
   final plan = decodeAnalysisPlan(Map<Object?, Object?>.from(raw));
   await applyAnalysisPlan(database, podcastId, plan);
-  await applyLogMelFindings(database, podcastId);
+  await applyLogMelFindings(database, podcastId, offUi: offUi);
+}
+
+/// Isolate.run ne doit pas fermer sur la base : le contexte capturerait
+/// la connexion SQLite, qui ne traverse pas un isolate.
+Future<Object?> _runPlanAnalysis(Map<String, Object?> message) {
+  return Isolate.run(() => planAnalysisMessage(message));
+}
+
+Future<Object?> _runPlanLogMel(Map<String, Object?> message) {
+  return Isolate.run(() => planLogMelMessage(message));
 }
 
 int _indexMs(int index, int hopMicros) {
@@ -504,201 +880,192 @@ Future<void> _recountTemplates(AppDatabase database, int podcastId) async {
 /// Gabarits log-mel, jingles courts et virgules de réseau.
 ///
 /// Le PCM a déjà été rééchantillonné pendant l’empreinte.
-Future<void> applyLogMelFindings(AppDatabase database, int podcastId) async {
+Future<void> applyLogMelFindings(
+  AppDatabase database,
+  int podcastId, {
+  Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
+}) async {
   final stored = await database.logMelForPodcast(podcastId);
   if (stored.isEmpty) return;
-  final episodes = <EpisodeMel>[];
-  for (final row in stored) {
+  final ranked = [...stored]
+    ..sort((a, b) => b.episodeId.compareTo(a.episodeId));
+  final episodeRows = <Object?>[];
+  for (final row in ranked.take(logMelCompareEpisodeCap)) {
     final episode = await database.episodeById(row.episodeId);
     if (episode == null) continue;
-    episodes.add(
-      EpisodeMel(
-        episodeId: row.episodeId,
-        podcastId: podcastId,
-        clip: _clip(row.data),
-        durationMs: (episode.durationSeconds ?? 0) * 1000,
-        preRollEndMs: null,
-      ),
-    );
+    episodeRows.add(<Object?>[
+      row.episodeId,
+      podcastId,
+      row.data,
+      (episode.durationSeconds ?? 0) * 1000,
+      null,
+    ]);
   }
-  if (episodes.isEmpty) return;
+  if (episodeRows.isEmpty) return;
   final templates = await database.listSegmentTemplates(podcastId);
   final reviews = await database.templateReviews(podcastId);
   final bundled = await loadBundledNetworkStings();
-  final learned = await database.listLearnedNetworkStings();
-  final stings = [
-    ...bundled,
-    for (final sting in learned)
-      NamedLogMel(
-        name: sting.name ?? 'Network sting',
-        clip: _clip(sting.logMel),
-      ),
-  ];
-  final adReview = _adConfirmation(reviews, templates);
+  final learnedRows = await database.listLearnedNetworkStings();
+  final segments = await database.fingerprintSegmentsForPodcast(podcastId);
+  final boundaries = [...await database.dynamicAdBoundaries()]
+    ..sort((a, b) => b.episodeId.compareTo(a.episodeId));
+  final message = <String, Object?>{
+    'episodes': episodeRows,
+    'templates': [
+      for (final template in templates) <Object?>[template.id, template.logMel],
+    ],
+    'stings': [
+      for (final sting in bundled)
+        <Object?>[
+          sting.name,
+          encodeLogMel(sting.clip.frames.cast<List<double>>()),
+        ],
+      for (final sting in learnedRows)
+        <Object?>[sting.name ?? 'Network sting', sting.logMel],
+    ],
+    'segments': [
+      for (final segment in segments)
+        <Object?>[
+          segment.id,
+          segment.episodeId,
+          segment.startMs,
+          segment.endMs,
+          segment.matches,
+          segment.templateId,
+        ],
+    ],
+    'boundaries': [
+      for (final row in boundaries.take(24))
+        <Object?>[row.id, row.podcastId, row.episodeId, row.data, row.endMs],
+    ],
+    'learned': [
+      for (final sting in learnedRows) <Object?>[sting.id, sting.logMel],
+    ],
+  };
+  final watch = Stopwatch()..start();
+  final raw = offUi == null
+      ? await _runPlanLogMel(message)
+      : await offUi(planLogMelEntry, message);
+  traceAnalysis('log-mel ${watch.elapsedMilliseconds} ms');
+  if (raw is! Map) return;
+  await database.transaction(() async {
+    await _applyLogMelPlan(
+      database,
+      podcastId,
+      Map<Object?, Object?>.from(raw),
+      reviews,
+      _adConfirmation(reviews, templates),
+    );
+  });
+}
 
-  final jingles = discoverShortJingles(episodes);
-  for (final jingle in jingles) {
-    final bytes = encodeLogMel(jingle.clip.frames.cast<List<double>>());
-    final existingId = _knownLogMel(jingle.clip, templates);
+Future<void> _applyLogMelPlan(
+  AppDatabase database,
+  int podcastId,
+  Map<Object?, Object?> plan,
+  Map<int, bool?> reviews,
+  bool? adReview,
+) async {
+  for (final raw in plan['jingles'] as List? ?? const []) {
+    final jingle = Map<Object?, Object?>.from(raw as Map);
+    final bytes = _asBytes(jingle['bytes']);
+    if (bytes == null || bytes.isEmpty) continue;
+    final hits = jingle['hits'] as List? ?? const [];
+    final existingId = jingle['templateId'] as int?;
     final templateId =
         existingId ??
         await database.insertSegmentTemplate(
           podcastId: podcastId,
           kind: SkipSegmentKind.jingle,
           logMel: bytes,
-          durationMs: jingle.clip.durationMs,
-          occurrences: jingle.hits.length,
+          durationMs: jingle['durationMs']! as int,
+          occurrences: hits.length,
         );
-    if (existingId != null &&
-        templates.every(
-          (template) => template.id != existingId || template.logMel == null,
-        )) {
+    if (existingId != null && jingle['fillLogMel'] == true) {
       await database.setTemplateLogMel(existingId, bytes);
     }
     final confirmed = reviews[templateId];
-    for (final hit in jingle.hits) {
+    for (final rawHit in hits) {
+      final hit = Map<Object?, Object?>.from(rawHit as Map);
       await _upsertLoose(
         database,
-        episodeId: hit.episodeId,
-        startMs: hit.startMs,
-        endMs: hit.endMs,
+        episodeId: hit['episodeId']! as int,
+        startMs: hit['startMs']! as int,
+        endMs: hit['endMs']! as int,
         kind: SkipSegmentKind.jingle,
         source: SkipSegmentSource.fingerprint,
-        matches: jingle.hits.length,
+        matches: hits.length,
         confirmed: confirmed,
         templateId: templateId,
       );
     }
   }
 
-  final fingerprintSegments = await database.fingerprintSegmentsForPodcast(
-    podcastId,
-  );
-  for (final segment in fingerprintSegments) {
-    if (segment.endMs - segment.startMs < jingleMinDurationMs) continue;
-    if (segment.startMs > logMelSearchWindowMs) continue;
-    final episode = episodes
-        .where((item) => item.episodeId == segment.episodeId)
-        .firstOrNull;
-    if (episode == null) continue;
-    final refined = refineLogMelBoundary(
-      episode: episode.clip,
-      roughStartMs: segment.startMs,
-      roughEndMs: segment.endMs,
-    );
-    if (refined == null) continue;
+  for (final raw in plan['refinements'] as List? ?? const []) {
+    final item = Map<Object?, Object?>.from(raw as Map);
+    final templateId = item['templateId'] as int?;
     await database.updateFingerprintSegment(
-      id: segment.id,
-      startMs: refined.startMs,
-      endMs: refined.endMs,
-      matches: segment.matches,
-      templateId: segment.templateId,
+      id: item['segmentId']! as int,
+      startMs: item['startMs']! as int,
+      endMs: item['endMs']! as int,
+      matches: item['matches']! as int,
+      templateId: templateId,
     );
-    final templateId = segment.templateId;
-    if (templateId == null) continue;
-    final template = templates
-        .where((item) => item.id == templateId)
-        .firstOrNull;
-    if (template != null && template.logMel == null) {
-      final slice = sliceLogMel(episode.clip, refined.startMs, refined.endMs);
-      if (slice.frames.length >= 8) {
-        await database.setTemplateLogMel(
-          templateId,
-          encodeLogMel(slice.frames.cast<List<double>>()),
-        );
-      }
+    final bytes = _asBytes(item['templateBytes']);
+    if (templateId != null && bytes != null && bytes.isNotEmpty) {
+      await database.setTemplateLogMel(templateId, bytes);
     }
   }
 
   final network = await database.networkSegmentsForPodcast(podcastId);
   final touched = <int>{};
-  for (final episode in episodes) {
-    for (final span in stingDelimitedSpans(episode: episode, stings: stings)) {
-      final id = await _upsertLoose(
-        database,
-        episodeId: span.episodeId,
-        startMs: span.startMs,
-        endMs: span.endMs,
-        kind: SkipSegmentKind.ad,
-        source: SkipSegmentSource.network,
-        matches: 1,
-        confirmed: adReview,
-        templateId: null,
-        existing: network,
-      );
-      if (id != null) touched.add(id);
-    }
+  for (final raw in plan['spans'] as List? ?? const []) {
+    final span = Map<Object?, Object?>.from(raw as Map);
+    final id = await _upsertLoose(
+      database,
+      episodeId: span['episodeId']! as int,
+      startMs: span['startMs']! as int,
+      endMs: span['endMs']! as int,
+      kind: SkipSegmentKind.ad,
+      source: SkipSegmentSource.network,
+      matches: 1,
+      confirmed: adReview,
+      templateId: null,
+      existing: network,
+    );
+    if (id != null) touched.add(id);
   }
   for (final row in network) {
     if (touched.contains(row.id) || row.confirmed == true) continue;
     await database.deleteSkipSegment(row.id);
   }
 
-  await _refreshLearnedStings(database);
-}
-
-Future<void> _refreshLearnedStings(AppDatabase database) async {
-  final rows = await database.dynamicAdBoundaries();
-  final slices = <EpisodeMelBoundary>[];
-  for (final row in rows) {
-    final clip = sliceLogMel(_clip(row.data), row.endMs - 1300, row.endMs);
-    if (clip.frames.length < 8) continue;
-    slices.add(
-      EpisodeMelBoundary(
-        podcastId: row.podcastId,
-        episodeId: row.episodeId,
-        clip: clip,
-      ),
-    );
-  }
-  final learned = learnNetworkStings(slices);
-  final existing = await database.listLearnedNetworkStings();
-  for (final sting in learned) {
-    LearnedNetworkSting? prior;
-    for (final row in existing) {
-      final score = searchLogMel(
-        sting.clip,
-        _clip(row.logMel),
-        threshold: networkStingLearnThreshold,
-      );
-      if (score.isNotEmpty) {
-        prior = row;
-        break;
-      }
-    }
+  for (final raw in plan['learned'] as List? ?? const []) {
+    final sting = Map<Object?, Object?>.from(raw as Map);
+    final prior = sting['priorId'] as int?;
     if (prior != null) {
       await database.touchLearnedNetworkSting(
-        prior.id,
-        episodeCount: sting.episodes,
-        podcastCount: sting.podcasts,
+        prior,
+        episodeCount: sting['episodes']! as int,
+        podcastCount: sting['podcasts']! as int,
       );
       continue;
     }
+    final bytes = _asBytes(sting['bytes']);
+    if (bytes == null || bytes.isEmpty) continue;
     await database.insertLearnedNetworkSting(
-      logMel: encodeLogMel(sting.clip.frames.cast<List<double>>()),
-      durationMs: sting.clip.durationMs,
-      episodeCount: sting.episodes,
-      podcastCount: sting.podcasts,
+      logMel: bytes,
+      durationMs: sting['durationMs']! as int,
+      episodeCount: sting['episodes']! as int,
+      podcastCount: sting['podcasts']! as int,
     );
   }
 }
 
-LogMelClip _clip(Uint8List data) {
-  return LogMelClip([
-    for (final frame in decodeLogMel(data)) Float64List.fromList(frame),
-  ]);
-}
-
-int? _knownLogMel(LogMelClip clip, List<SegmentTemplate> templates) {
-  for (final template in templates) {
-    final bytes = template.logMel;
-    if (bytes == null || bytes.isEmpty) continue;
-    final known = _clip(bytes);
-    if (searchLogMel(clip, known, threshold: 0.95).isNotEmpty ||
-        searchLogMel(known, clip, threshold: 0.95).isNotEmpty) {
-      return template.id;
-    }
-  }
+Uint8List? _asBytes(Object? raw) {
+  if (raw == null) return null;
+  if (raw is Uint8List) return raw;
+  if (raw is List) return Uint8List.fromList(raw.cast<int>());
   return null;
 }
 

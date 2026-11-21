@@ -12,6 +12,8 @@ import 'package:podavio/data/models.dart';
 import 'package:podavio/data/pcm_decoder.dart';
 import 'package:podavio/data/providers.dart';
 import 'package:podavio/data/skip_segments.dart';
+import 'package:podavio/settings/settings_controller.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   test(
@@ -205,6 +207,138 @@ void main() {
       expect(container.read(audioAnalysisProvider).pendingFor(podcastId), 0);
     },
   );
+
+  test('enqueueing the same episode twice decodes it once', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final podcastId = (await database.saveFeed(
+      _draft([_episodeDraft('a', 'Un')]),
+    )).podcastId;
+    final episode = (await database.watchEpisodes(podcastId: podcastId).first)
+        .single
+        .episode;
+    await database.setDownloadPath(episode.id, '/tmp/a.pcm');
+    final pcm = Int16List(chromaprintSampleRate);
+    final decoder = _CountingDecoder({
+      '/tmp/a.pcm': pcm,
+    }, delay: const Duration(milliseconds: 40));
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        pcmDecoderProvider.overrideWithValue(decoder),
+      ],
+    );
+    addTearDown(container.dispose);
+    final notifier = container.read(audioAnalysisProvider.notifier);
+    await Future.wait([
+      notifier.enqueueEpisode(episode.id),
+      notifier.enqueueEpisode(episode.id),
+    ]);
+    expect(decoder.calls, 1);
+  });
+
+  test(
+    'a hung decode is marked failed and is not resumed automatically',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final podcastId = (await database.saveFeed(
+        _draft([_episodeDraft('a', 'Un'), _episodeDraft('b', 'Deux')]),
+      )).podcastId;
+      final episodes = await database.watchEpisodes(podcastId: podcastId).first;
+      final first = episodes[0].episode;
+      final second = episodes[1].episode;
+      await database.setDownloadPath(first.id, '/tmp/a.pcm');
+      await database.setDownloadPath(second.id, '/tmp/b.pcm');
+      final decoder = _CountingDecoder(
+        {
+          '/tmp/a.pcm': Int16List(chromaprintSampleRate),
+          '/tmp/b.pcm': Int16List(chromaprintSampleRate),
+        },
+        hang: {'/tmp/a.pcm'},
+      );
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          pcmDecoderProvider.overrideWithValue(decoder),
+          audioAnalysisBudgetProvider.overrideWithValue(
+            const Duration(milliseconds: 30),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final notifier = container.read(audioAnalysisProvider.notifier);
+      await notifier.enqueueEpisode(first.id);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(await database.fingerprintStatus(first.id), 'failed');
+      final before = decoder.callsFor('/tmp/a.pcm');
+      await notifier.enqueueMissing();
+      expect(decoder.callsFor('/tmp/a.pcm'), before);
+      await notifier.enqueueEpisode(second.id);
+      expect(await database.fingerprintForEpisode(second.id), isNotNull);
+    },
+  );
+
+  test(
+    'an interrupted analysis is failed at startup and not retried',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final podcastId = (await database.saveFeed(
+        _draft([_episodeDraft('a', 'Un')]),
+      )).podcastId;
+      final episode = (await database.watchEpisodes(podcastId: podcastId).first)
+          .single
+          .episode;
+      await database.setDownloadPath(episode.id, '/tmp/a.pcm');
+      await database.markFingerprintRunning(episode.id);
+      final decoder = _CountingDecoder({
+        '/tmp/a.pcm': Int16List(chromaprintSampleRate),
+      });
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          pcmDecoderProvider.overrideWithValue(decoder),
+        ],
+      );
+      addTearDown(container.dispose);
+      final notifier = container.read(audioAnalysisProvider.notifier);
+      await notifier.recoverInterrupted();
+      expect(await database.fingerprintStatus(episode.id), 'failed');
+      await notifier.enqueueMissing();
+      expect(decoder.calls, 0);
+    },
+  );
+
+  test('automatic analysis stays idle when the setting is off', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({'automaticAudioAnalysis': false});
+    final preferences = await SharedPreferences.getInstance();
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final podcastId = (await database.saveFeed(
+      _draft([_episodeDraft('a', 'Un')]),
+    )).podcastId;
+    final episode = (await database.watchEpisodes(podcastId: podcastId).first)
+        .single
+        .episode;
+    await database.setDownloadPath(episode.id, '/tmp/a.pcm');
+    final decoder = _CountingDecoder({
+      '/tmp/a.pcm': Int16List(chromaprintSampleRate),
+    });
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        pcmDecoderProvider.overrideWithValue(decoder),
+        sharedPreferencesProvider.overrideWithValue(preferences),
+      ],
+    );
+    addTearDown(container.dispose);
+    final notifier = container.read(audioAnalysisProvider.notifier);
+    expect(container.read(settingsProvider).automaticAudioAnalysis, isFalse);
+    await notifier.enqueueMissing();
+    expect(decoder.calls, 0);
+  });
 }
 
 Future<void> _ready(
@@ -309,6 +443,38 @@ Int16List _mix(Int16List bed, Int16List ad, int at) {
   return out;
 }
 
+class _CountingDecoder extends PcmDecoder {
+  _CountingDecoder(
+    this.files, {
+    this.delay = Duration.zero,
+    this.hang = const {},
+  });
+
+  final Map<String, Int16List> files;
+  final Duration delay;
+  final Set<String> hang;
+  var calls = 0;
+  final byPath = <String, int>{};
+
+  int callsFor(String path) => byPath[path] ?? 0;
+
+  @override
+  Future<DecodedPcm?> decode(
+    String path, {
+    int sampleRate = chromaprintSampleRate,
+    Duration? budget,
+  }) async {
+    calls++;
+    byPath[path] = (byPath[path] ?? 0) + 1;
+    if (hang.contains(path)) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      return null;
+    }
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
+    return _MapDecoder(files).decode(path, sampleRate: sampleRate);
+  }
+}
+
 class _MapDecoder extends PcmDecoder {
   _MapDecoder(this.files);
 
@@ -318,6 +484,7 @@ class _MapDecoder extends PcmDecoder {
   Future<DecodedPcm?> decode(
     String path, {
     int sampleRate = chromaprintSampleRate,
+    Duration? budget,
   }) async {
     final samples = files[path];
     if (samples == null) return null;

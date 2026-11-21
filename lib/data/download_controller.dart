@@ -373,7 +373,7 @@ class DownloadProgressNotifier extends Notifier<Map<int, double>> {
       if (!ref.mounted) return;
       await ref
           .read(audioAnalysisProvider.notifier)
-          .enqueueEpisode(episodeId, force: true);
+          .enqueueEpisode(episodeId, force: true, automatic: true);
     } catch (error, stack) {
       debugPrint('Analyse audio: $error\n$stack');
     }

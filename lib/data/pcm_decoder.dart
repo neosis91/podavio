@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -30,6 +32,7 @@ abstract class PcmDecoder {
   Future<DecodedPcm?> decode(
     String path, {
     int sampleRate = chromaprintSampleRate,
+    Duration? budget,
   });
 }
 
@@ -44,6 +47,7 @@ class PlatformPcmDecoder extends PcmDecoder {
   Future<DecodedPcm?> decode(
     String path, {
     int sampleRate = chromaprintSampleRate,
+    Duration? budget,
   }) async {
     final stored = path.trim();
     if (stored.isEmpty) return null;
@@ -51,32 +55,46 @@ class PlatformPcmDecoder extends PcmDecoder {
       debugPrint('Décodage audio: URI content non prise en charge ici.');
       return null;
     }
+    final limit = budget ?? const Duration(minutes: 6);
     if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
-      return _invoke(stored, sampleRate);
+      return _invoke(stored, sampleRate, limit);
     }
     if (Platform.isLinux || Platform.isWindows) {
-      return _ffmpeg(stored, sampleRate);
+      return _ffmpeg(stored, sampleRate, limit);
     }
     debugPrint('Décodage audio non pris en charge sur cette plateforme.');
     return null;
   }
 
-  Future<DecodedPcm?> _invoke(String path, int sampleRate) async {
+  Future<DecodedPcm?> _invoke(
+    String path,
+    int sampleRate,
+    Duration budget,
+  ) async {
     try {
-      final raw = await _channel.invokeMethod<Object?>('decodeToPcm', {
-        'path': path,
-        'sampleRate': sampleRate,
-      });
+      final raw = await _channel
+          .invokeMethod<Object?>('decodeToPcm', {
+            'path': path,
+            'sampleRate': sampleRate,
+            'deadlineMs': budget.inMilliseconds,
+          })
+          .timeout(budget + const Duration(seconds: 5));
       return _fromMap(raw);
     } on MissingPluginException {
       debugPrint('Décodage audio: canal natif absent.');
     } on PlatformException catch (error) {
       debugPrint('Décodage audio: ${error.message}');
+    } on TimeoutException {
+      debugPrint('Décodage audio: délai dépassé.');
     }
     return null;
   }
 
-  Future<DecodedPcm?> _ffmpeg(String path, int sampleRate) async {
+  Future<DecodedPcm?> _ffmpeg(
+    String path,
+    int sampleRate,
+    Duration budget,
+  ) async {
     if (path.startsWith('content:')) return null;
     final file = File(path);
     if (!await file.exists()) {
@@ -95,7 +113,7 @@ class PlatformPcmDecoder extends PcmDecoder {
     final out = File(
       '${Directory.systemTemp.path}${Platform.pathSeparator}podavio-pcm-${DateTime.now().microsecondsSinceEpoch}.pcm',
     );
-    final result = await Process.run(binary, [
+    final process = await Process.start(binary, [
       '-y',
       '-v',
       'error',
@@ -111,9 +129,14 @@ class PlatformPcmDecoder extends PcmDecoder {
       'pcm_s16le',
       out.path,
     ]);
-    if (result.exitCode != 0 || !await out.exists()) {
+    unawaited(process.stdout.drain());
+    final stderr = process.stderr.transform(utf8.decoder).join();
+    final timer = Timer(budget, () => process.kill(ProcessSignal.sigkill));
+    final exitCode = await process.exitCode;
+    timer.cancel();
+    final message = (await stderr).trim();
+    if (exitCode != 0 || !await out.exists()) {
       if (await out.exists()) await out.delete();
-      final message = '${result.stderr}'.trim();
       debugPrint(
         'Décodage audio: ffmpeg a échoué${message.isEmpty ? '' : ' ($message)'}.',
       );
