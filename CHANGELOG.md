@@ -15,6 +15,9 @@ dans son titre, ou l’étiquette `skip-changelog`.
 
 - Short jingles in downloaded episodes are matched with a log-mel template, and a repeated network sting can mark the ad block around it. The classification screen labels that block as a network sting.
 
+- Repeated music inside a single downloaded episode, such as a refrain or a background bed, is no longer listed as a skip. A spoken repeat in that episode stays for review, and a low score stays behind Show uncertain passages. A jingle or outro shared by several episodes is still detected when it is musical.
+
+
 
 ## 2026.11.12
 
