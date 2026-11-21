@@ -60,6 +60,55 @@ void main() {
     );
   });
 
+  test('a detected portion grows out to the silences around it', () {
+    const at = 200;
+    final motif = _motif(80, 11);
+    FingerprintEpisode episode(int id, int atIndex) {
+      final start = _ms(atIndex);
+      final end = _ms(atIndex + motif.length);
+      var state = id * 97;
+      final values = List<int>.generate(1600, (_) {
+        state = (1664525 * state + 1013904223) & 0x7fffffff;
+        return state == 0 ? 1 : state;
+      });
+      for (var i = 0; i < motif.length; i++) {
+        values[atIndex + i] = motif[i];
+      }
+      final envelope = _envelope(
+        outside: 80,
+        adStart: start,
+        adEnd: end,
+        totalMs: 400000,
+      );
+      void quiet(int from, int to) {
+        for (var t = from; t < to; t += envelopeHopMs) {
+          final index = t ~/ envelopeHopMs;
+          if (index >= 0 && index < envelope.length) envelope[index] = 2;
+        }
+      }
+
+      quiet(start - 2600, start - 2000);
+      quiet(end + 1800, end + 2500);
+      return FingerprintEpisode(
+        episodeId: id,
+        values: values,
+        hopMicros: chromaprintStoredHopMicros,
+        durationMs: 400000,
+        envelope: envelope,
+      );
+    }
+
+    final found = discoverPatterns([episode(1, at), episode(2, at + 300)]);
+    expect(found, hasLength(1));
+    for (final hit in found.single.occurrences) {
+      final atIndex = hit.episodeId == 1 ? at : at + 300;
+      final start = _ms(atIndex);
+      final end = _ms(atIndex + motif.length);
+      expect(hit.startMs, inInclusiveRange(start - 2700, start - 1900));
+      expect(hit.endMs, inInclusiveRange(end + 1700, end + 2600));
+    }
+  });
+
   test('log-mel edges snap a wide window onto the chirp', () {
     final chirp = _chirp(milliseconds: 4000, f0: 320, f1: 1600);
     const atA = 5000;
@@ -101,43 +150,61 @@ void main() {
     expect(extendEndToSilence(loud, 10000), 10000);
   });
 
-  test('the same clip just after three ads becomes a sting', () {
-    final found = findPostAdStings(
+  test('a portion starts and ends on a held silence', () {
+    final envelope = Uint8List(40000 ~/ envelopeHopMs);
+    for (var i = 0; i < envelope.length; i++) {
+      envelope[i] = 80;
+    }
+    void quiet(int from, int to) {
+      for (var t = from; t < to; t += envelopeHopMs) {
+        envelope[t ~/ envelopeHopMs] = 2;
+      }
+    }
+
+    quiet(7800, 8400);
+    quiet(10200, 10300);
+    quiet(16800, 17600);
+    expect(extendStartToSilence(envelope, 10000), 8400);
+    expect(extendEndToSilence(envelope, 15000), 16800);
+    expect(extendStartToSilence(envelope, 8400), 8400);
+    expect(extendEndToSilence(envelope, 16800), 16800);
+
+    final snapped = snapPortionToSilence(envelope, 10000, 15000);
+    expect(snapped.startMs, 8400);
+    expect(snapped.endMs, 16800);
+    final atEnd = snapPortionToSilence(
+      envelope,
+      10000,
+      40000,
+      durationMs: 40000,
+    );
+    expect(atEnd.endMs, 40000);
+    expect(atEnd.startMs, 8400);
+  });
+
+  test('the same short clip at different times is a sting', () {
+    final found = findContentStings(
       episodes: [
-        for (final row in <(int, int, int)>[
-          (1, 30000, 1),
-          (2, 42000, 9),
-          (3, 18000, 4),
-        ])
+        for (final row in <(int, int, int)>[(1, 30000, 1), (2, 42000, 9)])
           EpisodeMel(
             episodeId: row.$1,
             podcastId: 1,
-            clip: _bedMel(stingAt: row.$2, salt: row.$3),
+            clip: _bedMel(stingAt: row.$2, salt: row.$3, bedMul: 3 + row.$3),
             durationMs: 60000,
           ),
       ],
-      adEnds: [
-        (episodeId: 1, endMs: 30000),
-        (episodeId: 2, endMs: 42000),
-        (episodeId: 3, endMs: 18000),
-      ],
     );
-    expect(found.map((hit) => hit.episodeId).toSet(), {1, 2, 3});
+    expect(found.map((hit) => hit.episodeId).toSet(), {1, 2});
     expect(
-      found.every(
-        (hit) =>
-            hit.startMs ==
-            (hit.episodeId == 1
-                ? 30000
-                : hit.episodeId == 2
-                ? 42000
-                : 18000),
-      ),
+      found.every((hit) {
+        final at = hit.episodeId == 1 ? 30000 : 42000;
+        return (hit.startMs - at).abs() <= 80 &&
+            hit.endMs - hit.startMs >= 2000;
+      }),
       isTrue,
     );
-    expect(found.every((hit) => hit.endMs - hit.startMs >= 2000), isTrue);
 
-    final unlike = findPostAdStings(
+    final third = findContentStings(
       episodes: [
         for (final row in <(int, int, int)>[
           (1, 30000, 1),
@@ -147,20 +214,54 @@ void main() {
           EpisodeMel(
             episodeId: row.$1,
             podcastId: 1,
-            clip: _bedMel(stingAt: row.$2, salt: row.$3, stingSalt: row.$1 + 2),
+            clip: _bedMel(stingAt: row.$2, salt: row.$3, bedMul: 3 + row.$3),
             durationMs: 60000,
           ),
       ],
-      adEnds: [
-        (episodeId: 1, endMs: 30000),
-        (episodeId: 2, endMs: 42000),
-        (episodeId: 3, endMs: 18000),
+    );
+    expect(third.map((hit) => hit.episodeId).toSet(), {1, 2, 3});
+
+    final unlike = findContentStings(
+      episodes: [
+        for (final row in <(int, int, int)>[
+          (1, 30000, 1),
+          (2, 42000, 9),
+          (3, 18000, 4),
+        ])
+          EpisodeMel(
+            episodeId: row.$1,
+            podcastId: 1,
+            clip: _bedMel(
+              stingAt: row.$2,
+              salt: row.$3,
+              stingSalt: row.$1 + 2,
+              bedMul: 3 + row.$3,
+            ),
+            durationMs: 60000,
+          ),
       ],
     );
     expect(unlike, isEmpty);
+
+    final insideAd = findContentStings(
+      episodes: [
+        for (final row in <(int, int)>[(1, 30000), (2, 42000)])
+          EpisodeMel(
+            episodeId: row.$1,
+            podcastId: 1,
+            clip: _bedMel(stingAt: row.$2, salt: row.$1, bedMul: 3 + row.$1),
+            durationMs: 60000,
+          ),
+      ],
+      covered: [
+        (episodeId: 1, startMs: 20000, endMs: 40000),
+        (episodeId: 2, startMs: 32000, endMs: 52000),
+      ],
+    );
+    expect(insideAd, isEmpty);
   });
 
-  test('a flat spectrum after two ads is not a sting', () {
+  test('a flat spectrum is not a sting', () {
     LogMelClip flat() {
       return LogMelClip([
         for (var i = 0; i < 6000; i++)
@@ -168,12 +269,11 @@ void main() {
       ]);
     }
 
-    final found = findPostAdStings(
+    final found = findContentStings(
       episodes: [
         EpisodeMel(episodeId: 1, podcastId: 1, clip: flat(), durationMs: 60000),
         EpisodeMel(episodeId: 2, podcastId: 1, clip: flat(), durationMs: 60000),
       ],
-      adEnds: [(episodeId: 1, endMs: 30000), (episodeId: 2, endMs: 42000)],
     );
     expect(found, isEmpty);
   });
@@ -252,17 +352,19 @@ LogMelClip _bedMel({
   required int stingAt,
   required int salt,
   int stingSalt = 0,
+  int bedMul = 3,
 }) {
   final frames = <Float64List>[];
   for (var ms = 0; ms < 60000; ms += logMelHopMs) {
     final row = Float64List(logMelBandCount);
-    final inSting = ms >= stingAt && ms < stingAt + postAdStingMs;
+    final inSting = ms >= stingAt && ms < stingAt + contentStingMs;
     final step = inSting ? (ms - stingAt) ~/ logMelHopMs : ms ~/ logMelHopMs;
     // stingSalt 0 is the shared sting. Another salt is a different melody,
-    // not a rotation of the same one-hot sequence.
+    // not a rotation of the same one-hot sequence. bedMul does the same
+    // for the surrounding audio, so a time shift cannot line the beds up.
     final band = inSting
-        ? (stingSalt == 0 ? step : step * stingSalt + 1) % logMelBandCount
-        : (step * 3 + salt + 7) % logMelBandCount;
+        ? (stingSalt == 0 ? step : step * stingSalt + 19) % logMelBandCount
+        : (step * bedMul + salt) % logMelBandCount;
     row[band] = 1;
     frames.add(row);
   }

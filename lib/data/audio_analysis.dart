@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'analysis_pace.dart';
 import 'app_database.dart';
 import 'chromaprint.dart';
+import 'envelope.dart';
 import 'episode_audio_analyzer.dart';
 import 'log_mel.dart';
 import 'log_mel_match.dart';
@@ -1196,6 +1197,15 @@ Future<void> _applyLogMelPlan(
   Map<int, bool?> reviews,
   bool? adReview,
 ) async {
+  final envelopes = await database.fingerprintEnvelopes(podcastId);
+  ({int startMs, int endMs}) edges(int episodeId, int startMs, int endMs) {
+    final envelope = envelopes[episodeId];
+    if (envelope == null || envelope.isEmpty) {
+      return (startMs: startMs, endMs: endMs);
+    }
+    return snapPortionToSilence(envelope, startMs, endMs);
+  }
+
   for (final raw in plan['jingles'] as List? ?? const []) {
     final jingle = Map<Object?, Object?>.from(raw as Map);
     final bytes = _asBytes(jingle['bytes']);
@@ -1217,11 +1227,16 @@ Future<void> _applyLogMelPlan(
     final confirmed = reviews[templateId];
     for (final rawHit in hits) {
       final hit = Map<Object?, Object?>.from(rawHit as Map);
+      final snapped = edges(
+        hit['episodeId']! as int,
+        hit['startMs']! as int,
+        hit['endMs']! as int,
+      );
       await _upsertLoose(
         database,
         episodeId: hit['episodeId']! as int,
-        startMs: hit['startMs']! as int,
-        endMs: hit['endMs']! as int,
+        startMs: snapped.startMs,
+        endMs: snapped.endMs,
         kind: SkipSegmentKind.jingle,
         source: SkipSegmentSource.fingerprint,
         matches: hits.length,
@@ -1234,10 +1249,14 @@ Future<void> _applyLogMelPlan(
   for (final raw in plan['refinements'] as List? ?? const []) {
     final item = Map<Object?, Object?>.from(raw as Map);
     final templateId = item['templateId'] as int?;
+    final episodeId = item['episodeId'] as int?;
+    final snapped = episodeId == null
+        ? (startMs: item['startMs']! as int, endMs: item['endMs']! as int)
+        : edges(episodeId, item['startMs']! as int, item['endMs']! as int);
     await database.updateFingerprintSegment(
       id: item['segmentId']! as int,
-      startMs: item['startMs']! as int,
-      endMs: item['endMs']! as int,
+      startMs: snapped.startMs,
+      endMs: snapped.endMs,
       matches: item['matches']! as int,
       templateId: templateId,
     );
@@ -1251,11 +1270,16 @@ Future<void> _applyLogMelPlan(
   final touched = <int>{};
   for (final raw in plan['spans'] as List? ?? const []) {
     final span = Map<Object?, Object?>.from(raw as Map);
+    final snapped = edges(
+      span['episodeId']! as int,
+      span['startMs']! as int,
+      span['endMs']! as int,
+    );
     final id = await _upsertLoose(
       database,
       episodeId: span['episodeId']! as int,
-      startMs: span['startMs']! as int,
-      endMs: span['endMs']! as int,
+      startMs: snapped.startMs,
+      endMs: snapped.endMs,
       kind: SkipSegmentKind.ad,
       source: SkipSegmentSource.network,
       matches: 1,
@@ -1272,11 +1296,16 @@ Future<void> _applyLogMelPlan(
 
   for (final raw in plan['postAd'] as List? ?? const []) {
     final hit = Map<Object?, Object?>.from(raw as Map);
+    final snapped = edges(
+      hit['episodeId']! as int,
+      hit['startMs']! as int,
+      hit['endMs']! as int,
+    );
     await _upsertLoose(
       database,
       episodeId: hit['episodeId']! as int,
-      startMs: hit['startMs']! as int,
-      endMs: hit['endMs']! as int,
+      startMs: snapped.startMs,
+      endMs: snapped.endMs,
       kind: SkipSegmentKind.jingle,
       source: SkipSegmentSource.network,
       matches: (plan['postAd'] as List).length,

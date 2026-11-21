@@ -364,12 +364,17 @@ collée juste après sont deux chapitres, mais un seul saut à la lecture.
 
 La fin d’une pub peut s’arrêter sur un creux alors que le son continue.
 Si l’enveloppe retrouve du niveau puis un silence tenu dans les 4 secondes,
-la fin avance jusqu’à ce silence. Une virgule d’environ 3 secondes répétée
-juste après cette fin, dans au moins trois épisodes, devient un passage
-`jingle` de source `network`. La comparaison retire la moyenne de chaque
-trame : sur la parole, la cosinus brute du log-mel vaut presque 1 partout. Un outro découpé en plusieurs bouts dans la
-dernière minute est recollé (trou d’au plus 5 secondes) et, s’il s’arrête
-à moins de 15 secondes de la fin du fichier, va jusqu’au bout.
+le bord avance jusqu’à ce silence. Le début recule de la même façon : une
+portion démarre et finit sur un vrai silence, pas sur un creux bref. Une
+virgule d’environ 3 secondes répétée n’importe où dans les trois premières
+minutes, même à une heure différente d’un épisode à l’autre, devient un
+passage `jingle` de source `network`. Deux épisodes suffisent quand la
+copie est franche. La comparaison retire la moyenne de chaque trame : sur
+la parole, la cosinus brute du log-mel vaut presque 1 partout. Un outro
+découpé en plusieurs bouts dans la dernière minute est recollé (trou d’au
+plus 5 secondes) et, s’il s’arrête à moins de 15 secondes de la fin de
+*ce* fichier, va jusqu’au bout. La durée totale peut changer avec le
+pré-roll : l’outro se mesure depuis la fin.
 
 ## Lecture
 

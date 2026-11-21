@@ -390,6 +390,39 @@ void main() {
       expect(hit.endMs, durationMs);
     }
   });
+
+  test('an outro ends at each file, not at one shared clock time', () {
+    final motif = _motif(100, 31);
+    FingerprintEpisode build(int id, int durationMs) {
+      final at =
+          ((durationMs - 4000) * 1000) ~/ chromaprintStoredHopMicros -
+          motif.length;
+      final values = _noise(at + motif.length + 40, id);
+      _write(values, at, motif);
+      return FingerprintEpisode(
+        episodeId: id,
+        values: values,
+        hopMicros: hop,
+        durationMs: durationMs,
+      );
+    }
+
+    const short = 200000;
+    const long = 260000;
+    final found = discoverPatterns([build(1, short), build(2, long)]);
+    final outros = found.where(
+      (pattern) => pattern.classification.kind == SkipSegmentKind.outro,
+    );
+    expect(outros, hasLength(1));
+    final byId = {
+      for (final hit in outros.single.occurrences) hit.episodeId: hit,
+    };
+    expect(byId[1]!.endMs, short);
+    expect(byId[2]!.endMs, long);
+    expect(short - byId[1]!.startMs, lessThanOrEqualTo(60000));
+    expect(long - byId[2]!.startMs, lessThanOrEqualTo(60000));
+    expect((byId[2]!.startMs - byId[1]!.startMs).abs(), greaterThan(30000));
+  });
 }
 
 int _ms(int index) => index * chromaprintStoredHopMicros ~/ 1000;

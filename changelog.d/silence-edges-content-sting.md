@@ -1,0 +1,1 @@
+- Detected portions snap to a held silence on both the start and the end. A repeated sting of about three seconds anywhere in the first three minutes is its own chapter, even when each episode places it at a different time.
