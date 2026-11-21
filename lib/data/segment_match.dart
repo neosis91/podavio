@@ -149,14 +149,36 @@ bool chromaprintValuesMatch(int a, int b) {
   return hammingDistance32(a, b) <= chromaprintMaxHammingBits;
 }
 
+/// Part minimale de valeurs qui se correspondent dans une suite retenue.
+///
+/// Le pont de deux trous accepterait sinon un point sur trois. Mesuré :
+/// une pub réencodée reste au-dessus, le bruit en dessous.
+const chromaprintMinAgreement = 0.55;
+
+final List<int> _popCount8 = List<int>.unmodifiable(
+  List<int>.generate(256, (value) {
+    var count = 0;
+    var bits = value;
+    while (bits != 0) {
+      count += bits & 1;
+      bits >>= 1;
+    }
+    return count;
+  }),
+);
+
 int hammingDistance32(int a, int b) {
-  var bits = (a ^ b) & 0xFFFFFFFF;
-  var count = 0;
-  while (bits != 0) {
-    count += bits & 1;
-    bits >>= 1;
-  }
-  return count;
+  final bits = (a ^ b) & 0xFFFFFFFF;
+  return _popCount8[bits & 0xFF] +
+      _popCount8[(bits >> 8) & 0xFF] +
+      _popCount8[(bits >> 16) & 0xFF] +
+      _popCount8[(bits >> 24) & 0xFF];
+}
+
+/// `true` si la suite a assez de correspondances pour ne pas être du bruit.
+bool chromaprintAgreementOk(int matches, int points) {
+  if (points <= 0) return false;
+  return matches >= points * chromaprintMinAgreement;
 }
 
 /// `true` si [next] prolonge la suite qui finit à [previous].

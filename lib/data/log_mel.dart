@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'chromaprint.dart';
+import 'envelope.dart';
+import 'fft.dart';
 import 'segment_match.dart';
 import 'speech_music.dart';
 
@@ -12,6 +14,7 @@ class PcmAnalysis {
     required this.fingerprint,
     required this.logMel,
     required this.speech,
+    required this.envelope,
     required this.peakRss,
     required this.retainedBytes,
     required this.elapsedMs,
@@ -23,6 +26,9 @@ class PcmAnalysis {
   final List<int> fingerprint;
   final Uint8List? logMel;
   final Uint8List speech;
+
+  /// Énergie toutes les 20 ms. Vide si le fichier est trop court.
+  final Uint8List envelope;
   final int peakRss;
   final int retainedBytes;
   final int elapsedMs;
@@ -51,84 +57,153 @@ class LogMelClip {
 /// au fil de l’eau. Le log-mel ne garde que les 180 premières secondes,
 /// déjà rééchantillonnées à 8 kHz.
 PcmAnalysis analyzePcmFileSync(String path) {
-  final watch = Stopwatch()..start();
-  final file = File(path);
-  final input = file.openSync();
-  final hasher = ChromaprintHasher();
-  final speech = SpeechTimelineBuilder();
-  final totalSamples = file.lengthSync() ~/ 2;
-  final resampler = LogMelResampler(
-    maxSamples: math.min(
-      (logMelSearchWindowMs * logMelSampleRate) ~/ 1000,
-      totalSamples <= 0
-          ? 0
-          : (totalSamples * logMelSampleRate) ~/ chromaprintSampleRate + 2,
-    ),
-  );
-  const chunkSamples = 8192;
-  final raw = Uint8List(chunkSamples * 2);
-  final piece = Int16List(chunkSamples);
-  var retained = 0;
-  var peakRss = _rss();
-  var fingerprintUs = 0;
-  var speechUs = 0;
+  final reader = _PcmReader(path);
   try {
-    while (true) {
-      final read = input.readIntoSync(raw);
-      if (read < 2) break;
-      final samples = read ~/ 2;
-      final view = ByteData.sublistView(raw, 0, samples * 2);
-      for (var i = 0; i < samples; i++) {
-        piece[i] = view.getInt16(i * 2, Endian.little);
-      }
-      final slice = samples == chunkSamples
-          ? piece
-          : Int16List.sublistView(piece, 0, samples);
-      final finger = Stopwatch()..start();
-      hasher.add(slice);
-      fingerprintUs += finger.elapsedMicroseconds;
-      final spoken = Stopwatch()..start();
-      speech.add(slice);
-      speechUs += spoken.elapsedMicroseconds;
-      resampler.add(slice);
-      final held =
-          raw.length +
-          speech.retainedBytes +
-          resampler.retainedBytes +
-          hasher.valueCount * 8;
-      if (held > retained) retained = held;
-      final rss = _rss();
-      if (rss > peakRss) peakRss = rss;
-    }
+    reader.drain();
+    return reader.finish();
   } finally {
-    input.closeSync();
+    reader.close();
   }
-  final fingerprint = hasher.finish();
-  final melWatch = Stopwatch()..start();
-  final clip = computeLogMel(resampler.output);
-  final logMelMs = melWatch.elapsedMilliseconds;
-  final fingerprintMs = fingerprintUs ~/ 1000;
-  final speechMs = speechUs ~/ 1000;
-  final logMel = clip.isEmpty
-      ? null
-      : encodeLogMel(clip.frames.cast<List<double>>());
-  final speechBytes = speech.finish();
-  final framesBytes = clip.frames.length * logMelBandCount * 8;
-  final endHeld = fingerprint.length * 8 + (logMel?.length ?? 0) + framesBytes;
-  if (endHeld > retained) retained = endHeld;
-  final rss = _rss();
-  if (rss > peakRss) peakRss = rss;
-  return PcmAnalysis(
-    fingerprint: fingerprint,
-    logMel: logMel,
-    speech: speechBytes,
-    peakRss: peakRss,
-    retainedBytes: retained,
-    elapsedMs: watch.elapsedMilliseconds,
-    fingerprintMs: fingerprintMs,
-    logMelMs: logMelMs,
-    speechMs: speechMs,
-  );
+}
+
+/// Comme [analyzePcmFileSync], en rendant la main entre les blocs.
+///
+/// [slow] renvoie `play`, `front` ou `fast`. Pendant la lecture, chaque
+/// bloc est suivi de 12 ms de pause. Au premier plan, on cède seulement
+/// l’ordonnancement. `fast` ne s’arrête presque pas.
+Future<PcmAnalysis> analyzePcmFilePaced(
+  String path,
+  String Function() slow,
+) async {
+  final reader = _PcmReader(path);
+  var chunks = 0;
+  try {
+    while (reader.pull()) {
+      chunks++;
+      final mode = slow();
+      if (mode == 'play') {
+        // ~8 ms de calcul par bloc sur un téléphone : 12 ms de pause
+        // ramène le cœur sous la moitié, le temps que l’audio passe.
+        await Future<void>.delayed(const Duration(milliseconds: 12));
+      } else if (mode == 'front' && chunks % 8 == 0) {
+        await Future<void>.delayed(Duration.zero);
+      } else if (chunks % 32 == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+    return reader.finish();
+  } finally {
+    reader.close();
+  }
+}
+
+/// Lecteur de PCM par blocs. L’empreinte, la parole, l’enveloppe et le
+/// rééchantillonnage avancent ensemble. Seules les 180 premières secondes
+/// du log-mel sont gardées.
+class _PcmReader {
+  _PcmReader(String path)
+    : _watch = Stopwatch()..start(),
+      _input = File(path).openSync(),
+      _resampler = LogMelResampler(
+        maxSamples: _melCap(File(path).lengthSync()),
+      ),
+      _peakRss = _rss();
+
+  static int _melCap(int fileBytes) {
+    final window = (logMelSearchWindowMs * logMelSampleRate) ~/ 1000;
+    if (fileBytes <= 1) return 0;
+    final fromFile =
+        (fileBytes ~/ 2 * logMelSampleRate) ~/ chromaprintSampleRate + 2;
+    return math.min(window, fromFile);
+  }
+
+  final Stopwatch _watch;
+  final RandomAccessFile _input;
+  final ChromaprintHasher _hasher = ChromaprintHasher();
+  final SpeechTimelineBuilder _speech = SpeechTimelineBuilder();
+  final EnergyEnvelopeBuilder _envelope = EnergyEnvelopeBuilder();
+  final LogMelResampler _resampler;
+  final Uint8List _raw = Uint8List(8192 * 2);
+  final Int16List _piece = Int16List(8192);
+  var _retained = 0;
+  var _peakRss = 0;
+  var _fingerprintUs = 0;
+  var _speechUs = 0;
+  var _open = true;
+
+  void drain() {
+    while (pull()) {}
+  }
+
+  bool pull() {
+    final read = _input.readIntoSync(_raw);
+    if (read < 2) return false;
+    final samples = read ~/ 2;
+    final view = ByteData.sublistView(_raw, 0, samples * 2);
+    for (var i = 0; i < samples; i++) {
+      _piece[i] = view.getInt16(i * 2, Endian.little);
+    }
+    final slice = samples == _piece.length
+        ? _piece
+        : Int16List.sublistView(_piece, 0, samples);
+    final finger = Stopwatch()..start();
+    _hasher.add(slice);
+    _fingerprintUs += finger.elapsedMicroseconds;
+    final spoken = Stopwatch()..start();
+    _speech.add(slice);
+    _speechUs += spoken.elapsedMicroseconds;
+    _envelope.add(slice);
+    _resampler.add(slice);
+    final held =
+        _raw.length +
+        _speech.retainedBytes +
+        _resampler.retainedBytes +
+        _envelope.retainedBytes +
+        _hasher.valueCount * 8;
+    if (held > _retained) _retained = held;
+    final rss = _rss();
+    if (rss > _peakRss) _peakRss = rss;
+    return true;
+  }
+
+  PcmAnalysis finish() {
+    final fingerprint = _hasher.finish();
+    final melWatch = Stopwatch()..start();
+    final clip = computeLogMel(_resampler.output);
+    final logMelMs = melWatch.elapsedMilliseconds;
+    final logMel = clip.isEmpty
+        ? null
+        : encodeLogMel(clip.frames.cast<List<double>>());
+    final speechBytes = _speech.finish();
+    final envelope = _envelope.finish();
+    final framesBytes = clip.frames.length * logMelBandCount * 8;
+    final endHeld =
+        fingerprint.length * 8 +
+        (logMel?.length ?? 0) +
+        framesBytes +
+        envelope.length;
+    if (endHeld > _retained) _retained = endHeld;
+    final rss = _rss();
+    if (rss > _peakRss) _peakRss = rss;
+    return PcmAnalysis(
+      fingerprint: fingerprint,
+      logMel: logMel,
+      speech: speechBytes,
+      envelope: envelope,
+      peakRss: _peakRss,
+      retainedBytes: _retained,
+      elapsedMs: _watch.elapsedMilliseconds,
+      fingerprintMs: _fingerprintUs ~/ 1000,
+      logMelMs: logMelMs,
+      speechMs: _speechUs ~/ 1000,
+    );
+  }
+
+  void close() {
+    if (!_open) return;
+    _open = false;
+    _input.closeSync();
+  }
 }
 
 int _rss() {
@@ -227,33 +302,37 @@ class LogMelResampler {
 LogMelClip computeLogMel(Float64List samples) {
   if (samples.length < logMelFrameSize) return const LogMelClip([]);
   final filters = _melFilters;
+  final starts = _melStart;
+  final ends = _melEnd;
   final window = _hann;
   final frameCount = 1 + (samples.length - logMelFrameSize) ~/ _hopSamples;
+  final flat = Float64List(frameCount * logMelBandCount);
   final frames = <Float64List>[];
-  final re = Float64List(logMelFrameSize);
-  final im = Float64List(logMelFrameSize);
-  for (var frame = 0; frame < frameCount; frame++) {
-    final offset = frame * _hopSamples;
+  final fft = RealFft(logMelFrameSize);
+  final frame = Float64List(logMelFrameSize);
+  final powers = Float64List(logMelFrameSize ~/ 2 + 1);
+  for (var index = 0; index < frameCount; index++) {
+    final offset = index * _hopSamples;
     for (var i = 0; i < logMelFrameSize; i++) {
-      re[i] = samples[offset + i] * window[i];
-      im[i] = 0;
+      frame[i] = samples[offset + i] * window[i];
     }
-    _fft(re, im);
-    final bands = Float64List(logMelBandCount);
+    fft.power(frame, powers);
+    final bands = Float64List.sublistView(
+      flat,
+      index * logMelBandCount,
+      (index + 1) * logMelBandCount,
+    );
     var total = 0.0;
-    final powers = Float64List(logMelFrameSize ~/ 2 + 1);
     for (var bin = 0; bin < powers.length; bin++) {
-      powers[bin] = re[bin] * re[bin] + im[bin] * im[bin];
       total += powers[bin];
     }
     if (total > 1e-8) {
       for (var band = 0; band < logMelBandCount; band++) {
         var energy = 0.0;
         final weights = filters[band];
-        for (var bin = 0; bin < weights.length; bin++) {
-          final weight = weights[bin];
-          if (weight == 0) continue;
-          energy += weight * powers[bin];
+        final end = ends[band];
+        for (var bin = starts[band]; bin < end; bin++) {
+          energy += weights[bin] * powers[bin];
         }
         bands[band] = math.log(energy + 1e-10);
       }
@@ -278,40 +357,112 @@ List<LogMelMatch> searchLogMel(
   if (width < 8 || haystack.frames.length < width) return const [];
   final needleNorm = _frobenius(needle.frames);
   if (needleNorm <= 1e-8) return const [];
+  final limit = haystack.frames.length - width;
+  // Pas de 4 trames (40 ms), puis recalage au pas de 10 ms. Les trames
+  // se recouvrent de 22 ms : un vrai pic reste visible sur le pas grossier.
+  const stride = 4;
+  const gateMargin = 0.12;
   final hits = <LogMelMatch>[];
   LogMelMatch? pending;
-  final limit = haystack.frames.length - width;
-  for (var start = 0; start <= limit; start++) {
-    var dot = 0.0;
-    var energy = 0.0;
-    for (var frame = 0; frame < width; frame++) {
-      final a = needle.frames[frame];
-      final b = haystack.frames[start + frame];
-      for (var band = 0; band < logMelBandCount; band++) {
-        final value = b[band];
-        dot += a[band] * value;
-        energy += value * value;
-      }
-    }
-    final denom = needleNorm * math.sqrt(energy);
-    if (denom <= 1e-8) continue;
-    final score = dot / denom;
-    if (score < threshold) continue;
+  var scannedTo = -1;
+
+  void consider(int start, double score) {
+    if (score < threshold) return;
     final startMs = start * logMelHopMs;
     final match = LogMelMatch(
       startMs: startMs,
       endMs: startMs + width * logMelHopMs,
       score: score,
     );
-    if (pending == null || startMs - pending.startMs > minSeparationMs) {
-      if (pending != null) hits.add(pending);
+    final current = pending;
+    if (current == null || startMs - current.startMs > minSeparationMs) {
+      if (current != null) hits.add(current);
       pending = match;
-    } else if (score > pending.score) {
+    } else if (score > current.score) {
       pending = match;
     }
   }
-  if (pending != null) hits.add(pending);
+
+  if (limit <= 48) {
+    for (var start = 0; start <= limit; start++) {
+      consider(
+        start,
+        _logMelScore(
+          needle,
+          haystack,
+          start,
+          width,
+          needleNorm,
+          threshold: threshold,
+          abort: false,
+        ),
+      );
+    }
+  } else {
+    final gate = threshold - gateMargin;
+    for (var coarse = 0; coarse <= limit; coarse += stride) {
+      final coarseScore = _logMelScore(
+        needle,
+        haystack,
+        coarse,
+        width,
+        needleNorm,
+        threshold: gate,
+        abort: true,
+      );
+      if (coarseScore < gate) continue;
+      final from = math.max(scannedTo + 1, coarse - stride);
+      final to = math.min(limit, coarse + stride);
+      for (var start = from; start <= to; start++) {
+        consider(
+          start,
+          _logMelScore(
+            needle,
+            haystack,
+            start,
+            width,
+            needleNorm,
+            threshold: threshold,
+            abort: false,
+          ),
+        );
+      }
+      scannedTo = to;
+    }
+  }
+  final last = pending;
+  if (last != null) hits.add(last);
   return hits;
+}
+
+double _logMelScore(
+  LogMelClip needle,
+  LogMelClip haystack,
+  int start,
+  int width,
+  double needleNorm, {
+  required double threshold,
+  required bool abort,
+}) {
+  var dot = 0.0;
+  var energy = 0.0;
+  for (var frame = 0; frame < width; frame++) {
+    final a = needle.frames[frame];
+    final b = haystack.frames[start + frame];
+    for (var band = 0; band < logMelBandCount; band++) {
+      final value = b[band];
+      dot += a[band] * value;
+      energy += value * value;
+    }
+    if (abort && frame % 16 == 15 && energy > 0) {
+      final remain = width - frame - 1;
+      final optimistic = (dot + remain) / (needleNorm * math.sqrt(energy));
+      if (optimistic < threshold) return 0;
+    }
+  }
+  final denom = needleNorm * math.sqrt(energy);
+  if (denom <= 1e-8) return 0;
+  return dot / denom;
 }
 
 class LogMelMatch {
@@ -337,6 +488,28 @@ LogMelClip sliceLogMel(LogMelClip clip, int startMs, int endMs) {
 const _hopSamples = logMelSampleRate * logMelHopMs ~/ 1000;
 
 final List<Float64List> _melFilters = _buildMelFilters();
+
+final List<int> _melStart = [
+  for (final weights in _melFilters) _firstNonZero(weights),
+];
+
+final List<int> _melEnd = [
+  for (final weights in _melFilters) _lastNonZero(weights),
+];
+
+int _firstNonZero(Float64List weights) {
+  for (var i = 0; i < weights.length; i++) {
+    if (weights[i] != 0) return i;
+  }
+  return 0;
+}
+
+int _lastNonZero(Float64List weights) {
+  for (var i = weights.length - 1; i >= 0; i--) {
+    if (weights[i] != 0) return i + 1;
+  }
+  return 0;
+}
 
 final Float64List _hann = _buildHann();
 
@@ -403,50 +576,4 @@ double _frobenius(List<Float64List> frames) {
     }
   }
   return math.sqrt(squares);
-}
-
-void _fft(Float64List re, Float64List im) {
-  final n = re.length;
-  var j = 0;
-  for (var i = 0; i < n; i++) {
-    if (i < j) {
-      final swapRe = re[i];
-      re[i] = re[j];
-      re[j] = swapRe;
-      final swapIm = im[i];
-      im[i] = im[j];
-      im[j] = swapIm;
-    }
-    var bit = n >> 1;
-    while ((j & bit) != 0) {
-      j ^= bit;
-      bit >>= 1;
-    }
-    j ^= bit;
-  }
-  for (var length = 2; length <= n; length <<= 1) {
-    final half = length >> 1;
-    final theta = -2 * math.pi / length;
-    final stepRe = math.cos(theta);
-    final stepIm = math.sin(theta);
-    for (var start = 0; start < n; start += length) {
-      var twiddleRe = 1.0;
-      var twiddleIm = 0.0;
-      for (var k = 0; k < half; k++) {
-        final oddRe = re[start + k + half];
-        final oddIm = im[start + k + half];
-        final mixedRe = twiddleRe * oddRe - twiddleIm * oddIm;
-        final mixedIm = twiddleRe * oddIm + twiddleIm * oddRe;
-        final evenRe = re[start + k];
-        final evenIm = im[start + k];
-        re[start + k] = evenRe + mixedRe;
-        im[start + k] = evenIm + mixedIm;
-        re[start + k + half] = evenRe - mixedRe;
-        im[start + k + half] = evenIm - mixedIm;
-        final nextRe = twiddleRe * stepRe - twiddleIm * stepIm;
-        twiddleIm = twiddleRe * stepIm + twiddleIm * stepRe;
-        twiddleRe = nextRe;
-      }
-    }
-  }
 }

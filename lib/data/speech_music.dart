@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'chromaprint.dart';
+import 'fft.dart';
 
 /// Une valeur de parole par seconde, alignée sur le PCM déjà décodé.
 const speechMusicHopMs = 1000;
@@ -225,9 +226,9 @@ double _speechLikelihood(_Second raw) {
 class _Scratch {
   _Scratch(this.sampleRate)
     : frameSamples = math.max(1, sampleRate * _subframeMs ~/ 1000),
-      re = Float64List(_fftSize),
-      im = Float64List(_fftSize),
       window = _hann,
+      windowed = Float64List(_fftSize),
+      power = Float64List(_fftSize ~/ 2 + 1),
       mag = Float64List(_fftSize ~/ 2 + 1),
       previous = Float64List(_fftSize ~/ 2 + 1),
       chroma = Float64List(12),
@@ -238,9 +239,10 @@ class _Scratch {
 
   final int sampleRate;
   final int frameSamples;
-  final Float64List re;
-  final Float64List im;
+  final RealFft fft = RealFft(_fftSize);
   final Float64List window;
+  final Float64List windowed;
+  final Float64List power;
   final Float64List mag;
   final Float64List previous;
   final Float64List chroma;
@@ -327,15 +329,11 @@ class _Scratch {
 
   void _spectrum(Int16List samples, int at) {
     for (var i = 0; i < _fftSize; i++) {
-      re[i] = samples[at + i] * window[i];
-      im[i] = 0;
+      windowed[i] = samples[at + i] * window[i];
     }
-    _fft(re, im);
-    final bins = mag.length;
-    for (var bin = 0; bin < bins; bin++) {
-      final real = re[bin];
-      final imag = im[bin];
-      mag[bin] = math.sqrt(real * real + imag * imag);
+    fft.power(windowed, power);
+    for (var bin = 0; bin < mag.length; bin++) {
+      mag[bin] = math.sqrt(power[bin]);
     }
   }
 
@@ -492,50 +490,4 @@ Float64List _buildHann() {
     window[i] = 0.5 - 0.5 * math.cos(2 * math.pi * i / last);
   }
   return window;
-}
-
-void _fft(Float64List re, Float64List im) {
-  final n = re.length;
-  var j = 0;
-  for (var i = 0; i < n; i++) {
-    if (i < j) {
-      final swapRe = re[i];
-      re[i] = re[j];
-      re[j] = swapRe;
-      final swapIm = im[i];
-      im[i] = im[j];
-      im[j] = swapIm;
-    }
-    var bit = n >> 1;
-    while ((j & bit) != 0) {
-      j ^= bit;
-      bit >>= 1;
-    }
-    j ^= bit;
-  }
-  for (var length = 2; length <= n; length <<= 1) {
-    final half = length >> 1;
-    final theta = -2 * math.pi / length;
-    final stepRe = math.cos(theta);
-    final stepIm = math.sin(theta);
-    for (var start = 0; start < n; start += length) {
-      var twiddleRe = 1.0;
-      var twiddleIm = 0.0;
-      for (var k = 0; k < half; k++) {
-        final oddRe = re[start + k + half];
-        final oddIm = im[start + k + half];
-        final mixedRe = twiddleRe * oddRe - twiddleIm * oddIm;
-        final mixedIm = twiddleRe * oddIm + twiddleIm * oddRe;
-        final evenRe = re[start + k];
-        final evenIm = im[start + k];
-        re[start + k] = evenRe + mixedRe;
-        im[start + k] = evenIm + mixedIm;
-        re[start + k + half] = evenRe - mixedRe;
-        im[start + k + half] = evenIm - mixedIm;
-        final nextRe = twiddleRe * stepRe - twiddleIm * stepIm;
-        twiddleIm = twiddleRe * stepIm + twiddleIm * stepRe;
-        twiddleRe = nextRe;
-      }
-    }
-  }
 }
