@@ -1183,24 +1183,21 @@ SegmentOccurrence _extendAdEnd(
   SegmentOccurrence hit,
   Map<int, FingerprintEpisode> byId,
 ) {
-  if (hit.durationMs < adMinDurationMs) return hit;
-  if (hit.episodeDurationMs > 0) {
-    final fromEnd = hit.episodeDurationMs - hit.startMs;
-    if (fromEnd > 0 && fromEnd <= outroWindowMs) return hit;
-  }
   final envelope = byId[hit.episodeId]?.envelope;
   if (envelope == null || envelope.isEmpty) return hit;
-  final end = extendEndToSilence(envelope, hit.endMs);
-  if (end <= hit.endMs) return hit;
-  var capped = end;
-  if (hit.episodeDurationMs > 0 && capped > hit.episodeDurationMs) {
-    capped = hit.episodeDurationMs;
+  final snapped = snapPortionToSilence(
+    envelope,
+    hit.startMs,
+    hit.endMs,
+    durationMs: hit.episodeDurationMs,
+  );
+  if (snapped.startMs == hit.startMs && snapped.endMs == hit.endMs) {
+    return hit;
   }
-  if (capped <= hit.startMs) return hit;
   return SegmentOccurrence(
     episodeId: hit.episodeId,
-    startMs: hit.startMs,
-    endMs: capped,
+    startMs: snapped.startMs,
+    endMs: snapped.endMs,
     episodeDurationMs: hit.episodeDurationMs,
     preRollEndMs: hit.preRollEndMs,
   );

@@ -183,3 +183,62 @@ int extendEndToSilence(
   }
   return endMs;
 }
+
+/// Ramène [startMs] au silence tenu d’avant, sans reculer de plus de
+/// [maxExtendMs].
+///
+/// Même règle que [extendEndToSilence] : un creux bref est ignoré, et
+/// un début déjà posé dans un silence qui dure ne bouge pas.
+int extendStartToSilence(
+  Uint8List envelope,
+  int startMs, {
+  int maxExtendMs = adEndExtendMs,
+}) {
+  if (envelope.isEmpty || startMs <= 0) return startMs;
+  final earliest = startMs - maxExtendMs > 0 ? startMs - maxExtendMs : 0;
+  var quietFor = 0;
+  var quietEnd = startMs;
+  var heard = false;
+  for (var t = startMs - envelopeHopMs; t >= earliest; t -= envelopeHopMs) {
+    final index = t ~/ envelopeHopMs;
+    if (index < 0 || index >= envelope.length) break;
+    if (envelope[index] > envelopeSilenceLevel) {
+      heard = true;
+      quietFor = 0;
+      continue;
+    }
+    if (quietFor == 0) quietEnd = t + envelopeHopMs;
+    quietFor += envelopeHopMs;
+    if (!heard && quietFor > 400) return startMs;
+    if (heard && quietFor >= 200) return quietEnd < 0 ? 0 : quietEnd;
+  }
+  return startMs;
+}
+
+/// Pose le début et la fin d’une portion sur un vrai silence.
+///
+/// On ne fait que sortir : un bord déjà dans un silence reste en place,
+/// et une fin déjà au bout du fichier n’est pas ramenée en arrière.
+({int startMs, int endMs}) snapPortionToSilence(
+  Uint8List envelope,
+  int startMs,
+  int endMs, {
+  int durationMs = 0,
+}) {
+  if (envelope.isEmpty || endMs <= startMs) {
+    return (startMs: startMs, endMs: endMs);
+  }
+  var start = extendStartToSilence(envelope, startMs);
+  var end = endMs;
+  final lastMs = envelope.length * envelopeHopMs;
+  final atFileEnd =
+      (durationMs > 0 && durationMs - endMs <= 500) ||
+      (lastMs - endMs <= 500 && endMs <= lastMs);
+  if (!atFileEnd) {
+    end = extendEndToSilence(envelope, endMs);
+    if (durationMs > 0 && end > durationMs) end = durationMs;
+  }
+  if (start < 0) start = 0;
+  if (start >= end) return (startMs: startMs, endMs: endMs);
+  return (startMs: start, endMs: end);
+}
