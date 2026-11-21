@@ -8,6 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app_database.dart';
 import 'chromaprint.dart';
 import 'episode_audio_analyzer.dart';
+import 'log_mel.dart';
+import 'log_mel_match.dart';
+import 'network_stings.dart';
 import 'pcm_decoder.dart';
 import 'providers.dart';
 import 'segment_finder.dart';
@@ -146,7 +149,8 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         final path = episode.downloadPath?.trim() ?? '';
         if (path.isEmpty) continue;
         final stored = await database.fingerprintForEpisode(episode.id);
-        if (stored == null || stored.data.isEmpty) {
+        final mel = await database.logMelForEpisode(episode.id);
+        if (stored == null || stored.data.isEmpty || mel == null) {
           queued = true;
           await enqueueEpisode(episode.id);
         }
@@ -221,25 +225,39 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     final existing = job.force
         ? null
         : await database.fingerprintForEpisode(episode.id);
-    if (existing == null || existing.data.isEmpty) {
+    final mel = job.force ? null : await database.logMelForEpisode(episode.id);
+    final needPrint = existing == null || existing.data.isEmpty;
+    if (needPrint || mel == null) {
       final watch = Stopwatch()..start();
-      final values = await _fingerprintPath(ref.read(pcmDecoderProvider), path);
+      final analyzed = await _analyzeDecoded(
+        ref.read(pcmDecoderProvider),
+        path,
+      );
       if (!ref.mounted) return;
-      if (values == null) {
+      if (analyzed == null) {
         debugPrint(
           'Analyse audio: pas d’empreinte pour l’épisode ${episode.id}.',
         );
         return;
       }
       debugPrint(
-        'Analyse audio: épisode ${episode.id}, ${values.length} valeurs, '
+        'Analyse audio: épisode ${episode.id}, '
+        '${analyzed.fingerprint.length} valeurs, '
         '${watch.elapsedMilliseconds} ms.',
       );
-      await database.upsertEpisodeFingerprint(
-        episodeId: episode.id,
-        data: encodeFingerprint(values),
-        hopMicros: chromaprintStoredHopMicros,
-      );
+      if (needPrint || job.force) {
+        await database.upsertEpisodeFingerprint(
+          episodeId: episode.id,
+          data: encodeFingerprint(analyzed.fingerprint),
+          hopMicros: chromaprintStoredHopMicros,
+        );
+      }
+      if (analyzed.logMel != null) {
+        await database.upsertEpisodeLogMel(
+          episodeId: episode.id,
+          data: analyzed.logMel!,
+        );
+      }
     }
     if (!ref.mounted) return;
     final match = Stopwatch()..start();
@@ -262,9 +280,9 @@ class ChromaprintEpisodeAudioAnalyzer implements EpisodeAudioAnalyzer {
 
   @override
   Future<Uint8List?> computeFingerprint(File file) async {
-    final values = await _fingerprintPath(decoder, file.path);
-    if (values == null || values.isEmpty) return null;
-    return encodeFingerprint(values);
+    final analyzed = await _analyzeDecoded(decoder, file.path);
+    if (analyzed == null || analyzed.fingerprint.isEmpty) return null;
+    return encodeFingerprint(analyzed.fingerprint);
   }
 
   @override
@@ -273,7 +291,10 @@ class ChromaprintEpisodeAudioAnalyzer implements EpisodeAudioAnalyzer {
   }
 }
 
-Future<List<int>?> _fingerprintPath(PcmDecoder decoder, String path) async {
+Future<({List<int> fingerprint, Uint8List? logMel})?> _analyzeDecoded(
+  PcmDecoder decoder,
+  String path,
+) async {
   final decoded = await decoder.decode(path);
   if (decoded == null) return null;
   try {
@@ -283,7 +304,7 @@ Future<List<int>?> _fingerprintPath(PcmDecoder decoder, String path) async {
       );
       return null;
     }
-    return await Isolate.run(() => fingerprintPcmFileSync(decoded.path));
+    return await Isolate.run(() => analyzePcmFileSync(decoded.path));
   } finally {
     await _deleteDecoded(decoded.path);
   }
@@ -341,6 +362,7 @@ Future<void> syncPodcastAnalysis(AppDatabase database, int podcastId) async {
   final raw = await Isolate.run(() => planAnalysisMessage(message));
   final plan = decodeAnalysisPlan(Map<Object?, Object?>.from(raw));
   await applyAnalysisPlan(database, podcastId, plan);
+  await applyLogMelFindings(database, podcastId);
 }
 
 int _indexMs(int index, int hopMicros) {
@@ -355,6 +377,10 @@ Future<void> applyAnalysisPlan(
   AnalysisPlan plan,
 ) async {
   final existing = await database.fingerprintSegmentsForPodcast(podcastId);
+  final keptForLogMel = {
+    for (final template in await database.listSegmentTemplates(podcastId))
+      if (template.logMel != null) template.id,
+  };
   final touched = <int>{};
   await database.transaction(() async {
     for (final pattern in plan.patterns) {
@@ -388,6 +414,9 @@ Future<void> applyAnalysisPlan(
     }
     for (final row in existing) {
       if (touched.contains(row.id) || row.confirmed == true) continue;
+      if (row.templateId != null && keptForLogMel.contains(row.templateId)) {
+        continue;
+      }
       await database.deleteSkipSegment(row.id);
     }
     await _recountTemplates(database, podcastId);
@@ -461,4 +490,266 @@ Future<void> _recountTemplates(AppDatabase database, int podcastId) async {
     if (episodes == template.occurrences) continue;
     await database.touchSegmentTemplate(template.id, occurrences: episodes);
   }
+}
+
+/// Gabarits log-mel, jingles courts et virgules de réseau.
+///
+/// Le PCM a déjà été rééchantillonné pendant l’empreinte.
+Future<void> applyLogMelFindings(AppDatabase database, int podcastId) async {
+  final stored = await database.logMelForPodcast(podcastId);
+  if (stored.isEmpty) return;
+  final episodes = <EpisodeMel>[];
+  for (final row in stored) {
+    final episode = await database.episodeById(row.episodeId);
+    if (episode == null) continue;
+    episodes.add(
+      EpisodeMel(
+        episodeId: row.episodeId,
+        podcastId: podcastId,
+        clip: _clip(row.data),
+        durationMs: (episode.durationSeconds ?? 0) * 1000,
+        preRollEndMs: null,
+      ),
+    );
+  }
+  if (episodes.isEmpty) return;
+  final templates = await database.listSegmentTemplates(podcastId);
+  final reviews = await database.templateReviews(podcastId);
+  final bundled = await loadBundledNetworkStings();
+  final learned = await database.listLearnedNetworkStings();
+  final stings = [
+    ...bundled,
+    for (final sting in learned)
+      NamedLogMel(
+        name: sting.name ?? 'Network sting',
+        clip: _clip(sting.logMel),
+      ),
+  ];
+  final adReview = _adConfirmation(reviews, templates);
+
+  final jingles = discoverShortJingles(episodes);
+  for (final jingle in jingles) {
+    final bytes = encodeLogMel(jingle.clip.frames.cast<List<double>>());
+    final existingId = _knownLogMel(jingle.clip, templates);
+    final templateId =
+        existingId ??
+        await database.insertSegmentTemplate(
+          podcastId: podcastId,
+          kind: SkipSegmentKind.jingle,
+          logMel: bytes,
+          durationMs: jingle.clip.durationMs,
+          occurrences: jingle.hits.length,
+        );
+    if (existingId != null &&
+        templates.every(
+          (template) => template.id != existingId || template.logMel == null,
+        )) {
+      await database.setTemplateLogMel(existingId, bytes);
+    }
+    final confirmed = reviews[templateId];
+    for (final hit in jingle.hits) {
+      await _upsertLoose(
+        database,
+        episodeId: hit.episodeId,
+        startMs: hit.startMs,
+        endMs: hit.endMs,
+        kind: SkipSegmentKind.jingle,
+        source: SkipSegmentSource.fingerprint,
+        matches: jingle.hits.length,
+        confirmed: confirmed,
+        templateId: templateId,
+      );
+    }
+  }
+
+  final fingerprintSegments = await database.fingerprintSegmentsForPodcast(
+    podcastId,
+  );
+  for (final segment in fingerprintSegments) {
+    if (segment.endMs - segment.startMs < jingleMinDurationMs) continue;
+    if (segment.startMs > logMelSearchWindowMs) continue;
+    final episode = episodes
+        .where((item) => item.episodeId == segment.episodeId)
+        .firstOrNull;
+    if (episode == null) continue;
+    final refined = refineLogMelBoundary(
+      episode: episode.clip,
+      roughStartMs: segment.startMs,
+      roughEndMs: segment.endMs,
+    );
+    if (refined == null) continue;
+    await database.updateFingerprintSegment(
+      id: segment.id,
+      startMs: refined.startMs,
+      endMs: refined.endMs,
+      matches: segment.matches,
+      templateId: segment.templateId,
+    );
+    final templateId = segment.templateId;
+    if (templateId == null) continue;
+    final template = templates
+        .where((item) => item.id == templateId)
+        .firstOrNull;
+    if (template != null && template.logMel == null) {
+      final slice = sliceLogMel(episode.clip, refined.startMs, refined.endMs);
+      if (slice.frames.length >= 8) {
+        await database.setTemplateLogMel(
+          templateId,
+          encodeLogMel(slice.frames.cast<List<double>>()),
+        );
+      }
+    }
+  }
+
+  final network = await database.networkSegmentsForPodcast(podcastId);
+  final touched = <int>{};
+  for (final episode in episodes) {
+    for (final span in stingDelimitedSpans(episode: episode, stings: stings)) {
+      final id = await _upsertLoose(
+        database,
+        episodeId: span.episodeId,
+        startMs: span.startMs,
+        endMs: span.endMs,
+        kind: SkipSegmentKind.ad,
+        source: SkipSegmentSource.network,
+        matches: 1,
+        confirmed: adReview,
+        templateId: null,
+        existing: network,
+      );
+      if (id != null) touched.add(id);
+    }
+  }
+  for (final row in network) {
+    if (touched.contains(row.id) || row.confirmed == true) continue;
+    await database.deleteSkipSegment(row.id);
+  }
+
+  await _refreshLearnedStings(database);
+}
+
+Future<void> _refreshLearnedStings(AppDatabase database) async {
+  final rows = await database.dynamicAdBoundaries();
+  final slices = <EpisodeMelBoundary>[];
+  for (final row in rows) {
+    final clip = sliceLogMel(_clip(row.data), row.endMs - 1300, row.endMs);
+    if (clip.frames.length < 8) continue;
+    slices.add(
+      EpisodeMelBoundary(
+        podcastId: row.podcastId,
+        episodeId: row.episodeId,
+        clip: clip,
+      ),
+    );
+  }
+  final learned = learnNetworkStings(slices);
+  final existing = await database.listLearnedNetworkStings();
+  for (final sting in learned) {
+    LearnedNetworkSting? prior;
+    for (final row in existing) {
+      final score = searchLogMel(
+        sting.clip,
+        _clip(row.logMel),
+        threshold: networkStingLearnThreshold,
+      );
+      if (score.isNotEmpty) {
+        prior = row;
+        break;
+      }
+    }
+    if (prior != null) {
+      await database.touchLearnedNetworkSting(
+        prior.id,
+        episodeCount: sting.episodes,
+        podcastCount: sting.podcasts,
+      );
+      continue;
+    }
+    await database.insertLearnedNetworkSting(
+      logMel: encodeLogMel(sting.clip.frames.cast<List<double>>()),
+      durationMs: sting.clip.durationMs,
+      episodeCount: sting.episodes,
+      podcastCount: sting.podcasts,
+    );
+  }
+}
+
+LogMelClip _clip(Uint8List data) {
+  return LogMelClip([
+    for (final frame in decodeLogMel(data)) Float64List.fromList(frame),
+  ]);
+}
+
+int? _knownLogMel(LogMelClip clip, List<SegmentTemplate> templates) {
+  for (final template in templates) {
+    final bytes = template.logMel;
+    if (bytes == null || bytes.isEmpty) continue;
+    final known = _clip(bytes);
+    if (searchLogMel(clip, known, threshold: 0.95).isNotEmpty ||
+        searchLogMel(known, clip, threshold: 0.95).isNotEmpty) {
+      return template.id;
+    }
+  }
+  return null;
+}
+
+bool? _adConfirmation(
+  Map<int, bool?> reviews,
+  List<SegmentTemplate> templates,
+) {
+  final ads = [
+    for (final template in templates)
+      if (template.kind == SkipSegmentKind.ad) reviews[template.id],
+  ];
+  if (ads.isEmpty) return null;
+  if (ads.every((review) => review == true)) return true;
+  if (ads.every((review) => review == false)) return false;
+  return null;
+}
+
+Future<int?> _upsertLoose(
+  AppDatabase database, {
+  required int episodeId,
+  required int startMs,
+  required int endMs,
+  required SkipSegmentKind kind,
+  required SkipSegmentSource source,
+  required int matches,
+  required bool? confirmed,
+  required int? templateId,
+  List<SkipSegment> existing = const [],
+}) async {
+  final rows = existing.isEmpty
+      ? await database.listSkipSegments(episodeId)
+      : existing.where((row) => row.episodeId == episodeId);
+  SkipSegment? prior;
+  for (final row in rows) {
+    if (row.source != source) continue;
+    final sameTemplate = templateId != null && row.templateId == templateId;
+    final near = (row.startMs - startMs).abs() <= stableOffsetSlackMs;
+    if (sameTemplate || near) {
+      prior = row;
+      break;
+    }
+  }
+  if (prior != null) {
+    await database.updateFingerprintSegment(
+      id: prior.id,
+      startMs: startMs,
+      endMs: endMs,
+      matches: matches,
+      templateId: templateId ?? prior.templateId,
+    );
+    return prior.id;
+  }
+  return database.insertSkipSegment(
+    episodeId: episodeId,
+    startMs: startMs,
+    endMs: endMs,
+    kind: kind,
+    source: source,
+    matches: matches,
+    confirmed: confirmed,
+    templateId: templateId,
+  );
 }

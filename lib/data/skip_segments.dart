@@ -14,6 +14,9 @@ enum SkipSegmentSource {
 
   /// Posé à la main.
   manual,
+
+  /// Virgule de réseau (pré-roll ou post-roll délimité par un sting).
+  network,
 }
 
 /// Clé anglaise affichée pour [kind] (traduite par l’interface).

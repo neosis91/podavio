@@ -358,6 +358,7 @@ const _fr = <String, String>{
   'Natural Sciences': 'Sciences naturelles',
   'Nature': 'Nature',
   'Network': 'Réseau',
+  'Network sting': 'Virgule réseau',
   'Never': 'Jamais',
   'New episodes': 'Nouveaux épisodes',
   'News': 'Actualités',

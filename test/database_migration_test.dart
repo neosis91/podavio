@@ -80,6 +80,6 @@ void main() {
         .get();
     final names = columns.map((row) => row.read<String>('name')).toSet();
     expect(names, containsAll(['auto_skip_ads', 'auto_skip_kinds']));
-    expect(await _userVersion(reopened), 20);
+    expect(await _userVersion(reopened), reopened.schemaVersion);
   });
 }
