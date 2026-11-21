@@ -9,6 +9,10 @@ La fusion de `develop` dans `main` publie cette version.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 
+## 2026.11.13
+
+- Downloaded episodes are fingerprinted after the file is saved. Repeated ads, sponsors, and jingles in the same podcast show up for review, and the classification screen can analyze episodes already on the phone.
+
 ## 2026.11.12
 
 - Downloaded episodes can skip confirmed ad, sponsor, and jingle passages. The review is in the podcast settings, and a chapter title that looks like an ad is suggested on its own. Detecting those passages from the audio is not active yet.
