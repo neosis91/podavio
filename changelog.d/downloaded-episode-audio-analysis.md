@@ -1,1 +1,0 @@
-- Downloaded episodes are fingerprinted after the file is saved. Repeated ads, sponsors, and jingles in the same podcast show up for review, and the classification screen can analyze episodes already on the phone.
