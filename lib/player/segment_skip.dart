@@ -77,9 +77,36 @@ SkipDecision? decideSkipSegment({
   if (chosen == null) return null;
   return SkipDecision(
     segmentId: chosen.id,
-    seekToMs: chosen.endMs,
+    seekToMs: _contiguousSkipEnd(chosen, segments, autoSkipKinds),
     returnToMs: positionMs,
   );
+}
+
+/// Une pub et la virgule collée juste après forment un seul saut.
+/// Les chapitres, eux, restent deux passages.
+int _contiguousSkipEnd(
+  SkipCandidate chosen,
+  List<SkipCandidate> segments,
+  Set<SkipSegmentKind> kinds,
+) {
+  var end = chosen.endMs;
+  var glueSting = chosen.kind == SkipSegmentKind.ad;
+  for (var guard = 0; guard < 8; guard++) {
+    SkipCandidate? next;
+    for (final segment in segments) {
+      if (segment.confirmed == false) continue;
+      if (segment.endMs <= end) continue;
+      if (segment.startMs > end + 500) continue;
+      final enabled = kinds.contains(segment.kind);
+      final stingAfterAd = glueSting && segment.kind == SkipSegmentKind.jingle;
+      if (!enabled && !stingAfterAd) continue;
+      if (next == null || segment.endMs > next.endMs) next = segment;
+    }
+    if (next == null) break;
+    end = next.endMs;
+    if (next.kind == SkipSegmentKind.ad) glueSting = true;
+  }
+  return end;
 }
 
 /// Bouton du grand lecteur : un passage présent, mais pas sauté tout seul.

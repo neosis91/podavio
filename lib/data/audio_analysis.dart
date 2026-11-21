@@ -1270,6 +1270,21 @@ Future<void> _applyLogMelPlan(
     await database.deleteSkipSegment(row.id);
   }
 
+  for (final raw in plan['postAd'] as List? ?? const []) {
+    final hit = Map<Object?, Object?>.from(raw as Map);
+    await _upsertLoose(
+      database,
+      episodeId: hit['episodeId']! as int,
+      startMs: hit['startMs']! as int,
+      endMs: hit['endMs']! as int,
+      kind: SkipSegmentKind.jingle,
+      source: SkipSegmentSource.network,
+      matches: (plan['postAd'] as List).length,
+      confirmed: null,
+      templateId: null,
+    );
+  }
+
   for (final raw in plan['learned'] as List? ?? const []) {
     final sting = Map<Object?, Object?>.from(raw as Map);
     final prior = sting['priorId'] as int?;

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'envelope.dart';
@@ -402,6 +403,59 @@ bool _audible(LogMelClip clip) {
   return loud * 2 >= clip.frames.length;
 }
 
+LogMelMatch? _bestCenteredMatch(LogMelClip needle, LogMelClip haystack) {
+  final width = needle.frames.length;
+  if (width < 8 || haystack.frames.length < width) return null;
+  final limit = haystack.frames.length - width;
+  var best = 0.0;
+  var bestStart = -1;
+  for (var start = 0; start <= limit; start += 2) {
+    final score = _centeredCosine(needle, haystack, start);
+    if (score <= best) continue;
+    best = score;
+    bestStart = start;
+  }
+  if (bestStart < 0 || best < logMelMatchThreshold) return null;
+  final startMs = bestStart * logMelHopMs;
+  return LogMelMatch(
+    startMs: startMs,
+    endMs: startMs + width * logMelHopMs,
+    score: best,
+  );
+}
+
+double _centeredCosine(LogMelClip needle, LogMelClip haystack, int start) {
+  var dot = 0.0;
+  var leftEnergy = 0.0;
+  var rightEnergy = 0.0;
+  for (var frame = 0; frame < needle.frames.length; frame++) {
+    final left = needle.frames[frame];
+    final right = haystack.frames[start + frame];
+    final bands = left.length < right.length ? left.length : right.length;
+    var meanLeft = 0.0;
+    var meanRight = 0.0;
+    for (var band = 0; band < bands; band++) {
+      meanLeft += left[band];
+      meanRight += right[band];
+    }
+    meanLeft /= bands;
+    meanRight /= bands;
+    for (var band = 0; band < bands; band++) {
+      final a = left[band] - meanLeft;
+      final b = right[band] - meanRight;
+      dot += a * b;
+      leftEnergy += a * a;
+      rightEnergy += b * b;
+    }
+  }
+  final denom = math.sqrt(leftEnergy) * math.sqrt(rightEnergy);
+  if (denom <= 1e-8) return 0;
+  final score = dot / denom;
+  if (score > 1) return 1;
+  if (score < -1) return -1;
+  return score;
+}
+
 bool _acceptShort(List<SegmentOccurrence> hits) {
   if (hits.isEmpty) return false;
   final episodes = <int>{};
@@ -413,6 +467,98 @@ bool _acceptShort(List<SegmentOccurrence> hits) {
   }
   if (episodes.length < jingleMinEpisodes) return false;
   return comparableJinglePositions(hits);
+}
+
+/// Durée cherchée juste après une pub : la virgule du réseau, ~3 s.
+const postAdStingMs = 2800;
+
+/// La virgule doit coller à la fin de la pub, à ce trou près.
+const postAdStingGapMs = 800;
+
+/// Même plancher que les jingles : deux épisodes seulement feraient
+/// d’une pub coupée trop tôt une fausse virgule.
+const postAdStingMinEpisodes = 3;
+
+/// Virgule répétée dans les secondes qui suivent une pub.
+class PostAdSting {
+  const PostAdSting({
+    required this.episodeId,
+    required this.startMs,
+    required this.endMs,
+  });
+
+  final int episodeId;
+  final int startMs;
+  final int endMs;
+}
+
+/// Cherche le même court extrait juste après la fin de pub de plusieurs
+/// épisodes. Le log-mel ne couvre que les 180 premières secondes.
+List<PostAdSting> findPostAdStings({
+  required List<EpisodeMel> episodes,
+  required List<({int episodeId, int endMs})> adEnds,
+}) {
+  final byEpisode = <int, EpisodeMel>{
+    for (final episode in episodes) episode.episodeId: episode,
+  };
+  final anchors = <({int episodeId, int endMs, LogMelClip clip})>[];
+  for (final ad in adEnds) {
+    if (ad.endMs <= 0 || ad.endMs > logMelSearchWindowMs) continue;
+    final episode = byEpisode[ad.episodeId];
+    if (episode == null) continue;
+    final clip = sliceLogMel(episode.clip, ad.endMs, ad.endMs + postAdStingMs);
+    if (!_audible(clip)) continue;
+    anchors.add((episodeId: ad.episodeId, endMs: ad.endMs, clip: clip));
+  }
+  if (anchors.length < postAdStingMinEpisodes) return const [];
+
+  final hits = <int, PostAdSting>{};
+  for (final anchor in anchors) {
+    final matched = <PostAdSting>[
+      PostAdSting(
+        episodeId: anchor.episodeId,
+        startMs: anchor.endMs,
+        endMs: anchor.endMs + anchor.clip.durationMs,
+      ),
+    ];
+    for (final other in anchors) {
+      if (other.episodeId == anchor.episodeId) continue;
+      final episode = byEpisode[other.episodeId];
+      if (episode == null) continue;
+      final windowStart = other.endMs - 400 < 0 ? 0 : other.endMs - 400;
+      final window = sliceLogMel(
+        episode.clip,
+        windowStart,
+        other.endMs + postAdStingMs + postAdStingGapMs,
+      );
+      // La cosinus brute du log-mel vaut ~1 sur la parole réelle : chaque
+      // trame est presque plate. On retire la moyenne de la trame, sinon
+      // toute fin de pub serait une virgule.
+      final found = _bestCenteredMatch(anchor.clip, window);
+      if (found == null) continue;
+      var start = windowStart + found.startMs;
+      final end = windowStart + found.endMs;
+      if (start < other.endMs - 400 || start > other.endMs + postAdStingGapMs) {
+        continue;
+      }
+      if (start < other.endMs) start = other.endMs;
+      if (start - other.endMs <= postAdStingGapMs) start = other.endMs;
+      if (end <= start) continue;
+      matched.add(
+        PostAdSting(episodeId: other.episodeId, startMs: start, endMs: end),
+      );
+    }
+    if (matched.length < postAdStingMinEpisodes) continue;
+    for (final hit in matched) {
+      final prior = hits[hit.episodeId];
+      if (prior == null ||
+          hit.endMs - hit.startMs > prior.endMs - prior.startMs) {
+        hits[hit.episodeId] = hit;
+      }
+    }
+  }
+  if (hits.length < postAdStingMinEpisodes) return const [];
+  return hits.values.toList();
 }
 
 /// Recherche log-mel hors de l’isolate d’interface.
@@ -516,6 +662,8 @@ Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
     }
     final refined = paired ?? self;
     if (refined == null) continue;
+    // La fin déjà poussée jusqu’au silence ne doit pas être raccourcie
+    // par un recalage qui s’arrête au dernier hash partagé.
     final templateId = segment[5] as int?;
     Uint8List? templateBytes;
     if (templateId != null) {
@@ -529,11 +677,12 @@ Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
         }
       }
     }
-    refinedEnds[segment[0]! as int] = refined.endMs;
+    final keptEnd = refined.endMs > endMs ? refined.endMs : endMs;
+    refinedEnds[segment[0]! as int] = keptEnd;
     refinements.add({
       'segmentId': segment[0],
       'startMs': refined.startMs,
-      'endMs': refined.endMs,
+      'endMs': keptEnd,
       'matches': segment[4],
       'templateId': templateId,
       'templateBytes': templateBytes,
@@ -596,11 +745,29 @@ Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
     });
   }
 
+  final adEnds = <({int episodeId, int endMs})>[];
+  for (final segment in segments) {
+    final id = segment[0]! as int;
+    final startMs = segment[2]! as int;
+    final endMs = refinedEnds[id] ?? segment[3]! as int;
+    if (endMs - startMs < adMinDurationMs) continue;
+    adEnds.add((episodeId: segment[1]! as int, endMs: endMs));
+  }
+  final postAd = findPostAdStings(episodes: episodes, adEnds: adEnds);
+
   return {
     'jingles': jingles,
     'refinements': refinements,
     'spans': spans,
     'learned': learned,
+    'postAd': [
+      for (final hit in postAd)
+        <String, Object?>{
+          'episodeId': hit.episodeId,
+          'startMs': hit.startMs,
+          'endMs': hit.endMs,
+        },
+    ],
   };
 }
 

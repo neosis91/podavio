@@ -602,5 +602,8 @@
   "Unnamed pattern": "Unnamed pattern",
   "Unreviewed": "Unreviewed",
   "Hide uncertain passages": "Hide uncertain passages",
-  "Show uncertain passages ({count})": "Show uncertain passages ({count})"
+  "Show uncertain passages ({count})": "Show uncertain passages ({count})",
+  "Episode": "Episode",
+  "Intro": "Intro",
+  "Outro": "Outro"
 }

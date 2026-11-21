@@ -470,5 +470,8 @@
   "{count} waiting": "{count} في الانتظار",
   "{seconds} seconds": "{seconds} ث",
   "Hide uncertain passages": "إخفاء المقاطع غير المؤكدة",
-  "Show uncertain passages ({count})": "عرض المقاطع غير المؤكدة ({count})"
+  "Show uncertain passages ({count})": "عرض المقاطع غير المؤكدة ({count})",
+  "Episode": "الحلقة",
+  "Intro": "المقدمة",
+  "Outro": "الخاتمة"
 }

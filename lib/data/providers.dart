@@ -118,16 +118,26 @@ final displayChaptersProvider =
     StreamProvider.family<List<DisplayChapter>, int>((ref, id) {
       unawaited(ref.watch(feedServiceProvider).ensureChapters(id));
       final database = ref.watch(databaseProvider);
+      final seconds = ref
+          .watch(episodeProvider(id))
+          .value
+          ?.episode
+          .durationSeconds;
+      final durationMs = seconds == null || seconds <= 0
+          ? null
+          : seconds * 1000;
       return _mergeChapterStreams(
         database.watchChapters(id),
         database.watchSkipSegments(id),
+        durationMs: durationMs,
       );
     });
 
 Stream<List<DisplayChapter>> _mergeChapterStreams(
   Stream<List<EpisodeChapter>> chapters,
-  Stream<List<SkipSegment>> segments,
-) {
+  Stream<List<SkipSegment>> segments, {
+  int? durationMs,
+}) {
   return Stream.multi((listener) {
     List<EpisodeChapter>? latestChapters;
     List<SkipSegment>? latestSegments;
@@ -139,6 +149,7 @@ Stream<List<DisplayChapter>> _mergeChapterStreams(
         mergeChaptersWithSegments(
           chapters: currentChapters,
           segments: currentSegments,
+          durationMs: durationMs,
         ),
       );
     }

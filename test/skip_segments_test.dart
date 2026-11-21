@@ -398,6 +398,69 @@ void main() {
     );
     expect(still, isNull);
   });
+
+  test('an ad and the sting glued to it are one skip', () {
+    final decision = decideSkipSegment(
+      positionMs: 1000,
+      previousMs: 0,
+      playing: true,
+      fromDownload: true,
+      autoSkipAds: true,
+      autoSkipKinds: const {SkipSegmentKind.ad},
+      segments: [
+        const SkipCandidate(
+          id: 1,
+          startMs: 0,
+          endMs: 30000,
+          kind: SkipSegmentKind.ad,
+          confirmed: null,
+        ),
+        const SkipCandidate(
+          id: 2,
+          startMs: 30000,
+          endMs: 33000,
+          kind: SkipSegmentKind.jingle,
+          confirmed: null,
+        ),
+        const SkipCandidate(
+          id: 3,
+          startMs: 33000,
+          endMs: 40000,
+          kind: SkipSegmentKind.intro,
+          confirmed: null,
+        ),
+      ],
+      heldIds: <int>{},
+    );
+    expect(decision?.seekToMs, 33000);
+
+    final rejected = decideSkipSegment(
+      positionMs: 1000,
+      previousMs: 0,
+      playing: true,
+      fromDownload: true,
+      autoSkipAds: true,
+      autoSkipKinds: const {SkipSegmentKind.ad},
+      segments: [
+        const SkipCandidate(
+          id: 1,
+          startMs: 0,
+          endMs: 30000,
+          kind: SkipSegmentKind.ad,
+          confirmed: null,
+        ),
+        const SkipCandidate(
+          id: 2,
+          startMs: 30000,
+          endMs: 33000,
+          kind: SkipSegmentKind.jingle,
+          confirmed: false,
+        ),
+      ],
+      heldIds: <int>{},
+    );
+    expect(rejected?.seekToMs, 30000);
+  });
 }
 
 FeedDraft _draft({int seconds = 120}) {

@@ -161,9 +161,7 @@ class _ChaptersSheetState extends ConsumerState<_ChaptersSheet> {
       title: Text(
         chapter.title.isEmpty
             ? 'Chapitre ${index + 1}'
-            : chapter.fromSegment
-            ? context.tr(chapter.title)
-            : chapter.title,
+            : localizedChapterTitle(chapter, context.tr),
       ),
       onTap: () {
         Navigator.pop(context);
