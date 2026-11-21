@@ -9,6 +9,10 @@ La fusion de `develop` dans `main` publie cette version.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 
+## 2026.11.14
+
+- Automatic fingerprinting no longer freezes the app. A long download is read in pieces, analysis stops after a timeout instead of retrying forever, and a setting turns automatic analysis off.
+
 ## 2026.11.13
 
 - Downloaded episodes are fingerprinted after the file is saved. Repeated ads, sponsors, and jingles in the same podcast show up for review, and the classification screen can analyze episodes already on the phone.

@@ -1,1 +1,0 @@
-- Automatic fingerprinting no longer freezes the app. A long download is read in pieces, analysis stops after a timeout instead of retrying forever, and a setting turns automatic analysis off.
