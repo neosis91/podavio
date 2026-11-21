@@ -1,1 +1,0 @@
-- Short jingles in downloaded episodes are matched with a log-mel template, and a repeated network sting can mark the ad block around it. The classification screen labels that block as a network sting.

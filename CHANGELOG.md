@@ -13,6 +13,9 @@ dans son titre, ou l’étiquette `skip-changelog`.
 
 - Downloaded episodes are fingerprinted after the file is saved. Repeated ads, sponsors, and jingles in the same podcast show up for review, and the classification screen can analyze episodes already on the phone.
 
+- Short jingles in downloaded episodes are matched with a log-mel template, and a repeated network sting can mark the ad block around it. The classification screen labels that block as a network sting.
+
+
 ## 2026.11.12
 
 - Downloaded episodes can skip confirmed ad, sponsor, and jingle passages. The review is in the podcast settings, and a chapter title that looks like an ad is suggested on its own. Detecting those passages from the audio is not active yet.
