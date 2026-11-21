@@ -4,15 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
-import '../../data/app_database.dart';
 import '../../data/providers.dart';
 import '../../l10n/l10n.dart';
+import '../../player/chapter_merge.dart';
 import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
 import '../widgets/brand.dart';
 import '../widgets/episode_tile.dart';
 import 'audio_output_sheet.dart';
-import 'player_chapter.dart';
 import 'player_panel.dart';
 import 'player_sheets.dart';
 
@@ -42,9 +41,10 @@ class PlayerTransport extends ConsumerWidget {
     final hasNext = ref.watch(hasNextInQueueProvider).value ?? false;
     final episodeId = ref.watch(playerProvider.select((s) => s.episodeId));
     final chapters = episodeId == null
-        ? const <EpisodeChapter>[]
-        : (ref.watch(chaptersProvider(episodeId)).value ??
-              const <EpisodeChapter>[]);
+        ? const <DisplayChapter>[]
+        : (ref.watch(displayChaptersProvider(episodeId)).value ??
+              const <DisplayChapter>[]);
+    final passage = ref.watch(playerProvider.select((s) => s.manualSkip));
     final hasChapters = chapters.isNotEmpty;
     final player = ref.read(playerProvider.notifier);
     final clockStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -62,7 +62,7 @@ class PlayerTransport extends ConsumerWidget {
     }
 
     final scheme = Theme.of(context).colorScheme;
-    final activeChapter = currentChapterFor(chapters, position);
+    final activeChapter = currentDisplayChapter(chapters, position);
     final showChapterMarkers = totalMs > 0 && chapters.isNotEmpty;
     final sliderTheme = SliderTheme.of(context);
     final thumbWidth = (sliderTheme.thumbShape ?? const RoundSliderThumbShape())
@@ -170,6 +170,16 @@ class PlayerTransport extends ConsumerWidget {
             ),
           ],
         ),
+        if (passage != null) ...[
+          const SizedBox(height: 4),
+          Align(
+            child: TextButton.icon(
+              onPressed: () => player.skipPassage(passage),
+              icon: Icon(Icons.skip_next, size: carMode ? 28 : 20),
+              label: Text(context.tr('Skip this passage')),
+            ),
+          ),
+        ],
         SizedBox(height: carMode ? 8 : 4),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -275,7 +285,7 @@ class _ChapterMarkersPainter extends CustomPainter {
     required this.trackInset,
   });
 
-  final List<EpisodeChapter> chapters;
+  final List<DisplayChapter> chapters;
   final int durationMs;
   final int? activeStartMs;
   final Color markerColor;

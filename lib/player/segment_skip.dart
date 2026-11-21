@@ -81,3 +81,57 @@ SkipDecision? decideSkipSegment({
     returnToMs: positionMs,
   );
 }
+
+/// Bouton du grand lecteur : un passage présent, mais pas sauté tout seul.
+class SkipOffer {
+  const SkipOffer({
+    required this.segmentId,
+    required this.kind,
+    required this.seekToMs,
+  });
+
+  final int segmentId;
+  final SkipSegmentKind kind;
+  final int seekToMs;
+
+  @override
+  bool operator ==(Object other) {
+    return other is SkipOffer &&
+        other.segmentId == segmentId &&
+        other.kind == kind &&
+        other.seekToMs == seekToMs;
+  }
+
+  @override
+  int get hashCode => Object.hash(segmentId, kind, seekToMs);
+}
+
+/// Passage à proposer quand le saut automatique ne le couvre pas.
+///
+/// Si un passage couvrant la position est configuré pour le saut
+/// automatique, rien n’est proposé : ce saut part tout seul.
+SkipOffer? manualSkipOffer({
+  required int positionMs,
+  required bool autoSkipAds,
+  required Set<SkipSegmentKind> autoSkipKinds,
+  required List<SkipCandidate> segments,
+}) {
+  var coveredByAuto = false;
+  SkipCandidate? chosen;
+  for (final segment in segments) {
+    if (segment.confirmed == false) continue;
+    if (segment.endMs <= segment.startMs) continue;
+    if (!segment.contains(positionMs)) continue;
+    if (autoSkipAds && autoSkipKinds.contains(segment.kind)) {
+      coveredByAuto = true;
+      continue;
+    }
+    if (chosen == null || segment.endMs > chosen.endMs) chosen = segment;
+  }
+  if (coveredByAuto || chosen == null) return null;
+  return SkipOffer(
+    segmentId: chosen.id,
+    kind: chosen.kind,
+    seekToMs: chosen.endMs,
+  );
+}
