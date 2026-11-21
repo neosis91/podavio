@@ -4026,6 +4026,15 @@ class $EpisodeFingerprintsTable extends EpisodeFingerprints
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _speechMeta = const VerificationMeta('speech');
+  @override
+  late final GeneratedColumn<Uint8List> speech = GeneratedColumn<Uint8List>(
+    'speech',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -4038,7 +4047,13 @@ class $EpisodeFingerprintsTable extends EpisodeFingerprints
     requiredDuringInsert: true,
   );
   @override
-  List<GeneratedColumn> get $columns => [episodeId, data, hopMicros, createdAt];
+  List<GeneratedColumn> get $columns => [
+    episodeId,
+    data,
+    hopMicros,
+    speech,
+    createdAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -4073,6 +4088,12 @@ class $EpisodeFingerprintsTable extends EpisodeFingerprints
     } else if (isInserting) {
       context.missing(_hopMicrosMeta);
     }
+    if (data.containsKey('speech')) {
+      context.handle(
+        _speechMeta,
+        speech.isAcceptableOrUnknown(data['speech']!, _speechMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -4102,6 +4123,10 @@ class $EpisodeFingerprintsTable extends EpisodeFingerprints
         DriftSqlType.int,
         data['${effectivePrefix}hop_micros'],
       )!,
+      speech: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}speech'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -4124,11 +4149,16 @@ class EpisodeFingerprint extends DataClass
 
   /// Écart entre deux valeurs, en microsecondes (~125000 pour 8/s).
   final int hopMicros;
+
+  /// Une octet par seconde : 0 musique, 255 parole. `null` tant que
+  /// l’épisode n’a pas été noté.
+  final Uint8List? speech;
   final DateTime createdAt;
   const EpisodeFingerprint({
     required this.episodeId,
     required this.data,
     required this.hopMicros,
+    this.speech,
     required this.createdAt,
   });
   @override
@@ -4137,6 +4167,9 @@ class EpisodeFingerprint extends DataClass
     map['episode_id'] = Variable<int>(episodeId);
     map['data'] = Variable<Uint8List>(data);
     map['hop_micros'] = Variable<int>(hopMicros);
+    if (!nullToAbsent || speech != null) {
+      map['speech'] = Variable<Uint8List>(speech);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -4146,6 +4179,9 @@ class EpisodeFingerprint extends DataClass
       episodeId: Value(episodeId),
       data: Value(data),
       hopMicros: Value(hopMicros),
+      speech: speech == null && nullToAbsent
+          ? const Value.absent()
+          : Value(speech),
       createdAt: Value(createdAt),
     );
   }
@@ -4159,6 +4195,7 @@ class EpisodeFingerprint extends DataClass
       episodeId: serializer.fromJson<int>(json['episodeId']),
       data: serializer.fromJson<Uint8List>(json['data']),
       hopMicros: serializer.fromJson<int>(json['hopMicros']),
+      speech: serializer.fromJson<Uint8List?>(json['speech']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -4169,6 +4206,7 @@ class EpisodeFingerprint extends DataClass
       'episodeId': serializer.toJson<int>(episodeId),
       'data': serializer.toJson<Uint8List>(data),
       'hopMicros': serializer.toJson<int>(hopMicros),
+      'speech': serializer.toJson<Uint8List?>(speech),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -4177,11 +4215,13 @@ class EpisodeFingerprint extends DataClass
     int? episodeId,
     Uint8List? data,
     int? hopMicros,
+    Value<Uint8List?> speech = const Value.absent(),
     DateTime? createdAt,
   }) => EpisodeFingerprint(
     episodeId: episodeId ?? this.episodeId,
     data: data ?? this.data,
     hopMicros: hopMicros ?? this.hopMicros,
+    speech: speech.present ? speech.value : this.speech,
     createdAt: createdAt ?? this.createdAt,
   );
   EpisodeFingerprint copyWithCompanion(EpisodeFingerprintsCompanion data) {
@@ -4189,6 +4229,7 @@ class EpisodeFingerprint extends DataClass
       episodeId: data.episodeId.present ? data.episodeId.value : this.episodeId,
       data: data.data.present ? data.data.value : this.data,
       hopMicros: data.hopMicros.present ? data.hopMicros.value : this.hopMicros,
+      speech: data.speech.present ? data.speech.value : this.speech,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -4199,6 +4240,7 @@ class EpisodeFingerprint extends DataClass
           ..write('episodeId: $episodeId, ')
           ..write('data: $data, ')
           ..write('hopMicros: $hopMicros, ')
+          ..write('speech: $speech, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -4209,6 +4251,7 @@ class EpisodeFingerprint extends DataClass
     episodeId,
     $driftBlobEquality.hash(data),
     hopMicros,
+    $driftBlobEquality.hash(speech),
     createdAt,
   );
   @override
@@ -4218,6 +4261,7 @@ class EpisodeFingerprint extends DataClass
           other.episodeId == this.episodeId &&
           $driftBlobEquality.equals(other.data, this.data) &&
           other.hopMicros == this.hopMicros &&
+          $driftBlobEquality.equals(other.speech, this.speech) &&
           other.createdAt == this.createdAt);
 }
 
@@ -4225,17 +4269,20 @@ class EpisodeFingerprintsCompanion extends UpdateCompanion<EpisodeFingerprint> {
   final Value<int> episodeId;
   final Value<Uint8List> data;
   final Value<int> hopMicros;
+  final Value<Uint8List?> speech;
   final Value<DateTime> createdAt;
   const EpisodeFingerprintsCompanion({
     this.episodeId = const Value.absent(),
     this.data = const Value.absent(),
     this.hopMicros = const Value.absent(),
+    this.speech = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   EpisodeFingerprintsCompanion.insert({
     this.episodeId = const Value.absent(),
     required Uint8List data,
     required int hopMicros,
+    this.speech = const Value.absent(),
     required DateTime createdAt,
   }) : data = Value(data),
        hopMicros = Value(hopMicros),
@@ -4244,12 +4291,14 @@ class EpisodeFingerprintsCompanion extends UpdateCompanion<EpisodeFingerprint> {
     Expression<int>? episodeId,
     Expression<Uint8List>? data,
     Expression<int>? hopMicros,
+    Expression<Uint8List>? speech,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
       if (episodeId != null) 'episode_id': episodeId,
       if (data != null) 'data': data,
       if (hopMicros != null) 'hop_micros': hopMicros,
+      if (speech != null) 'speech': speech,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -4258,12 +4307,14 @@ class EpisodeFingerprintsCompanion extends UpdateCompanion<EpisodeFingerprint> {
     Value<int>? episodeId,
     Value<Uint8List>? data,
     Value<int>? hopMicros,
+    Value<Uint8List?>? speech,
     Value<DateTime>? createdAt,
   }) {
     return EpisodeFingerprintsCompanion(
       episodeId: episodeId ?? this.episodeId,
       data: data ?? this.data,
       hopMicros: hopMicros ?? this.hopMicros,
+      speech: speech ?? this.speech,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -4280,6 +4331,9 @@ class EpisodeFingerprintsCompanion extends UpdateCompanion<EpisodeFingerprint> {
     if (hopMicros.present) {
       map['hop_micros'] = Variable<int>(hopMicros.value);
     }
+    if (speech.present) {
+      map['speech'] = Variable<Uint8List>(speech.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4292,6 +4346,7 @@ class EpisodeFingerprintsCompanion extends UpdateCompanion<EpisodeFingerprint> {
           ..write('episodeId: $episodeId, ')
           ..write('data: $data, ')
           ..write('hopMicros: $hopMicros, ')
+          ..write('speech: $speech, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -4393,6 +4448,17 @@ class $SegmentTemplatesTable extends SegmentTemplates
     requiredDuringInsert: false,
     defaultValue: const Constant(1),
   );
+  static const VerificationMeta _confidenceMeta = const VerificationMeta(
+    'confidence',
+  );
+  @override
+  late final GeneratedColumn<int> confidence = GeneratedColumn<int>(
+    'confidence',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -4414,6 +4480,7 @@ class $SegmentTemplatesTable extends SegmentTemplates
     logMel,
     durationMs,
     occurrences,
+    confidence,
     createdAt,
   ];
   @override
@@ -4479,6 +4546,12 @@ class $SegmentTemplatesTable extends SegmentTemplates
         ),
       );
     }
+    if (data.containsKey('confidence')) {
+      context.handle(
+        _confidenceMeta,
+        confidence.isAcceptableOrUnknown(data['confidence']!, _confidenceMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -4530,6 +4603,10 @@ class $SegmentTemplatesTable extends SegmentTemplates
         DriftSqlType.int,
         data['${effectivePrefix}occurrences'],
       )!,
+      confidence: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}confidence'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -4561,6 +4638,9 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
   final Uint8List? logMel;
   final int durationMs;
   final int occurrences;
+
+  /// 0–100. `null` : gabarit posé avant le score. Le saut n’en dépend pas.
+  final int? confidence;
   final DateTime createdAt;
   const SegmentTemplate({
     required this.id,
@@ -4571,6 +4651,7 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
     this.logMel,
     required this.durationMs,
     required this.occurrences,
+    this.confidence,
     required this.createdAt,
   });
   @override
@@ -4592,6 +4673,9 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
     }
     map['duration_ms'] = Variable<int>(durationMs);
     map['occurrences'] = Variable<int>(occurrences);
+    if (!nullToAbsent || confidence != null) {
+      map['confidence'] = Variable<int>(confidence);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -4610,6 +4694,9 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
           : Value(logMel),
       durationMs: Value(durationMs),
       occurrences: Value(occurrences),
+      confidence: confidence == null && nullToAbsent
+          ? const Value.absent()
+          : Value(confidence),
       createdAt: Value(createdAt),
     );
   }
@@ -4630,6 +4717,7 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
       logMel: serializer.fromJson<Uint8List?>(json['logMel']),
       durationMs: serializer.fromJson<int>(json['durationMs']),
       occurrences: serializer.fromJson<int>(json['occurrences']),
+      confidence: serializer.fromJson<int?>(json['confidence']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -4647,6 +4735,7 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
       'logMel': serializer.toJson<Uint8List?>(logMel),
       'durationMs': serializer.toJson<int>(durationMs),
       'occurrences': serializer.toJson<int>(occurrences),
+      'confidence': serializer.toJson<int?>(confidence),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -4660,6 +4749,7 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
     Value<Uint8List?> logMel = const Value.absent(),
     int? durationMs,
     int? occurrences,
+    Value<int?> confidence = const Value.absent(),
     DateTime? createdAt,
   }) => SegmentTemplate(
     id: id ?? this.id,
@@ -4670,6 +4760,7 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
     logMel: logMel.present ? logMel.value : this.logMel,
     durationMs: durationMs ?? this.durationMs,
     occurrences: occurrences ?? this.occurrences,
+    confidence: confidence.present ? confidence.value : this.confidence,
     createdAt: createdAt ?? this.createdAt,
   );
   SegmentTemplate copyWithCompanion(SegmentTemplatesCompanion data) {
@@ -4688,6 +4779,9 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
       occurrences: data.occurrences.present
           ? data.occurrences.value
           : this.occurrences,
+      confidence: data.confidence.present
+          ? data.confidence.value
+          : this.confidence,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -4703,6 +4797,7 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
           ..write('logMel: $logMel, ')
           ..write('durationMs: $durationMs, ')
           ..write('occurrences: $occurrences, ')
+          ..write('confidence: $confidence, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -4718,6 +4813,7 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
     $driftBlobEquality.hash(logMel),
     durationMs,
     occurrences,
+    confidence,
     createdAt,
   );
   @override
@@ -4732,6 +4828,7 @@ class SegmentTemplate extends DataClass implements Insertable<SegmentTemplate> {
           $driftBlobEquality.equals(other.logMel, this.logMel) &&
           other.durationMs == this.durationMs &&
           other.occurrences == this.occurrences &&
+          other.confidence == this.confidence &&
           other.createdAt == this.createdAt);
 }
 
@@ -4744,6 +4841,7 @@ class SegmentTemplatesCompanion extends UpdateCompanion<SegmentTemplate> {
   final Value<Uint8List?> logMel;
   final Value<int> durationMs;
   final Value<int> occurrences;
+  final Value<int?> confidence;
   final Value<DateTime> createdAt;
   const SegmentTemplatesCompanion({
     this.id = const Value.absent(),
@@ -4754,6 +4852,7 @@ class SegmentTemplatesCompanion extends UpdateCompanion<SegmentTemplate> {
     this.logMel = const Value.absent(),
     this.durationMs = const Value.absent(),
     this.occurrences = const Value.absent(),
+    this.confidence = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   SegmentTemplatesCompanion.insert({
@@ -4765,6 +4864,7 @@ class SegmentTemplatesCompanion extends UpdateCompanion<SegmentTemplate> {
     this.logMel = const Value.absent(),
     required int durationMs,
     this.occurrences = const Value.absent(),
+    this.confidence = const Value.absent(),
     required DateTime createdAt,
   }) : podcastId = Value(podcastId),
        kind = Value(kind),
@@ -4780,6 +4880,7 @@ class SegmentTemplatesCompanion extends UpdateCompanion<SegmentTemplate> {
     Expression<Uint8List>? logMel,
     Expression<int>? durationMs,
     Expression<int>? occurrences,
+    Expression<int>? confidence,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -4791,6 +4892,7 @@ class SegmentTemplatesCompanion extends UpdateCompanion<SegmentTemplate> {
       if (logMel != null) 'log_mel': logMel,
       if (durationMs != null) 'duration_ms': durationMs,
       if (occurrences != null) 'occurrences': occurrences,
+      if (confidence != null) 'confidence': confidence,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -4804,6 +4906,7 @@ class SegmentTemplatesCompanion extends UpdateCompanion<SegmentTemplate> {
     Value<Uint8List?>? logMel,
     Value<int>? durationMs,
     Value<int>? occurrences,
+    Value<int?>? confidence,
     Value<DateTime>? createdAt,
   }) {
     return SegmentTemplatesCompanion(
@@ -4815,6 +4918,7 @@ class SegmentTemplatesCompanion extends UpdateCompanion<SegmentTemplate> {
       logMel: logMel ?? this.logMel,
       durationMs: durationMs ?? this.durationMs,
       occurrences: occurrences ?? this.occurrences,
+      confidence: confidence ?? this.confidence,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -4848,6 +4952,9 @@ class SegmentTemplatesCompanion extends UpdateCompanion<SegmentTemplate> {
     if (occurrences.present) {
       map['occurrences'] = Variable<int>(occurrences.value);
     }
+    if (confidence.present) {
+      map['confidence'] = Variable<int>(confidence.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4865,6 +4972,7 @@ class SegmentTemplatesCompanion extends UpdateCompanion<SegmentTemplate> {
           ..write('logMel: $logMel, ')
           ..write('durationMs: $durationMs, ')
           ..write('occurrences: $occurrences, ')
+          ..write('confidence: $confidence, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -4968,6 +5076,17 @@ class $SkipSegmentsTable extends SkipSegments
       'CHECK ("confirmed" IN (0, 1))',
     ),
   );
+  static const VerificationMeta _confidenceMeta = const VerificationMeta(
+    'confidence',
+  );
+  @override
+  late final GeneratedColumn<int> confidence = GeneratedColumn<int>(
+    'confidence',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _templateIdMeta = const VerificationMeta(
     'templateId',
   );
@@ -4992,6 +5111,7 @@ class $SkipSegmentsTable extends SkipSegments
     source,
     matches,
     confirmed,
+    confidence,
     templateId,
   ];
   @override
@@ -5045,6 +5165,12 @@ class $SkipSegmentsTable extends SkipSegments
         confirmed.isAcceptableOrUnknown(data['confirmed']!, _confirmedMeta),
       );
     }
+    if (data.containsKey('confidence')) {
+      context.handle(
+        _confidenceMeta,
+        confidence.isAcceptableOrUnknown(data['confidence']!, _confidenceMeta),
+      );
+    }
     if (data.containsKey('template_id')) {
       context.handle(
         _templateIdMeta,
@@ -5096,6 +5222,10 @@ class $SkipSegmentsTable extends SkipSegments
         DriftSqlType.bool,
         data['${effectivePrefix}confirmed'],
       ),
+      confidence: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}confidence'],
+      ),
       templateId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}template_id'],
@@ -5129,6 +5259,10 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
 
   /// `null` : pas revu. `true` : confirmé. `false` : ignoré.
   final bool? confirmed;
+
+  /// 0–100. `null` : pas calculé (chapitre, ou passage ancien).
+  /// Sert au tri. Un candidat intra-épisode bas est replié dans l’écran.
+  final int? confidence;
   final int? templateId;
   const SkipSegment({
     required this.id,
@@ -5139,6 +5273,7 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     required this.source,
     required this.matches,
     this.confirmed,
+    this.confidence,
     this.templateId,
   });
   @override
@@ -5162,6 +5297,9 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     if (!nullToAbsent || confirmed != null) {
       map['confirmed'] = Variable<bool>(confirmed);
     }
+    if (!nullToAbsent || confidence != null) {
+      map['confidence'] = Variable<int>(confidence);
+    }
     if (!nullToAbsent || templateId != null) {
       map['template_id'] = Variable<int>(templateId);
     }
@@ -5180,6 +5318,9 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
       confirmed: confirmed == null && nullToAbsent
           ? const Value.absent()
           : Value(confirmed),
+      confidence: confidence == null && nullToAbsent
+          ? const Value.absent()
+          : Value(confidence),
       templateId: templateId == null && nullToAbsent
           ? const Value.absent()
           : Value(templateId),
@@ -5204,6 +5345,7 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
       ),
       matches: serializer.fromJson<int>(json['matches']),
       confirmed: serializer.fromJson<bool?>(json['confirmed']),
+      confidence: serializer.fromJson<int?>(json['confidence']),
       templateId: serializer.fromJson<int?>(json['templateId']),
     );
   }
@@ -5223,6 +5365,7 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
       ),
       'matches': serializer.toJson<int>(matches),
       'confirmed': serializer.toJson<bool?>(confirmed),
+      'confidence': serializer.toJson<int?>(confidence),
       'templateId': serializer.toJson<int?>(templateId),
     };
   }
@@ -5236,6 +5379,7 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     SkipSegmentSource? source,
     int? matches,
     Value<bool?> confirmed = const Value.absent(),
+    Value<int?> confidence = const Value.absent(),
     Value<int?> templateId = const Value.absent(),
   }) => SkipSegment(
     id: id ?? this.id,
@@ -5246,6 +5390,7 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     source: source ?? this.source,
     matches: matches ?? this.matches,
     confirmed: confirmed.present ? confirmed.value : this.confirmed,
+    confidence: confidence.present ? confidence.value : this.confidence,
     templateId: templateId.present ? templateId.value : this.templateId,
   );
   SkipSegment copyWithCompanion(SkipSegmentsCompanion data) {
@@ -5258,6 +5403,9 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
       source: data.source.present ? data.source.value : this.source,
       matches: data.matches.present ? data.matches.value : this.matches,
       confirmed: data.confirmed.present ? data.confirmed.value : this.confirmed,
+      confidence: data.confidence.present
+          ? data.confidence.value
+          : this.confidence,
       templateId: data.templateId.present
           ? data.templateId.value
           : this.templateId,
@@ -5275,6 +5423,7 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
           ..write('source: $source, ')
           ..write('matches: $matches, ')
           ..write('confirmed: $confirmed, ')
+          ..write('confidence: $confidence, ')
           ..write('templateId: $templateId')
           ..write(')'))
         .toString();
@@ -5290,6 +5439,7 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     source,
     matches,
     confirmed,
+    confidence,
     templateId,
   );
   @override
@@ -5304,6 +5454,7 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
           other.source == this.source &&
           other.matches == this.matches &&
           other.confirmed == this.confirmed &&
+          other.confidence == this.confidence &&
           other.templateId == this.templateId);
 }
 
@@ -5316,6 +5467,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
   final Value<SkipSegmentSource> source;
   final Value<int> matches;
   final Value<bool?> confirmed;
+  final Value<int?> confidence;
   final Value<int?> templateId;
   const SkipSegmentsCompanion({
     this.id = const Value.absent(),
@@ -5326,6 +5478,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     this.source = const Value.absent(),
     this.matches = const Value.absent(),
     this.confirmed = const Value.absent(),
+    this.confidence = const Value.absent(),
     this.templateId = const Value.absent(),
   });
   SkipSegmentsCompanion.insert({
@@ -5337,6 +5490,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     required SkipSegmentSource source,
     this.matches = const Value.absent(),
     this.confirmed = const Value.absent(),
+    this.confidence = const Value.absent(),
     this.templateId = const Value.absent(),
   }) : episodeId = Value(episodeId),
        startMs = Value(startMs),
@@ -5352,6 +5506,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     Expression<String>? source,
     Expression<int>? matches,
     Expression<bool>? confirmed,
+    Expression<int>? confidence,
     Expression<int>? templateId,
   }) {
     return RawValuesInsertable({
@@ -5363,6 +5518,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
       if (source != null) 'source': source,
       if (matches != null) 'matches': matches,
       if (confirmed != null) 'confirmed': confirmed,
+      if (confidence != null) 'confidence': confidence,
       if (templateId != null) 'template_id': templateId,
     });
   }
@@ -5376,6 +5532,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     Value<SkipSegmentSource>? source,
     Value<int>? matches,
     Value<bool?>? confirmed,
+    Value<int?>? confidence,
     Value<int?>? templateId,
   }) {
     return SkipSegmentsCompanion(
@@ -5387,6 +5544,7 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
       source: source ?? this.source,
       matches: matches ?? this.matches,
       confirmed: confirmed ?? this.confirmed,
+      confidence: confidence ?? this.confidence,
       templateId: templateId ?? this.templateId,
     );
   }
@@ -5422,6 +5580,9 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     if (confirmed.present) {
       map['confirmed'] = Variable<bool>(confirmed.value);
     }
+    if (confidence.present) {
+      map['confidence'] = Variable<int>(confidence.value);
+    }
     if (templateId.present) {
       map['template_id'] = Variable<int>(templateId.value);
     }
@@ -5439,7 +5600,770 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
           ..write('source: $source, ')
           ..write('matches: $matches, ')
           ..write('confirmed: $confirmed, ')
+          ..write('confidence: $confidence, ')
           ..write('templateId: $templateId')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $EpisodeLogMelsTable extends EpisodeLogMels
+    with TableInfo<$EpisodeLogMelsTable, EpisodeLogMel> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EpisodeLogMelsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _episodeIdMeta = const VerificationMeta(
+    'episodeId',
+  );
+  @override
+  late final GeneratedColumn<int> episodeId = GeneratedColumn<int>(
+    'episode_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES episodes (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _dataMeta = const VerificationMeta('data');
+  @override
+  late final GeneratedColumn<Uint8List> data = GeneratedColumn<Uint8List>(
+    'data',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hopMsMeta = const VerificationMeta('hopMs');
+  @override
+  late final GeneratedColumn<int> hopMs = GeneratedColumn<int>(
+    'hop_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [episodeId, data, hopMs, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'episode_log_mels';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<EpisodeLogMel> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('episode_id')) {
+      context.handle(
+        _episodeIdMeta,
+        episodeId.isAcceptableOrUnknown(data['episode_id']!, _episodeIdMeta),
+      );
+    }
+    if (data.containsKey('data')) {
+      context.handle(
+        _dataMeta,
+        this.data.isAcceptableOrUnknown(data['data']!, _dataMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dataMeta);
+    }
+    if (data.containsKey('hop_ms')) {
+      context.handle(
+        _hopMsMeta,
+        hopMs.isAcceptableOrUnknown(data['hop_ms']!, _hopMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hopMsMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {episodeId};
+  @override
+  EpisodeLogMel map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EpisodeLogMel(
+      episodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}episode_id'],
+      )!,
+      data: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}data'],
+      )!,
+      hopMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}hop_ms'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $EpisodeLogMelsTable createAlias(String alias) {
+    return $EpisodeLogMelsTable(attachedDatabase, alias);
+  }
+}
+
+class EpisodeLogMel extends DataClass implements Insertable<EpisodeLogMel> {
+  final int episodeId;
+
+  /// Float32 little-endian, 40 bandes, hop 10 ms.
+  final Uint8List data;
+  final int hopMs;
+  final DateTime createdAt;
+  const EpisodeLogMel({
+    required this.episodeId,
+    required this.data,
+    required this.hopMs,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['episode_id'] = Variable<int>(episodeId);
+    map['data'] = Variable<Uint8List>(data);
+    map['hop_ms'] = Variable<int>(hopMs);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  EpisodeLogMelsCompanion toCompanion(bool nullToAbsent) {
+    return EpisodeLogMelsCompanion(
+      episodeId: Value(episodeId),
+      data: Value(data),
+      hopMs: Value(hopMs),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory EpisodeLogMel.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EpisodeLogMel(
+      episodeId: serializer.fromJson<int>(json['episodeId']),
+      data: serializer.fromJson<Uint8List>(json['data']),
+      hopMs: serializer.fromJson<int>(json['hopMs']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'episodeId': serializer.toJson<int>(episodeId),
+      'data': serializer.toJson<Uint8List>(data),
+      'hopMs': serializer.toJson<int>(hopMs),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  EpisodeLogMel copyWith({
+    int? episodeId,
+    Uint8List? data,
+    int? hopMs,
+    DateTime? createdAt,
+  }) => EpisodeLogMel(
+    episodeId: episodeId ?? this.episodeId,
+    data: data ?? this.data,
+    hopMs: hopMs ?? this.hopMs,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  EpisodeLogMel copyWithCompanion(EpisodeLogMelsCompanion data) {
+    return EpisodeLogMel(
+      episodeId: data.episodeId.present ? data.episodeId.value : this.episodeId,
+      data: data.data.present ? data.data.value : this.data,
+      hopMs: data.hopMs.present ? data.hopMs.value : this.hopMs,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EpisodeLogMel(')
+          ..write('episodeId: $episodeId, ')
+          ..write('data: $data, ')
+          ..write('hopMs: $hopMs, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(episodeId, $driftBlobEquality.hash(data), hopMs, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EpisodeLogMel &&
+          other.episodeId == this.episodeId &&
+          $driftBlobEquality.equals(other.data, this.data) &&
+          other.hopMs == this.hopMs &&
+          other.createdAt == this.createdAt);
+}
+
+class EpisodeLogMelsCompanion extends UpdateCompanion<EpisodeLogMel> {
+  final Value<int> episodeId;
+  final Value<Uint8List> data;
+  final Value<int> hopMs;
+  final Value<DateTime> createdAt;
+  const EpisodeLogMelsCompanion({
+    this.episodeId = const Value.absent(),
+    this.data = const Value.absent(),
+    this.hopMs = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  EpisodeLogMelsCompanion.insert({
+    this.episodeId = const Value.absent(),
+    required Uint8List data,
+    required int hopMs,
+    required DateTime createdAt,
+  }) : data = Value(data),
+       hopMs = Value(hopMs),
+       createdAt = Value(createdAt);
+  static Insertable<EpisodeLogMel> custom({
+    Expression<int>? episodeId,
+    Expression<Uint8List>? data,
+    Expression<int>? hopMs,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (episodeId != null) 'episode_id': episodeId,
+      if (data != null) 'data': data,
+      if (hopMs != null) 'hop_ms': hopMs,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  EpisodeLogMelsCompanion copyWith({
+    Value<int>? episodeId,
+    Value<Uint8List>? data,
+    Value<int>? hopMs,
+    Value<DateTime>? createdAt,
+  }) {
+    return EpisodeLogMelsCompanion(
+      episodeId: episodeId ?? this.episodeId,
+      data: data ?? this.data,
+      hopMs: hopMs ?? this.hopMs,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (episodeId.present) {
+      map['episode_id'] = Variable<int>(episodeId.value);
+    }
+    if (data.present) {
+      map['data'] = Variable<Uint8List>(data.value);
+    }
+    if (hopMs.present) {
+      map['hop_ms'] = Variable<int>(hopMs.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EpisodeLogMelsCompanion(')
+          ..write('episodeId: $episodeId, ')
+          ..write('data: $data, ')
+          ..write('hopMs: $hopMs, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LearnedNetworkStingsTable extends LearnedNetworkStings
+    with TableInfo<$LearnedNetworkStingsTable, LearnedNetworkSting> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LearnedNetworkStingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _logMelMeta = const VerificationMeta('logMel');
+  @override
+  late final GeneratedColumn<Uint8List> logMel = GeneratedColumn<Uint8List>(
+    'log_mel',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
+  @override
+  late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
+    'duration_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _episodeCountMeta = const VerificationMeta(
+    'episodeCount',
+  );
+  @override
+  late final GeneratedColumn<int> episodeCount = GeneratedColumn<int>(
+    'episode_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _podcastCountMeta = const VerificationMeta(
+    'podcastCount',
+  );
+  @override
+  late final GeneratedColumn<int> podcastCount = GeneratedColumn<int>(
+    'podcast_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    logMel,
+    durationMs,
+    episodeCount,
+    podcastCount,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'learned_network_stings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LearnedNetworkSting> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    }
+    if (data.containsKey('log_mel')) {
+      context.handle(
+        _logMelMeta,
+        logMel.isAcceptableOrUnknown(data['log_mel']!, _logMelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_logMelMeta);
+    }
+    if (data.containsKey('duration_ms')) {
+      context.handle(
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['duration_ms']!, _durationMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_durationMsMeta);
+    }
+    if (data.containsKey('episode_count')) {
+      context.handle(
+        _episodeCountMeta,
+        episodeCount.isAcceptableOrUnknown(
+          data['episode_count']!,
+          _episodeCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('podcast_count')) {
+      context.handle(
+        _podcastCountMeta,
+        podcastCount.isAcceptableOrUnknown(
+          data['podcast_count']!,
+          _podcastCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LearnedNetworkSting map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LearnedNetworkSting(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      ),
+      logMel: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}log_mel'],
+      )!,
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}duration_ms'],
+      )!,
+      episodeCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}episode_count'],
+      )!,
+      podcastCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}podcast_count'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LearnedNetworkStingsTable createAlias(String alias) {
+    return $LearnedNetworkStingsTable(attachedDatabase, alias);
+  }
+}
+
+class LearnedNetworkSting extends DataClass
+    implements Insertable<LearnedNetworkSting> {
+  final int id;
+  final String? name;
+  final Uint8List logMel;
+  final int durationMs;
+  final int episodeCount;
+  final int podcastCount;
+  final DateTime createdAt;
+  const LearnedNetworkSting({
+    required this.id,
+    this.name,
+    required this.logMel,
+    required this.durationMs,
+    required this.episodeCount,
+    required this.podcastCount,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    if (!nullToAbsent || name != null) {
+      map['name'] = Variable<String>(name);
+    }
+    map['log_mel'] = Variable<Uint8List>(logMel);
+    map['duration_ms'] = Variable<int>(durationMs);
+    map['episode_count'] = Variable<int>(episodeCount);
+    map['podcast_count'] = Variable<int>(podcastCount);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  LearnedNetworkStingsCompanion toCompanion(bool nullToAbsent) {
+    return LearnedNetworkStingsCompanion(
+      id: Value(id),
+      name: name == null && nullToAbsent ? const Value.absent() : Value(name),
+      logMel: Value(logMel),
+      durationMs: Value(durationMs),
+      episodeCount: Value(episodeCount),
+      podcastCount: Value(podcastCount),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory LearnedNetworkSting.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LearnedNetworkSting(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String?>(json['name']),
+      logMel: serializer.fromJson<Uint8List>(json['logMel']),
+      durationMs: serializer.fromJson<int>(json['durationMs']),
+      episodeCount: serializer.fromJson<int>(json['episodeCount']),
+      podcastCount: serializer.fromJson<int>(json['podcastCount']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String?>(name),
+      'logMel': serializer.toJson<Uint8List>(logMel),
+      'durationMs': serializer.toJson<int>(durationMs),
+      'episodeCount': serializer.toJson<int>(episodeCount),
+      'podcastCount': serializer.toJson<int>(podcastCount),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  LearnedNetworkSting copyWith({
+    int? id,
+    Value<String?> name = const Value.absent(),
+    Uint8List? logMel,
+    int? durationMs,
+    int? episodeCount,
+    int? podcastCount,
+    DateTime? createdAt,
+  }) => LearnedNetworkSting(
+    id: id ?? this.id,
+    name: name.present ? name.value : this.name,
+    logMel: logMel ?? this.logMel,
+    durationMs: durationMs ?? this.durationMs,
+    episodeCount: episodeCount ?? this.episodeCount,
+    podcastCount: podcastCount ?? this.podcastCount,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  LearnedNetworkSting copyWithCompanion(LearnedNetworkStingsCompanion data) {
+    return LearnedNetworkSting(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      logMel: data.logMel.present ? data.logMel.value : this.logMel,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
+      episodeCount: data.episodeCount.present
+          ? data.episodeCount.value
+          : this.episodeCount,
+      podcastCount: data.podcastCount.present
+          ? data.podcastCount.value
+          : this.podcastCount,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LearnedNetworkSting(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('logMel: $logMel, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('episodeCount: $episodeCount, ')
+          ..write('podcastCount: $podcastCount, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    $driftBlobEquality.hash(logMel),
+    durationMs,
+    episodeCount,
+    podcastCount,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LearnedNetworkSting &&
+          other.id == this.id &&
+          other.name == this.name &&
+          $driftBlobEquality.equals(other.logMel, this.logMel) &&
+          other.durationMs == this.durationMs &&
+          other.episodeCount == this.episodeCount &&
+          other.podcastCount == this.podcastCount &&
+          other.createdAt == this.createdAt);
+}
+
+class LearnedNetworkStingsCompanion
+    extends UpdateCompanion<LearnedNetworkSting> {
+  final Value<int> id;
+  final Value<String?> name;
+  final Value<Uint8List> logMel;
+  final Value<int> durationMs;
+  final Value<int> episodeCount;
+  final Value<int> podcastCount;
+  final Value<DateTime> createdAt;
+  const LearnedNetworkStingsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.logMel = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.episodeCount = const Value.absent(),
+    this.podcastCount = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  LearnedNetworkStingsCompanion.insert({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    required Uint8List logMel,
+    required int durationMs,
+    this.episodeCount = const Value.absent(),
+    this.podcastCount = const Value.absent(),
+    required DateTime createdAt,
+  }) : logMel = Value(logMel),
+       durationMs = Value(durationMs),
+       createdAt = Value(createdAt);
+  static Insertable<LearnedNetworkSting> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<Uint8List>? logMel,
+    Expression<int>? durationMs,
+    Expression<int>? episodeCount,
+    Expression<int>? podcastCount,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (logMel != null) 'log_mel': logMel,
+      if (durationMs != null) 'duration_ms': durationMs,
+      if (episodeCount != null) 'episode_count': episodeCount,
+      if (podcastCount != null) 'podcast_count': podcastCount,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  LearnedNetworkStingsCompanion copyWith({
+    Value<int>? id,
+    Value<String?>? name,
+    Value<Uint8List>? logMel,
+    Value<int>? durationMs,
+    Value<int>? episodeCount,
+    Value<int>? podcastCount,
+    Value<DateTime>? createdAt,
+  }) {
+    return LearnedNetworkStingsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      logMel: logMel ?? this.logMel,
+      durationMs: durationMs ?? this.durationMs,
+      episodeCount: episodeCount ?? this.episodeCount,
+      podcastCount: podcastCount ?? this.podcastCount,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (logMel.present) {
+      map['log_mel'] = Variable<Uint8List>(logMel.value);
+    }
+    if (durationMs.present) {
+      map['duration_ms'] = Variable<int>(durationMs.value);
+    }
+    if (episodeCount.present) {
+      map['episode_count'] = Variable<int>(episodeCount.value);
+    }
+    if (podcastCount.present) {
+      map['podcast_count'] = Variable<int>(podcastCount.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LearnedNetworkStingsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('logMel: $logMel, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('episodeCount: $episodeCount, ')
+          ..write('podcastCount: $podcastCount, ')
+          ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
@@ -5465,6 +6389,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $SkipSegmentsTable skipSegments = $SkipSegmentsTable(this);
+  late final $EpisodeLogMelsTable episodeLogMels = $EpisodeLogMelsTable(this);
+  late final $LearnedNetworkStingsTable learnedNetworkStings =
+      $LearnedNetworkStingsTable(this);
   late final Index episodesPodcastId = Index(
     'episodes_podcast_id',
     'CREATE INDEX episodes_podcast_id ON episodes (podcast_id)',
@@ -5523,6 +6450,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     episodeFingerprints,
     segmentTemplates,
     skipSegments,
+    episodeLogMels,
+    learnedNetworkStings,
     episodesPodcastId,
     episodesPublishedAt,
     episodesPlayed,
@@ -5599,6 +6528,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('skip_segments', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'episodes',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('episode_log_mels', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -6618,6 +7554,24 @@ final class $$EpisodesTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$EpisodeLogMelsTable, List<EpisodeLogMel>>
+  _episodeLogMelsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.episodeLogMels,
+    aliasName: 'episodes__id__episode_log_mels__episode_id',
+  );
+
+  $$EpisodeLogMelsTableProcessedTableManager get episodeLogMelsRefs {
+    final manager = $$EpisodeLogMelsTableTableManager(
+      $_db,
+      $_db.episodeLogMels,
+    ).filter((f) => f.episodeId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_episodeLogMelsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$EpisodesTableFilterComposer
@@ -6873,6 +7827,31 @@ class $$EpisodesTableFilterComposer
           }) => $$SkipSegmentsTableFilterComposer(
             $db: $db,
             $table: $db.skipSegments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> episodeLogMelsRefs(
+    Expression<bool> Function($$EpisodeLogMelsTableFilterComposer f) f,
+  ) {
+    final $$EpisodeLogMelsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.episodeLogMels,
+      getReferencedColumn: (t) => t.episodeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodeLogMelsTableFilterComposer(
+            $db: $db,
+            $table: $db.episodeLogMels,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -7262,6 +8241,31 @@ class $$EpisodesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> episodeLogMelsRefs<T extends Object>(
+    Expression<T> Function($$EpisodeLogMelsTableAnnotationComposer a) f,
+  ) {
+    final $$EpisodeLogMelsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.episodeLogMels,
+      getReferencedColumn: (t) => t.episodeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodeLogMelsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.episodeLogMels,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$EpisodesTableTableManager
@@ -7284,6 +8288,7 @@ class $$EpisodesTableTableManager
             bool playlistEpisodesRefs,
             bool episodeFingerprintsRefs,
             bool skipSegmentsRefs,
+            bool episodeLogMelsRefs,
           })
         > {
   $$EpisodesTableTableManager(_$AppDatabase db, $EpisodesTable table)
@@ -7409,6 +8414,7 @@ class $$EpisodesTableTableManager
                 playlistEpisodesRefs = false,
                 episodeFingerprintsRefs = false,
                 skipSegmentsRefs = false,
+                episodeLogMelsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -7418,6 +8424,7 @@ class $$EpisodesTableTableManager
                     if (playlistEpisodesRefs) db.playlistEpisodes,
                     if (episodeFingerprintsRefs) db.episodeFingerprints,
                     if (skipSegmentsRefs) db.skipSegments,
+                    if (episodeLogMelsRefs) db.episodeLogMels,
                   ],
                   addJoins:
                       <
@@ -7551,6 +8558,26 @@ class $$EpisodesTableTableManager
                           referencedColumn: 'episode_id',
                           typedResults: items,
                         ),
+                      if (episodeLogMelsRefs)
+                        await $_getPrefetchedDataByColumns<
+                          Episode,
+                          $EpisodesTable,
+                          EpisodeLogMel,
+                          $EpisodeLogMelsTable
+                        >(
+                          currentTable: table,
+                          referencedTable: $$EpisodesTableReferences
+                              ._episodeLogMelsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$EpisodesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).episodeLogMelsRefs,
+                          currentColumn: 'id',
+                          referencedColumn: 'episode_id',
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -7578,6 +8605,7 @@ typedef $$EpisodesTableProcessedTableManager =
         bool playlistEpisodesRefs,
         bool episodeFingerprintsRefs,
         bool skipSegmentsRefs,
+        bool episodeLogMelsRefs,
       })
     >;
 typedef $$EpisodeChaptersTableCreateCompanionBuilder =
@@ -8854,6 +9882,7 @@ typedef $$EpisodeFingerprintsTableCreateCompanionBuilder =
       Value<int> episodeId,
       required Uint8List data,
       required int hopMicros,
+      Value<Uint8List?> speech,
       required DateTime createdAt,
     });
 typedef $$EpisodeFingerprintsTableUpdateCompanionBuilder =
@@ -8861,6 +9890,7 @@ typedef $$EpisodeFingerprintsTableUpdateCompanionBuilder =
       Value<int> episodeId,
       Value<Uint8List> data,
       Value<int> hopMicros,
+      Value<Uint8List?> speech,
       Value<DateTime> createdAt,
     });
 
@@ -8914,6 +9944,11 @@ class $$EpisodeFingerprintsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<Uint8List> get speech => $composableBuilder(
+    column: $table.speech,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
@@ -8962,6 +9997,11 @@ class $$EpisodeFingerprintsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<Uint8List> get speech => $composableBuilder(
+    column: $table.speech,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9005,6 +10045,9 @@ class $$EpisodeFingerprintsTableAnnotationComposer
 
   GeneratedColumn<int> get hopMicros =>
       $composableBuilder(column: $table.hopMicros, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get speech =>
+      $composableBuilder(column: $table.speech, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -9072,11 +10115,13 @@ class $$EpisodeFingerprintsTableTableManager
                 Value<int> episodeId = const Value.absent(),
                 Value<Uint8List> data = const Value.absent(),
                 Value<int> hopMicros = const Value.absent(),
+                Value<Uint8List?> speech = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => EpisodeFingerprintsCompanion(
                 episodeId: episodeId,
                 data: data,
                 hopMicros: hopMicros,
+                speech: speech,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -9084,11 +10129,13 @@ class $$EpisodeFingerprintsTableTableManager
                 Value<int> episodeId = const Value.absent(),
                 required Uint8List data,
                 required int hopMicros,
+                Value<Uint8List?> speech = const Value.absent(),
                 required DateTime createdAt,
               }) => EpisodeFingerprintsCompanion.insert(
                 episodeId: episodeId,
                 data: data,
                 hopMicros: hopMicros,
+                speech: speech,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -9168,6 +10215,7 @@ typedef $$SegmentTemplatesTableCreateCompanionBuilder =
       Value<Uint8List?> logMel,
       required int durationMs,
       Value<int> occurrences,
+      Value<int?> confidence,
       required DateTime createdAt,
     });
 typedef $$SegmentTemplatesTableUpdateCompanionBuilder =
@@ -9180,6 +10228,7 @@ typedef $$SegmentTemplatesTableUpdateCompanionBuilder =
       Value<Uint8List?> logMel,
       Value<int> durationMs,
       Value<int> occurrences,
+      Value<int?> confidence,
       Value<DateTime> createdAt,
     });
 
@@ -9270,6 +10319,11 @@ class $$SegmentTemplatesTableFilterComposer
 
   ColumnFilters<int> get occurrences => $composableBuilder(
     column: $table.occurrences,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get confidence => $composableBuilder(
+    column: $table.confidence,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9371,6 +10425,11 @@ class $$SegmentTemplatesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get confidence => $composableBuilder(
+    column: $table.confidence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9433,6 +10492,11 @@ class $$SegmentTemplatesTableAnnotationComposer
 
   GeneratedColumn<int> get occurrences => $composableBuilder(
     column: $table.occurrences,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get confidence => $composableBuilder(
+    column: $table.confidence,
     builder: (column) => column,
   );
 
@@ -9526,6 +10590,7 @@ class $$SegmentTemplatesTableTableManager
                 Value<Uint8List?> logMel = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 Value<int> occurrences = const Value.absent(),
+                Value<int?> confidence = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => SegmentTemplatesCompanion(
                 id: id,
@@ -9536,6 +10601,7 @@ class $$SegmentTemplatesTableTableManager
                 logMel: logMel,
                 durationMs: durationMs,
                 occurrences: occurrences,
+                confidence: confidence,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -9548,6 +10614,7 @@ class $$SegmentTemplatesTableTableManager
                 Value<Uint8List?> logMel = const Value.absent(),
                 required int durationMs,
                 Value<int> occurrences = const Value.absent(),
+                Value<int?> confidence = const Value.absent(),
                 required DateTime createdAt,
               }) => SegmentTemplatesCompanion.insert(
                 id: id,
@@ -9558,6 +10625,7 @@ class $$SegmentTemplatesTableTableManager
                 logMel: logMel,
                 durationMs: durationMs,
                 occurrences: occurrences,
+                confidence: confidence,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -9659,6 +10727,7 @@ typedef $$SkipSegmentsTableCreateCompanionBuilder =
       required SkipSegmentSource source,
       Value<int> matches,
       Value<bool?> confirmed,
+      Value<int?> confidence,
       Value<int?> templateId,
     });
 typedef $$SkipSegmentsTableUpdateCompanionBuilder =
@@ -9671,6 +10740,7 @@ typedef $$SkipSegmentsTableUpdateCompanionBuilder =
       Value<SkipSegmentSource> source,
       Value<int> matches,
       Value<bool?> confirmed,
+      Value<int?> confidence,
       Value<int?> templateId,
     });
 
@@ -9757,6 +10827,11 @@ class $$SkipSegmentsTableFilterComposer
 
   ColumnFilters<bool> get confirmed => $composableBuilder(
     column: $table.confirmed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get confidence => $composableBuilder(
+    column: $table.confidence,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9851,6 +10926,11 @@ class $$SkipSegmentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get confidence => $composableBuilder(
+    column: $table.confidence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$EpisodesTableOrderingComposer get episodeId {
     final $$EpisodesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -9927,6 +11007,11 @@ class $$SkipSegmentsTableAnnotationComposer
 
   GeneratedColumn<bool> get confirmed =>
       $composableBuilder(column: $table.confirmed, builder: (column) => column);
+
+  GeneratedColumn<int> get confidence => $composableBuilder(
+    column: $table.confidence,
+    builder: (column) => column,
+  );
 
   $$EpisodesTableAnnotationComposer get episodeId {
     final $$EpisodesTableAnnotationComposer composer = $composerBuilder(
@@ -10011,6 +11096,7 @@ class $$SkipSegmentsTableTableManager
                 Value<SkipSegmentSource> source = const Value.absent(),
                 Value<int> matches = const Value.absent(),
                 Value<bool?> confirmed = const Value.absent(),
+                Value<int?> confidence = const Value.absent(),
                 Value<int?> templateId = const Value.absent(),
               }) => SkipSegmentsCompanion(
                 id: id,
@@ -10021,6 +11107,7 @@ class $$SkipSegmentsTableTableManager
                 source: source,
                 matches: matches,
                 confirmed: confirmed,
+                confidence: confidence,
                 templateId: templateId,
               ),
           createCompanionCallback:
@@ -10033,6 +11120,7 @@ class $$SkipSegmentsTableTableManager
                 required SkipSegmentSource source,
                 Value<int> matches = const Value.absent(),
                 Value<bool?> confirmed = const Value.absent(),
+                Value<int?> confidence = const Value.absent(),
                 Value<int?> templateId = const Value.absent(),
               }) => SkipSegmentsCompanion.insert(
                 id: id,
@@ -10043,6 +11131,7 @@ class $$SkipSegmentsTableTableManager
                 source: source,
                 matches: matches,
                 confirmed: confirmed,
+                confidence: confidence,
                 templateId: templateId,
               ),
           withReferenceMapper: (p0) => p0
@@ -10121,6 +11210,567 @@ typedef $$SkipSegmentsTableProcessedTableManager =
       SkipSegment,
       PrefetchHooks Function({bool episodeId, bool templateId})
     >;
+typedef $$EpisodeLogMelsTableCreateCompanionBuilder =
+    EpisodeLogMelsCompanion Function({
+      Value<int> episodeId,
+      required Uint8List data,
+      required int hopMs,
+      required DateTime createdAt,
+    });
+typedef $$EpisodeLogMelsTableUpdateCompanionBuilder =
+    EpisodeLogMelsCompanion Function({
+      Value<int> episodeId,
+      Value<Uint8List> data,
+      Value<int> hopMs,
+      Value<DateTime> createdAt,
+    });
+
+final class $$EpisodeLogMelsTableReferences
+    extends BaseReferences<_$AppDatabase, $EpisodeLogMelsTable, EpisodeLogMel> {
+  $$EpisodeLogMelsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $EpisodesTable _episodeIdTable(_$AppDatabase db) =>
+      db.episodes.createAlias('episode_log_mels__episode_id__episodes__id');
+
+  $$EpisodesTableProcessedTableManager get episodeId {
+    final $_column = $_itemColumn<int>('episode_id')!;
+
+    final manager = $$EpisodesTableTableManager(
+      $_db,
+      $_db.episodes,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_episodeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$EpisodeLogMelsTableFilterComposer
+    extends Composer<_$AppDatabase, $EpisodeLogMelsTable> {
+  $$EpisodeLogMelsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<Uint8List> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get hopMs => $composableBuilder(
+    column: $table.hopMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$EpisodesTableFilterComposer get episodeId {
+    final $$EpisodesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableFilterComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EpisodeLogMelsTableOrderingComposer
+    extends Composer<_$AppDatabase, $EpisodeLogMelsTable> {
+  $$EpisodeLogMelsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<Uint8List> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get hopMs => $composableBuilder(
+    column: $table.hopMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$EpisodesTableOrderingComposer get episodeId {
+    final $$EpisodesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableOrderingComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EpisodeLogMelsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EpisodeLogMelsTable> {
+  $$EpisodeLogMelsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<Uint8List> get data =>
+      $composableBuilder(column: $table.data, builder: (column) => column);
+
+  GeneratedColumn<int> get hopMs =>
+      $composableBuilder(column: $table.hopMs, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$EpisodesTableAnnotationComposer get episodeId {
+    final $$EpisodesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EpisodeLogMelsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $EpisodeLogMelsTable,
+          EpisodeLogMel,
+          $$EpisodeLogMelsTableFilterComposer,
+          $$EpisodeLogMelsTableOrderingComposer,
+          $$EpisodeLogMelsTableAnnotationComposer,
+          $$EpisodeLogMelsTableCreateCompanionBuilder,
+          $$EpisodeLogMelsTableUpdateCompanionBuilder,
+          (EpisodeLogMel, $$EpisodeLogMelsTableReferences),
+          EpisodeLogMel,
+          PrefetchHooks Function({bool episodeId})
+        > {
+  $$EpisodeLogMelsTableTableManager(
+    _$AppDatabase db,
+    $EpisodeLogMelsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EpisodeLogMelsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EpisodeLogMelsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EpisodeLogMelsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> episodeId = const Value.absent(),
+                Value<Uint8List> data = const Value.absent(),
+                Value<int> hopMs = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => EpisodeLogMelsCompanion(
+                episodeId: episodeId,
+                data: data,
+                hopMs: hopMs,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> episodeId = const Value.absent(),
+                required Uint8List data,
+                required int hopMs,
+                required DateTime createdAt,
+              }) => EpisodeLogMelsCompanion.insert(
+                episodeId: episodeId,
+                data: data,
+                hopMs: hopMs,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$EpisodeLogMelsTable, EpisodeLogMel>(table),
+                  $$EpisodeLogMelsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({episodeId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (episodeId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.episodeId,
+                        referencedTable: $$EpisodeLogMelsTableReferences
+                            ._episodeIdTable(db),
+                        referencedColumn: $$EpisodeLogMelsTableReferences
+                            ._episodeIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$EpisodeLogMelsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $EpisodeLogMelsTable,
+      EpisodeLogMel,
+      $$EpisodeLogMelsTableFilterComposer,
+      $$EpisodeLogMelsTableOrderingComposer,
+      $$EpisodeLogMelsTableAnnotationComposer,
+      $$EpisodeLogMelsTableCreateCompanionBuilder,
+      $$EpisodeLogMelsTableUpdateCompanionBuilder,
+      (EpisodeLogMel, $$EpisodeLogMelsTableReferences),
+      EpisodeLogMel,
+      PrefetchHooks Function({bool episodeId})
+    >;
+typedef $$LearnedNetworkStingsTableCreateCompanionBuilder =
+    LearnedNetworkStingsCompanion Function({
+      Value<int> id,
+      Value<String?> name,
+      required Uint8List logMel,
+      required int durationMs,
+      Value<int> episodeCount,
+      Value<int> podcastCount,
+      required DateTime createdAt,
+    });
+typedef $$LearnedNetworkStingsTableUpdateCompanionBuilder =
+    LearnedNetworkStingsCompanion Function({
+      Value<int> id,
+      Value<String?> name,
+      Value<Uint8List> logMel,
+      Value<int> durationMs,
+      Value<int> episodeCount,
+      Value<int> podcastCount,
+      Value<DateTime> createdAt,
+    });
+
+class $$LearnedNetworkStingsTableFilterComposer
+    extends Composer<_$AppDatabase, $LearnedNetworkStingsTable> {
+  $$LearnedNetworkStingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get logMel => $composableBuilder(
+    column: $table.logMel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get episodeCount => $composableBuilder(
+    column: $table.episodeCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get podcastCount => $composableBuilder(
+    column: $table.podcastCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LearnedNetworkStingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LearnedNetworkStingsTable> {
+  $$LearnedNetworkStingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get logMel => $composableBuilder(
+    column: $table.logMel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get episodeCount => $composableBuilder(
+    column: $table.episodeCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get podcastCount => $composableBuilder(
+    column: $table.podcastCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LearnedNetworkStingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LearnedNetworkStingsTable> {
+  $$LearnedNetworkStingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get logMel =>
+      $composableBuilder(column: $table.logMel, builder: (column) => column);
+
+  GeneratedColumn<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get episodeCount => $composableBuilder(
+    column: $table.episodeCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get podcastCount => $composableBuilder(
+    column: $table.podcastCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$LearnedNetworkStingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LearnedNetworkStingsTable,
+          LearnedNetworkSting,
+          $$LearnedNetworkStingsTableFilterComposer,
+          $$LearnedNetworkStingsTableOrderingComposer,
+          $$LearnedNetworkStingsTableAnnotationComposer,
+          $$LearnedNetworkStingsTableCreateCompanionBuilder,
+          $$LearnedNetworkStingsTableUpdateCompanionBuilder,
+          (
+            LearnedNetworkSting,
+            BaseReferences<
+              _$AppDatabase,
+              $LearnedNetworkStingsTable,
+              LearnedNetworkSting
+            >,
+          ),
+          LearnedNetworkSting,
+          PrefetchHooks Function()
+        > {
+  $$LearnedNetworkStingsTableTableManager(
+    _$AppDatabase db,
+    $LearnedNetworkStingsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LearnedNetworkStingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LearnedNetworkStingsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$LearnedNetworkStingsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String?> name = const Value.absent(),
+                Value<Uint8List> logMel = const Value.absent(),
+                Value<int> durationMs = const Value.absent(),
+                Value<int> episodeCount = const Value.absent(),
+                Value<int> podcastCount = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => LearnedNetworkStingsCompanion(
+                id: id,
+                name: name,
+                logMel: logMel,
+                durationMs: durationMs,
+                episodeCount: episodeCount,
+                podcastCount: podcastCount,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String?> name = const Value.absent(),
+                required Uint8List logMel,
+                required int durationMs,
+                Value<int> episodeCount = const Value.absent(),
+                Value<int> podcastCount = const Value.absent(),
+                required DateTime createdAt,
+              }) => LearnedNetworkStingsCompanion.insert(
+                id: id,
+                name: name,
+                logMel: logMel,
+                durationMs: durationMs,
+                episodeCount: episodeCount,
+                podcastCount: podcastCount,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$LearnedNetworkStingsTable, LearnedNetworkSting>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $LearnedNetworkStingsTable,
+                    LearnedNetworkSting
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LearnedNetworkStingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LearnedNetworkStingsTable,
+      LearnedNetworkSting,
+      $$LearnedNetworkStingsTableFilterComposer,
+      $$LearnedNetworkStingsTableOrderingComposer,
+      $$LearnedNetworkStingsTableAnnotationComposer,
+      $$LearnedNetworkStingsTableCreateCompanionBuilder,
+      $$LearnedNetworkStingsTableUpdateCompanionBuilder,
+      (
+        LearnedNetworkSting,
+        BaseReferences<
+          _$AppDatabase,
+          $LearnedNetworkStingsTable,
+          LearnedNetworkSting
+        >,
+      ),
+      LearnedNetworkSting,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -10143,4 +11793,8 @@ class $AppDatabaseManager {
       $$SegmentTemplatesTableTableManager(_db, _db.segmentTemplates);
   $$SkipSegmentsTableTableManager get skipSegments =>
       $$SkipSegmentsTableTableManager(_db, _db.skipSegments);
+  $$EpisodeLogMelsTableTableManager get episodeLogMels =>
+      $$EpisodeLogMelsTableTableManager(_db, _db.episodeLogMels);
+  $$LearnedNetworkStingsTableTableManager get learnedNetworkStings =>
+      $$LearnedNetworkStingsTableTableManager(_db, _db.learnedNetworkStings);
 }

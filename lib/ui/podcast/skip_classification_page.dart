@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../data/app_database.dart';
+import '../../data/audio_analysis.dart';
 import '../../data/providers.dart';
+import '../../data/segment_match.dart';
 import '../../data/skip_segments.dart';
 import '../../l10n/l10n.dart';
 import '../../player/player_controller.dart';
@@ -47,6 +49,9 @@ class SkipClassificationPage extends ConsumerWidget {
         }
         final theme = Theme.of(context);
         final classification = ref.watch(skipClassificationProvider(podcastId));
+        ref.watch(podcastAnalysisKickProvider(podcastId));
+        final analysis = ref.watch(audioAnalysisProvider);
+        final pending = analysis.pendingFor(podcastId);
         return Scaffold(
           appBar: AppBar(
             toolbarHeight: 72,
@@ -96,6 +101,41 @@ class SkipClassificationPage extends ConsumerWidget {
                       _toggleKind(ref, item, kind, enabled: enabled),
                 ),
               _Section(context.tr('Detected segments')),
+              if (pending > 0)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          context.tr('Analyzing episodes ({count} left)', {
+                            'count': '$pending',
+                          }),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: OutlinedButton(
+                    onPressed: pending > 0
+                        ? null
+                        : () => ref
+                              .read(audioAnalysisProvider.notifier)
+                              .analyzeDownloaded(podcastId),
+                    child: Text(context.tr('Analyze downloaded episodes')),
+                  ),
+                ),
+              ),
               ..._segmentTiles(context, ref, classification),
             ],
           ),
@@ -142,10 +182,21 @@ class SkipClassificationPage extends ConsumerWidget {
         if (grouped.isEmpty) {
           return [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: Text(
                 context.tr(
-                  'Segments show up after a download is analyzed, or when a chapter title looks like an ad.',
+                  'At least two downloaded episodes of the same podcast are needed before repeated ads and jingles can be found.',
+                ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: Text(
+                context.tr(
+                  'A chapter title that looks like an ad is still suggested on its own.',
                 ),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -154,16 +205,7 @@ class SkipClassificationPage extends ConsumerWidget {
             ),
           ];
         }
-        final tiles = <Widget>[];
-        for (final kind in SkipSegmentKind.values) {
-          final rows = grouped[kind];
-          if (rows == null || rows.isEmpty) continue;
-          tiles.add(_Section(context.tr(skipKindLabel(kind))));
-          for (final row in rows) {
-            tiles.add(_SegmentTile(podcastId: podcastId, row: row));
-          }
-        }
-        return tiles;
+        return [_RankedSegments(podcastId: podcastId, grouped: grouped)];
       },
     );
   }
@@ -185,6 +227,94 @@ class _Section extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Tri par confiance. Les candidats intra-épisode peu sûrs restent derrière
+/// un bouton : ils ne sont jamais sautés, le score ne fait que les ranger.
+class _RankedSegments extends StatefulWidget {
+  const _RankedSegments({required this.podcastId, required this.grouped});
+
+  final int podcastId;
+  final Map<SkipSegmentKind, List<_Row>> grouped;
+
+  @override
+  State<_RankedSegments> createState() => _RankedSegmentsState();
+}
+
+class _RankedSegmentsState extends State<_RankedSegments> {
+  var _showUncertain = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tiles = <Widget>[];
+    var uncertain = 0;
+    for (final kind in SkipSegmentKind.values) {
+      final rows = widget.grouped[kind];
+      if (rows == null || rows.isEmpty) continue;
+      final sorted = [...rows]
+        ..sort((a, b) {
+          final byConfidence = _confidenceOf(b).compareTo(_confidenceOf(a));
+          if (byConfidence != 0) return byConfidence;
+          return _startOf(a).compareTo(_startOf(b));
+        });
+      final visible = <_Row>[];
+      for (final row in sorted) {
+        if (_uncertain(row)) {
+          uncertain++;
+          if (!_showUncertain) continue;
+        }
+        visible.add(row);
+      }
+      if (visible.isEmpty) continue;
+      tiles.add(_Section(context.tr(skipKindLabel(kind))));
+      for (final row in visible) {
+        tiles.add(_SegmentTile(podcastId: widget.podcastId, row: row));
+      }
+    }
+    if (uncertain > 0) {
+      tiles.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton(
+              onPressed: () => setState(() => _showUncertain = !_showUncertain),
+              child: Text(
+                _showUncertain
+                    ? context.tr('Hide uncertain passages')
+                    : context.tr('Show uncertain passages ({count})', {
+                        'count': '$uncertain',
+                      }),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: tiles,
+    );
+  }
+}
+
+int _confidenceOf(_Row row) {
+  final value = row.template?.confidence ?? row.loose?.segment.confidence;
+  return value ?? crossEpisodeConfidence;
+}
+
+int _startOf(_Row row) {
+  return row.loose?.segment.startMs ?? row.template?.id ?? 0;
+}
+
+/// Candidat d’une seule épisode, déjà ignoré pour le saut, score bas.
+bool _uncertain(_Row row) {
+  if (_confidenceOf(row) >= lowConfidenceCutoff) return false;
+  final confirmed = row.template != null
+      ? row.confirmed
+      : row.loose!.segment.confirmed;
+  final matches = row.template?.occurrences ?? row.loose!.segment.matches;
+  return confirmed == false && matches <= 1;
 }
 
 class _Row {
@@ -222,10 +352,12 @@ class _SegmentTile extends ConsumerWidget {
         ? null
         : '${formatClock(Duration(milliseconds: loose.segment.startMs))}'
               '–${formatClock(Duration(milliseconds: loose.segment.endMs))}';
+    final source = loose?.segment.source;
     final subtitle = [
       ?range,
       formatClock(Duration(milliseconds: durationMs < 0 ? 0 : durationMs)),
       _episodeCount(context, count),
+      if (source == SkipSegmentSource.network) context.tr('Network sting'),
       context.tr(_reviewKey(review)),
     ].join(' · ');
     return ListTile(

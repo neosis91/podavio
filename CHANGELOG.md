@@ -9,6 +9,16 @@ La fusion de `develop` dans `main` publie cette version.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 
+## 2026.11.13
+
+- Downloaded episodes are fingerprinted after the file is saved. Repeated ads, sponsors, and jingles in the same podcast show up for review, and the classification screen can analyze episodes already on the phone.
+
+- Short jingles in downloaded episodes are matched with a log-mel template, and a repeated network sting can mark the ad block around it. The classification screen labels that block as a network sting.
+
+- Repeated music inside a single downloaded episode, such as a refrain or a background bed, is no longer listed as a skip. A spoken repeat in that episode stays for review, and a low score stays behind Show uncertain passages. A jingle or outro shared by several episodes is still detected when it is musical.
+
+
+
 ## 2026.11.12
 
 - Downloaded episodes can skip confirmed ad, sponsor, and jingle passages. The review is in the podcast settings, and a chapter title that looks like an ad is suggested on its own. Detecting those passages from the audio is not active yet.

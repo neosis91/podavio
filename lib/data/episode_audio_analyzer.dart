@@ -21,9 +21,8 @@ abstract class EpisodeAudioAnalyzer {
   Future<void> findSegments(int podcastId);
 }
 
-/// Place nette : le téléchargement appelle déjà l’analyseur, sans
-/// calculer d’empreinte. Le vrai moteur (MediaExtractor / MediaCodec,
-/// Chromaprint MIT ou LGPL) viendra ensuite.
+/// Place nette, pour les tests. L’application branche le moteur
+/// Chromaprint de `audio_analysis.dart`.
 class PlaceholderEpisodeAudioAnalyzer implements EpisodeAudioAnalyzer {
   const PlaceholderEpisodeAudioAnalyzer();
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
@@ -8,6 +10,7 @@ import '../sync/sync_hooks.dart';
 import 'download_policy.dart';
 import 'listening_activity.dart';
 import 'models.dart';
+import 'segment_match.dart';
 import 'skip_segments.dart';
 
 part 'app_database.g.dart';
@@ -173,6 +176,10 @@ class EpisodeFingerprints extends Table {
 
   /// Écart entre deux valeurs, en microsecondes (~125000 pour 8/s).
   IntColumn get hopMicros => integer()();
+
+  /// Une octet par seconde : 0 musique, 255 parole. `null` tant que
+  /// l’épisode n’a pas été noté.
+  BlobColumn get speech => blob().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -197,6 +204,9 @@ class SegmentTemplates extends Table {
   BlobColumn get logMel => blob().nullable()();
   IntColumn get durationMs => integer()();
   IntColumn get occurrences => integer().withDefault(const Constant(1))();
+
+  /// 0–100. `null` : gabarit posé avant le score. Le saut n’en dépend pas.
+  IntColumn get confidence => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 }
 
@@ -217,11 +227,40 @@ class SkipSegments extends Table {
 
   /// `null` : pas revu. `true` : confirmé. `false` : ignoré.
   BoolColumn get confirmed => boolean().nullable()();
+
+  /// 0–100. `null` : pas calculé (chapitre, ou passage ancien).
+  /// Sert au tri. Un candidat intra-épisode bas est replié dans l’écran.
+  IntColumn get confidence => integer().nullable()();
   IntColumn get templateId => integer().nullable().references(
     SegmentTemplates,
     #id,
     onDelete: KeyAction.setNull,
   )();
+}
+
+/// Log-mel des 180 premières secondes, pour ne pas redécoder le fichier.
+class EpisodeLogMels extends Table {
+  IntColumn get episodeId =>
+      integer().references(Episodes, #id, onDelete: KeyAction.cascade)();
+
+  /// Float32 little-endian, 40 bandes, hop 10 ms.
+  BlobColumn get data => blob()();
+  IntColumn get hopMs => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {episodeId};
+}
+
+/// Virgule de réseau apprise sur cet appareil, jamais partagée.
+class LearnedNetworkStings extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text().nullable()();
+  BlobColumn get logMel => blob()();
+  IntColumn get durationMs => integer()();
+  IntColumn get episodeCount => integer().withDefault(const Constant(1))();
+  IntColumn get podcastCount => integer().withDefault(const Constant(1))();
+  DateTimeColumn get createdAt => dateTime()();
 }
 
 class EpisodeEntry {
@@ -273,6 +312,8 @@ class EpisodeEntry {
     EpisodeFingerprints,
     SegmentTemplates,
     SkipSegments,
+    EpisodeLogMels,
+    LearnedNetworkStings,
   ],
 )
 class AppDatabase extends _$AppDatabase
@@ -288,7 +329,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -390,6 +431,27 @@ class AppDatabase extends _$AppDatabase
         await _createTableIfMissing(migrator, skipSegments);
         await _addColumnIfMissing(migrator, podcasts, podcasts.autoSkipAds);
         await _addColumnIfMissing(migrator, podcasts, podcasts.autoSkipKinds);
+      }
+      if (from < 21) {
+        await _createTableIfMissing(migrator, episodeLogMels);
+        await _createTableIfMissing(migrator, learnedNetworkStings);
+      }
+      if (from < 22) {
+        await _addColumnIfMissing(
+          migrator,
+          episodeFingerprints,
+          episodeFingerprints.speech,
+        );
+        await _addColumnIfMissing(
+          migrator,
+          segmentTemplates,
+          segmentTemplates.confidence,
+        );
+        await _addColumnIfMissing(
+          migrator,
+          skipSegments,
+          skipSegments.confidence,
+        );
       }
     },
     beforeOpen: (details) async {

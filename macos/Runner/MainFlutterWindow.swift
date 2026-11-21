@@ -9,6 +9,8 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    let audioRegistrar = flutterViewController.registrar(forPlugin: "AudioDecodePlugin")
+    AudioDecodePlugin.register(messenger: audioRegistrar.messenger)
 
     super.awakeFromNib()
   }

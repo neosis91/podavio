@@ -319,6 +319,7 @@
   "Notes": "Notes",
   "Nothing new in this category": "Rien de nouveau dans cette catégorie",
   "Nothing to play right now": "Rien à écouter pour le moment",
+  "Network sting": "Virgule réseau",
   "Notifications": "Notifications",
   "Notifies when a subscription publishes. Each podcast can be turned off in its settings. Turning this off keeps those choices.": "Prévient quand un abonnement publie. Chaque podcast peut être coupé dans ses réglages. Le couper conserve ces choix.",
   "Notify about new episodes": "Prévenir des nouveaux épisodes",
@@ -549,7 +550,11 @@
   "{count} podcasts to refresh": "{count} podcasts à actualiser",
   "{count} waiting": "{count} en attente",
   "{seconds} seconds": "{seconds} secondes",
+  "A chapter title that looks like an ad is still suggested on its own.": "Un titre de chapitre qui ressemble à une pub est quand même proposé.",
   "Ad": "Publicité",
+  "Analyze downloaded episodes": "Analyser les épisodes téléchargés",
+  "Analyzing episodes ({count} left)": "Analyse en cours ({count} restants)",
+  "At least two downloaded episodes of the same podcast are needed before repeated ads and jingles can be found.": "Il faut au moins deux épisodes téléchargés du même podcast pour repérer les pubs et les jingles répétés.",
   "Change kind": "Changer le type",
   "Confirm": "Confirmer",
   "Confirmed": "Confirmé",
@@ -577,5 +582,7 @@
   "Sponsor": "Sponsor",
   "Undo": "Annuler",
   "Unnamed pattern": "Motif sans nom",
-  "Unreviewed": "À revoir"
+  "Unreviewed": "À revoir",
+  "Hide uncertain passages": "Masquer les passages incertains",
+  "Show uncertain passages ({count})": "Afficher les passages incertains ({count})"
 }

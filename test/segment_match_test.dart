@@ -143,6 +143,51 @@ void main() {
     final refrainClass = classifyRepeatedSegment(refrain);
     expect(refrainClass.kind, isNull);
     expect(refrainClass.autoSkip, isFalse);
+    expect(refrainClass.confidence, crossEpisodeConfidence);
+
+    // 30 s, 120 s, 400 s : pas une période. Sans note de parole, on garde.
+    final irregular = judgeIntraEpisodeRepeat(
+      startsMs: refrain.map((hit) => hit.startMs).toList(),
+      speechRatio: null,
+    );
+    expect(irregular.reject, isFalse);
+    expect(irregular.confidence, lessThan(lowConfidenceCutoff));
+
+    // Refrain toutes les 30 s, ou ratio de parole de musique : on jette.
+    const periodic = [20000, 50000, 80000];
+    expect(nearPeriodicRefrain(periodic), isTrue);
+    expect(
+      judgeIntraEpisodeRepeat(startsMs: periodic, speechRatio: null).reject,
+      isTrue,
+    );
+    expect(
+      judgeIntraEpisodeRepeat(startsMs: periodic, speechRatio: 0.2).reject,
+      isTrue,
+    );
+    expect(
+      judgeIntraEpisodeRepeat(
+        startsMs: const [10000, 95000],
+        speechRatio: 0.2,
+      ).reject,
+      isTrue,
+    );
+
+    // La même lecture, parlée, deux fois, sans période : candidat seulement.
+    final spoken = judgeIntraEpisodeRepeat(
+      startsMs: const [15000, 90000],
+      speechRatio: 0.85,
+    );
+    expect(spoken.reject, isFalse);
+    expect(spoken.confidence, greaterThanOrEqualTo(lowConfidenceCutoff));
+    expect(spoken.confidence, lessThan(crossEpisodeConfidence));
+
+    // Parole très nette même si l’écart est régulier : on garde, sans saut.
+    final scheduled = judgeIntraEpisodeRepeat(
+      startsMs: periodic,
+      speechRatio: 0.9,
+    );
+    expect(scheduled.reject, isFalse);
+    expect(scheduled.confidence, lessThan(spoken.confidence));
   });
 
   test('Acast sting ends the pre-roll and RSS duration estimates ads', () {

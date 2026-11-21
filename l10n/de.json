@@ -467,5 +467,7 @@
   "{count} people are listening.": "{count} Personen hören zu.",
   "{count} podcasts to refresh": "{count} Podcasts zu aktualisieren",
   "{count} waiting": "{count} wartend",
-  "{seconds} seconds": "{seconds} Sekunden"
+  "{seconds} seconds": "{seconds} Sekunden",
+  "Hide uncertain passages": "Unsichere Passagen ausblenden",
+  "Show uncertain passages ({count})": "Unsichere Passagen anzeigen ({count})"
 }

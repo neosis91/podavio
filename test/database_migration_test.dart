@@ -71,15 +71,52 @@ void main() {
         .get();
     await reopened
         .customSelect(
-          'SELECT start_ms, end_ms, kind, source, matches, confirmed, template_id '
-          'FROM skip_segments',
+          'SELECT start_ms, end_ms, kind, source, matches, confirmed, '
+          'confidence, template_id FROM skip_segments',
         )
+        .get();
+    await reopened
+        .customSelect('SELECT speech FROM episode_fingerprints')
+        .get();
+    await reopened
+        .customSelect('SELECT confidence FROM segment_templates')
         .get();
     final columns = await reopened
         .customSelect('PRAGMA table_info(podcasts)')
         .get();
     final names = columns.map((row) => row.read<String>('name')).toSet();
     expect(names, containsAll(['auto_skip_ads', 'auto_skip_kinds']));
-    expect(await _userVersion(reopened), 20);
+    expect(await _userVersion(reopened), reopened.schemaVersion);
+  });
+
+  test('upgrades a v21 file onto the speech timeline and confidence', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-migration-v21');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    await created.customSelect('SELECT 1').get();
+    await created.customStatement(
+      'ALTER TABLE episode_fingerprints DROP COLUMN speech',
+    );
+    await created.customStatement(
+      'ALTER TABLE segment_templates DROP COLUMN confidence',
+    );
+    await created.customStatement(
+      'ALTER TABLE skip_segments DROP COLUMN confidence',
+    );
+    await created.customStatement('PRAGMA user_version = 21');
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    await reopened
+        .customSelect('SELECT speech FROM episode_fingerprints')
+        .get();
+    await reopened
+        .customSelect('SELECT confidence FROM segment_templates')
+        .get();
+    await reopened.customSelect('SELECT confidence FROM skip_segments').get();
+    expect(await _userVersion(reopened), reopened.schemaVersion);
   });
 }

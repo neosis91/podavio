@@ -468,5 +468,7 @@
   "{count} people are listening.": "{count} أشخاص يستمعون.",
   "{count} podcasts to refresh": "{count} بودكاست للتحديث",
   "{count} waiting": "{count} في الانتظار",
-  "{seconds} seconds": "{seconds} ث"
+  "{seconds} seconds": "{seconds} ث",
+  "Hide uncertain passages": "إخفاء المقاطع غير المؤكدة",
+  "Show uncertain passages ({count})": "عرض المقاطع غير المؤكدة ({count})"
 }
