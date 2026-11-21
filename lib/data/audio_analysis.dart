@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'analysis_pace.dart';
 import 'app_database.dart';
 import 'chromaprint.dart';
 import 'episode_audio_analyzer.dart';
@@ -620,7 +621,8 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         final analyzed = await _analyzeDecoded(
           ref.read(pcmDecoderProvider),
           path,
-          offUi: _offUi,
+          paced: true,
+          offUi: _offUiPaced,
         );
         if (!live()) return;
         if (analyzed == null) {
@@ -649,6 +651,10 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
             hopMicros: chromaprintStoredHopMicros,
             speech: analyzed.speech,
           );
+        }
+        if (!live()) return;
+        if (analyzed.envelope.isNotEmpty) {
+          await database.setFingerprintEnvelope(episode.id, analyzed.envelope);
         }
         if (!live()) return;
         if (analyzed.logMel != null) {
@@ -688,20 +694,54 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   Future<Object?> _offUi(
     void Function(List<Object?> message) entry,
     Object? message,
-  ) async {
+  ) {
+    return _spawnTracked(entry, message, paced: false);
+  }
+
+  Future<Object?> _offUiPaced(
+    void Function(List<Object?> message) entry,
+    Object? message,
+  ) {
+    return _spawnTracked(entry, message, paced: true);
+  }
+
+  Future<Object?> _spawnTracked(
+    void Function(List<Object?> message) entry,
+    Object? message, {
+    required bool paced,
+  }) async {
     final port = ReceivePort();
     final isolate = await Isolate.spawn(entry, <Object?>[
       port.sendPort,
       message,
     ], debugName: 'podavio-analysis');
     _worker = isolate;
+    Timer? pace;
     try {
-      final result = await port.first;
-      if (result is List && result.isNotEmpty && result.first == 'error') {
-        throw StateError('${result[1]}');
+      final result = Completer<Object?>();
+      SendPort? control;
+      port.listen((event) {
+        if (paced && event is SendPort) {
+          control = event;
+          void push() {
+            control?.send(AnalysisPace.mode);
+          }
+
+          push();
+          pace = Timer.periodic(const Duration(milliseconds: 250), (_) {
+            push();
+          });
+          return;
+        }
+        if (!result.isCompleted) result.complete(event);
+      });
+      final value = await result.future;
+      if (value is List && value.isNotEmpty && value.first == 'error') {
+        throw StateError('${value[1]}');
       }
-      return result;
+      return value;
     } finally {
+      pace?.cancel();
       if (identical(_worker, isolate)) _worker = null;
       isolate.kill(priority: Isolate.immediate);
       port.close();
@@ -734,6 +774,7 @@ class ChromaprintEpisodeAudioAnalyzer implements EpisodeAudioAnalyzer {
 Future<PcmAnalysis?> _analyzeDecoded(
   PcmDecoder decoder,
   String path, {
+  bool paced = false,
   Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
 }) async {
   final decoded = await decoder.decode(path, budget: nativeDecodeBudget);
@@ -745,12 +786,18 @@ Future<PcmAnalysis?> _analyzeDecoded(
       );
       return null;
     }
-    final raw = await (offUi ?? _spawn)(analyzePcmEntry, decoded.path);
+    final raw = await (offUi ?? _spawn)(
+      paced ? analyzePcmPacedEntry : analyzePcmEntry,
+      decoded.path,
+    );
     if (raw is! List || raw.length < 9 || raw.first == 'error') return null;
     return PcmAnalysis(
       fingerprint: (raw[0]! as List).cast<int>(),
       logMel: raw[1] as Uint8List?,
       speech: raw[2]! as Uint8List,
+      envelope: raw.length > 9 && raw[9] is Uint8List
+          ? raw[9]! as Uint8List
+          : Uint8List(0),
       peakRss: raw[3]! as int,
       retainedBytes: raw[4]! as int,
       elapsedMs: raw[5]! as int,
@@ -784,21 +831,49 @@ Future<Object?> _spawn(
 void analyzePcmEntry(List<Object?> args) {
   final send = args[0]! as SendPort;
   try {
-    final result = analyzePcmFileSync(args[1]! as String);
-    send.send(<Object?>[
-      result.fingerprint,
-      result.logMel,
-      result.speech,
-      result.peakRss,
-      result.retainedBytes,
-      result.elapsedMs,
-      result.fingerprintMs,
-      result.logMelMs,
-      result.speechMs,
-    ]);
+    send.send(_pcmMessage(analyzePcmFileSync(args[1]! as String)));
   } catch (error, stack) {
     send.send(<Object?>['error', '$error', '$stack']);
   }
+}
+
+/// Premier message : [SendPort] de contrôle (`play`, `front`, `fast`).
+///
+/// Le [ReceivePort] ouvert garde l’isolate en vie le temps du calcul.
+void analyzePcmPacedEntry(List<Object?> args) {
+  final send = args[0]! as SendPort;
+  final path = args[1]! as String;
+  final inbox = ReceivePort();
+  send.send(inbox.sendPort);
+  var mode = 'fast';
+  inbox.listen((message) {
+    if (message is String) mode = message;
+  });
+  unawaited(() async {
+    try {
+      final result = await analyzePcmFilePaced(path, () => mode);
+      send.send(_pcmMessage(result));
+    } catch (error, stack) {
+      send.send(<Object?>['error', '$error', '$stack']);
+    } finally {
+      inbox.close();
+    }
+  }());
+}
+
+List<Object?> _pcmMessage(PcmAnalysis result) {
+  return <Object?>[
+    result.fingerprint,
+    result.logMel,
+    result.speech,
+    result.peakRss,
+    result.retainedBytes,
+    result.elapsedMs,
+    result.fingerprintMs,
+    result.logMelMs,
+    result.speechMs,
+    result.envelope,
+  ];
 }
 
 void planAnalysisEntry(List<Object?> args) {
@@ -843,6 +918,7 @@ Future<void> syncPodcastAnalysis(
   Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
 }) async {
   final stored = await database.fingerprintedDownloads(podcastId);
+  final envelopes = await database.fingerprintEnvelopes(podcastId);
   final episodes = <Object?>[];
   for (final row in stored) {
     final bytes = row.fingerprint.data;
@@ -862,6 +938,7 @@ Future<void> syncPodcastAnalysis(
       preRoll,
       bytes,
       row.fingerprint.speech,
+      envelopes[row.episode.id],
     ]);
   }
   final templates = <Object?>[];

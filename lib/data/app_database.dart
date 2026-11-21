@@ -329,7 +329,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -454,10 +454,12 @@ class AppDatabase extends _$AppDatabase
         );
       }
       if (from < 23) await _ensureFingerprintStatus();
+      if (from < 24) await _ensureFingerprintEnvelope();
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
       await _ensureFingerprintStatus();
+      await _ensureFingerprintEnvelope();
       // Idempotent : v8 a pu être appliqué avant l’ajout des indexes.
       await _createEpisodeIndexes();
       await _ensureDefaultPlaylist();
@@ -504,6 +506,18 @@ class AppDatabase extends _$AppDatabase
         isDefault: const Value(true),
         createdAt: DateTime.now(),
       ),
+    );
+  }
+
+  /// Enveloppe d’énergie (uint8, 20 ms). Hors schéma Drift, comme `status` :
+  /// les épisodes déjà analysés restent `NULL` et ne sont pas recalculés.
+  Future<void> _ensureFingerprintEnvelope() async {
+    final rows = await customSelect('PRAGMA table_info(episode_fingerprints)')
+        .get();
+    if (rows.isEmpty) return;
+    if (rows.any((row) => row.read<String>('name') == 'envelope')) return;
+    await customStatement(
+      'ALTER TABLE episode_fingerprints ADD COLUMN envelope BLOB',
     );
   }
 

@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'fft.dart';
+
 /// Chromaprint, algorithme 2 (celui de `fpcalc`).
 ///
 /// Portage en Dart de l’algorithme publié par Lukáš Lalinský
@@ -114,16 +116,22 @@ class ChromaprintHasher {
 
   late final List<int> _notes;
   late final Float64List _window;
+  final _fft = RealFft(chromaprintFrameSize);
   final _chromaBuffer = List<Float64List>.generate(
     8,
     (_) => Float64List(_bands),
   );
   var _chromaOffset = 0;
   var _chromaSize = 1;
-  final _integral = <Float64List>[];
+
+  /// 16 lignes du filtre, plus la ligne juste au-dessus (`offset - 1`).
+  static const _integralKeep = 17;
+  final _integral = List<Float64List>.generate(
+    _integralKeep,
+    (_) => Float64List(_bands),
+  );
+  var _integralLength = 0;
   final _power = Float64List(chromaprintFrameSize ~/ 2);
-  final _re = Float64List(chromaprintFrameSize);
-  final _im = Float64List(chromaprintFrameSize);
   final _features = Float64List(_bands);
   final _filtered = Float64List(_bands);
 
@@ -149,18 +157,7 @@ class ChromaprintHasher {
   List<int> finish() => List<int>.unmodifiable(_fingerprint);
 
   void _consumeFrame(Int16List frame) {
-    for (var i = 0; i < chromaprintFrameSize; i++) {
-      _re[i] = frame[i] * _window[i];
-      _im[i] = 0;
-    }
-    _fft(_re, _im);
-    _power[0] = _re[0] * _re[0];
-    final nyquist = chromaprintFrameSize ~/ 2;
-    for (var k = 1; k < nyquist; k++) {
-      final real = _re[k];
-      final imag = _im[k];
-      _power[k] = real * real + imag * imag;
-    }
+    _fft.powerWindowedInt16(frame, _window, _power);
     for (var band = 0; band < _bands; band++) {
       _features[band] = 0;
     }
@@ -203,26 +200,28 @@ class ChromaprintHasher {
       }
     }
     _addIntegral(_filtered);
-    if (_integral.length >= 16) {
-      _fingerprint.add(_subfingerprint(_integral.length - 16));
+    if (_integralLength >= 16) {
+      _fingerprint.add(_subfingerprint(_integralLength - 16));
     }
   }
 
   void _addIntegral(Float64List features) {
-    final row = Float64List(_bands);
+    final row = _integral[_integralLength % _integralKeep];
     var sum = 0.0;
     for (var band = 0; band < _bands; band++) {
       sum += features[band];
       row[band] = sum;
     }
-    if (_integral.isNotEmpty) {
-      final previous = _integral.last;
+    if (_integralLength > 0) {
+      final previous = _integral[(_integralLength - 1) % _integralKeep];
       for (var band = 0; band < _bands; band++) {
         row[band] += previous[band];
       }
     }
-    _integral.add(row);
+    _integralLength++;
   }
+
+  Float64List _integralAt(int index) => _integral[index % _integralKeep];
 
   int _subfingerprint(int offset) {
     var bits = 0;
@@ -284,12 +283,12 @@ class ChromaprintHasher {
   double _area(int r1, int c1, int r2, int c2) {
     if (r1 == r2 || c1 == c2) return 0;
     if (r1 == 0) {
-      final row = _integral[r2 - 1];
+      final row = _integralAt(r2 - 1);
       if (c1 == 0) return row[c2 - 1];
       return row[c2 - 1] - row[c1 - 1];
     }
-    final top = _integral[r1 - 1];
-    final bottom = _integral[r2 - 1];
+    final top = _integralAt(r1 - 1);
+    final bottom = _integralAt(r2 - 1);
     if (c1 == 0) return bottom[c2 - 1] - top[c2 - 1];
     return bottom[c2 - 1] - top[c2 - 1] - bottom[c1 - 1] + top[c1 - 1];
   }
@@ -360,51 +359,4 @@ List<int> _noteTable() {
 
 int _freqToIndex(double freq) {
   return (chromaprintFrameSize * freq / chromaprintSampleRate).round();
-}
-
-/// FFT radix-2 sur place. [re] et [im] ont la même longueur, puissance de 2.
-void _fft(Float64List re, Float64List im) {
-  final n = re.length;
-  var j = 0;
-  for (var i = 0; i < n; i++) {
-    if (i < j) {
-      final swapRe = re[i];
-      re[i] = re[j];
-      re[j] = swapRe;
-      final swapIm = im[i];
-      im[i] = im[j];
-      im[j] = swapIm;
-    }
-    var bit = n >> 1;
-    while ((j & bit) != 0) {
-      j ^= bit;
-      bit >>= 1;
-    }
-    j ^= bit;
-  }
-  for (var length = 2; length <= n; length <<= 1) {
-    final half = length >> 1;
-    final theta = -2.0 * math.pi / length;
-    final stepRe = math.cos(theta);
-    final stepIm = math.sin(theta);
-    for (var start = 0; start < n; start += length) {
-      var twiddleRe = 1.0;
-      var twiddleIm = 0.0;
-      for (var k = 0; k < half; k++) {
-        final oddRe = re[start + k + half];
-        final oddIm = im[start + k + half];
-        final mixedRe = twiddleRe * oddRe - twiddleIm * oddIm;
-        final mixedIm = twiddleRe * oddIm + twiddleIm * oddRe;
-        final evenRe = re[start + k];
-        final evenIm = im[start + k];
-        re[start + k] = evenRe + mixedRe;
-        im[start + k] = evenIm + mixedIm;
-        re[start + k + half] = evenRe - mixedRe;
-        im[start + k + half] = evenIm - mixedIm;
-        final nextRe = twiddleRe * stepRe - twiddleIm * stepIm;
-        twiddleIm = twiddleRe * stepIm + twiddleIm * stepRe;
-        twiddleRe = nextRe;
-      }
-    }
-  }
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../data/analysis_pace.dart';
 import '../data/automatic_downloads.dart';
 import '../data/opml.dart';
 import '../data/providers.dart';
@@ -357,6 +358,7 @@ class _PlaybackLifecycleState extends ConsumerState<PlaybackLifecycle>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    AnalysisPace.foreground = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
@@ -384,6 +386,10 @@ class _PlaybackLifecycleState extends ConsumerState<PlaybackLifecycle>
       settingsProvider.select((settings) => settings.keepScreenOn),
     );
     final playing = ref.watch(playerProvider.select((state) => state.playing));
+    AnalysisPace.playing = playing;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    AnalysisPace.foreground =
+        lifecycle == null || lifecycle == AppLifecycleState.resumed;
     _syncWakelock(keepOn: keepOn, playing: playing);
     return widget.child;
   }

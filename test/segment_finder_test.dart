@@ -316,6 +316,21 @@ void main() {
     expect(found.single.classification.confidence, crossEpisodeConfidence);
   });
 
+  test('a sparse bridge of one match in three is not an ad', () {
+    final motif = _motif(120, 50);
+    final noisy = List<int>.from(motif);
+    for (var i = 0; i < noisy.length; i++) {
+      if (i % 3 != 0) noisy[i] = motif[i] ^ 0x00FFFFFF;
+    }
+    expect(
+      discoverPatterns([
+        _episode(id: 1, length: 1500, seed: 1, at: 200, motif: motif),
+        _episode(id: 2, length: 1500, seed: 2, at: 800, motif: noisy),
+      ]),
+      isEmpty,
+    );
+  });
+
   test('a dynamic ad stays an ad when the speech score is high', () {
     final ad = _motif(120, 44);
     final found = discoverPatterns([

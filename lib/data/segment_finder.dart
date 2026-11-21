@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'envelope.dart';
 import 'segment_match.dart';
 import 'skip_segments.dart';
 import 'speech_music.dart';
@@ -32,6 +33,7 @@ class FingerprintEpisode {
     required this.durationMs,
     this.preRollEndMs,
     this.speech,
+    this.envelope,
   });
 
   final int episodeId;
@@ -42,6 +44,10 @@ class FingerprintEpisode {
 
   /// Une octet par seconde, 0 musique … 255 parole. `null` : pas encore noté.
   final Uint8List? speech;
+
+  /// Énergie toutes les 20 ms. `null` : épisode empreinté avant le recalage.
+  /// L’analyse ne redécode pas seulement pour la remplir.
+  final Uint8List? envelope;
 }
 
 /// Gabarit déjà en base. Le rapprochement rapide s’en sert avant
@@ -169,10 +175,15 @@ AnalysisPlan buildAnalysisPlan({
             confidence: _templateConfidence(template),
           ),
         );
-        (claimed[episode.episodeId] ??= []).add(_Range(startMs, endMs));
       }
     }
     if (segments.isEmpty) continue;
+    final refinedSegments = _refinePlanned(segments, byId);
+    for (final segment in refinedSegments) {
+      (claimed[segment.episodeId] ??= []).add(
+        _Range(segment.startMs, segment.endMs),
+      );
+    }
     patterns.add(
       _withMatches(
         PlannedPattern(
@@ -181,7 +192,7 @@ AnalysisPlan buildAnalysisPlan({
           confirmed: template.confirmed,
           fingerprint: template.fingerprint,
           durationMs: template.durationMs,
-          segments: segments,
+          segments: refinedSegments,
           confidence: _templateConfidence(template),
         ),
       ),
@@ -359,6 +370,7 @@ Map<String, Object?> encodeAnalysisInput({
           episode.preRollEndMs,
           episode.values,
           episode.speech,
+          episode.envelope,
         ],
     ],
     'templates': [
@@ -389,6 +401,7 @@ Map<String, Object?> planAnalysisMessage(Map<String, Object?> message) {
         preRollEndMs: row[3] as int?,
         values: decodeFingerprint(blob),
         speech: row.length > 5 ? _bytes(row[5]) : null,
+        envelope: row.length > 6 ? _bytes(row[6]) : null,
       ),
     );
   }
@@ -493,25 +506,43 @@ void _compare(
   }
   final hop = a.hopMicros;
   final minDelta = self ? _pointsForMs(selfMatchMinOffsetMs, hop) : null;
-  final votes = <int, int>{};
+  final votes = <int, _Tally>{};
   for (var i = 0; i < a.values.length; i++) {
     final hits = index.offsets[a.values[i]];
     if (hits == null) continue;
     for (final j in hits) {
       final delta = i - j;
       if (minDelta != null && delta < minDelta) continue;
-      _vote(votes, delta);
+      _vote(votes, delta, i);
     }
   }
   final candidates = [
     for (final entry in votes.entries)
-      if (entry.value >= _minVotes) entry,
-  ]..sort((left, right) => right.value.compareTo(left.value));
+      if (entry.value.count >= _minVotes) entry,
+  ]..sort((left, right) => right.value.count.compareTo(left.value.count));
   final limited = candidates.length > _maxCandidateDeltas
       ? candidates.sublist(0, _maxCandidateDeltas)
       : candidates;
   for (final candidate in limited) {
-    for (final run in _runs(a.values, b.values, candidate.key)) {
+    final tally = candidate.value;
+    final span = tally.max - tally.min + 1;
+    // Des ancres trop espacées ne font pas une pub : on évite de
+    // reparcourir tout l’épisode pour un décalage de silence.
+    if (span > tally.count * 80 + 128) continue;
+    final window = _tightSpan(
+      a.values,
+      b.values,
+      candidate.key,
+      tally.min,
+      tally.max,
+    );
+    for (final run in _runs(
+      a.values,
+      b.values,
+      candidate.key,
+      from: window.$1,
+      to: window.$2,
+    )) {
       final points = run.end - run.start;
       final durationMs = _spanMs(points, hop);
       final startA = _indexMs(run.start, hop);
@@ -523,18 +554,45 @@ void _compare(
           startB >= 0 &&
           startB <= jingleSearchWindowMs;
       if (!long && !jingle) continue;
-      if (!_distinctive(a.values, run.start, run.end)) continue;
-      clusters.add(
-        a.episodeId,
-        run.start,
-        run.end,
-        b.episodeId,
-        run.start - candidate.key,
-        run.end - candidate.key,
-        hop,
-      );
+      if (!chromaprintAgreementOk(run.matches, points)) continue;
+      final pieces = _splitWeak(a.values, b.values, candidate.key, run);
+      for (final piece in pieces) {
+        _keepRun(a, b, candidate.key, piece, hop, clusters);
+      }
     }
   }
+}
+
+void _keepRun(
+  FingerprintEpisode a,
+  FingerprintEpisode b,
+  int delta,
+  _Range run,
+  int hop,
+  _Clusters clusters,
+) {
+  final points = run.end - run.start;
+  final durationMs = _spanMs(points, hop);
+  final startA = _indexMs(run.start, hop);
+  final startB = _indexMs(run.start - delta, hop);
+  final long = durationMs >= adMinDurationMs;
+  final jingle =
+      durationMs >= jingleMinDurationMs &&
+      startA <= jingleSearchWindowMs &&
+      startB >= 0 &&
+      startB <= jingleSearchWindowMs;
+  if (!long && !jingle) return;
+  if (!chromaprintAgreementOk(run.matches, points)) return;
+  if (!_distinctive(a.values, run.start, run.end)) return;
+  clusters.add(
+    a.episodeId,
+    run.start,
+    run.end,
+    b.episodeId,
+    run.start - delta,
+    run.end - delta,
+    hop,
+  );
 }
 
 class _Index {
@@ -562,26 +620,31 @@ class _Index {
 }
 
 class _Range {
-  const _Range(this.start, this.end);
+  const _Range(this.start, this.end, [this.matches = 0]);
 
   final int start;
   final int end;
+  final int matches;
 }
 
-List<_Range> _runs(List<int> a, List<int> b, int delta) {
-  final startI = math.max(0, delta);
-  final endI = math.min(a.length, b.length + delta);
+List<_Range> _runs(List<int> a, List<int> b, int delta, {int? from, int? to}) {
+  var startI = math.max(0, delta);
+  var endI = math.min(a.length, b.length + delta);
+  if (from != null && from > startI) startI = from;
+  if (to != null && to < endI) endI = to;
   final found = <_Range>[];
   var runStart = -1;
   var last = -1;
   var gap = 0;
+  var matches = 0;
   void close() {
     if (runStart >= 0 && last >= runStart) {
-      found.add(_Range(runStart, last + 1));
+      found.add(_Range(runStart, last + 1, matches));
     }
     runStart = -1;
     last = -1;
     gap = 0;
+    matches = 0;
   }
 
   for (var i = startI; i < endI; i++) {
@@ -589,6 +652,7 @@ List<_Range> _runs(List<int> a, List<int> b, int delta) {
       if (runStart < 0) runStart = i;
       last = i;
       gap = 0;
+      matches++;
     } else if (runStart >= 0) {
       gap++;
       if (gap > chromaprintMaxGapPoints) close();
@@ -598,19 +662,111 @@ List<_Range> _runs(List<int> a, List<int> b, int delta) {
   return found;
 }
 
-void _vote(Map<int, int> votes, int delta) {
+/// Coupe un passage dont une fenêtre d’environ une seconde ne correspond
+/// presque plus. Les deux morceaux sont revus ensuite pour la durée.
+List<_Range> _splitWeak(List<int> a, List<int> b, int delta, _Range run) {
+  const window = 8;
+  const minHits = 3;
+  final length = run.end - run.start;
+  if (length <= window) return [run];
+  final cuts = <int>[];
+  var weak = -1;
+  for (var i = run.start; i + window <= run.end; i++) {
+    var hits = 0;
+    for (var j = i; j < i + window; j++) {
+      if (chromaprintValuesMatch(a[j], b[j - delta])) hits++;
+    }
+    if (hits < minHits) {
+      if (weak < 0) weak = i;
+    } else if (weak >= 0) {
+      cuts.add(weak + window ~/ 2);
+      weak = -1;
+    }
+  }
+  if (weak >= 0) cuts.add(weak + window ~/ 2);
+  if (cuts.isEmpty) return [run];
+  final pieces = <_Range>[];
+  var cursor = run.start;
+  for (final cut in cuts) {
+    if (cut - cursor >= 8) {
+      pieces.add(_Range(cursor, cut, _countMatches(a, b, delta, cursor, cut)));
+    }
+    cursor = cut;
+  }
+  if (run.end - cursor >= 8) {
+    pieces.add(
+      _Range(cursor, run.end, _countMatches(a, b, delta, cursor, run.end)),
+    );
+  }
+  return pieces.isEmpty ? [run] : pieces;
+}
+
+int _countMatches(List<int> a, List<int> b, int delta, int start, int end) {
+  var matches = 0;
+  for (var i = start; i < end; i++) {
+    if (chromaprintValuesMatch(a[i], b[i - delta])) matches++;
+  }
+  return matches;
+}
+
+class _Tally {
+  _Tally(int index) : count = 1, min = index, max = index;
+
+  int count;
+  int min;
+  int max;
+}
+
+void _vote(Map<int, _Tally> votes, int delta, int index) {
   final current = votes[delta];
   if (current != null) {
-    votes[delta] = current + 1;
+    current.count++;
+    if (index < current.min) current.min = index;
+    if (index > current.max) current.max = index;
     return;
   }
   if (votes.length < _maxVoteKeys) {
-    votes[delta] = 1;
+    votes[delta] = _Tally(index);
     return;
   }
-  votes.removeWhere((_, count) => count < 2);
+  votes.removeWhere((_, tally) => tally.count < 2);
   if (votes.length >= _maxVoteKeys) return;
-  votes[delta] = 1;
+  votes[delta] = _Tally(index);
+}
+
+/// Étend [min] et [max] tant que la distance de Hamming suit, puis
+/// s’arrête au premier trou trop long. Le parcours ne couvre que le passage.
+(int, int) _tightSpan(
+  List<int> a,
+  List<int> b,
+  int delta,
+  int minIndex,
+  int maxIndex,
+) {
+  final startLimit = math.max(0, delta);
+  final endLimit = math.min(a.length, b.length + delta);
+  if (endLimit <= startLimit) return (startLimit, startLimit);
+  var lo = minIndex.clamp(startLimit, endLimit - 1);
+  var hi = maxIndex.clamp(lo, endLimit - 1);
+  var gap = 0;
+  for (var i = lo - 1; i >= startLimit; i--) {
+    if (chromaprintValuesMatch(a[i], b[i - delta])) {
+      lo = i;
+      gap = 0;
+    } else if (++gap > chromaprintMaxGapPoints) {
+      break;
+    }
+  }
+  gap = 0;
+  for (var i = hi + 1; i < endLimit; i++) {
+    if (chromaprintValuesMatch(a[i], b[i - delta])) {
+      hi = i;
+      gap = 0;
+    } else if (++gap > chromaprintMaxGapPoints) {
+      break;
+    }
+  }
+  return (lo, hi + 1);
 }
 
 List<_Range> _matchNeedle(
@@ -621,31 +777,50 @@ List<_Range> _matchNeedle(
 }) {
   if (needle.length < 8 || haystack.isEmpty) return const [];
   final built = index ?? _Index(haystack);
-  final votes = <int, int>{};
+  final votes = <int, _Tally>{};
   for (var j = 0; j < needle.length; j++) {
     final hits = built.offsets[needle[j]];
     if (hits == null) continue;
     for (final i in hits) {
       final delta = i - j;
-      _vote(votes, delta);
+      _vote(votes, delta, i);
     }
   }
   final candidates = [
     for (final entry in votes.entries)
-      if (entry.value >= _minVotes) entry,
-  ]..sort((left, right) => right.value.compareTo(left.value));
+      if (entry.value.count >= _minVotes) entry,
+  ]..sort((left, right) => right.value.count.compareTo(left.value.count));
   final limited = candidates.length > _maxCandidateDeltas
       ? candidates.sublist(0, _maxCandidateDeltas)
       : candidates;
   final found = <_Range>[];
   for (final candidate in limited) {
-    for (final run in _runs(haystack, needle, candidate.key)) {
+    final tally = candidate.value;
+    final span = tally.max - tally.min + 1;
+    if (span > tally.count * 80 + 128) continue;
+    final window = _tightSpan(
+      haystack,
+      needle,
+      candidate.key,
+      tally.min,
+      tally.max,
+    );
+    for (final run in _runs(
+      haystack,
+      needle,
+      candidate.key,
+      from: window.$1,
+      to: window.$2,
+    )) {
       final span = run.end - run.start;
       final covered =
           span * _templateCoverageDenominator >=
           needle.length * _templateCoverageNumerator;
       final shaped = !requireTemplateShape || span <= needle.length + 8;
-      if (covered && shaped && _distinctive(haystack, run.start, run.end)) {
+      if (covered &&
+          shaped &&
+          chromaprintAgreementOk(run.matches, run.end - run.start) &&
+          _distinctive(haystack, run.start, run.end)) {
         found.add(run);
       }
     }
@@ -814,7 +989,8 @@ List<DiscoveredPattern> _materialize(
       }
     }
     if (occurrences.isEmpty || longest == null) continue;
-    final decision = _keep(occurrences, byId);
+    final aligned = _refineOccurrences(occurrences, byId);
+    final decision = _keep(aligned, byId);
     if (decision == null) continue;
     final episode = byId[longest.episodeId]!;
     final slice = episode.values.sublist(
@@ -826,7 +1002,7 @@ List<DiscoveredPattern> _materialize(
       DiscoveredPattern(
         fingerprint: slice,
         durationMs: _spanMs(slice.length, longest.hopMicros),
-        occurrences: occurrences,
+        occurrences: aligned,
         classification: decision,
       ),
     );
@@ -856,6 +1032,92 @@ SegmentClassification? _keep(
     );
   }
   return null;
+}
+
+List<PlannedSegment> _refinePlanned(
+  List<PlannedSegment> segments,
+  Map<int, FingerprintEpisode> byId,
+) {
+  final hits = [
+    for (final segment in segments)
+      SegmentOccurrence(
+        episodeId: segment.episodeId,
+        startMs: segment.startMs,
+        endMs: segment.endMs,
+        episodeDurationMs: byId[segment.episodeId]?.durationMs ?? 0,
+      ),
+  ];
+  final refined = _refineOccurrences(hits, byId);
+  return [
+    for (var i = 0; i < segments.length; i++)
+      PlannedSegment(
+        episodeId: segments[i].episodeId,
+        startMs: refined[i].startMs,
+        endMs: refined[i].endMs,
+        kind: segments[i].kind,
+        confirmed: segments[i].confirmed,
+        matches: segments[i].matches,
+        confidence: segments[i].confidence,
+      ),
+  ];
+}
+
+List<SegmentOccurrence> _refineOccurrences(
+  List<SegmentOccurrence> hits,
+  Map<int, FingerprintEpisode> byId,
+) {
+  if (hits.length < 2) return hits;
+  final anchor = hits.firstWhere(
+    (hit) => byId[hit.episodeId]?.envelope?.isNotEmpty == true,
+    orElse: () => hits.first,
+  );
+  final anchorBytes = byId[anchor.episodeId]?.envelope;
+  if (anchorBytes == null || anchorBytes.isEmpty) return hits;
+  final shifts = <EnvelopeShift>[];
+  for (final hit in hits) {
+    if (identical(hit, anchor)) continue;
+    final other = byId[hit.episodeId]?.envelope;
+    if (other == null || other.isEmpty) continue;
+    final shift = envelopeEdgeShift(
+      anchor: anchorBytes,
+      other: other,
+      anchorStartMs: anchor.startMs,
+      anchorEndMs: anchor.endMs,
+      otherStartMs: hit.startMs,
+      otherEndMs: hit.endMs,
+    );
+    if (shift != null) shifts.add(shift);
+  }
+  if (shifts.isEmpty) return hits;
+  final startShift = _medianShift([for (final shift in shifts) shift.startMs]);
+  final endShift = _medianShift([for (final shift in shifts) shift.endMs]);
+  return [for (final hit in hits) _shiftOccurrence(hit, startShift, endShift)];
+}
+
+int _medianShift(List<int> values) {
+  final sorted = [...values]..sort();
+  return sorted[sorted.length ~/ 2];
+}
+
+SegmentOccurrence _shiftOccurrence(
+  SegmentOccurrence hit,
+  int startShift,
+  int endShift,
+) {
+  var start = hit.startMs + startShift;
+  var end = hit.endMs + endShift;
+  if (start < 0) start = 0;
+  if (hit.episodeDurationMs > 0 && end > hit.episodeDurationMs) {
+    end = hit.episodeDurationMs;
+  }
+  if (end <= start) return hit;
+  return SegmentOccurrence(
+    episodeId: hit.episodeId,
+    startMs: start,
+    endMs: end,
+    episodeDurationMs: hit.episodeDurationMs,
+    preRollEndMs: hit.preRollEndMs,
+  );
 }
 
 double? _speechOf(
