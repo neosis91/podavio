@@ -272,10 +272,12 @@ class _SegmentTile extends ConsumerWidget {
         ? null
         : '${formatClock(Duration(milliseconds: loose.segment.startMs))}'
               '–${formatClock(Duration(milliseconds: loose.segment.endMs))}';
+    final source = loose?.segment.source;
     final subtitle = [
       ?range,
       formatClock(Duration(milliseconds: durationMs < 0 ? 0 : durationMs)),
       _episodeCount(context, count),
+      if (source == SkipSegmentSource.network) context.tr('Network sting'),
       context.tr(_reviewKey(review)),
     ].join(' · ');
     return ListTile(

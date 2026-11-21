@@ -428,6 +428,133 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     );
   }
 
+  Future<void> setTemplateLogMel(int id, Uint8List logMel) {
+    return (update(segmentTemplates)..where((row) => row.id.equals(id))).write(
+      SegmentTemplatesCompanion(logMel: Value(logMel)),
+    );
+  }
+
+  Future<void> upsertEpisodeLogMel({
+    required int episodeId,
+    required Uint8List data,
+    int hopMs = logMelHopMs,
+    DateTime? createdAt,
+  }) {
+    return into(episodeLogMels).insertOnConflictUpdate(
+      EpisodeLogMelsCompanion.insert(
+        episodeId: Value(episodeId),
+        data: data,
+        hopMs: hopMs,
+        createdAt: createdAt ?? DateTime.now(),
+      ),
+    );
+  }
+
+  Future<EpisodeLogMel?> logMelForEpisode(int episodeId) {
+    return (select(
+      episodeLogMels,
+    )..where((row) => row.episodeId.equals(episodeId))).getSingleOrNull();
+  }
+
+  Future<List<({int episodeId, int podcastId, Uint8List data})>>
+  logMelForPodcast(int podcastId) async {
+    final query =
+        select(episodeLogMels).join([
+          innerJoin(episodes, episodes.id.equalsExp(episodeLogMels.episodeId)),
+        ])..where(
+          episodes.podcastId.equals(podcastId) &
+              episodes.downloadPath.isNotNull() &
+              episodes.downloadPath.length.isBiggerThanValue(0),
+        );
+    final rows = await query.get();
+    return [
+      for (final row in rows)
+        (
+          episodeId: row.readTable(episodeLogMels).episodeId,
+          podcastId: podcastId,
+          data: row.readTable(episodeLogMels).data,
+        ),
+    ];
+  }
+
+  Future<List<({int episodeId, int podcastId, Uint8List data, int endMs})>>
+  dynamicAdBoundaries() async {
+    final query =
+        select(skipSegments).join([
+          innerJoin(episodes, episodes.id.equalsExp(skipSegments.episodeId)),
+          innerJoin(
+            episodeLogMels,
+            episodeLogMels.episodeId.equalsExp(skipSegments.episodeId),
+          ),
+        ])..where(
+          skipSegments.kind.equalsValue(SkipSegmentKind.ad) &
+              skipSegments.source.equalsValue(SkipSegmentSource.fingerprint) &
+              skipSegments.endMs.isSmallerOrEqualValue(logMelSearchWindowMs),
+        );
+    final rows = await query.get();
+    return [
+      for (final row in rows)
+        (
+          episodeId: row.readTable(skipSegments).episodeId,
+          podcastId: row.readTable(episodes).podcastId,
+          data: row.readTable(episodeLogMels).data,
+          endMs: row.readTable(skipSegments).endMs,
+        ),
+    ];
+  }
+
+  Future<List<LearnedNetworkSting>> listLearnedNetworkStings() {
+    return (select(
+      learnedNetworkStings,
+    )..orderBy([(row) => OrderingTerm.asc(row.id)])).get();
+  }
+
+  Future<int> insertLearnedNetworkSting({
+    required Uint8List logMel,
+    required int durationMs,
+    String? name,
+    int episodeCount = 1,
+    int podcastCount = 1,
+  }) {
+    return into(learnedNetworkStings).insert(
+      LearnedNetworkStingsCompanion.insert(
+        name: Value(name),
+        logMel: logMel,
+        durationMs: durationMs,
+        episodeCount: Value(episodeCount),
+        podcastCount: Value(podcastCount),
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
+
+  Future<void> touchLearnedNetworkSting(
+    int id, {
+    required int episodeCount,
+    required int podcastCount,
+  }) {
+    return (update(
+      learnedNetworkStings,
+    )..where((row) => row.id.equals(id))).write(
+      LearnedNetworkStingsCompanion(
+        episodeCount: Value(episodeCount),
+        podcastCount: Value(podcastCount),
+      ),
+    );
+  }
+
+  Future<List<SkipSegment>> networkSegmentsForPodcast(int podcastId) async {
+    final query =
+        select(skipSegments).join([
+          innerJoin(episodes, episodes.id.equalsExp(skipSegments.episodeId)),
+        ])..where(
+          episodes.podcastId.equals(podcastId) &
+              skipSegments.source.equalsValue(SkipSegmentSource.network),
+        );
+    final rows = await query.get();
+    return [for (final row in rows) row.readTable(skipSegments)];
+  }
+
   /// Retire l’empreinte et les passages qui en viennent. Un gabarit sans
   /// passage restant est effacé. Les chapitres et les passages manuels restent.
   Future<void> clearDownloadAnalysis(int episodeId) {
@@ -451,6 +578,9 @@ mixin _SkipSegmentQueries on _$AppDatabase {
           .go();
       await (delete(
         episodeFingerprints,
+      )..where((row) => row.episodeId.equals(episodeId))).go();
+      await (delete(
+        episodeLogMels,
       )..where((row) => row.episodeId.equals(episodeId))).go();
       for (final templateId in templateIds) {
         final left = await segmentsForTemplate(templateId);

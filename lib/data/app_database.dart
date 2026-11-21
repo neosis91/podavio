@@ -10,6 +10,7 @@ import '../sync/sync_hooks.dart';
 import 'download_policy.dart';
 import 'listening_activity.dart';
 import 'models.dart';
+import 'segment_match.dart';
 import 'skip_segments.dart';
 
 part 'app_database.g.dart';
@@ -226,6 +227,31 @@ class SkipSegments extends Table {
   )();
 }
 
+/// Log-mel des 180 premières secondes, pour ne pas redécoder le fichier.
+class EpisodeLogMels extends Table {
+  IntColumn get episodeId =>
+      integer().references(Episodes, #id, onDelete: KeyAction.cascade)();
+
+  /// Float32 little-endian, 40 bandes, hop 10 ms.
+  BlobColumn get data => blob()();
+  IntColumn get hopMs => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {episodeId};
+}
+
+/// Virgule de réseau apprise sur cet appareil, jamais partagée.
+class LearnedNetworkStings extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text().nullable()();
+  BlobColumn get logMel => blob()();
+  IntColumn get durationMs => integer()();
+  IntColumn get episodeCount => integer().withDefault(const Constant(1))();
+  IntColumn get podcastCount => integer().withDefault(const Constant(1))();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
 class EpisodeEntry {
   const EpisodeEntry({required this.episode, required this.podcast});
 
@@ -275,6 +301,8 @@ class EpisodeEntry {
     EpisodeFingerprints,
     SegmentTemplates,
     SkipSegments,
+    EpisodeLogMels,
+    LearnedNetworkStings,
   ],
 )
 class AppDatabase extends _$AppDatabase
@@ -290,7 +318,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -392,6 +420,10 @@ class AppDatabase extends _$AppDatabase
         await _createTableIfMissing(migrator, skipSegments);
         await _addColumnIfMissing(migrator, podcasts, podcasts.autoSkipAds);
         await _addColumnIfMissing(migrator, podcasts, podcasts.autoSkipKinds);
+      }
+      if (from < 21) {
+        await _createTableIfMissing(migrator, episodeLogMels);
+        await _createTableIfMissing(migrator, learnedNetworkStings);
       }
     },
     beforeOpen: (details) async {

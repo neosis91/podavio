@@ -58,8 +58,8 @@ le décale. Exemple mesuré, jingle RTL à 0:00 ou à 27,7 s.
 
 Une fois le jingle trouvé, on le stocke comme gabarit **du podcast** :
 tranche Chromaprint (`segment_templates.fingerprint`) et gabarit log-mel
-(`segment_templates.log_mel`). Les épisodes suivants ne cherchent que ce
-gabarit, pas tout l’index.
+(`segment_templates.log_mel`). Les épisodes suivants cherchent ce gabarit
+avant de reparcourir tout l’index.
 
 ## Log-mel
 
@@ -73,12 +73,36 @@ Pour les sons de moins de 3 s, et pour caler la frontière au dixième :
 Mesuré sur un gabarit RTL de 2 s : 0,96–0,97 au bon endroit, ≤ 0,50 sur
 les autres podcasts.
 
+C’est branché. Le PCM 11 025 Hz déjà décodé pour Chromaprint est
+rééchantillonné à 8 kHz dans le même isolate : on ne décode pas le
+fichier une seconde fois. On ne garde que les 180 premières secondes
+(`episode_log_mels`).
+
+- Un passage Chromaprint d’au moins 3 s, dans cette fenêtre, est recalé
+  sur le log-mel (début et fin au pas de 10 ms).
+- En dessous de 3 s, le candidat est le premier son de l’épisode, ou le
+  son juste après le pré-roll. On le garde s’il revient dans au moins
+  3 épisodes à une position comparable. Le gabarit est de type `jingle`.
+- L’épisode suivant est d’abord comparé aux gabarits log-mel déjà connus.
+
 ## Stings de réseau
 
 Acast joue un sting d’environ 1,3 s à la fin de son bloc de pub inséré
-(score log-mel 1,00 d’un podcast Acast à l’autre). `knownNetworkStings`
-liste ces signatures. La fin du sting (`preRollEndFromSting`) marque la
-fin du pré-roll, ce qui rend comparables des jingles décalés.
+(score log-mel 1,00 d’un podcast Acast à l’autre, ≤ 0,65 ailleurs).
+`knownNetworkStings` en décrit la durée. Le son lui-même n’est pas dans
+le dépôt : on ne le fabrique pas. `assets/stings/README.md` explique
+comment ajouter un gabarit (Acast, une variante, Ausha, Audiomeans).
+
+Quand une virgule connue est trouvée dans les 180 premières secondes,
+le pré-roll `[0, fin de la virgule]` devient un `SkipSegment`
+(`kind = ad`, `source = network`). Dans la dernière minute, le passage
+va de la virgule à la fin de l’épisode. L’écran de classement l’affiche
+avec le libellé « Virgule réseau ». L’avis reste ouvert, sauf si les
+pubs du podcast sont déjà toutes confirmées ou toutes ignorées.
+
+Un son court identique, collé à la fin d’un bloc dynamique, et retrouvé
+dans au moins deux podcasts (score ≥ 0,95), est appris sur l’appareil
+(`learned_network_stings`). Il n’est pas un gabarit du podcast.
 
 ## Classement
 
@@ -105,12 +129,14 @@ calcule sur le fichier téléchargé, pas sur un autre téléchargement.
 
 Sur la machine de développement (CPU virtualisé), le portage Dart
 produit exactement la même empreinte que `fpcalc` 1.5.1 (algorithme 2).
-Huit secondes de PCM prennent environ 6 ms. Un épisode de 30 s, une
-fois le PCM en mémoire, prend 30 à 50 ms dans l’isolate, soit de
-l’ordre de 4 à 6 s par heure d’audio. L’appariement de deux épisodes
-de 30 s prend 1 à 3 ms ; trois empreintes d’environ quatre minutes
-restent bien sous la seconde. L’estimation téléphone, 10 à 20 s par
-heure, n’a pas été remesurée sur un appareil.
+Huit secondes de PCM prennent environ 6 ms. Un épisode de 30 s, PCM
+déjà en mémoire, empreinte et log-mel compris, prend 70 à 85 ms dans
+l’isolate. L’appariement Chromaprint de deux épisodes de 30 s reste
+de l’ordre de quelques millisecondes ; y ajouter la recherche log-mel
+porte le total vers 0,2 s. Le log-mel ne couvre que 180 s, donc une
+heure d’audio reste dominée par Chromaprint, environ 4 à 6 s sur cette
+machine. L’estimation téléphone, 10 à 20 s par heure, n’a pas été
+remesurée sur un appareil.
 
 ## Décodage
 
@@ -130,12 +156,6 @@ téléchargés ». Effacer un téléchargement retire l’empreinte et les
 passages `fingerprint`. Un avis déjà posé (`confirmed`) est conservé
 si l’analyse retrouve le passage. Un gabarit ignoré (`confirmed`
 false) le reste, y compris pour un épisode nouveau.
-
-Le gabarit log-mel (`segment_templates.log_mel`) n’est pas encore
-rempli. Les sons de moins de 3 s et le calage au dixième de seconde
-attendent cette étape. Les stings réseau (Acast) ne sont pas détectés
-dans l’audio : la constante existe, le pré-roll ne vient que de
-l’écart entre la durée RSS et la longueur de l’empreinte.
 
 ## Chapitres
 
@@ -161,5 +181,7 @@ ne le ressaute pas. Un bandeau « Passage ignoré » propose d’annuler.
 
 ## Reste à faire
 
-Le gabarit log-mel (sons de moins de 3 s, frontière au dixième) et la
-détection des stings de réseau dans l’audio.
+Déposer le vrai gabarit Acast (ou Ausha, Audiomeans) dans
+`assets/stings/`, comme décrit dans `assets/stings/README.md`.
+Sans ce fichier, seules les virgules apprises sur l’appareil sont
+cherchées.
