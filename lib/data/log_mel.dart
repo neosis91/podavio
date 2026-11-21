@@ -6,6 +6,31 @@ import 'chromaprint.dart';
 import 'segment_match.dart';
 import 'speech_music.dart';
 
+/// Empreinte, log-mel et chronologie, lus sans garder l’épisode en RAM.
+class PcmAnalysis {
+  const PcmAnalysis({
+    required this.fingerprint,
+    required this.logMel,
+    required this.speech,
+    required this.peakRss,
+    required this.retainedBytes,
+    required this.elapsedMs,
+    required this.fingerprintMs,
+    required this.logMelMs,
+    required this.speechMs,
+  });
+
+  final List<int> fingerprint;
+  final Uint8List? logMel;
+  final Uint8List speech;
+  final int peakRss;
+  final int retainedBytes;
+  final int elapsedMs;
+  final int fingerprintMs;
+  final int logMelMs;
+  final int speechMs;
+}
+
 /// Fenêtre d’analyse : 32 ms à 8 kHz, puissance de 2 pour la FFT.
 const logMelFrameSize = 256;
 
@@ -20,28 +45,98 @@ class LogMelClip {
   bool get isEmpty => frames.isEmpty;
 }
 
-/// Empreinte, log-mel des 180 premières secondes et chronologie parole,
-/// lus sur le même PCM.
-({List<int> fingerprint, Uint8List? logMel, Uint8List speech})
-analyzePcmFileSync(String path) {
-  final bytes = File(path).readAsBytesSync();
-  final view = ByteData.sublistView(bytes);
-  final count = bytes.lengthInBytes ~/ 2;
-  final samples = Int16List(count);
-  for (var i = 0; i < count; i++) {
-    samples[i] = view.getInt16(i * 2, Endian.little);
+/// Empreinte, log-mel des 180 premières secondes et chronologie parole.
+///
+/// Le fichier est lu par blocs. Chromaprint et la note parole avancent
+/// au fil de l’eau. Le log-mel ne garde que les 180 premières secondes,
+/// déjà rééchantillonnées à 8 kHz.
+PcmAnalysis analyzePcmFileSync(String path) {
+  final watch = Stopwatch()..start();
+  final file = File(path);
+  final input = file.openSync();
+  final hasher = ChromaprintHasher();
+  final speech = SpeechTimelineBuilder();
+  final totalSamples = file.lengthSync() ~/ 2;
+  final resampler = LogMelResampler(
+    maxSamples: math.min(
+      (logMelSearchWindowMs * logMelSampleRate) ~/ 1000,
+      totalSamples <= 0
+          ? 0
+          : (totalSamples * logMelSampleRate) ~/ chromaprintSampleRate + 2,
+    ),
+  );
+  const chunkSamples = 8192;
+  final raw = Uint8List(chunkSamples * 2);
+  final piece = Int16List(chunkSamples);
+  var retained = 0;
+  var peakRss = _rss();
+  var fingerprintUs = 0;
+  var speechUs = 0;
+  try {
+    while (true) {
+      final read = input.readIntoSync(raw);
+      if (read < 2) break;
+      final samples = read ~/ 2;
+      final view = ByteData.sublistView(raw, 0, samples * 2);
+      for (var i = 0; i < samples; i++) {
+        piece[i] = view.getInt16(i * 2, Endian.little);
+      }
+      final slice = samples == chunkSamples
+          ? piece
+          : Int16List.sublistView(piece, 0, samples);
+      final finger = Stopwatch()..start();
+      hasher.add(slice);
+      fingerprintUs += finger.elapsedMicroseconds;
+      final spoken = Stopwatch()..start();
+      speech.add(slice);
+      speechUs += spoken.elapsedMicroseconds;
+      resampler.add(slice);
+      final held =
+          raw.length +
+          speech.retainedBytes +
+          resampler.retainedBytes +
+          hasher.valueCount * 8;
+      if (held > retained) retained = held;
+      final rss = _rss();
+      if (rss > peakRss) peakRss = rss;
+    }
+  } finally {
+    input.closeSync();
   }
-  final fingerprint = chromaprintFingerprint(samples);
-  final clip = computeLogMel(
-    resampleToLogMelRate(samples, chromaprintSampleRate),
-  );
-  return (
+  final fingerprint = hasher.finish();
+  final melWatch = Stopwatch()..start();
+  final clip = computeLogMel(resampler.output);
+  final logMelMs = melWatch.elapsedMilliseconds;
+  final fingerprintMs = fingerprintUs ~/ 1000;
+  final speechMs = speechUs ~/ 1000;
+  final logMel = clip.isEmpty
+      ? null
+      : encodeLogMel(clip.frames.cast<List<double>>());
+  final speechBytes = speech.finish();
+  final framesBytes = clip.frames.length * logMelBandCount * 8;
+  final endHeld = fingerprint.length * 8 + (logMel?.length ?? 0) + framesBytes;
+  if (endHeld > retained) retained = endHeld;
+  final rss = _rss();
+  if (rss > peakRss) peakRss = rss;
+  return PcmAnalysis(
     fingerprint: fingerprint,
-    logMel: clip.isEmpty
-        ? null
-        : encodeLogMel(clip.frames.cast<List<double>>()),
-    speech: speechMusicTimeline(samples),
+    logMel: logMel,
+    speech: speechBytes,
+    peakRss: peakRss,
+    retainedBytes: retained,
+    elapsedMs: watch.elapsedMilliseconds,
+    fingerprintMs: fingerprintMs,
+    logMelMs: logMelMs,
+    speechMs: speechMs,
   );
+}
+
+int _rss() {
+  try {
+    return ProcessInfo.currentRss;
+  } catch (_) {
+    return 0;
+  }
 }
 
 /// Rééchantillonne [input] (entiers 16 bits, [fromRate]) vers 8 kHz.
@@ -70,6 +165,62 @@ Float64List resampleToLogMelRate(
     out[i] = left + (right - left) * frac;
   }
   return out;
+}
+
+/// Rééchantillonnage linéaire vers 8 kHz, borné à [maxSamples].
+///
+/// Ne garde que le dernier échantillon source déjà vu, plus la sortie.
+/// Le résultat est celui de [resampleToLogMelRate] sur la même suite.
+class LogMelResampler {
+  LogMelResampler({required this.maxSamples})
+    : _buffer = Float64List(maxSamples < 0 ? 0 : maxSamples);
+
+  final int maxSamples;
+  final Float64List _buffer;
+  var produced = 0;
+  var consumed = 0;
+  int? _previous;
+
+  int get retainedBytes => _buffer.lengthInBytes;
+
+  void add(Int16List chunk) {
+    if (chunk.isEmpty || produced >= _buffer.length) return;
+    while (produced < _buffer.length) {
+      final position = produced * chromaprintSampleRate / logMelSampleRate;
+      final index = position.floor();
+      final local = index - consumed;
+      final next = local + 1;
+      if (next >= chunk.length) break;
+      final left = local >= 0
+          ? chunk[local].toDouble()
+          : (_previous ?? chunk[0]).toDouble();
+      final right = chunk[next].toDouble();
+      final frac = position - index;
+      _buffer[produced] = left + (right - left) * frac;
+      produced++;
+    }
+    _previous = chunk[chunk.length - 1];
+    consumed += chunk.length;
+  }
+
+  /// Termine les échantillons dont le voisin de droite n’existe pas.
+  void finish() {
+    if (_previous == null) return;
+    while (produced < _buffer.length) {
+      final position = produced * chromaprintSampleRate / logMelSampleRate;
+      final index = position.floor();
+      if (index + 1 < consumed) break;
+      if (index >= consumed) break;
+      _buffer[produced] = _previous!.toDouble();
+      produced++;
+    }
+  }
+
+  Float64List get output {
+    finish();
+    if (produced == _buffer.length) return _buffer;
+    return Float64List.sublistView(_buffer, 0, produced);
+  }
 }
 
 /// Spectrogramme log-mel normalisé par trame (norme euclidienne).

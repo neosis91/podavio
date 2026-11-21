@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../data/app_database.dart';
 import '../../data/audio_analysis.dart';
 import '../../data/providers.dart';
+import '../../settings/settings_controller.dart';
 import '../../data/segment_match.dart';
 import '../../data/skip_segments.dart';
 import '../../l10n/l10n.dart';
@@ -101,6 +102,18 @@ class SkipClassificationPage extends ConsumerWidget {
                       _toggleKind(ref, item, kind, enabled: enabled),
                 ),
               _Section(context.tr('Detected segments')),
+              SwitchListTile(
+                title: Text(context.tr('Analyze downloads automatically')),
+                subtitle: Text(
+                  context.tr(
+                    'Finds repeated ads and jingles in downloaded episodes. Turn this off if the app stops responding.',
+                  ),
+                ),
+                value: ref.watch(settingsProvider).automaticAudioAnalysis,
+                onChanged: (enabled) => ref
+                    .read(settingsProvider.notifier)
+                    .setAutomaticAudioAnalysis(enabled),
+              ),
               if (pending > 0)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),

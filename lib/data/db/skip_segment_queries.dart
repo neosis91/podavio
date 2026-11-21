@@ -368,30 +368,86 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     ];
   }
 
+  /// Épisodes téléchargés qui n’ont jamais été empreintés.
+  ///
+  /// Une ligne `running` ou `failed` n’est pas reprise au démarrage :
+  /// l’analyse précédente n’est pas terminée, ou elle a déjà échoué.
   Future<List<({int id, int podcastId})>> downloadedEpisodesMissingFingerprint({
     int? podcastId,
   }) async {
-    final query =
-        select(episodes).join([
-          leftOuterJoin(
-            episodeFingerprints,
-            episodeFingerprints.episodeId.equalsExp(episodes.id),
-          ),
-        ])..where(
-          episodes.downloadPath.isNotNull() &
-              episodes.downloadPath.length.isBiggerThanValue(0) &
-              (episodeFingerprints.episodeId.isNull() |
-                  episodeFingerprints.speech.isNull()),
-        );
-    if (podcastId != null) query.where(episodes.podcastId.equals(podcastId));
-    final rows = await query.get();
+    final rows = await customSelect(
+      'SELECT e.id AS id, e.podcast_id AS podcast_id '
+      'FROM episodes e '
+      'LEFT JOIN episode_fingerprints f ON f.episode_id = e.id '
+      'WHERE e.download_path IS NOT NULL AND length(e.download_path) > 0 '
+      'AND f.episode_id IS NULL'
+      '${podcastId == null ? '' : ' AND e.podcast_id = ?'}',
+      variables: [if (podcastId != null) Variable.withInt(podcastId)],
+      readsFrom: {episodes, episodeFingerprints},
+    ).get();
     return [
       for (final row in rows)
-        (
-          id: row.readTable(episodes).id,
-          podcastId: row.readTable(episodes).podcastId,
-        ),
+        (id: row.read<int>('id'), podcastId: row.read<int>('podcast_id')),
     ];
+  }
+
+  Future<String?> fingerprintStatus(int episodeId) async {
+    final rows = await customSelect(
+      'SELECT status FROM episode_fingerprints WHERE episode_id = ?',
+      variables: [Variable.withInt(episodeId)],
+      readsFrom: {episodeFingerprints},
+    ).get();
+    if (rows.isEmpty) return null;
+    return rows.single.read<String>('status');
+  }
+
+  /// Pose `running` sans effacer une empreinte déjà bonne.
+  Future<void> markFingerprintRunning(int episodeId) async {
+    final existing = await fingerprintForEpisode(episodeId);
+    if (existing == null) {
+      await upsertEpisodeFingerprint(
+        episodeId: episodeId,
+        data: Uint8List(0),
+        hopMicros: 0,
+        speech: Uint8List(0),
+      );
+    }
+    await customStatement(
+      "UPDATE episode_fingerprints SET status = 'running' WHERE episode_id = ?",
+      [episodeId],
+    );
+  }
+
+  Future<void> markFingerprintDone(int episodeId) {
+    return customStatement(
+      "UPDATE episode_fingerprints SET status = 'done' WHERE episode_id = ?",
+      [episodeId],
+    );
+  }
+
+  /// Échec ou analyse interrompue. Une empreinte déjà `done` est gardée.
+  Future<void> markFingerprintFailed(int episodeId) async {
+    final status = await fingerprintStatus(episodeId);
+    if (status == 'done') return;
+    if (status == null) {
+      await upsertEpisodeFingerprint(
+        episodeId: episodeId,
+        data: Uint8List(0),
+        hopMicros: 0,
+        speech: Uint8List(0),
+      );
+    }
+    await customStatement(
+      "UPDATE episode_fingerprints SET status = 'failed' WHERE episode_id = ?",
+      [episodeId],
+    );
+  }
+
+  /// Au démarrage : une analyse tuée en cours ne repart pas toute seule.
+  Future<void> failInterruptedFingerprints() {
+    return customStatement(
+      "UPDATE episode_fingerprints SET status = 'failed' WHERE status = 'running'",
+    );
   }
 
   Future<List<SkipSegment>> fingerprintSegmentsForPodcast(int podcastId) async {
@@ -486,7 +542,9 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     ];
   }
 
-  Future<List<({int episodeId, int podcastId, Uint8List data, int endMs})>>
+  Future<
+    List<({int id, int episodeId, int podcastId, Uint8List data, int endMs})>
+  >
   dynamicAdBoundaries() async {
     final query =
         select(skipSegments).join([
@@ -504,6 +562,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     return [
       for (final row in rows)
         (
+          id: row.readTable(skipSegments).id,
           episodeId: row.readTable(skipSegments).episodeId,
           podcastId: row.readTable(episodes).podcastId,
           data: row.readTable(episodeLogMels).data,

@@ -111,6 +111,7 @@ class AppSettings {
     required this.enqueueDownloads,
     required this.dequeueDeletedDownloads,
     required this.automaticDownload,
+    required this.automaticAudioAnalysis,
     required this.automaticDownloadLimit,
     required this.simultaneousDownloads,
     required this.allowMobileData,
@@ -194,6 +195,11 @@ class AppSettings {
   /// Téléchargement automatique. Éteint, le mécanisme s’arrête sans effacer
   /// le choix de chaque abonnement.
   final bool automaticDownload;
+
+  /// Empreinte des épisodes téléchargés, sans action de l’utilisateur.
+  /// Coupé : pas de file au démarrage, après un téléchargement, ni à
+  /// l’ouverture de l’écran de classement. Le bouton de cet écran reste.
+  final bool automaticAudioAnalysis;
 
   /// Nombre max d’épisodes à télécharger automatiquement par podcast.
   /// `null` = illimité. Les non lus déjà téléchargés comptent dans le plafond.
@@ -294,6 +300,7 @@ class AppSettings {
     bool? enqueueDownloads,
     bool? dequeueDeletedDownloads,
     bool? automaticDownload,
+    bool? automaticAudioAnalysis,
     int? automaticDownloadLimit,
     bool clearAutomaticDownloadLimit = false,
     int? simultaneousDownloads,
@@ -354,6 +361,8 @@ class AppSettings {
       dequeueDeletedDownloads:
           dequeueDeletedDownloads ?? this.dequeueDeletedDownloads,
       automaticDownload: automaticDownload ?? this.automaticDownload,
+      automaticAudioAnalysis:
+          automaticAudioAnalysis ?? this.automaticAudioAnalysis,
       automaticDownloadLimit: clearAutomaticDownloadLimit
           ? null
           : (automaticDownloadLimit ?? this.automaticDownloadLimit),
@@ -462,6 +471,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
       dequeueDeletedDownloads:
           preferences.getBool('dequeueDeletedDownloads') ?? true,
       automaticDownload: preferences.getBool('automaticDownload') ?? false,
+      automaticAudioAnalysis:
+          preferences.getBool('automaticAudioAnalysis') ?? true,
       automaticDownloadLimit: automaticDownloadLimitFromStored(
         preferences.getInt('automaticDownloadLimit'),
       ),
@@ -804,6 +815,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await ref
         .read(sharedPreferencesProvider)
         .setBool('notifyNewEpisodes', enabled);
+  }
+
+  Future<void> setAutomaticAudioAnalysis(bool enabled) async {
+    state = state.copyWith(automaticAudioAnalysis: enabled);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool('automaticAudioAnalysis', enabled);
   }
 
   Future<void> setAutomaticDownloadLimit(int? limit) async {

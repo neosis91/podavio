@@ -63,19 +63,61 @@ class _Second {
 ///
 /// Le calcul reste dans l’isolate qui empreinte déjà ce PCM : pas de
 /// second décodage, pas de modèle. Une heure tient en 3600 octets.
+///
+/// [SpeechTimelineBuilder] fait le même calcul en ne gardant qu’une
+/// seconde de PCM à la fois.
 Uint8List speechMusicTimeline(
   Int16List samples, {
   int sampleRate = chromaprintSampleRate,
 }) {
-  final seconds = _wholeSeconds(samples, sampleRate);
-  if (seconds <= 0) return Uint8List(0);
-  final out = Uint8List(seconds);
-  final scratch = _Scratch(sampleRate);
-  for (var second = 0; second < seconds; second++) {
-    final features = scratch.measure(samples, second * sampleRate);
-    out[second] = (features.speech * 255).round().clamp(0, 255);
+  final builder = SpeechTimelineBuilder(sampleRate: sampleRate);
+  const chunk = 4096;
+  var offset = 0;
+  while (offset < samples.length) {
+    final end = math.min(samples.length, offset + chunk);
+    builder.add(Int16List.sublistView(samples, offset, end));
+    offset = end;
   }
-  return out;
+  return builder.finish();
+}
+
+/// Chronologie parole/musique, une seconde à la fois.
+///
+/// Le tampon interne fait une seconde. Le PCM du reste de l’épisode
+/// n’est pas retenu.
+class SpeechTimelineBuilder {
+  SpeechTimelineBuilder({int sampleRate = chromaprintSampleRate})
+    : _sampleRate = sampleRate,
+      _scratch = sampleRate > 0 ? _Scratch(sampleRate) : null,
+      _hold = Int16List(sampleRate > 0 ? sampleRate : 0);
+
+  final int _sampleRate;
+  final _Scratch? _scratch;
+  final Int16List _hold;
+  var _held = 0;
+  final _out = BytesBuilder(copy: false);
+
+  /// Octets du tampon d’une seconde, pour la trace mémoire.
+  int get retainedBytes => _hold.lengthInBytes;
+
+  void add(Int16List samples) {
+    final scratch = _scratch;
+    if (scratch == null || samples.isEmpty) return;
+    var offset = 0;
+    while (offset < samples.length) {
+      final room = _sampleRate - _held;
+      final take = math.min(room, samples.length - offset);
+      _hold.setRange(_held, _held + take, samples, offset);
+      _held += take;
+      offset += take;
+      if (_held != _sampleRate) continue;
+      final features = scratch.measure(_hold, 0);
+      _out.addByte((features.speech * 255).round().clamp(0, 255));
+      _held = 0;
+    }
+  }
+
+  Uint8List finish() => _out.takeBytes();
 }
 
 /// Moyenne des descripteurs sur les secondes entières de [samples].

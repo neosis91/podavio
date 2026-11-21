@@ -8,6 +8,7 @@ import android.media.MediaFormat
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
@@ -31,13 +32,15 @@ object AudioDecodePlugin {
             }
             val path = call.argument<String>("path")?.trim().orEmpty()
             val sampleRate = call.argument<Int>("sampleRate") ?: 11025
+            val deadlineMs = call.argument<Int>("deadlineMs") ?: 360_000
             if (path.isEmpty()) {
                 result.success(null)
                 return@setMethodCallHandler
             }
+            // Jamais le thread principal : MediaCodec synchrone y provoque un ANR.
             Thread {
                 try {
-                    val decoded = decode(context, path, sampleRate)
+                    val decoded = decode(context, path, sampleRate, deadlineMs.toLong())
                     main.post { result.success(decoded) }
                 } catch (error: Exception) {
                     main.post { result.error("decode", error.message, null) }
@@ -46,7 +49,12 @@ object AudioDecodePlugin {
         }
     }
 
-    private fun decode(context: Context, path: String, targetRate: Int): Map<String, Any?>? {
+    private fun decode(
+        context: Context,
+        path: String,
+        targetRate: Int,
+        deadlineMs: Long,
+    ): Map<String, Any?>? {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         var outFile: File? = null
@@ -84,60 +92,86 @@ object AudioDecodePlugin {
                 val info = MediaCodec.BufferInfo()
                 var inputDone = false
                 var outputDone = false
-                var stalls = 0
+                var idle = 0
+                var emptyReads = 0
+                var failed = false
+                val deadline = SystemClock.elapsedRealtime() + deadlineMs.coerceAtLeast(1_000)
                 while (!outputDone) {
+                    if (SystemClock.elapsedRealtime() >= deadline) {
+                        failed = true
+                        break
+                    }
+                    var progressed = false
                     if (!inputDone) {
                         val inIndex = codec.dequeueInputBuffer(10_000)
                         if (inIndex >= 0) {
                             val buffer = codec.getInputBuffer(inIndex)
-                            val size = if (buffer == null) -1 else extractor.readSampleData(buffer, 0)
-                            if (size < 0) {
-                                codec.queueInputBuffer(
-                                    inIndex,
-                                    0,
-                                    0,
-                                    0,
-                                    MediaCodec.BUFFER_FLAG_END_OF_STREAM,
-                                )
-                                inputDone = true
+                            if (buffer == null) {
+                                codec.queueInputBuffer(inIndex, 0, 0, 0, 0)
                             } else {
-                                codec.queueInputBuffer(
-                                    inIndex,
-                                    0,
-                                    size,
-                                    extractor.sampleTime,
-                                    0,
-                                )
-                                extractor.advance()
+                                val size = extractor.readSampleData(buffer, 0)
+                                if (size == 0) emptyReads += 1
+                                if (size > 0) emptyReads = 0
+                                val exhausted = size < 0 || emptyReads >= 8
+                                if (exhausted) {
+                                    codec.queueInputBuffer(
+                                        inIndex,
+                                        0,
+                                        0,
+                                        0,
+                                        MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                                    )
+                                    inputDone = true
+                                } else {
+                                    codec.queueInputBuffer(
+                                        inIndex,
+                                        0,
+                                        size.coerceAtLeast(0),
+                                        extractor.sampleTime.coerceAtLeast(0),
+                                        0,
+                                    )
+                                    extractor.advance()
+                                }
                             }
+                            progressed = true
                         }
                     }
                     when (val outIndex = codec.dequeueOutputBuffer(info, 10_000)) {
-                        MediaCodec.INFO_TRY_AGAIN_LATER -> {
-                            stalls += 1
-                            if (inputDone && stalls > 200) outputDone = true
-                        }
+                        MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
                         MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                            stalls = 0
                             writer.update(codec.outputFormat)
+                            progressed = true
                         }
                         else -> {
-                            if (outIndex < 0) continue
-                            stalls = 0
-                            val config = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
-                            if (!config && info.size > 0) {
-                                codec.getOutputBuffer(outIndex)?.let { buffer ->
-                                    writer.write(buffer, info)
+                            if (outIndex >= 0) {
+                                val config = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                                if (!config && info.size > 0) {
+                                    codec.getOutputBuffer(outIndex)?.let { buffer ->
+                                        writer.write(buffer, info)
+                                    }
                                 }
+                                val end = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                                codec.releaseOutputBuffer(outIndex, false)
+                                progressed = true
+                                if (end) outputDone = true
                             }
-                            val end = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                            codec.releaseOutputBuffer(outIndex, false)
-                            if (end) outputDone = true
+                        }
+                    }
+                    if (progressed) {
+                        idle = 0
+                    } else {
+                        idle += 1
+                        // 200 essais après la fin d’entrée, 500 si elle n’arrive pas.
+                        // Même politique que test/codec_drain_test.dart.
+                        if (inputDone && idle > 200) outputDone = true
+                        if (!inputDone && idle > 500) {
+                            failed = true
+                            outputDone = true
                         }
                     }
                 }
                 writer.finish()
-                if (writer.written <= 0L) {
+                if (failed || writer.written <= 0L) {
                     outFile.delete()
                     return null
                 }
