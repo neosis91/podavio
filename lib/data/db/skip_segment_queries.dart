@@ -48,6 +48,32 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     );
   }
 
+  Future<void> setFingerprintEnvelope(int episodeId, Uint8List envelope) {
+    return customStatement(
+      'UPDATE episode_fingerprints SET envelope = ? WHERE episode_id = ?',
+      [envelope, episodeId],
+    );
+  }
+
+  /// Enveloppes déjà calculées. Une valeur absente ne relance pas le décodage.
+  Future<Map<int, Uint8List>> fingerprintEnvelopes(int podcastId) async {
+    final rows = await customSelect(
+      'SELECT f.episode_id AS episode_id, f.envelope AS envelope '
+      'FROM episode_fingerprints f '
+      'INNER JOIN episodes e ON e.id = f.episode_id '
+      'WHERE e.podcast_id = ? AND f.envelope IS NOT NULL',
+      variables: [Variable.withInt(podcastId)],
+      readsFrom: {episodeFingerprints, episodes},
+    ).get();
+    final found = <int, Uint8List>{};
+    for (final row in rows) {
+      final bytes = row.read<Uint8List?>('envelope');
+      if (bytes == null || bytes.isEmpty) continue;
+      found[row.read<int>('episode_id')] = bytes;
+    }
+    return found;
+  }
+
   Future<EpisodeFingerprint?> fingerprintForEpisode(int episodeId) {
     return (select(
       episodeFingerprints,

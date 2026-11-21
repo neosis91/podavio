@@ -79,7 +79,7 @@ void main() {
         .customSelect('SELECT speech FROM episode_fingerprints')
         .get();
     await reopened
-        .customSelect('SELECT status FROM episode_fingerprints')
+        .customSelect('SELECT status, envelope FROM episode_fingerprints')
         .get();
     await reopened
         .customSelect('SELECT confidence FROM segment_templates')
@@ -117,7 +117,7 @@ void main() {
         .customSelect('SELECT speech FROM episode_fingerprints')
         .get();
     await reopened
-        .customSelect('SELECT status FROM episode_fingerprints')
+        .customSelect('SELECT status, envelope FROM episode_fingerprints')
         .get();
     await reopened
         .customSelect('SELECT confidence FROM segment_templates')

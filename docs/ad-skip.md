@@ -32,12 +32,23 @@ Pour les épisodes téléchargés d’un même podcast :
    deltas `offsetA - offsetB` qui s’alignent.
 3. Deux valeurs se correspondent si leur distance de Hamming est ≤ 6 bits
    sur 32 (`chromaprintValuesMatch`). Ça absorbe le bruit d’un réencodage.
+   Le popcount se fait par octets.
 4. Une suite peut sauter jusqu’à 2 valeurs (`chromaprintMaxGapPoints`)
-   sans être coupée en deux.
-5. Une plage retenue comme pub, promo ou lecture sponsor dure au moins
+   sans être coupée en deux. Trois valeurs manquantes la coupent.
+5. La suite doit encore compter au moins 55 % de valeurs qui collent
+   (`chromaprintMinAgreement`). Un pont d’une valeur sur trois, assez
+   long pour passer les 10 s, est rejeté. Une fenêtre d’environ 1 s
+   (8 points) avec moins de 3 correspondances coupe la suite
+   (`_splitWeak`).
+6. Le vote retient le premier et le dernier offset de chaque décalage.
+   Si ces ancres sont trop espacées pour le nombre de votes
+   (`écart > votes × 80 + 128`), le décalage est un hasard : on ne
+   parcourt pas le fichier. Sinon la distance de Hamming ne s’étend
+   qu’autour de cette plage.
+7. Une plage retenue comme pub, promo ou lecture sponsor dure au moins
    10 secondes (`adMinDurationMs`). Mesuré : Squarespace 29 s à 8 positions
    différentes, lectures sponsor ~70 s, outros de 15 à 47 s, cross-promos.
-6. Le motif devient un `SegmentTemplate` (tranche d’empreinte, durée, type
+8. Le motif devient un `SegmentTemplate` (tranche d’empreinte, durée, type)
    classé une fois) et un `SkipSegment` par épisode
    (`source = fingerprint`, `matches` = nombre d’épisodes).
 
@@ -53,8 +64,10 @@ le décale. Exemple mesuré, jingle RTL à 0:00 ou à 27,7 s.
   après le pré-roll (`acceptJingleCandidate`).
 - Résultat mesuré : jingle RTL retrouvé sur 15/15 paires. À 3 s, aucun
   faux positif d’un podcast à l’autre. À 2 s, un seul : le sting Acast,
-  commun au réseau. Précision des frontières : ±0,5 à 1 s
-  (`stableOffsetSlackMs` = 2 s).
+  commun au réseau. L’offset « stable » tolère 2 s
+  (`stableOffsetSlackMs`). La frontière, elle, est resserrée ensuite
+  (voir plus bas) : le pas Chromaprint reste ~124 ms, le recalage vise
+  le pas de 20 ms.
 
 Une fois le jingle trouvé, on le stocke comme gabarit **du podcast** :
 tranche Chromaprint (`segment_templates.fingerprint`) et gabarit log-mel
@@ -80,8 +93,10 @@ secondes (`episode_log_mels`).
 
 La recherche (jingles courts, recalage, virgules) ne tourne pas sur
 l’isolate d’interface, qui est le thread principal Android. Elle part
-dans un isolate annulable. Le décodage des trames écrit directement
-des `Float64List`, sans liste de `double` intermédiaire. On ne compare
+dans un isolate annulable. Le spectre est une FFT réelle (les échantillons
+sont réels). La recherche glisse d’abord de 4 trames (40 ms), puis
+recale à ±40 ms au pas de 10 ms. Un score déjà trop bas pour le seuil
+demandé est abandonné avant la fin de l’aiguille. On ne compare
 que les 12 épisodes les plus récents (`logMelCompareEpisodeCap`) et au
 plus 24 frontières de bloc. Les écritures tiennent dans une
 transaction, pour ne pas reconstruire l’écran de classement à chaque
@@ -89,7 +104,20 @@ ligne. Un jingle déjà enregistré sur un épisode plus ancien n’est pas
 effacé : il n’est simplement plus repris dans cette fenêtre.
 
 - Un passage Chromaprint d’au moins 3 s, dans cette fenêtre, est recalé
-  sur le log-mel (début et fin au pas de 10 ms).
+  sur le log-mel (début et fin au pas de 10 ms). Si un autre épisode
+  porte le même gabarit, les deux spectres se recoupent
+  (`refinePairedLogMelEdges`) et la frontière se pose sur la transition
+  de similarité, pas seulement sur le silence.
+- L’empreinte est accompagnée d’une enveloppe d’énergie sur tout
+  l’épisode : un octet d’RMS toutes les 20 ms
+  (`episode_fingerprints.envelope`, schéma 24, colonne SQL hors Drift).
+  Autour du match grossier (±1,5 s), on cherche où les enveloppes
+  commencent et cessent de se correspondre. Le même décalage, médiane
+  des paires, est appliqué à toutes les occurrences. Sans contraste
+  (écart de médiane < 0,12), on garde la frontière Chromaprint.
+  Une enveloppe absente ne relance pas le décodage : les épisodes déjà
+  analysés restent en cache. Le bouton d’analyse, ou un épisode nouveau,
+  remplit la colonne.
 - En dessous de 3 s, le candidat est le premier son de l’épisode, ou le
   son juste après le pré-roll. On le garde s’il revient dans au moins
   3 épisodes à une position comparable. Le gabarit est de type `jingle`.
@@ -200,11 +228,10 @@ Sous 50 (`lowConfidenceCutoff`), l’écran de classement le replie
 derrière « Afficher les passages incertains ». Le tri dans chaque type
 est la confiance décroissante. La confiance ne déclenche pas de saut.
 
-Coût mesuré sur la machine de développement (CPU virtualisé), 20 s de
-PCM tonal extrapolés : **environ 0,7 s par heure** d’audio. Le test
-refuse au-delà de 8 s/h. Ajouté aux 4 à 6 s de Chromaprint, l’heure
-reste du même ordre. L’estimation téléphone, 10 à 20 s, n’a pas été
-remesurée.
+Coût mesuré sur la machine de développement (CPU virtualisé), 120 s de
+PCM tonal : **34 puis 35 ms** de note, soit environ 1,0 s par heure.
+Avant la FFT réelle, le même banc donnait 43 à 54 ms. Le test refuse
+au-delà de 8 s/h. L’estimation téléphone n’a pas été remesurée.
 
 ## Durée RSS et fichier
 
@@ -216,24 +243,44 @@ calcule sur le fichier téléchargé, pas sur un autre téléchargement.
 ## Débit mesuré
 
 Sur la machine de développement (CPU virtualisé), le portage Dart
-produit exactement la même empreinte que `fpcalc` 1.5.1 (algorithme 2).
-Huit secondes de PCM prennent environ 6 ms. Un épisode de 30 s, PCM
-déjà en mémoire, empreinte et log-mel compris, prend 70 à 85 ms dans
-l’isolate. L’appariement Chromaprint de deux épisodes de 30 s reste
-de l’ordre de quelques millisecondes ; y ajouter la recherche log-mel
-porte le total vers 0,2 s. Le log-mel ne couvre que 180 s, donc une
-heure d’audio reste dominée par Chromaprint, environ 4 à 6 s sur cette
-machine, plus environ 0,7 s pour la note parole/musique (voir plus
-haut). L’estimation téléphone, 10 à 20 s par heure, n’a pas été
-remesurée sur un appareil.
+produit exactement la même empreinte que `fpcalc` 1.5.1 (algorithme 2),
+y compris après le passage à la FFT réelle.
 
-Fichier silencieux de 2 h (158,8 Mo, 11 025 Hz, mono, 16 bits), même
-machine. L’ancien chemin gardait le fichier et une copie `Int16` :
-318 Mo de RSS. Le chemin par blocs finit en 5,7 s (empreinte 4,9 s,
-parole 0,47 s, log-mel des 180 premières secondes 0,08 s), avec 12 Mo
-retenus par les tampons et +36 Mo de RSS. Le silence est un plancher
-pour le temps CPU : le gain visé est la mémoire, et le fait que ce
-travail n’est plus sur l’isolate d’interface.
+Banc `test/analysis_speed_test.dart`, même machine, PCM tonal synthétique
+déjà en fichier (pas de décodage natif). Moyenne de deux passages avant
+ces changements, puis après (le cas dense n’a été mesuré qu’une fois
+avant, à 563 ms) :
+
+| Étape | Avant | Après |
+| --- | --- | --- |
+| 120 s, total Dart | 421 ms | 163 ms |
+| dont empreinte | 143 ms | 50 ms |
+| dont parole/musique | 49 ms | 35 ms |
+| dont spectre log-mel (fenêtre 180 s) | 166 ms | 41 ms |
+| lecture, rééchantillonnage, enveloppe (reste) | ~63 ms | ~38 ms |
+| 6 épisodes × 20 min, hashes distincts | 56 ms | 34 ms |
+| 4 épisodes × 30 min, hashes répétés | 563 ms | 207 ms |
+| 8 recherches log-mel dans 20 s | 228 ms | 92 ms |
+
+L’empreinte d’une heure tombe d’environ 4,3 s à 1,5 s sur cette machine.
+Le spectre log-mel ne couvre que 180 s, donc il ne grandit plus avec
+l’épisode. Les écritures en base restent un blob par épisode : elles
+ne sont pas le coût. Le décodage natif (MediaCodec, AVFoundation,
+ffmpeg) n’est pas dans ce banc ; il était déjà hors de l’isolate
+d’interface.
+
+Mémoire, même banc de 120 s : tampons retenus 7,73 Mo contre 7,73 Mo
+avant (l’enveloppe de 120 s ajoute 6 ko). Delta RSS environ 17 Mo,
+comme avant, pic ~158 Mo contre ~156 Mo. Le test du fichier silencieux
+de 20 min exige encore que les tampons retenus restent sous la moitié
+du fichier. Le plafond visé reste celui du chemin par blocs : pas une
+seconde copie de l’épisode, et pas un second isolate de décodage.
+
+Fichier silencieux de 2 h (158,8 Mo, 11 025 Hz, mono, 16 bits), mesure
+d’avant cette accélération, même machine. L’ancien chemin gardait le
+fichier et une copie `Int16` : 318 Mo de RSS. Le chemin par blocs
+finissait en 5,7 s, avec 12 Mo retenus et +36 Mo de RSS. Ce plafond
+n’est pas relevé.
 
 ## Décodage
 
@@ -261,9 +308,18 @@ note parole et le rééchantillonnage 8 kHz avancent ensemble. Le log-mel
 ne conserve que les 180 premières secondes.
 
 L’empreinte et l’appariement tournent dans un isolate, un épisode à
-la fois. L’isolate est tué si l’épisode dépasse 8 minutes
-(`audioAnalysisBudget`), ou si l’analyse automatique est coupée. Une
-fin en retard ne réécrit pas une ligne déjà marquée en échec.
+la fois. On ne lance pas un second décodage en parallèle : ça
+doublerait le pic de RAM. L’isolate est tué si l’épisode dépasse
+8 minutes (`audioAnalysisBudget`), ou si l’analyse automatique est
+coupée. Une fin en retard ne réécrit pas une ligne déjà marquée en
+échec.
+
+Pendant une lecture, l’isolate d’empreinte marque une pause de 12 ms
+après chaque bloc de 8192 échantillons (`AnalysisPace`, mode `play`),
+pour ne pas garder un cœur pendant que l’audio joue. Au premier plan
+sans lecture, il cède seulement l’ordonnancement (`front`). En
+arrière-plan, sans lecture, il va au plus vite. L’isolate d’interface
+ne calcule pas.
 
 La file dédoublonne : le même épisode demandé deux fois (démarrage,
 écran, fin de téléchargement) n’est décodé qu’une fois. Un second

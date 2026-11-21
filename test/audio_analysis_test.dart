@@ -11,6 +11,7 @@ import 'package:podavio/data/chromaprint.dart';
 import 'package:podavio/data/models.dart';
 import 'package:podavio/data/pcm_decoder.dart';
 import 'package:podavio/data/providers.dart';
+import 'package:podavio/data/segment_match.dart';
 import 'package:podavio/data/skip_segments.dart';
 import 'package:podavio/settings/settings_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -395,6 +396,43 @@ void main() {
     await notifier.enqueueMissing(podcastId: podcastB);
     await Future.wait([firstJob, secondJob, thirdJob]);
     expect(decoder.order, ['/tmp/a1.pcm', '/tmp/b.pcm', '/tmp/a2.pcm']);
+  });
+
+  test('an episode already fingerprinted is not decoded again', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final podcastId = (await database.saveFeed(
+      _draft([_episodeDraft('a', 'Un')]),
+    )).podcastId;
+    final episode = (await database.watchEpisodes(podcastId: podcastId).first)
+        .single
+        .episode;
+    await database.setDownloadPath(episode.id, '/tmp/a.pcm');
+    await database.upsertEpisodeFingerprint(
+      episodeId: episode.id,
+      data: encodeFingerprint(_motif(32, 1)),
+      hopMicros: chromaprintStoredHopMicros,
+      speech: Uint8List(4),
+    );
+    await database.upsertEpisodeLogMel(
+      episodeId: episode.id,
+      data: Uint8List(logMelBandCount * 4 * 8),
+    );
+    final decoder = _CountingDecoder({
+      '/tmp/a.pcm': Int16List(chromaprintSampleRate),
+    });
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        pcmDecoderProvider.overrideWithValue(decoder),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container
+        .read(audioAnalysisProvider.notifier)
+        .enqueueEpisode(episode.id);
+    expect(decoder.calls, 0);
+    expect(await database.fingerprintStatus(episode.id), isNot('running'));
   });
 
   test('automatic analysis stays idle when the setting is off', () async {

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'envelope.dart';
 import 'segment_match.dart';
 import 'log_mel.dart';
 
@@ -153,6 +154,108 @@ LogMelMatch? refineLogMelBoundary({
     endMs: start + audible.durationMs,
     score: best.score,
   );
+}
+
+/// Recale début et fin en comparant deux épisodes, au pas de 10 ms.
+///
+/// Le cœur du passage sert de référence. On avance ou on recule tant que
+/// les trames alignées se correspondent, dans ±[boundaryRefineSlackMs].
+/// `null` si les deux sons ne se distinguent pas de ce qui les entoure.
+LogMelMatch? refinePairedLogMelEdges({
+  required LogMelClip left,
+  required int leftStartMs,
+  required int leftEndMs,
+  required LogMelClip right,
+  required int rightStartMs,
+  required int rightEndMs,
+  int slackMs = boundaryRefineSlackMs,
+}) {
+  final span = leftEndMs - leftStartMs;
+  if (span < jingleMinDurationMs || left.frames.length < 8) return null;
+  final delta = leftStartMs - rightStartMs;
+
+  double cosAt(int leftMs) {
+    final frameL = leftMs ~/ logMelHopMs;
+    final frameR = (leftMs - delta) ~/ logMelHopMs;
+    if (frameL < 0 ||
+        frameR < 0 ||
+        frameL >= left.frames.length ||
+        frameR >= right.frames.length) {
+      return 0;
+    }
+    return _frameCos(left.frames[frameL], right.frames[frameR]);
+  }
+
+  final inner = <double>[];
+  final innerFrom = leftStartMs + span ~/ 5;
+  final innerTo = leftEndMs - span ~/ 5;
+  for (var t = innerFrom; t < innerTo; t += logMelHopMs) {
+    inner.add(cosAt(t));
+  }
+  final outer = <double>[];
+  for (var t = leftStartMs - slackMs; t < leftStartMs - 200; t += logMelHopMs) {
+    outer.add(cosAt(t));
+  }
+  if (inner.length < 4 || outer.length < 4) return null;
+  inner.sort();
+  outer.sort();
+  final innerMed = inner[inner.length ~/ 2];
+  final outerMed = outer[outer.length ~/ 2];
+  if (innerMed - outerMed < 0.12) return null;
+  final gate = (innerMed + outerMed) / 2;
+  const holdNeed = 150 ~/ logMelHopMs;
+
+  int? rising;
+  var hold = 0;
+  final riseStop = leftStartMs + slackMs < leftEndMs
+      ? leftStartMs + slackMs
+      : leftEndMs;
+  for (var t = leftStartMs - slackMs; t < riseStop; t += logMelHopMs) {
+    if (cosAt(t) >= gate) {
+      hold++;
+      if (hold >= holdNeed) {
+        rising = t - (holdNeed - 1) * logMelHopMs;
+        break;
+      }
+    } else {
+      hold = 0;
+    }
+  }
+  int? falling;
+  hold = 0;
+  final fallStop = leftEndMs - slackMs > leftStartMs
+      ? leftEndMs - slackMs
+      : leftStartMs;
+  for (var t = leftEndMs + slackMs; t > fallStop; t -= logMelHopMs) {
+    if (cosAt(t) >= gate) {
+      hold++;
+      if (hold >= holdNeed) {
+        falling = t + holdNeed * logMelHopMs;
+        break;
+      }
+    } else {
+      hold = 0;
+    }
+  }
+  if (rising == null || falling == null || falling - rising < span ~/ 2) {
+    return null;
+  }
+  if ((rising - leftStartMs).abs() > slackMs) return null;
+  if ((falling - leftEndMs).abs() > slackMs) return null;
+  final score = innerMed.clamp(0.0, 1.0);
+  if (score < logMelMatchThreshold) return null;
+  return LogMelMatch(startMs: rising, endMs: falling, score: score);
+}
+
+double _frameCos(List<double> left, List<double> right) {
+  var dot = 0.0;
+  final n = left.length < right.length ? left.length : right.length;
+  for (var i = 0; i < n; i++) {
+    dot += left[i] * right[i];
+  }
+  if (dot > 1) return 1;
+  if (dot < -1) return -1;
+  return dot;
 }
 
 LogMelClip _trimSilence(LogMelClip clip) {
@@ -385,11 +488,33 @@ Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
         .where((item) => item.episodeId == episodeId)
         .firstOrNull;
     if (episode == null) continue;
-    final refined = refineLogMelBoundary(
+    final self = refineLogMelBoundary(
       episode: episode.clip,
       roughStartMs: startMs,
       roughEndMs: endMs,
     );
+    final templateIdEarly = segment[5] as int?;
+    LogMelMatch? paired;
+    if (templateIdEarly != null) {
+      for (final other in segments) {
+        if (identical(other, segment) || other[5] != templateIdEarly) continue;
+        final otherId = other[1]! as int;
+        final partner = episodes
+            .where((item) => item.episodeId == otherId)
+            .firstOrNull;
+        if (partner == null) continue;
+        paired = refinePairedLogMelEdges(
+          left: episode.clip,
+          leftStartMs: self?.startMs ?? startMs,
+          leftEndMs: self?.endMs ?? endMs,
+          right: partner.clip,
+          rightStartMs: other[2]! as int,
+          rightEndMs: other[3]! as int,
+        );
+        if (paired != null) break;
+      }
+    }
+    final refined = paired ?? self;
     if (refined == null) continue;
     final templateId = segment[5] as int?;
     Uint8List? templateBytes;
