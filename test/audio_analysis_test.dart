@@ -16,6 +16,33 @@ import 'package:podavio/settings/settings_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('remaining time follows the length of the audio', () {
+    final now = DateTime.utc(2026, 11, 21, 16);
+    final left = estimateAnalysisRemaining(
+      podcastId: 16,
+      runningPodcastId: 45,
+      runningDurationSeconds: 321,
+      runningSince: now.subtract(const Duration(seconds: 20)),
+      now: now,
+      pending: [(podcastId: 16, durationSeconds: 1172)],
+      measuredMs: 0,
+      measuredAudioSeconds: 0,
+    );
+    expect(left, const Duration(milliseconds: 321 * 150 - 20000 + 1172 * 150));
+
+    final measured = estimateAnalysisRemaining(
+      podcastId: 121,
+      runningPodcastId: 121,
+      runningDurationSeconds: 1512,
+      runningSince: now,
+      now: now,
+      pending: const [],
+      measuredMs: 216614,
+      measuredAudioSeconds: 1447,
+    );
+    expect(measured, const Duration(milliseconds: 1512 * 216614 ~/ 1447));
+  });
+
   test(
     'analysis is idempotent and keeps an ignored or confirmed template',
     () async {
@@ -310,6 +337,66 @@ void main() {
     },
   );
 
+  test('the open podcast is analyzed before the rest of the backlog', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({'automaticAudioAnalysis': true});
+    final preferences = await SharedPreferences.getInstance();
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final podcastA = (await database.saveFeed(
+      _draft([
+        _episodeDraft('a1', 'Un'),
+        _episodeDraft('a2', 'Deux'),
+      ], url: 'https://example.com/a.xml'),
+    )).podcastId;
+    final podcastB = (await database.saveFeed(
+      _draft([_episodeDraft('b', 'Trois')], url: 'https://example.com/b.xml'),
+    )).podcastId;
+    final episodesA = await database.watchEpisodes(podcastId: podcastA).first;
+    final episodeB = (await database.watchEpisodes(podcastId: podcastB).first)
+        .single
+        .episode;
+    final first = episodesA
+        .singleWhere((row) => row.episode.guid == 'a1')
+        .episode;
+    final second = episodesA
+        .singleWhere((row) => row.episode.guid == 'a2')
+        .episode;
+    await database.setDownloadPath(first.id, '/tmp/a1.pcm');
+    await database.setDownloadPath(second.id, '/tmp/a2.pcm');
+    await database.setDownloadPath(episodeB.id, '/tmp/b.pcm');
+    final pcm = Int16List(chromaprintSampleRate);
+    final decoder = _CountingDecoder({
+      '/tmp/a1.pcm': pcm,
+      '/tmp/a2.pcm': pcm,
+      '/tmp/b.pcm': pcm,
+    }, delay: const Duration(milliseconds: 250));
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        pcmDecoderProvider.overrideWithValue(decoder),
+        sharedPreferencesProvider.overrideWithValue(preferences),
+      ],
+    );
+    addTearDown(container.dispose);
+    final notifier = container.read(audioAnalysisProvider.notifier);
+    final firstJob = notifier.enqueueEpisode(first.id);
+    await _until(
+      container,
+      (progress) => progress.runningEpisodeId == first.id,
+    );
+    final secondJob = notifier.enqueueEpisode(second.id);
+    await _until(
+      container,
+      (progress) => progress.pending.any((job) => job.episodeId == second.id),
+    );
+    final thirdJob = notifier.enqueueEpisode(episodeB.id);
+    await _until(container, (progress) => progress.pending.length == 2);
+    await notifier.enqueueMissing(podcastId: podcastB);
+    await Future.wait([firstJob, secondJob, thirdJob]);
+    expect(decoder.order, ['/tmp/a1.pcm', '/tmp/b.pcm', '/tmp/a2.pcm']);
+  });
+
   test('automatic analysis stays idle when the setting is off', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({'automaticAudioAnalysis': false});
@@ -339,6 +426,22 @@ void main() {
     await notifier.enqueueMissing();
     expect(decoder.calls, 0);
   });
+}
+
+Future<void> _until(
+  ProviderContainer container,
+  bool Function(AudioAnalysisProgress progress) ready,
+) async {
+  final started = DateTime.now();
+  while (!ready(container.read(audioAnalysisProvider))) {
+    if (DateTime.now().difference(started) > const Duration(seconds: 2)) {
+      final progress = container.read(audioAnalysisProvider);
+      fail(
+        'file non remplie: ${progress.runningEpisodeId} ${progress.pending}',
+      );
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
 }
 
 Future<void> _ready(
@@ -455,6 +558,7 @@ class _CountingDecoder extends PcmDecoder {
   final Set<String> hang;
   var calls = 0;
   final byPath = <String, int>{};
+  final order = <String>[];
 
   int callsFor(String path) => byPath[path] ?? 0;
 
@@ -465,6 +569,7 @@ class _CountingDecoder extends PcmDecoder {
     Duration? budget,
   }) async {
     calls++;
+    order.add(path);
     byPath[path] = (byPath[path] ?? 0) + 1;
     if (hang.contains(path)) {
       await Future<void>.delayed(const Duration(milliseconds: 200));

@@ -88,16 +88,87 @@ final podcastAnalysisKickProvider = Provider.family<void, int>((
   );
 });
 
+enum AnalysisStep { preparing, decoding, saving, matching }
+
+/// Rythme observé sur ce téléphone avant la première mesure de la session :
+/// 1447 s d’audio en 217 s, 1512 s en 211 s, 321 s en 53 s.
+const analysisMsPerAudioSecond = 150;
+
+/// Temps restant pour [podcastId], y compris l’épisode déjà en cours,
+/// qui bloque la file même s’il appartient à un autre podcast.
+Duration? estimateAnalysisRemaining({
+  required int podcastId,
+  required int? runningPodcastId,
+  required int? runningDurationSeconds,
+  required DateTime? runningSince,
+  required DateTime now,
+  required List<({int podcastId, int? durationSeconds})> pending,
+  required int measuredMs,
+  required int measuredAudioSeconds,
+}) {
+  var total = 0;
+  var any = false;
+  void add(int? seconds, {bool running = false}) {
+    if (seconds == null || seconds <= 0) return;
+    var ms = measuredAudioSeconds > 0 && measuredMs > 0
+        ? seconds * measuredMs ~/ measuredAudioSeconds
+        : seconds * analysisMsPerAudioSecond;
+    if (running && runningSince != null) {
+      final spent = now.difference(runningSince).inMilliseconds;
+      if (spent > 0) ms = ms > spent ? ms - spent : 0;
+    }
+    total += ms;
+    any = true;
+  }
+
+  if (runningPodcastId != null) {
+    add(runningDurationSeconds, running: true);
+  }
+  for (final job in pending) {
+    if (job.podcastId == podcastId) add(job.durationSeconds);
+  }
+  if (!any) return null;
+  return Duration(milliseconds: total);
+}
+
 class AudioAnalysisProgress {
   const AudioAnalysisProgress({
     this.runningEpisodeId,
     this.runningPodcastId,
+    this.runningDurationSeconds,
+    this.runningSince,
+    this.step,
+    this.stepAt,
+    this.measuredMs = 0,
+    this.measuredAudioSeconds = 0,
     this.pending = const [],
   });
 
   final int? runningEpisodeId;
   final int? runningPodcastId;
-  final List<({int episodeId, int podcastId})> pending;
+  final int? runningDurationSeconds;
+  final DateTime? runningSince;
+  final AnalysisStep? step;
+  final DateTime? stepAt;
+  final int measuredMs;
+  final int measuredAudioSeconds;
+  final List<({int episodeId, int podcastId, int? durationSeconds})> pending;
+
+  Duration? remainingFor(int podcastId, DateTime now) {
+    return estimateAnalysisRemaining(
+      podcastId: podcastId,
+      runningPodcastId: runningPodcastId,
+      runningDurationSeconds: runningDurationSeconds,
+      runningSince: runningSince,
+      now: now,
+      pending: [
+        for (final job in pending)
+          (podcastId: job.podcastId, durationSeconds: job.durationSeconds),
+      ],
+      measuredMs: measuredMs,
+      measuredAudioSeconds: measuredAudioSeconds,
+    );
+  }
 
   int pendingFor(int podcastId) {
     var count = 0;
@@ -113,14 +184,17 @@ class _Job {
   _Job({
     required this.episodeId,
     required this.podcastId,
+    required this.durationSeconds,
     required this.force,
     required this.automatic,
   });
 
   final int episodeId;
   final int podcastId;
+  final int? durationSeconds;
   bool force;
   final bool automatic;
+  var finished = false;
   final done = Completer<void>();
   final followers = <Completer<void>>[];
   var again = false;
@@ -131,7 +205,11 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   final _reserved = <int>{};
   final _joiners = <int, List<Completer<void>>>{};
   final _joinForce = <int>{};
+  int? _frontPodcast;
   _Job? _running;
+  DateTime? _runningSince;
+  var _measuredMs = 0;
+  var _measuredAudioSeconds = 0;
   Future<void>? _pumpFuture;
   Isolate? _worker;
   Timer? _budgetTimer;
@@ -231,12 +309,15 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       final job = _Job(
         episodeId: episode.id,
         podcastId: episode.podcastId,
+        durationSeconds: episode.durationSeconds,
         force: force || _joinForce.remove(episodeId),
         automatic: automatic,
       );
       final waiting = _joiners.remove(episodeId);
       if (waiting != null) job.followers.addAll(waiting);
       _wait.add(job);
+      final podcastId = job.podcastId;
+      if (podcastId == _frontPodcast) _bringToFront(podcastId);
       _publish();
       unawaited(_ensurePump());
       await job.done.future;
@@ -249,10 +330,14 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   Future<void> enqueueMissing({int? podcastId}) async {
     try {
       if (!ref.mounted || !_automaticAllowed) return;
+      // Pas de notification pendant la construction de l’écran : le lecteur
+      // ouvert par-dessus se reconstruit en même temps et l’arbre casse.
+      if (podcastId != null) _frontPodcast = podcastId;
       final rows = await ref
           .read(databaseProvider)
           .downloadedEpisodesMissingFingerprint(podcastId: podcastId);
       if (!ref.mounted) return;
+      if (podcastId != null) _prefer(podcastId);
       final pending = <Future<void>>[];
       for (final row in rows) {
         pending.add(enqueueEpisode(row.id, automatic: true));
@@ -338,16 +423,87 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     }
   }
 
+  /// L’écran de classement de [podcastId] passe devant le reste de la file.
+  ///
+  /// Le compteur de cet écran ne baisse que pour ses propres épisodes.
+  /// Sans ça, un podcast qui n’a plus qu’un épisode reste affiché à 1
+  /// pendant que la file traite d’abord tous les autres.
+  void _prefer(int podcastId) {
+    _frontPodcast = podcastId;
+    final moved = _bringToFront(podcastId);
+    if (moved) _publish();
+  }
+
+  bool _bringToFront(int podcastId) {
+    final mine = <_Job>[];
+    final rest = <_Job>[];
+    for (final job in _wait) {
+      if (job.podcastId == podcastId) {
+        mine.add(job);
+      } else {
+        rest.add(job);
+      }
+    }
+    if (mine.isEmpty || rest.isEmpty) return false;
+    for (var i = 0; i < mine.length; i++) {
+      if (identical(_wait[i], mine[i])) continue;
+      _wait
+        ..clear()
+        ..addAll(mine)
+        ..addAll(rest);
+      return true;
+    }
+    return false;
+  }
+
   void _publish() {
     if (!ref.mounted) return;
-    state = AudioAnalysisProgress(
-      runningEpisodeId: state.runningEpisodeId,
-      runningPodcastId: state.runningPodcastId,
+    state = _view(step: state.step, stepAt: state.stepAt);
+  }
+
+  AudioAnalysisProgress _view({AnalysisStep? step, DateTime? stepAt}) {
+    final job = _running;
+    return AudioAnalysisProgress(
+      runningEpisodeId: job?.episodeId,
+      runningPodcastId: job?.podcastId,
+      runningDurationSeconds: job?.durationSeconds,
+      runningSince: job == null ? null : _runningSince,
+      step: job == null ? null : step,
+      stepAt: job == null ? null : stepAt,
+      measuredMs: _measuredMs,
+      measuredAudioSeconds: _measuredAudioSeconds,
       pending: [
-        for (final job in _wait)
-          (episodeId: job.episodeId, podcastId: job.podcastId),
+        for (final waiting in _wait)
+          (
+            episodeId: waiting.episodeId,
+            podcastId: waiting.podcastId,
+            durationSeconds: waiting.durationSeconds,
+          ),
       ],
     );
+  }
+
+  void _rememberFinished(_Job job) {
+    final started = _runningSince;
+    final seconds = job.durationSeconds;
+    if (started == null ||
+        !job.finished ||
+        job.again ||
+        seconds == null ||
+        seconds <= 0) {
+      return;
+    }
+    final elapsed = DateTime.now().difference(started).inMilliseconds;
+    if (elapsed <= 0) return;
+    _measuredMs += elapsed;
+    _measuredAudioSeconds += seconds;
+  }
+
+  void _step(AnalysisStep step) {
+    if (!ref.mounted || state.runningEpisodeId == null || state.step == step) {
+      return;
+    }
+    state = _view(step: step, stepAt: DateTime.now());
   }
 
   Future<void> _ensurePump() {
@@ -364,14 +520,8 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
           continue;
         }
         _running = job;
-        state = AudioAnalysisProgress(
-          runningEpisodeId: job.episodeId,
-          runningPodcastId: job.podcastId,
-          pending: [
-            for (final waiting in _wait)
-              (episodeId: waiting.episodeId, podcastId: waiting.podcastId),
-          ],
-        );
+        _runningSince = DateTime.now();
+        state = _view(step: AnalysisStep.preparing, stepAt: _runningSince);
         try {
           await _analyze(job);
         } catch (error, stack) {
@@ -384,6 +534,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
             final next = _Job(
               episodeId: job.episodeId,
               podcastId: job.podcastId,
+              durationSeconds: job.durationSeconds,
               force: true,
               automatic: job.automatic,
             );
@@ -400,12 +551,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     } finally {
       _pumpFuture = null;
       if (ref.mounted) {
-        state = AudioAnalysisProgress(
-          pending: [
-            for (final waiting in _wait)
-              (episodeId: waiting.episodeId, podcastId: waiting.podcastId),
-          ],
-        );
+        state = _view();
       }
       if (_wait.isNotEmpty && ref.mounted) {
         unawaited(_ensurePump());
@@ -438,7 +584,10 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       _budgetTimer?.cancel();
       _budgetTimer = null;
     }
-    if (!timedOut) return;
+    if (!timedOut) {
+      _rememberFinished(job);
+      return;
+    }
     debugPrint('Analyse audio: délai dépassé pour l’épisode ${job.episodeId}.');
     if (!ref.mounted) return;
     await ref.read(databaseProvider).markFingerprintFailed(job.episodeId);
@@ -465,6 +614,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       final needSpeech = existing == null || existing.speech == null;
       final watch = Stopwatch()..start();
       if (needPrint || mel == null || needSpeech) {
+        _step(AnalysisStep.decoding);
         await database.markFingerprintRunning(episode.id);
         if (!live()) return;
         final analyzed = await _analyzeDecoded(
@@ -492,6 +642,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         );
         if (!live()) return;
         if (needPrint || job.force || needSpeech) {
+          _step(AnalysisStep.saving);
           await database.upsertEpisodeFingerprint(
             episodeId: episode.id,
             data: encodeFingerprint(analyzed.fingerprint),
@@ -510,6 +661,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         await database.markFingerprintDone(episode.id);
       }
       if (!live()) return;
+      _step(AnalysisStep.matching);
       final match = Stopwatch()..start();
       await syncPodcastAnalysis(
         database,
@@ -522,6 +674,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         'rapprochement ${match.elapsedMilliseconds} ms '
         '(décodage compris ${watch.elapsedMilliseconds} ms).',
       );
+      job.finished = true;
     } finally {
       if (!live() && ref.mounted) {
         final status = await database.fingerprintStatus(job.episodeId);

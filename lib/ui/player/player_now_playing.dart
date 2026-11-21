@@ -5,14 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
-import '../../data/app_database.dart';
 import '../../data/feed_service.dart';
 import '../../data/providers.dart';
+import '../../l10n/l10n.dart';
+import '../../player/chapter_merge.dart';
 import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
 import '../widgets/brand.dart';
 import '../widgets/cover.dart';
-import 'player_chapter.dart';
 import 'player_controls.dart';
 
 class PlayerNowPlaying extends ConsumerWidget {
@@ -44,14 +44,14 @@ class PlayerNowPlaying extends ConsumerWidget {
         ?.episode
         .publishedAt;
     final releaseDate = formatReleaseDate(publishedAt);
-    final chaptersAsync = ref.watch(chaptersProvider(episodeId));
-    final chapters = chaptersAsync.value ?? const <EpisodeChapter>[];
+    final chaptersAsync = ref.watch(displayChaptersProvider(episodeId));
+    final chapters = chaptersAsync.value ?? const <DisplayChapter>[];
     final podcast = ref.watch(episodeProvider(episodeId)).value?.podcast;
     final position = ref.watch(playerProvider.select((s) => s.position));
     final playing = ref.watch(playerProvider.select((s) => s.playing));
     final activeChapter = carMode
         ? null
-        : currentChapterFor(chapters, position);
+        : currentDisplayChapter(chapters, position);
     final theme = Theme.of(context);
 
     Widget content({required bool compact}) {
@@ -164,7 +164,9 @@ class PlayerNowPlaying extends ConsumerWidget {
                         activeChapter != null &&
                         activeChapter.title.isNotEmpty)
                       Text(
-                        activeChapter.title,
+                        activeChapter.fromSegment
+                            ? context.tr(activeChapter.title)
+                            : activeChapter.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(

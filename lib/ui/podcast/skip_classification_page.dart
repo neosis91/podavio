@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -53,6 +55,17 @@ class SkipClassificationPage extends ConsumerWidget {
         ref.watch(podcastAnalysisKickProvider(podcastId));
         final analysis = ref.watch(audioAnalysisProvider);
         final pending = analysis.pendingFor(podcastId);
+        final runningHere = analysis.runningPodcastId == podcastId
+            ? analysis.runningEpisodeId
+            : null;
+        final runningTitle = runningHere == null
+            ? null
+            : ref
+                  .watch(episodeProvider(runningHere))
+                  .asData
+                  ?.value
+                  ?.episode
+                  .title;
         return Scaffold(
           appBar: AppBar(
             toolbarHeight: 72,
@@ -115,25 +128,17 @@ class SkipClassificationPage extends ConsumerWidget {
                     .setAutomaticAudioAnalysis(enabled),
               ),
               if (pending > 0)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  child: Row(
-                    children: [
-                      const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          context.tr('Analyzing episodes ({count} left)', {
-                            'count': '$pending',
-                          }),
-                        ),
-                      ),
-                    ],
+                _AnalysisStatus(
+                  countLabel: context.tr('Analyzing episodes ({count} left)', {
+                    'count': '$pending',
+                  }),
+                  detail: _analysisDetail(
+                    context,
+                    analysis,
+                    podcastId,
+                    runningTitle,
                   ),
+                  remainingAt: (now) => analysis.remainingFor(podcastId, now),
                 ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -617,4 +622,131 @@ Future<String?> _askLabel(BuildContext context, String? current) async {
   );
   controller.dispose();
   return result;
+}
+
+String? _remainingLabel(BuildContext context, Duration? remaining) {
+  if (remaining == null) return null;
+  if (remaining.inSeconds < 60) return context.tr('Less than a minute left');
+  final minutes = (remaining.inSeconds / 60).ceil();
+  if (minutes < 60) {
+    return context.tr('About {minutes} min left', {'minutes': '$minutes'});
+  }
+  final hours = minutes ~/ 60;
+  final rest = minutes % 60;
+  if (rest == 0) return context.tr('About {hours} h left', {'hours': '$hours'});
+  return context.tr('About {hours} h {minutes} min left', {
+    'hours': '$hours',
+    'minutes': '$rest',
+  });
+}
+
+String _analysisDetail(
+  BuildContext context,
+  AudioAnalysisProgress analysis,
+  int podcastId,
+  String? title,
+) {
+  final name = title?.trim();
+  final named = name != null && name.isNotEmpty;
+  if (analysis.runningPodcastId != podcastId) {
+    if (analysis.runningEpisodeId != null) {
+      return context.tr('Finishing another podcast first');
+    }
+    return context.tr('Waiting in the queue');
+  }
+  return switch (analysis.step) {
+    AnalysisStep.decoding =>
+      named
+          ? context.tr('Decoding the audio of {title}', {'title': name})
+          : context.tr('Decoding the audio'),
+    AnalysisStep.saving =>
+      named
+          ? context.tr('Saving the fingerprint of {title}', {'title': name})
+          : context.tr('Saving the fingerprint'),
+    AnalysisStep.matching =>
+      named
+          ? context.tr('Comparing {title} with the other episodes', {
+              'title': name,
+            })
+          : context.tr('Comparing episodes'),
+    _ =>
+      named
+          ? context.tr('Preparing {title}', {'title': name})
+          : context.tr('Preparing the episode'),
+  };
+}
+
+class _AnalysisStatus extends StatefulWidget {
+  const _AnalysisStatus({
+    required this.countLabel,
+    required this.detail,
+    required this.remainingAt,
+  });
+
+  final String countLabel;
+  final String detail;
+  final Duration? Function(DateTime now) remainingAt;
+
+  @override
+  State<_AnalysisStatus> createState() => _AnalysisStatusState();
+}
+
+class _AnalysisStatusState extends State<_AnalysisStatus> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final remaining = _remainingLabel(
+      context,
+      widget.remainingAt(DateTime.now()),
+    );
+    final subtle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.countLabel),
+                Text(widget.detail, style: subtle),
+              ],
+            ),
+          ),
+          if (remaining != null) ...[
+            const SizedBox(width: 12),
+            Text(remaining, style: subtle),
+          ],
+        ],
+      ),
+    );
+  }
 }

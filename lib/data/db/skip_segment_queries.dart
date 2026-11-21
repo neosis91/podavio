@@ -113,6 +113,13 @@ mixin _SkipSegmentQueries on _$AppDatabase {
         .get();
   }
 
+  Stream<List<SkipSegment>> watchSkipSegments(int episodeId) {
+    final query = select(skipSegments)
+      ..where((row) => row.episodeId.equals(episodeId))
+      ..orderBy([(row) => OrderingTerm.asc(row.startMs)]);
+    return query.watch();
+  }
+
   Stream<List<SegmentTemplate>> watchSegmentTemplates(int podcastId) {
     return (select(segmentTemplates)
           ..where((row) => row.podcastId.equals(podcastId))

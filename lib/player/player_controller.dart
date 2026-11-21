@@ -4,7 +4,6 @@ import 'dart:io' show Platform;
 import 'package:audio_session/audio_session.dart';
 import 'package:cast/device.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -16,9 +15,7 @@ import '../data/http_auth.dart';
 import '../data/online_status.dart';
 import '../data/providers.dart';
 import '../data/skip_segments.dart';
-import '../l10n/l10n.dart';
 import '../settings/settings_controller.dart';
-import '../ui/root_navigator.dart';
 import '../ui/widgets/mobile_data_prompt.dart';
 import '../sync/sync_hooks.dart';
 import '../web_companion/web_remote.dart';
@@ -26,6 +23,7 @@ import 'audio_effects.dart';
 import 'cast_playback.dart';
 import 'cast_session.dart';
 import 'playback_handler.dart';
+import 'chapter_merge.dart';
 import 'playback_source.dart';
 import 'player_sheet_controller.dart';
 import 'queue_cursor.dart';
@@ -54,6 +52,7 @@ class PlayerUiState {
     this.playbackSource = PlaybackSource.queue,
     this.streamQualityLabel,
     this.castDeviceName,
+    this.manualSkip,
   });
 
   final int? episodeId;
@@ -82,6 +81,9 @@ class PlayerUiState {
 
   /// Nom du récepteur Cast, ou `null` si la lecture est locale.
   final String? castDeviceName;
+
+  /// Passage sous la tête de lecture, à sauter à la main.
+  final SkipOffer? manualSkip;
 
   bool get hasEpisode => episodeId != null;
 
@@ -120,6 +122,8 @@ class PlayerUiState {
     bool clearStreamQuality = false,
     String? castDeviceName,
     bool clearCast = false,
+    SkipOffer? manualSkip,
+    bool setManualSkip = false,
   }) {
     return PlayerUiState(
       episodeId: clearEpisode ? null : episodeId ?? this.episodeId,
@@ -142,6 +146,7 @@ class PlayerUiState {
           ? null
           : streamQualityLabel ?? this.streamQualityLabel,
       castDeviceName: clearCast ? null : castDeviceName ?? this.castDeviceName,
+      manualSkip: setManualSkip ? manualSkip : this.manualSkip,
     );
   }
 }
@@ -309,29 +314,37 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       );
       final seconds = entry.episode.durationSeconds;
       _emit(
-        _ui.copyWith(
-          episodeId: entry.episode.id,
-          podcastId: entry.podcast.id,
-          title: entry.episode.title,
-          podcastTitle: entry.podcast.title,
-          imageUrl: cover.imageUrl(
-            preferPodcastCover: settings.preferPodcastCover,
+        _withSkip(
+          _ui.copyWith(
+            episodeId: entry.episode.id,
+            podcastId: entry.podcast.id,
+            title: entry.episode.title,
+            podcastTitle: entry.podcast.title,
+            imageUrl: cover.imageUrl(
+              preferPodcastCover: settings.preferPodcastCover,
+            ),
+            imagePath: cover.imagePath(
+              preferPodcastCover: settings.preferPodcastCover,
+            ),
+            updateImage: true,
+            position: position,
+            duration:
+                duration ??
+                (seconds == null ? Duration.zero : Duration(seconds: seconds)),
+            playing: playing ?? false,
+            clearError: true,
           ),
-          imagePath: cover.imagePath(
-            preferPodcastCover: settings.preferPodcastCover,
-          ),
-          updateImage: true,
-          position: position,
-          duration:
-              duration ??
-              (seconds == null ? Duration.zero : Duration(seconds: seconds)),
-          playing: playing ?? false,
-          clearError: true,
         ),
       );
     } else {
       _emit(
-        _ui.copyWith(position: position, playing: playing, duration: duration),
+        _withSkip(
+          _ui.copyWith(
+            position: position,
+            playing: playing,
+            duration: duration,
+          ),
+        ),
       );
     }
     if (!wasRemote || changed) {
@@ -503,7 +516,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     _noteUserSeek(position);
     if (_remote) {
       if (!_ui.hasEpisode) return;
-      _emit(_ui.copyWith(position: position));
+      _emit(_withSkip(_ui.copyWith(position: position)));
       WebRemoteHooks.command({
         'type': 'command',
         'action': 'seek',
@@ -514,13 +527,19 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (!_ui.hasEpisode) return;
     if (_cast.active) {
       _cast.seek(position);
-      _emit(_ui.copyWith(position: position));
+      _emit(_withSkip(_ui.copyWith(position: position)));
       await persistPosition();
       return;
     }
     await _player.seek(position);
-    _emit(_ui.copyWith(position: position));
+    _emit(_withSkip(_ui.copyWith(position: position)));
     await persistPosition();
+  }
+
+  /// Saute le passage proposé par le bouton du grand lecteur.
+  Future<void> skipPassage(SkipOffer offer) {
+    _heldSegmentIds.add(offer.segmentId);
+    return seek(Duration(milliseconds: offer.seekToMs));
   }
 
   /// Notification, casque et Android Auto : saut ou épisode selon le réglage.
@@ -762,10 +781,16 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   Future<void> _loadChapterStop(int arm) async {
     final id = _ui.episodeId;
     if (id == null || !ref.mounted) return;
-    final chapters = await ref.read(databaseProvider).watchChapters(id).first;
+    final database = ref.read(databaseProvider);
+    final chapters = await database.watchChapters(id).first;
+    final segments = await database.listSkipSegments(id);
     if (arm != _chapterArm || _disposed) return;
     final position = _ui.position.inMilliseconds;
-    for (final chapter in chapters) {
+    final merged = mergeChaptersWithSegments(
+      chapters: chapters,
+      segments: segments,
+    );
+    for (final chapter in merged) {
       if (chapter.startMs > position + 1000) {
         _sleepChapterAtMs = chapter.startMs;
         return;
@@ -1012,7 +1037,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       );
       await _player.setSpeed(_ui.speed);
       await _player.setVolume(_ui.volume);
-      if (downloaded && podcast.autoSkipAds) {
+      if (downloaded) {
         final rows = await db.listSkipSegments(episode.id);
         if (!ref.mounted || _disposed || _ui.episodeId != episode.id) return;
         _skipWindows = [
@@ -1025,6 +1050,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
               confirmed: row.confirmed,
             ),
         ];
+        _emit(_withSkip(_ui));
       }
       final preview = _previewSeek;
       if (preview != null && _ui.episodeId == episode.id) {
@@ -1105,7 +1131,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     final wasPlaying = _ui.playing;
     await _cast.release();
     if (_disposed || !ref.mounted) return;
-    _emit(_ui.copyWith(clearCast: true, playing: false, position: position));
+    _emit(
+      _withSkip(
+        _ui.copyWith(clearCast: true, playing: false, position: position),
+      ),
+    );
     await _player.seek(position);
     if (wasPlaying && !_disposed) {
       await _player.play();
@@ -1118,7 +1148,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       unawaited(_onCompleted());
       return;
     }
-    _emit(_ui.copyWith(position: update.position, playing: update.playing));
+    _emit(
+      _withSkip(
+        _ui.copyWith(position: update.position, playing: update.playing),
+      ),
+    );
     final id = _ui.episodeId;
     if (id == null) return;
     final now = DateTime.now();
@@ -1238,9 +1272,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       if (now.difference(_lastPositionUi) >=
           const Duration(milliseconds: 250)) {
         _lastPositionUi = now;
-        _emit(_ui.copyWith(position: position));
+        _emit(_withSkip(_ui.copyWith(position: position)));
       } else {
-        _ui = _ui.copyWith(position: position);
+        _ui = _withSkip(_ui.copyWith(position: position));
       }
       final id = _ui.episodeId;
       if (id == null) return;
@@ -1299,6 +1333,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     _autoSkipKinds = decodeAutoSkipKinds(podcast.autoSkipKinds).toSet();
     _skipWindows = const [];
     _heldSegmentIds.clear();
+    _ui = _ui.copyWith(setManualSkip: true);
     _segmentWatchMs = null;
     _skipInFlightTarget = null;
     _skipInFlightSince = null;
@@ -1368,8 +1403,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     try {
       await _player.seek(Duration(milliseconds: decision.seekToMs));
       if (_disposed || !ref.mounted) return;
-      _emit(_ui.copyWith(position: Duration(milliseconds: decision.seekToMs)));
-      _showSegmentSkipped(decision);
+      _emit(
+        _withSkip(
+          _ui.copyWith(position: Duration(milliseconds: decision.seekToMs)),
+        ),
+      );
     } catch (error, stack) {
       _skipInFlightTarget = null;
       _skipInFlightSince = null;
@@ -1378,29 +1416,21 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     }
   }
 
-  void _showSegmentSkipped(SkipDecision decision) {
-    final context = rootNavigatorKey.currentContext;
-    if (context == null) return;
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    final label = context.tr('Segment skipped');
-    if (messenger == null) return;
-    messenger
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(label),
-          duration: const Duration(seconds: 4),
-          behavior: SnackBarBehavior.floating,
-          action: SnackBarAction(
-            label: context.tr('Undo'),
-            onPressed: () {
-              if (_disposed) return;
-              _heldSegmentIds.add(decision.segmentId);
-              unawaited(seek(Duration(milliseconds: decision.returnToMs)));
-            },
-          ),
-        ),
-      );
+  PlayerUiState _withSkip(PlayerUiState state) {
+    return state.copyWith(
+      setManualSkip: true,
+      manualSkip: _manualSkipAt(state.position),
+    );
+  }
+
+  SkipOffer? _manualSkipAt(Duration position) {
+    if (_cast.active || _remote || !_playingFromDownload) return null;
+    return manualSkipOffer(
+      positionMs: position.inMilliseconds,
+      autoSkipAds: _autoSkipAds,
+      autoSkipKinds: _autoSkipKinds,
+      segments: _skipWindows,
+    );
   }
 
   Future<void> _onCompleted() async {

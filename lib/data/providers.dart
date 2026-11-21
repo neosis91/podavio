@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../player/chapter_merge.dart';
 import 'app_database.dart';
 import 'cover_service.dart';
 import 'download_notifications.dart';
@@ -111,6 +112,51 @@ final chaptersProvider = StreamProvider.family<List<EpisodeChapter>, int>((
   unawaited(ref.watch(feedServiceProvider).ensureChapters(id));
   return ref.watch(databaseProvider).watchChapters(id);
 });
+
+/// Chapitres du flux, avec les passages détectés insérés dedans.
+final displayChaptersProvider =
+    StreamProvider.family<List<DisplayChapter>, int>((ref, id) {
+      unawaited(ref.watch(feedServiceProvider).ensureChapters(id));
+      final database = ref.watch(databaseProvider);
+      return _mergeChapterStreams(
+        database.watchChapters(id),
+        database.watchSkipSegments(id),
+      );
+    });
+
+Stream<List<DisplayChapter>> _mergeChapterStreams(
+  Stream<List<EpisodeChapter>> chapters,
+  Stream<List<SkipSegment>> segments,
+) {
+  return Stream.multi((listener) {
+    List<EpisodeChapter>? latestChapters;
+    List<SkipSegment>? latestSegments;
+    void emit() {
+      final currentChapters = latestChapters;
+      final currentSegments = latestSegments;
+      if (currentChapters == null || currentSegments == null) return;
+      listener.add(
+        mergeChaptersWithSegments(
+          chapters: currentChapters,
+          segments: currentSegments,
+        ),
+      );
+    }
+
+    final chaptersSub = chapters.listen((value) {
+      latestChapters = value;
+      emit();
+    }, onError: listener.addError);
+    final segmentsSub = segments.listen((value) {
+      latestSegments = value;
+      emit();
+    }, onError: listener.addError);
+    listener.onCancel = () {
+      chaptersSub.cancel();
+      segmentsSub.cancel();
+    };
+  });
+}
 
 /// Résultat du fetch réseau des chapitres (le stream Drift émet `[]` tout de suite).
 enum ChaptersLoadPhase { loaded, failed }

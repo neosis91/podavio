@@ -51,6 +51,9 @@ const _fr = <String, String>{
   'A chapter title that looks like an ad is still suggested on its own.':
       'Un titre de chapitre qui ressemble à une pub est quand même proposé.',
   'About': 'À propos',
+  'About {hours} h left': 'Environ {hours} h',
+  'About {hours} h {minutes} min left': 'Environ {hours} h {minutes} min',
+  'About {minutes} min left': 'Environ {minutes} min',
   'Actions': 'Actions',
   'Ad': 'Publicité',
   'Add a subscription to fill the home screen.':
@@ -150,6 +153,9 @@ const _fr = <String, String>{
   'Comedy Interviews': 'Interviews d’humour',
   'Comfortable': 'Confortable',
   'Compact': 'Compact',
+  'Comparing episodes': 'Comparaison des épisodes',
+  'Comparing {title} with the other episodes':
+      'Comparaison de {title} avec les autres épisodes',
   'Confirm': 'Confirmer',
   'Confirmed': 'Confirmé',
   'Connect a device': 'Connecter un appareil',
@@ -185,6 +191,8 @@ const _fr = <String, String>{
   'Database': 'Base de données',
   'Database exported': 'Base de données exportée',
   'Database imported': 'Base de données importée',
+  'Decoding the audio': 'Décodage de l’audio',
+  'Decoding the audio of {title}': 'Décodage de l’audio de {title}',
   'Delete': 'Supprimer',
   'Delete after playback': 'Supprimer après la lecture',
   'Delete this passage?': 'Supprimer ce passage ?',
@@ -254,6 +262,7 @@ const _fr = <String, String>{
   'Film Reviews': 'Critiques de films',
   'Filter': 'Filtrer',
   'Finds repeated ads and jingles in downloaded episodes. Turn this off if the app stops responding.': 'Repère les pubs et les jingles dans les épisodes téléchargés. À couper si l’application ne répond plus.',
+  'Finishing another podcast first': 'Un autre podcast se termine d’abord',
   'Fitness': 'Fitness',
   'Food': 'Cuisine',
   'Football': 'Football américain',
@@ -325,6 +334,7 @@ const _fr = <String, String>{
   'Last synchronization: {when}': 'Dernière synchronisation : {when}',
   'Leave': 'Quitter',
   'Leisure': 'Loisirs',
+  'Less than a minute left': 'Moins d’une minute',
   'Library': 'Bibliothèque',
   'Licenses': 'Licences',
   'Life Sciences': 'Sciences de la vie',
@@ -448,6 +458,8 @@ const _fr = <String, String>{
   'Politics': 'Politique',
   'Preferred subscriptions': 'Abonnements préférés',
   'Preparing Podavio…': 'Préparation de Podavio…',
+  'Preparing the episode': 'Préparation de l’épisode',
+  'Preparing {title}': 'Préparation de {title}',
   'Prevents sleep during playback':
       'Empêche la mise en veille pendant la lecture',
   'Preview': 'Écouter',
@@ -495,6 +507,9 @@ const _fr = <String, String>{
   'Saved': 'Téléchargé',
   'Saves a copy every 3 days and keeps the 5 most recent.':
       'Enregistre une copie tous les 3 jours et conserve les 5 plus récentes.',
+  'Saving the fingerprint': 'Enregistrement de l’empreinte',
+  'Saving the fingerprint of {title}':
+      'Enregistrement de l’empreinte de {title}',
   'Scan the QR code': 'Scanner le code QR',
   'Scan the code': 'Scanner le code',
   'Scanning is available on the phone':
@@ -539,6 +554,7 @@ const _fr = <String, String>{
       'Affiche le temps restant à droite de la barre de lecture',
   'Skip ads and jingles': 'Sauter pubs et jingles',
   'Skip automatically': 'Saut automatique',
+  'Skip this passage': 'Sauter ce passage',
   'Skips confirmed passages in downloaded episodes':
       'Saute les passages confirmés des épisodes téléchargés',
   'Sky blue': 'Bleu ciel',
@@ -650,6 +666,7 @@ const _fr = <String, String>{
   'Volleyball': 'Volley',
   'Waiting for the browser': 'En attente du navigateur',
   'Waiting for the others.': 'En attente des autres.',
+  'Waiting in the queue': 'En attente dans la file',
   'Wallpaper': 'Fond d’écran',
   'Welcome to Podavio': 'Bienvenue dans Podavio',
   'What\'s new': 'Les nouveautés',
