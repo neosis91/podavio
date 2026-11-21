@@ -14,8 +14,10 @@ Les constantes vivent dans `lib/data/segment_match.dart`.
 Chromaprint, licence MIT ou LGPL. Ne pas prendre de bibliothèque AGPL
 (Olaf, par exemple).
 
-- Environ 8 valeurs de 32 bits par seconde. `hopMicros` vaut alors 125000
-  (`chromaprintHopMicros`).
+- Environ 8,08 valeurs de 32 bits par seconde. Le pas réel est
+  `1365 / 11025` s, soit 123809 µs (`chromaprintStoredHopMicros`),
+  la valeur écrite dans `hop_micros`. `chromaprintHopMicros` (125000)
+  reste l’approximation du premier jet.
 - Le blob `episode_fingerprints.data` est la suite de ces `uint32` en
   little-endian (`encodeFingerprint` / `decodeFingerprint`).
 
@@ -101,22 +103,41 @@ calcule sur le fichier téléchargé, pas sur un autre téléchargement.
 
 ## Débit mesuré
 
-Sur un cœur de Xeon virtualisé : `fpcalc` 2 à 3,5 s par heure d’audio,
-appariement 2 à 97 ms par podcast. Estimation téléphone, non mesurée :
-10 à 20 s par heure.
+Sur la machine de développement (CPU virtualisé), le portage Dart
+produit exactement la même empreinte que `fpcalc` 1.5.1 (algorithme 2).
+Huit secondes de PCM prennent environ 6 ms. Un épisode de 30 s, une
+fois le PCM en mémoire, prend 30 à 50 ms dans l’isolate, soit de
+l’ordre de 4 à 6 s par heure d’audio. L’appariement de deux épisodes
+de 30 s prend 1 à 3 ms ; trois empreintes d’environ quatre minutes
+restent bien sous la seconde. L’estimation téléphone, 10 à 20 s par
+heure, n’a pas été remesurée sur un appareil.
 
 ## Décodage
 
-Sur Android, le PCM viendra de MediaExtractor et MediaCodec, puis
-Chromaprint. Ce n’est pas branché : `PlaceholderEpisodeAudioAnalyzer` ne
-calcule rien. `DownloadProgressNotifier._run` appelle quand même
-l’analyseur après un téléchargement réussi, pour que le moteur réel se
-branche sans changer le flux de téléchargement.
+Branché.
 
-Les URI `content:` ne sont pas ouvertes comme un fichier. Le décodage
-natif devra les prendre en charge.
+- Android : MediaExtractor et MediaCodec, mono 11025 Hz, écrit au fil
+  de l’eau. Les URI `content:` passent par le ContentResolver.
+- iOS et macOS : AVFoundation, même format.
+- Linux et Windows : `ffmpeg` s’il est installé (`-ac 1 -ar 11025`),
+  sinon un message dans le journal et pas d’empreinte.
 
-## En attendant l’analyseur
+L’empreinte et l’appariement tournent dans un isolate, un épisode à
+la fois. Après un téléchargement, au démarrage, et à l’ouverture de
+l’écran de classement, les épisodes téléchargés sans empreinte sont
+mis en file. Le même écran a le bouton « Analyser les épisodes
+téléchargés ». Effacer un téléchargement retire l’empreinte et les
+passages `fingerprint`. Un avis déjà posé (`confirmed`) est conservé
+si l’analyse retrouve le passage. Un gabarit ignoré (`confirmed`
+false) le reste, y compris pour un épisode nouveau.
+
+Le gabarit log-mel (`segment_templates.log_mel`) n’est pas encore
+rempli. Les sons de moins de 3 s et le calage au dixième de seconde
+attendent cette étape. Les stings réseau (Acast) ne sont pas détectés
+dans l’audio : la constante existe, le pré-roll ne vient que de
+l’écart entre la durée RSS et la longueur de l’empreinte.
+
+## Chapitres
 
 Quand les chapitres d’un épisode sont enregistrés, un titre qui ressemble
 à une pub ou un sponsor (`pub`, `publicité`, `sponsorisé`, et l’équivalent
@@ -140,6 +161,5 @@ ne le ressaute pas. Un bandeau « Passage ignoré » propose d’annuler.
 
 ## Reste à faire
 
-L’implémentation réelle de `EpisodeAudioAnalyzer` : décodage PCM,
-Chromaprint, index inversé, vote avec les seuils ci-dessus, gabarit
-log-mel, écriture des modèles et des passages.
+Le gabarit log-mel (sons de moins de 3 s, frontière au dixième) et la
+détection des stings de réseau dans l’audio.

@@ -308,6 +308,163 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     if (rows.isEmpty) return;
     await batch((statement) => statement.insertAll(skipSegments, rows));
   }
+
+  Future<List<SegmentTemplate>> listSegmentTemplates(int podcastId) {
+    return (select(segmentTemplates)
+          ..where((row) => row.podcastId.equals(podcastId))
+          ..orderBy([(row) => OrderingTerm.asc(row.id)]))
+        .get();
+  }
+
+  Future<Map<int, bool?>> templateReviews(int podcastId) async {
+    final rows = await customSelect(
+      'SELECT s.template_id AS template_id, '
+      'SUM(CASE WHEN s.confirmed IS NULL THEN 1 ELSE 0 END) AS pending, '
+      'SUM(CASE WHEN s.confirmed = 1 THEN 1 ELSE 0 END) AS yes, '
+      'SUM(CASE WHEN s.confirmed = 0 THEN 1 ELSE 0 END) AS no '
+      'FROM skip_segments s '
+      'INNER JOIN episodes e ON e.id = s.episode_id '
+      'WHERE e.podcast_id = ? AND s.template_id IS NOT NULL '
+      'GROUP BY s.template_id',
+      variables: [Variable.withInt(podcastId)],
+      readsFrom: {skipSegments, episodes},
+    ).get();
+    return {
+      for (final row in rows)
+        row.read<int>('template_id'): _reviewOf(
+          row.read<int>('pending'),
+          row.read<int>('yes'),
+          row.read<int>('no'),
+        ),
+    };
+  }
+
+  Future<List<({Episode episode, EpisodeFingerprint fingerprint})>>
+  fingerprintedDownloads(int podcastId) async {
+    final query =
+        select(episodes).join([
+          innerJoin(
+            episodeFingerprints,
+            episodeFingerprints.episodeId.equalsExp(episodes.id),
+          ),
+        ])..where(
+          episodes.podcastId.equals(podcastId) &
+              episodes.downloadPath.isNotNull() &
+              episodes.downloadPath.length.isBiggerThanValue(0),
+        );
+    final rows = await query.get();
+    return [
+      for (final row in rows)
+        (
+          episode: row.readTable(episodes),
+          fingerprint: row.readTable(episodeFingerprints),
+        ),
+    ];
+  }
+
+  Future<List<({int id, int podcastId})>> downloadedEpisodesMissingFingerprint({
+    int? podcastId,
+  }) async {
+    final query =
+        select(episodes).join([
+          leftOuterJoin(
+            episodeFingerprints,
+            episodeFingerprints.episodeId.equalsExp(episodes.id),
+          ),
+        ])..where(
+          episodes.downloadPath.isNotNull() &
+              episodes.downloadPath.length.isBiggerThanValue(0) &
+              episodeFingerprints.episodeId.isNull(),
+        );
+    if (podcastId != null) query.where(episodes.podcastId.equals(podcastId));
+    final rows = await query.get();
+    return [
+      for (final row in rows)
+        (
+          id: row.readTable(episodes).id,
+          podcastId: row.readTable(episodes).podcastId,
+        ),
+    ];
+  }
+
+  Future<List<SkipSegment>> fingerprintSegmentsForPodcast(int podcastId) async {
+    final query =
+        select(skipSegments).join([
+          innerJoin(episodes, episodes.id.equalsExp(skipSegments.episodeId)),
+        ])..where(
+          episodes.podcastId.equals(podcastId) &
+              skipSegments.source.equalsValue(SkipSegmentSource.fingerprint),
+        );
+    final rows = await query.get();
+    return [for (final row in rows) row.readTable(skipSegments)];
+  }
+
+  Future<List<SkipSegment>> segmentsForTemplate(int templateId) {
+    return (select(
+      skipSegments,
+    )..where((row) => row.templateId.equals(templateId))).get();
+  }
+
+  Future<void> updateFingerprintSegment({
+    required int id,
+    required int startMs,
+    required int endMs,
+    required int matches,
+    required int? templateId,
+  }) {
+    return (update(skipSegments)..where((row) => row.id.equals(id))).write(
+      SkipSegmentsCompanion(
+        startMs: Value(startMs),
+        endMs: Value(endMs),
+        matches: Value(matches),
+        templateId: Value(templateId),
+      ),
+    );
+  }
+
+  Future<void> touchSegmentTemplate(int id, {required int occurrences}) {
+    return (update(segmentTemplates)..where((row) => row.id.equals(id))).write(
+      SegmentTemplatesCompanion(occurrences: Value(occurrences)),
+    );
+  }
+
+  /// Retire l’empreinte et les passages qui en viennent. Un gabarit sans
+  /// passage restant est effacé. Les chapitres et les passages manuels restent.
+  Future<void> clearDownloadAnalysis(int episodeId) {
+    return transaction(() async {
+      final rows =
+          await (select(skipSegments)..where(
+                (row) =>
+                    row.episodeId.equals(episodeId) &
+                    row.source.equalsValue(SkipSegmentSource.fingerprint),
+              ))
+              .get();
+      final templateIds = <int>{
+        for (final row in rows)
+          if (row.templateId != null) row.templateId!,
+      };
+      await (delete(skipSegments)..where(
+            (row) =>
+                row.episodeId.equals(episodeId) &
+                row.source.equalsValue(SkipSegmentSource.fingerprint),
+          ))
+          .go();
+      await (delete(
+        episodeFingerprints,
+      )..where((row) => row.episodeId.equals(episodeId))).go();
+      for (final templateId in templateIds) {
+        final left = await segmentsForTemplate(templateId);
+        if (left.isEmpty) {
+          await (delete(
+            segmentTemplates,
+          )..where((row) => row.id.equals(templateId))).go();
+          continue;
+        }
+        final episodes = left.map((row) => row.episodeId).toSet().length;
+        await touchSegmentTemplate(templateId, occurrences: episodes);
+      }
+    });
+  }
 }
 
 bool? _reviewOf(int pending, int yes, int no) {
@@ -351,9 +508,9 @@ Stream<T> _combineSkip<A, B, C, T>(
         emit();
       }, onError: controller.addError),
     ];
-    controller.onCancel = () async {
+    controller.onCancel = () {
       for (final sub in subs) {
-        await sub.cancel();
+        unawaited(sub.cancel());
       }
     };
   });

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../data/app_database.dart';
+import '../../data/audio_analysis.dart';
 import '../../data/providers.dart';
 import '../../data/skip_segments.dart';
 import '../../l10n/l10n.dart';
@@ -47,6 +48,9 @@ class SkipClassificationPage extends ConsumerWidget {
         }
         final theme = Theme.of(context);
         final classification = ref.watch(skipClassificationProvider(podcastId));
+        ref.watch(podcastAnalysisKickProvider(podcastId));
+        final analysis = ref.watch(audioAnalysisProvider);
+        final pending = analysis.pendingFor(podcastId);
         return Scaffold(
           appBar: AppBar(
             toolbarHeight: 72,
@@ -96,6 +100,41 @@ class SkipClassificationPage extends ConsumerWidget {
                       _toggleKind(ref, item, kind, enabled: enabled),
                 ),
               _Section(context.tr('Detected segments')),
+              if (pending > 0)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          context.tr('Analyzing episodes ({count} left)', {
+                            'count': '$pending',
+                          }),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: OutlinedButton(
+                    onPressed: pending > 0
+                        ? null
+                        : () => ref
+                              .read(audioAnalysisProvider.notifier)
+                              .analyzeDownloaded(podcastId),
+                    child: Text(context.tr('Analyze downloaded episodes')),
+                  ),
+                ),
+              ),
               ..._segmentTiles(context, ref, classification),
             ],
           ),
@@ -142,10 +181,21 @@ class SkipClassificationPage extends ConsumerWidget {
         if (grouped.isEmpty) {
           return [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: Text(
                 context.tr(
-                  'Segments show up after a download is analyzed, or when a chapter title looks like an ad.',
+                  'At least two downloaded episodes of the same podcast are needed before repeated ads and jingles can be found.',
+                ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: Text(
+                context.tr(
+                  'A chapter title that looks like an ad is still suggested on its own.',
                 ),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,

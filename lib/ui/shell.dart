@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/theme.dart';
+import '../data/audio_analysis.dart';
 import '../data/database_backup.dart';
 import '../data/providers.dart';
 import '../sync/sync_controller.dart';
@@ -72,6 +73,7 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(coverPrefetchProvider);
     ref.watch(mojibakeRepairProvider);
+    ref.watch(audioAnalysisBootstrapProvider);
     ref.watch(automaticDatabaseBackupProvider);
     ref.listen(automaticBackupFailureProvider, (previous, next) {
       if (next == 0 || next == previous) return;

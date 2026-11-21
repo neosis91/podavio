@@ -12,6 +12,7 @@ class MainActivity : FlutterActivity() {
         FlutterEngineCache.getInstance().put(AndroidAutoBridge.ENGINE_ID, flutterEngine)
         AndroidAutoBridge.attach(flutterEngine)
         NearbySharePlugin.attach(flutterEngine, applicationContext)
+        AudioDecodePlugin.attach(flutterEngine, applicationContext)
         WebCompanionPlugin.attach(flutterEngine, applicationContext)
         DatabaseExportPlugin.attach(flutterEngine) { name ->
             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
