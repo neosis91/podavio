@@ -1,0 +1,1 @@
+- Ad ends extend to the next short silence, a repeated sting just after an ad is its own chapter, and an outro runs through to the end of the file. Content between detected segments keeps the podcaster's chapter titles, or is named Episode when the feed has none.

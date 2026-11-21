@@ -470,5 +470,8 @@
   "{count} waiting": "{count} in de wachtrij",
   "{seconds} seconds": "{seconds} seconden",
   "Hide uncertain passages": "Onzekere fragmenten verbergen",
-  "Show uncertain passages ({count})": "Onzekere fragmenten tonen ({count})"
+  "Show uncertain passages ({count})": "Onzekere fragmenten tonen ({count})",
+  "Episode": "Aflevering",
+  "Intro": "Intro",
+  "Outro": "Outro"
 }

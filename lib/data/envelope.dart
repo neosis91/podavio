@@ -9,6 +9,14 @@ const envelopeHopMs = 20;
 /// Déplacement maximum du recalage autour de la frontière Chromaprint.
 const boundaryRefineSlackMs = 1500;
 
+/// Une pub peut s’arrêter ~3 s trop tôt, sur un creux, alors que le
+/// son continue jusqu’au vrai silence. On ne va pas plus loin que ça.
+const adEndExtendMs = 4000;
+
+/// En dessous, l’octet d’enveloppe est du silence (~−36 dB).
+/// Un creux à −28 dB reste au-dessus et ne coupe pas la pub.
+const envelopeSilenceLevel = 4;
+
 const envelopeHopSamples = chromaprintSampleRate * envelopeHopMs ~/ 1000;
 
 /// Énergie RMS quantifiée, un octet toutes les [envelopeHopMs].
@@ -140,4 +148,38 @@ EnvelopeShift? envelopeEdgeShift({
 double _median(List<double> values) {
   final sorted = [...values]..sort();
   return sorted[sorted.length ~/ 2];
+}
+
+/// Pousse [endMs] jusqu’au prochain silence tenu, sans dépasser
+/// [maxExtendMs].
+///
+/// Un creux bref au point d’arrêt grossier est ignoré : il faut avoir
+/// réentendu du son, puis 200 ms de silence. Si le point d’arrêt est
+/// déjà dans un silence qui dure, on ne bouge pas. Sans silence dans
+/// la fenêtre, la fin reste celle de l’empreinte.
+int extendEndToSilence(
+  Uint8List envelope,
+  int endMs, {
+  int maxExtendMs = adEndExtendMs,
+}) {
+  if (envelope.isEmpty || endMs < 0) return endMs;
+  final lastMs = envelope.length * envelopeHopMs;
+  final stop = endMs + maxExtendMs < lastMs ? endMs + maxExtendMs : lastMs;
+  var quietFor = 0;
+  var quietStart = endMs;
+  var heard = false;
+  for (var t = endMs; t < stop; t += envelopeHopMs) {
+    final index = t ~/ envelopeHopMs;
+    if (index < 0 || index >= envelope.length) break;
+    if (envelope[index] > envelopeSilenceLevel) {
+      heard = true;
+      quietFor = 0;
+      continue;
+    }
+    if (quietFor == 0) quietStart = t;
+    quietFor += envelopeHopMs;
+    if (!heard && quietFor > 400) return endMs;
+    if (heard && quietFor >= 200) return quietStart;
+  }
+  return endMs;
 }

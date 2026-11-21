@@ -353,10 +353,28 @@ Quand les chapitres d’un épisode sont enregistrés, un titre qui ressemble
 dans d’autres langues) crée un `SkipSegment` avec `source = chapter`.
 La fin du passage est le chapitre suivant, ou la durée de l’épisode.
 
+L’écran des chapitres couvre tout l’épisode, du début à la fin. Chaque
+passage détecté est un chapitre (Publicité, Virgule réseau, Intro, Outro,
+et les autres libellés). Deux pubs qui se suivent restent deux chapitres.
+Entre ces passages, le titre vient du podcast s’il en a donné un pour cet
+intervalle. Sinon le chapitre s’appelle « Épisode ». La pub et la virgule
+collée juste après sont deux chapitres, mais un seul saut à la lecture.
+
+## Frontières
+
+La fin d’une pub peut s’arrêter sur un creux alors que le son continue.
+Si l’enveloppe retrouve du niveau puis un silence tenu dans les 4 secondes,
+la fin avance jusqu’à ce silence. Une virgule d’environ 3 secondes répétée
+juste après cette fin, dans au moins trois épisodes, devient un passage
+`jingle` de source `network`. La comparaison retire la moyenne de chaque
+trame : sur la parole, la cosinus brute du log-mel vaut presque 1 partout. Un outro découpé en plusieurs bouts dans la
+dernière minute est recollé (trou d’au plus 5 secondes) et, s’il s’arrête
+à moins de 15 secondes de la fin du fichier, va jusqu’au bout.
+
 ## Lecture
 
 `_maybeSkipSegment` (à côté de `_maybeSkipOutro`) avance à la fin du
-passage. La liste des passages est lue une fois au démarrage de la
+passage, ou à la fin de la virgule collée juste après une pub. La liste des passages est lue une fois au démarrage de la
 lecture d’un fichier téléchargé (`listSkipSegments` vers `_skipWindows`)
 et le test de position ne refait pas de requête. Le saut a lieu si :
 

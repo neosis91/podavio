@@ -25,6 +25,18 @@ class DisplayChapter {
   final String? link;
 }
 
+/// Titre affiché. Les passages détectés et le chapitre « Episode »
+/// passent par la traduction. Un titre donné par le podcast reste tel quel.
+String localizedChapterTitle(
+  DisplayChapter chapter,
+  String Function(String key) translate,
+) {
+  if (chapter.fromSegment || chapter.title == episodeChapterLabel) {
+    return translate(chapter.title);
+  }
+  return chapter.title;
+}
+
 DisplayChapter? currentDisplayChapter(
   List<DisplayChapter> chapters,
   Duration position,
@@ -59,12 +71,19 @@ class _Span {
 
 /// Insère les passages détectés dans les chapitres.
 ///
-/// Un passage coupe le chapitre qu’il traverse. La partie d’avant et celle
-/// d’après gardent le titre du chapitre. Les passages déjà issus d’un titre
-/// de chapitre, et ceux écartés à la main, ne sont pas ajoutés une seconde fois.
+/// La ligne couvre tout l’épisode. Un passage coupe le chapitre qu’il
+/// traverse : la partie d’avant et celle d’après gardent le titre du
+/// podcast. Sans chapitre du podcast, ces parties s’appellent « Episode ».
+/// Les pubs qui se suivent restent des chapitres distincts. Les passages
+/// déjà issus d’un titre de chapitre, et ceux écartés à la main, ne sont
+/// pas ajoutés une seconde fois.
+///
+/// [durationMs] donne une fin exacte au dernier chapitre. Sans durée, cette
+/// fin reste ouverte.
 List<DisplayChapter> mergeChaptersWithSegments({
   required List<EpisodeChapter> chapters,
   required List<SkipSegment> segments,
+  int? durationMs,
 }) {
   final ordered = [...chapters]
     ..sort((a, b) {
@@ -72,13 +91,19 @@ List<DisplayChapter> mergeChaptersWithSegments({
       if (byStart != 0) return byStart;
       return a.sortIndex.compareTo(b.sortIndex);
     });
+  int? close(int start, int? next) {
+    if (next != null) return next;
+    if (durationMs != null && durationMs > start) return durationMs;
+    return null;
+  }
+
   final spans = <_Span>[];
   if (ordered.isEmpty || ordered.first.startMs > 0) {
     spans.add(
       _Span(
         start: 0,
-        end: ordered.isEmpty ? null : ordered.first.startMs,
-        title: '',
+        end: ordered.isEmpty ? close(0, null) : ordered.first.startMs,
+        title: episodeChapterLabel,
         id: 0,
         fromSegment: false,
       ),
@@ -88,11 +113,14 @@ List<DisplayChapter> mergeChaptersWithSegments({
     final chapter = ordered[i];
     final next = i + 1 < ordered.length ? ordered[i + 1].startMs : null;
     if (next != null && next <= chapter.startMs) continue;
+    final title = chapter.title.trim().isEmpty
+        ? episodeChapterLabel
+        : chapter.title;
     spans.add(
       _Span(
         start: chapter.startMs,
-        end: next,
-        title: chapter.title,
+        end: close(chapter.startMs, next),
+        title: title,
         id: chapter.id,
         fromSegment: false,
         link: chapter.link,
@@ -120,7 +148,7 @@ List<DisplayChapter> mergeChaptersWithSegments({
       spans,
       segment.startMs,
       segment.endMs,
-      skipKindLabel(segment.kind),
+      detectedChapterLabel(segment.kind, source: segment.source),
       () => synthetic--,
     );
   }

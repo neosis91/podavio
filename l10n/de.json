@@ -469,5 +469,8 @@
   "{count} waiting": "{count} wartend",
   "{seconds} seconds": "{seconds} Sekunden",
   "Hide uncertain passages": "Unsichere Passagen ausblenden",
-  "Show uncertain passages ({count})": "Unsichere Passagen anzeigen ({count})"
+  "Show uncertain passages ({count})": "Unsichere Passagen anzeigen ({count})",
+  "Episode": "Episode",
+  "Intro": "Intro",
+  "Outro": "Outro"
 }

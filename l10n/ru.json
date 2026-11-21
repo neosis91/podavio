@@ -470,5 +470,8 @@
   "{count} waiting": "{count} в очереди",
   "{seconds} seconds": "{seconds} с",
   "Hide uncertain passages": "Скрыть неуверенные фрагменты",
-  "Show uncertain passages ({count})": "Показать неуверенные фрагменты ({count})"
+  "Show uncertain passages ({count})": "Показать неуверенные фрагменты ({count})",
+  "Episode": "Выпуск",
+  "Intro": "Интро",
+  "Outro": "Аутро"
 }

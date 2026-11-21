@@ -470,5 +470,8 @@
   "{count} waiting": "{count} menunggu",
   "{seconds} seconds": "{seconds} detik",
   "Hide uncertain passages": "Sembunyikan bagian yang tidak pasti",
-  "Show uncertain passages ({count})": "Tampilkan bagian yang tidak pasti ({count})"
+  "Show uncertain passages ({count})": "Tampilkan bagian yang tidak pasti ({count})",
+  "Episode": "Episode",
+  "Intro": "Intro",
+  "Outro": "Outro"
 }

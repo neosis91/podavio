@@ -19,6 +19,9 @@ enum SkipSegmentSource {
   network,
 }
 
+/// Chapitre de contenu quand le podcast n’a pas donné de titre.
+const episodeChapterLabel = 'Episode';
+
 /// Clé anglaise affichée pour [kind] (traduite par l’interface).
 String skipKindLabel(SkipSegmentKind kind) {
   switch (kind) {
@@ -36,6 +39,27 @@ String skipKindLabel(SkipSegmentKind kind) {
       return 'Self-promo';
     case SkipSegmentKind.other:
       return 'Other';
+  }
+}
+
+/// Clé anglaise du chapitre posé sur un passage détecté.
+///
+/// L’intro et l’outro ont ici un libellé court. Une virgule apprise
+/// (jingle de source réseau) ne porte pas le même nom qu’un jingle.
+String detectedChapterLabel(
+  SkipSegmentKind kind, {
+  SkipSegmentSource source = SkipSegmentSource.fingerprint,
+}) {
+  if (kind == SkipSegmentKind.jingle && source == SkipSegmentSource.network) {
+    return 'Network sting';
+  }
+  switch (kind) {
+    case SkipSegmentKind.intro:
+      return 'Intro';
+    case SkipSegmentKind.outro:
+      return 'Outro';
+    default:
+      return skipKindLabel(kind);
   }
 }
 
