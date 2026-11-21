@@ -9,6 +9,11 @@ La fusion de `develop` dans `main` publie cette version.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 
+## 2026.11.15
+
+- The analysis screen names the episode in progress, the current step, and an estimate of the time left.
+- The player no longer shows a snackbar when it skips a passage. A button skips a passage whose automatic skip is off, and detected passages are merged into the chapter list.
+
 ## 2026.11.14
 
 - Automatic fingerprinting no longer freezes the app. A long download is read in pieces, analysis stops after a timeout instead of retrying forever, and a setting turns automatic analysis off.
