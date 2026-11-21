@@ -1,0 +1,1 @@
+- Analysis of downloaded episodes is faster and still runs off the main thread. Similar passages get a tighter start and end, and analysis slows down while audio is playing.
