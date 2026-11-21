@@ -176,6 +176,10 @@ class EpisodeFingerprints extends Table {
 
   /// Écart entre deux valeurs, en microsecondes (~125000 pour 8/s).
   IntColumn get hopMicros => integer()();
+
+  /// Une octet par seconde : 0 musique, 255 parole. `null` tant que
+  /// l’épisode n’a pas été noté.
+  BlobColumn get speech => blob().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -200,6 +204,9 @@ class SegmentTemplates extends Table {
   BlobColumn get logMel => blob().nullable()();
   IntColumn get durationMs => integer()();
   IntColumn get occurrences => integer().withDefault(const Constant(1))();
+
+  /// 0–100. `null` : gabarit posé avant le score. Le saut n’en dépend pas.
+  IntColumn get confidence => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 }
 
@@ -220,6 +227,10 @@ class SkipSegments extends Table {
 
   /// `null` : pas revu. `true` : confirmé. `false` : ignoré.
   BoolColumn get confirmed => boolean().nullable()();
+
+  /// 0–100. `null` : pas calculé (chapitre, ou passage ancien).
+  /// Sert au tri. Un candidat intra-épisode bas est replié dans l’écran.
+  IntColumn get confidence => integer().nullable()();
   IntColumn get templateId => integer().nullable().references(
     SegmentTemplates,
     #id,
@@ -318,7 +329,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -424,6 +435,23 @@ class AppDatabase extends _$AppDatabase
       if (from < 21) {
         await _createTableIfMissing(migrator, episodeLogMels);
         await _createTableIfMissing(migrator, learnedNetworkStings);
+      }
+      if (from < 22) {
+        await _addColumnIfMissing(
+          migrator,
+          episodeFingerprints,
+          episodeFingerprints.speech,
+        );
+        await _addColumnIfMissing(
+          migrator,
+          segmentTemplates,
+          segmentTemplates.confidence,
+        );
+        await _addColumnIfMissing(
+          migrator,
+          skipSegments,
+          skipSegments.confidence,
+        );
       }
     },
     beforeOpen: (details) async {

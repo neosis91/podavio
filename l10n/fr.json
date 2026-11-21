@@ -582,5 +582,7 @@
   "Sponsor": "Sponsor",
   "Undo": "Annuler",
   "Unnamed pattern": "Motif sans nom",
-  "Unreviewed": "À revoir"
+  "Unreviewed": "À revoir",
+  "Hide uncertain passages": "Masquer les passages incertains",
+  "Show uncertain passages ({count})": "Afficher les passages incertains ({count})"
 }

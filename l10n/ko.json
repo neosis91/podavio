@@ -468,5 +468,7 @@
   "{count} people are listening.": "{count}명이 듣고 있습니다.",
   "{count} podcasts to refresh": "새로고침할 팟캐스트 {count}개",
   "{count} waiting": "대기 {count}개",
-  "{seconds} seconds": "{seconds}초"
+  "{seconds} seconds": "{seconds}초",
+  "Hide uncertain passages": "불확실한 구간 숨기기",
+  "Show uncertain passages ({count})": "불확실한 구간 표시 ({count})"
 }

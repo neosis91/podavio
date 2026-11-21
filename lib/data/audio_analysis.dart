@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -150,7 +151,10 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         if (path.isEmpty) continue;
         final stored = await database.fingerprintForEpisode(episode.id);
         final mel = await database.logMelForEpisode(episode.id);
-        if (stored == null || stored.data.isEmpty || mel == null) {
+        if (stored == null ||
+            stored.data.isEmpty ||
+            stored.speech == null ||
+            mel == null) {
           queued = true;
           await enqueueEpisode(episode.id);
         }
@@ -227,7 +231,8 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         : await database.fingerprintForEpisode(episode.id);
     final mel = job.force ? null : await database.logMelForEpisode(episode.id);
     final needPrint = existing == null || existing.data.isEmpty;
-    if (needPrint || mel == null) {
+    final needSpeech = existing == null || existing.speech == null;
+    if (needPrint || mel == null || needSpeech) {
       final watch = Stopwatch()..start();
       final analyzed = await _analyzeDecoded(
         ref.read(pcmDecoderProvider),
@@ -245,11 +250,12 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         '${analyzed.fingerprint.length} valeurs, '
         '${watch.elapsedMilliseconds} ms.',
       );
-      if (needPrint || job.force) {
+      if (needPrint || job.force || needSpeech) {
         await database.upsertEpisodeFingerprint(
           episodeId: episode.id,
           data: encodeFingerprint(analyzed.fingerprint),
           hopMicros: chromaprintStoredHopMicros,
+          speech: analyzed.speech,
         );
       }
       if (analyzed.logMel != null) {
@@ -291,10 +297,8 @@ class ChromaprintEpisodeAudioAnalyzer implements EpisodeAudioAnalyzer {
   }
 }
 
-Future<({List<int> fingerprint, Uint8List? logMel})?> _analyzeDecoded(
-  PcmDecoder decoder,
-  String path,
-) async {
+Future<({List<int> fingerprint, Uint8List? logMel, Uint8List speech})?>
+_analyzeDecoded(PcmDecoder decoder, String path) async {
   final decoded = await decoder.decode(path);
   if (decoded == null) return null;
   try {
@@ -342,6 +346,7 @@ Future<void> syncPodcastAnalysis(AppDatabase database, int podcastId) async {
         hopMicros: row.fingerprint.hopMicros,
         durationMs: durationMs,
         preRollEndMs: preRoll,
+        speech: row.fingerprint.speech,
       ),
     );
   }
@@ -355,6 +360,7 @@ Future<void> syncPodcastAnalysis(AppDatabase database, int podcastId) async {
         fingerprint: decodeFingerprint(template.fingerprint),
         durationMs: template.durationMs,
         confirmed: reviews[template.id],
+        confidence: template.confidence,
       ),
     );
   }
@@ -396,6 +402,7 @@ Future<void> applyAnalysisPlan(
             endMs: desired.endMs,
             matches: desired.matches,
             templateId: templateId,
+            confidence: Value(desired.confidence),
           );
           continue;
         }
@@ -407,6 +414,7 @@ Future<void> applyAnalysisPlan(
           source: SkipSegmentSource.fingerprint,
           matches: desired.matches,
           confirmed: desired.confirmed,
+          confidence: desired.confidence,
           templateId: templateId,
         );
         touched.add(id);
@@ -436,6 +444,7 @@ Future<int> _upsertTemplate(
     fingerprint: encodeFingerprint(pattern.fingerprint),
     durationMs: pattern.durationMs,
     occurrences: pattern.occurrences,
+    confidence: pattern.confidence,
   );
 }
 

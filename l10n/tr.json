@@ -468,5 +468,7 @@
   "{count} people are listening.": "{count} kişi dinliyor.",
   "{count} podcasts to refresh": "yenilenecek {count} podcast",
   "{count} waiting": "{count} bekliyor",
-  "{seconds} seconds": "{seconds} saniye"
+  "{seconds} seconds": "{seconds} saniye",
+  "Hide uncertain passages": "Belirsiz bölümleri gizle",
+  "Show uncertain passages ({count})": "Belirsiz bölümleri göster ({count})"
 }

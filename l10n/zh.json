@@ -468,5 +468,7 @@
   "{count} people are listening.": "{count} 人正在收听。",
   "{count} podcasts to refresh": "{count} 个播客待刷新",
   "{count} waiting": "{count} 个等待",
-  "{seconds} seconds": "{seconds} 秒"
+  "{seconds} seconds": "{seconds} 秒",
+  "Hide uncertain passages": "隐藏不确定的片段",
+  "Show uncertain passages ({count})": "显示不确定的片段 ({count})"
 }

@@ -582,5 +582,7 @@
   "Sponsor": "Sponsor",
   "Undo": "Undo",
   "Unnamed pattern": "Unnamed pattern",
-  "Unreviewed": "Unreviewed"
+  "Unreviewed": "Unreviewed",
+  "Hide uncertain passages": "Hide uncertain passages",
+  "Show uncertain passages ({count})": "Show uncertain passages ({count})"
 }

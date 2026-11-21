@@ -466,5 +466,7 @@
   "{count} people are listening.": "{count} 人が聴いています。",
   "{count} podcasts to refresh": "更新するポッドキャスト {count} 件",
   "{count} waiting": "{count} 件待機",
-  "{seconds} seconds": "{seconds} 秒"
+  "{seconds} seconds": "{seconds} 秒",
+  "Hide uncertain passages": "不確かな箇所を隠す",
+  "Show uncertain passages ({count})": "不確かな箇所を表示 ({count})"
 }

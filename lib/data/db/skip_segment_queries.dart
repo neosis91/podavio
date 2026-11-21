@@ -34,6 +34,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     required int episodeId,
     required Uint8List data,
     required int hopMicros,
+    Uint8List? speech,
     DateTime? createdAt,
   }) {
     return into(episodeFingerprints).insertOnConflictUpdate(
@@ -41,6 +42,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
         episodeId: Value(episodeId),
         data: data,
         hopMicros: hopMicros,
+        speech: speech == null ? const Value.absent() : Value(speech),
         createdAt: createdAt ?? DateTime.now(),
       ),
     );
@@ -60,6 +62,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     Uint8List? logMel,
     required int durationMs,
     int occurrences = 1,
+    int? confidence,
     DateTime? createdAt,
   }) {
     return into(segmentTemplates).insert(
@@ -71,6 +74,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
         logMel: Value(logMel),
         durationMs: durationMs,
         occurrences: Value(occurrences),
+        confidence: Value(confidence),
         createdAt: createdAt ?? DateTime.now(),
       ),
     );
@@ -84,6 +88,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     required SkipSegmentSource source,
     int matches = 1,
     bool? confirmed,
+    int? confidence,
     int? templateId,
   }) {
     return into(skipSegments).insert(
@@ -95,6 +100,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
         source: source,
         matches: Value(matches),
         confirmed: Value(confirmed),
+        confidence: Value(confidence),
         templateId: Value(templateId),
       ),
     );
@@ -374,7 +380,8 @@ mixin _SkipSegmentQueries on _$AppDatabase {
         ])..where(
           episodes.downloadPath.isNotNull() &
               episodes.downloadPath.length.isBiggerThanValue(0) &
-              episodeFingerprints.episodeId.isNull(),
+              (episodeFingerprints.episodeId.isNull() |
+                  episodeFingerprints.speech.isNull()),
         );
     if (podcastId != null) query.where(episodes.podcastId.equals(podcastId));
     final rows = await query.get();
@@ -411,6 +418,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     required int endMs,
     required int matches,
     required int? templateId,
+    Value<int?>? confidence,
   }) {
     return (update(skipSegments)..where((row) => row.id.equals(id))).write(
       SkipSegmentsCompanion(
@@ -418,6 +426,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
         endMs: Value(endMs),
         matches: Value(matches),
         templateId: Value(templateId),
+        confidence: confidence ?? const Value.absent(),
       ),
     );
   }
