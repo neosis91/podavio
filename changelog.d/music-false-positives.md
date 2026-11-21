@@ -1,0 +1,1 @@
+Repeated music inside a single downloaded episode, such as a refrain or a background bed, is no longer listed as a skip. A spoken repeat in that episode stays for review, and a low score stays behind Show uncertain passages. A jingle or outro shared by several episodes is still detected when it is musical.

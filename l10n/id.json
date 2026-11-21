@@ -468,5 +468,7 @@
   "{count} people are listening.": "{count} orang sedang mendengarkan.",
   "{count} podcasts to refresh": "{count} podcast untuk diperbarui",
   "{count} waiting": "{count} menunggu",
-  "{seconds} seconds": "{seconds} detik"
+  "{seconds} seconds": "{seconds} detik",
+  "Hide uncertain passages": "Sembunyikan bagian yang tidak pasti",
+  "Show uncertain passages ({count})": "Tampilkan bagian yang tidak pasti ({count})"
 }

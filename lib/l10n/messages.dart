@@ -270,6 +270,7 @@ const _fr = <String, String>{
   'HTML page to open or share (cannot be re-imported)':
       'Page HTML à ouvrir ou partager (pas de ré-import)',
   'Health & Fitness': 'Forme et santé',
+  'Hide uncertain passages': 'Masquer les passages incertains',
   'Hide variants': 'Masquer les variantes',
   'Hinduism': 'Hindouisme',
   'History': 'Histoire',
@@ -518,6 +519,8 @@ const _fr = <String, String>{
       'Le partage s’arrête quand vous quittez cet écran ou changez d’appli.',
   'Shelves': 'Étagères',
   'Show them again in Interface.': 'Affichez-les de nouveau dans Interface.',
+  'Show uncertain passages ({count})':
+      'Afficher les passages incertains ({count})',
   'Show variants': 'Afficher les variantes',
   'Shows a notification when a download fails.':
       'Affiche une notification quand un téléchargement échoue.',
@@ -878,6 +881,7 @@ const _de = <String, String>{
   'Green': 'Grün',
   'Guest': 'Gast',
   'Health & Fitness': 'Gesundheit und Fitness',
+  'Hide uncertain passages': 'Unsichere Passagen ausblenden',
   'Hide variants': 'Varianten ausblenden',
   'Hinduism': 'Hinduismus',
   'History': 'Geschichte',
@@ -1078,6 +1082,7 @@ const _de = <String, String>{
   'Shelves': 'Regale',
   'Show them again in Interface.':
       'Blenden Sie sie unter Oberfläche wieder ein.',
+  'Show uncertain passages ({count})': 'Unsichere Passagen anzeigen ({count})',
   'Show variants': 'Varianten anzeigen',
   'Shows a notification when a download fails.':
       'Zeigt eine Benachrichtigung, wenn ein Download fehlschlägt.',
@@ -1396,6 +1401,7 @@ const _es = <String, String>{
   'Green': 'Verde',
   'Guest': 'Invitado',
   'Health & Fitness': 'Salud y forma física',
+  'Hide uncertain passages': 'Ocultar los pasajes inciertos',
   'Hide variants': 'Ocultar variantes',
   'Hinduism': 'Hinduismo',
   'History': 'Historia',
@@ -1598,6 +1604,8 @@ const _es = <String, String>{
       'Comparta este código con las personas de la misma red.',
   'Shelves': 'Estantes',
   'Show them again in Interface.': 'Vuelve a mostrarlos en Interfaz.',
+  'Show uncertain passages ({count})':
+      'Mostrar los pasajes inciertos ({count})',
   'Show variants': 'Mostrar variantes',
   'Shows a notification when a download fails.':
       'Muestra una notificación cuando falla una descarga.',
@@ -1916,6 +1924,7 @@ const _it = <String, String>{
   'Green': 'Verde',
   'Guest': 'Ospite',
   'Health & Fitness': 'Salute e benessere',
+  'Hide uncertain passages': 'Nascondi i passaggi incerti',
   'Hide variants': 'Nascondi le varianti',
   'Hinduism': 'Induismo',
   'History': 'Storia',
@@ -2114,6 +2123,7 @@ const _it = <String, String>{
       'Condividi questo codice con le persone sulla stessa rete.',
   'Shelves': 'Scaffali',
   'Show them again in Interface.': 'Mostrali di nuovo in Interfaccia.',
+  'Show uncertain passages ({count})': 'Mostra i passaggi incerti ({count})',
   'Show variants': 'Mostra le varianti',
   'Shows a notification when a download fails.':
       'Mostra una notifica quando un download non riesce.',
@@ -2431,6 +2441,7 @@ const _pt = <String, String>{
   'Green': 'Verde',
   'Guest': 'Convidado',
   'Health & Fitness': 'Saúde e fitness',
+  'Hide uncertain passages': 'Ocultar as passagens incertas',
   'Hide variants': 'Ocultar variantes',
   'Hinduism': 'Hinduísmo',
   'History': 'História',
@@ -2632,6 +2643,8 @@ const _pt = <String, String>{
       'Partilhe este código com as pessoas na mesma rede.',
   'Shelves': 'Prateleiras',
   'Show them again in Interface.': 'Volte a mostrá-las em Interface.',
+  'Show uncertain passages ({count})':
+      'Mostrar as passagens incertas ({count})',
   'Show variants': 'Mostrar variantes',
   'Shows a notification when a download fails.':
       'Mostra uma notificação quando uma transferência falha.',
@@ -2953,6 +2966,7 @@ const _nl = <String, String>{
   'Green': 'Groen',
   'Guest': 'Gast',
   'Health & Fitness': 'Gezondheid en fitness',
+  'Hide uncertain passages': 'Onzekere fragmenten verbergen',
   'Hide variants': 'Varianten verbergen',
   'Hinduism': 'Hindoeïsme',
   'History': 'Geschiedenis',
@@ -3152,6 +3166,7 @@ const _nl = <String, String>{
       'Deel deze code met mensen op hetzelfde netwerk.',
   'Shelves': 'Schappen',
   'Show them again in Interface.': 'Toon ze weer in Interface.',
+  'Show uncertain passages ({count})': 'Onzekere fragmenten tonen ({count})',
   'Show variants': 'Varianten tonen',
   'Shows a notification when a download fails.':
       'Toont een melding als een download mislukt.',
@@ -3462,6 +3477,7 @@ const _zh = <String, String>{
   'Green': '绿色',
   'Guest': '客人',
   'Health & Fitness': '健康与健身',
+  'Hide uncertain passages': '隐藏不确定的片段',
   'Hide variants': '隐藏变体',
   'Hinduism': '印度教',
   'History': '历史',
@@ -3662,6 +3678,7 @@ const _zh = <String, String>{
   'Share this code with people on the same network.': '把这个代码分享给同一网络上的人。',
   'Shelves': '书架',
   'Show them again in Interface.': '在界面中重新显示。',
+  'Show uncertain passages ({count})': '显示不确定的片段 ({count})',
   'Show variants': '显示变体',
   'Shows a notification when a download fails.': '下载失败时显示通知。',
   'Shows a notification when synchronization fails.': '同步失败时显示通知。',
@@ -3968,6 +3985,7 @@ const _hi = <String, String>{
   'Green': 'हरा',
   'Guest': 'अतिथि',
   'Health & Fitness': 'स्वास्थ्य और फ़िटनेस',
+  'Hide uncertain passages': 'अनिश्चित अंश छिपाएँ',
   'Hide variants': 'रूप छिपाएँ',
   'Hinduism': 'हिंदू धर्म',
   'History': 'इतिहास',
@@ -4165,6 +4183,7 @@ const _hi = <String, String>{
       'यह कोड उसी नेटवर्क के लोगों के साथ साझा करें।',
   'Shelves': 'शेल्फ़',
   'Show them again in Interface.': 'इन्हें इंटरफ़ेस में फिर दिखाएँ।',
+  'Show uncertain passages ({count})': 'अनिश्चित अंश दिखाएँ ({count})',
   'Show variants': 'रूप दिखाएँ',
   'Shows a notification when a download fails.':
       'डाउनलोड विफल होने पर सूचना दिखाता है।',
@@ -4482,6 +4501,7 @@ const _id = <String, String>{
   'Green': 'Hijau',
   'Guest': 'Tamu',
   'Health & Fitness': 'Kesehatan dan kebugaran',
+  'Hide uncertain passages': 'Sembunyikan bagian yang tidak pasti',
   'Hide variants': 'Sembunyikan varian',
   'Hinduism': 'Hindu',
   'History': 'Sejarah',
@@ -4683,6 +4703,8 @@ const _id = <String, String>{
       'Bagikan kode ini kepada orang di jaringan yang sama.',
   'Shelves': 'Rak',
   'Show them again in Interface.': 'Tampilkan lagi di Antarmuka.',
+  'Show uncertain passages ({count})':
+      'Tampilkan bagian yang tidak pasti ({count})',
   'Show variants': 'Tampilkan varian',
   'Shows a notification when a download fails.':
       'Menampilkan notifikasi saat unduhan gagal.',
@@ -4994,6 +5016,7 @@ const _ja = <String, String>{
   'Green': '緑',
   'Guest': 'ゲスト',
   'Health & Fitness': '健康とフィットネス',
+  'Hide uncertain passages': '不確かな箇所を隠す',
   'Hide variants': 'バリエーションを隠す',
   'Hinduism': 'ヒンドゥー教',
   'History': '歴史',
@@ -5195,6 +5218,7 @@ const _ja = <String, String>{
       '同じネットワークの人にこのコードを伝えてください。',
   'Shelves': '棚',
   'Show them again in Interface.': 'インターフェースで再び表示します。',
+  'Show uncertain passages ({count})': '不確かな箇所を表示 ({count})',
   'Show variants': 'バリエーションを表示',
   'Shows a notification when a download fails.': 'ダウンロードが失敗したときに通知します。',
   'Shows a notification when synchronization fails.': '同期が失敗したときに通知します。',
@@ -5504,6 +5528,7 @@ const _ko = <String, String>{
   'Green': '초록',
   'Guest': '손님',
   'Health & Fitness': '건강과 피트니스',
+  'Hide uncertain passages': '불확실한 구간 숨기기',
   'Hide variants': '변형 숨기기',
   'Hinduism': '힌두교',
   'History': '역사',
@@ -5706,6 +5731,7 @@ const _ko = <String, String>{
       '같은 네트워크의 사람들에게 이 코드를 전하세요.',
   'Shelves': '선반',
   'Show them again in Interface.': '인터페이스에서 다시 표시하세요.',
+  'Show uncertain passages ({count})': '불확실한 구간 표시 ({count})',
   'Show variants': '변형 표시',
   'Shows a notification when a download fails.': '다운로드가 실패하면 알림을 표시합니다.',
   'Shows a notification when synchronization fails.': '동기화가 실패하면 알림을 표시합니다.',
@@ -6019,6 +6045,7 @@ const _ru = <String, String>{
   'Green': 'Зелёный',
   'Guest': 'Гость',
   'Health & Fitness': 'Здоровье и фитнес',
+  'Hide uncertain passages': 'Скрыть неуверенные фрагменты',
   'Hide variants': 'Скрыть варианты',
   'Hinduism': 'Индуизм',
   'History': 'История',
@@ -6220,6 +6247,8 @@ const _ru = <String, String>{
       'Передайте этот код людям в той же сети.',
   'Shelves': 'Полки',
   'Show them again in Interface.': 'Покажите их снова в Интерфейсе.',
+  'Show uncertain passages ({count})':
+      'Показать неуверенные фрагменты ({count})',
   'Show variants': 'Показать варианты',
   'Shows a notification when a download fails.':
       'Показывает уведомление, если загрузка не удалась.',
@@ -6538,6 +6567,7 @@ const _tr = <String, String>{
   'Green': 'Yeşil',
   'Guest': 'Konuk',
   'Health & Fitness': 'Sağlık ve fitness',
+  'Hide uncertain passages': 'Belirsiz bölümleri gizle',
   'Hide variants': 'Çeşitleri gizle',
   'Hinduism': 'Hinduizm',
   'History': 'Tarih',
@@ -6737,6 +6767,7 @@ const _tr = <String, String>{
       'Bu kodu aynı ağdaki kişilerle paylaşın.',
   'Shelves': 'Raflar',
   'Show them again in Interface.': 'Arayüzde yeniden gösterin.',
+  'Show uncertain passages ({count})': 'Belirsiz bölümleri göster ({count})',
   'Show variants': 'Çeşitleri göster',
   'Shows a notification when a download fails.':
       'Bir indirme başarısız olunca bildirim gösterir.',
@@ -7054,6 +7085,7 @@ const _ar = <String, String>{
   'Green': 'أخضر',
   'Guest': 'ضيف',
   'Health & Fitness': 'الصحة واللياقة',
+  'Hide uncertain passages': 'إخفاء المقاطع غير المؤكدة',
   'Hide variants': 'إخفاء التنويعات',
   'Hinduism': 'الهندوسية',
   'History': 'تاريخ',
@@ -7253,6 +7285,7 @@ const _ar = <String, String>{
       'شارك هذا الرمز مع الأشخاص على الشبكة نفسها.',
   'Shelves': 'الأرفف',
   'Show them again in Interface.': 'أظهرها من جديد في الواجهة.',
+  'Show uncertain passages ({count})': 'عرض المقاطع غير المؤكدة ({count})',
   'Show variants': 'إظهار التنويعات',
   'Shows a notification when a download fails.':
       'يعرض إشعارًا عند فشل التنزيل.',
@@ -7569,6 +7602,7 @@ const _pl = <String, String>{
   'Green': 'Zielony',
   'Guest': 'Gość',
   'Health & Fitness': 'Zdrowie i fitness',
+  'Hide uncertain passages': 'Ukryj niepewne fragmenty',
   'Hide variants': 'Ukryj warianty',
   'Hinduism': 'Hinduizm',
   'History': 'Historia',
@@ -7766,6 +7800,7 @@ const _pl = <String, String>{
       'Podaj ten kod osobom w tej samej sieci.',
   'Shelves': 'Półki',
   'Show them again in Interface.': 'Pokaż je ponownie w Interfejsie.',
+  'Show uncertain passages ({count})': 'Pokaż niepewne fragmenty ({count})',
   'Show variants': 'Pokaż warianty',
   'Shows a notification when a download fails.':
       'Pokazuje powiadomienie, gdy pobieranie się nie uda.',

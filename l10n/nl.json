@@ -468,5 +468,7 @@
   "{count} people are listening.": "{count} personen luisteren.",
   "{count} podcasts to refresh": "{count} podcasts te vernieuwen",
   "{count} waiting": "{count} in de wachtrij",
-  "{seconds} seconds": "{seconds} seconden"
+  "{seconds} seconds": "{seconds} seconden",
+  "Hide uncertain passages": "Onzekere fragmenten verbergen",
+  "Show uncertain passages ({count})": "Onzekere fragmenten tonen ({count})"
 }

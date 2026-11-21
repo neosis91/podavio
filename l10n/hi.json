@@ -466,5 +466,7 @@
   "{count} people are listening.": "{count} लोग सुन रहे हैं।",
   "{count} podcasts to refresh": "{count} पॉडकास्ट अपडेट करने हैं",
   "{count} waiting": "{count} प्रतीक्षा में",
-  "{seconds} seconds": "{seconds} सेकंड"
+  "{seconds} seconds": "{seconds} सेकंड",
+  "Hide uncertain passages": "अनिश्चित अंश छिपाएँ",
+  "Show uncertain passages ({count})": "अनिश्चित अंश दिखाएँ ({count})"
 }

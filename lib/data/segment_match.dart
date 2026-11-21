@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'skip_segments.dart';
@@ -33,6 +34,37 @@ const outroWindowMs = 60000;
 /// collé à lui-même). Au-delà, un refrain reste un candidat non sauté.
 const selfMatchMinOffsetMs = 20000;
 
+/// Sous ce ratio de parole (0–1), une répétition vue dans une seule
+/// épisode est de la musique : refrain, lit, épisode musical. On la jette.
+///
+/// Mesuré : lit tonal 0,03, refrain chanté 0,18, parole (seule ou sur un
+/// lit) ≥ 0,78. Voir `test/speech_music_test.dart`.
+const intraMusicRejectRatio = 0.45;
+
+/// Un refrain périodique n’est gardé que si la parole est aussi nette
+/// qu’une lecture (le chant passe dessous).
+const intraPeriodicSpeechEscape = 0.75;
+
+/// Écart-type / moyenne des intervalles. En dessous, les reprises sont
+/// trop régulières pour une pub insérée au hasard.
+const refrainIntervalCvMax = 0.18;
+
+/// Trois occurrences au moins (deux intervalles) pour parler de période.
+const refrainMinGaps = 2;
+
+/// Espacement d’un refrain : au-delà de l’auto-comparaison, en deçà
+/// d’un couplet très espacé.
+const refrainMinIntervalMs = 8000;
+
+const refrainMaxIntervalMs = 180000;
+
+/// Confiance d’un motif retrouvé dans plusieurs épisodes.
+const crossEpisodeConfidence = 90;
+
+/// En dessous, l’écran de classement replie le candidat (« afficher plus »).
+/// Un motif inter-épisodes reste au-dessus.
+const lowConfidenceCutoff = 50;
+
 /// Log-mel : 8 kHz, 40 bandes, hop 10 ms, corrélation après normalisation.
 const logMelSampleRate = 8000;
 
@@ -63,13 +95,32 @@ const knownNetworkStings = <NetworkSting>[acastNetworkSting];
 
 /// Résultat de [classifyRepeatedSegment].
 class SegmentClassification {
-  const SegmentClassification({required this.kind, required this.autoSkip});
+  const SegmentClassification({
+    required this.kind,
+    required this.autoSkip,
+    this.confidence = crossEpisodeConfidence,
+  });
 
-  /// `null` : candidat seulement (refrain, musique de fond).
+  /// `null` : candidat seulement (parole répétée dans une seule épisode).
   final SkipSegmentKind? kind;
 
   /// `false` : ne jamais sauter automatiquement.
   final bool autoSkip;
+
+  /// 0–100. Sert à trier l’écran de classement et à replier les doutes.
+  /// N’autorise jamais le saut à lui seul.
+  final int confidence;
+}
+
+/// Avis sur une répétition vue dans une seule épisode.
+class IntraEpisodeVerdict {
+  const IntraEpisodeVerdict({required this.reject, required this.confidence});
+
+  /// `true` : ne pas enregistrer le passage.
+  final bool reject;
+
+  /// 0–100, ignoré quand [reject] est vrai.
+  final int confidence;
 }
 
 /// Une occurrence d’un motif dans un épisode.
@@ -178,13 +229,75 @@ bool _inIntroWindow(SegmentOccurrence hit) {
   return hit.startMs >= 0 && hit.startMs <= jingleSearchWindowMs;
 }
 
+/// `true` si les départs se répètent à intervalle presque constant.
+///
+/// Deux occurrences ne suffisent pas : un lit entendu deux fois n’a
+/// qu’un intervalle. Trois reprises d’un refrain, si.
+bool nearPeriodicRefrain(List<int> startsMs) {
+  if (startsMs.length < refrainMinGaps + 1) return false;
+  final sorted = [...startsMs]..sort();
+  final gaps = <int>[];
+  for (var i = 1; i < sorted.length; i++) {
+    final gap = sorted[i] - sorted[i - 1];
+    if (gap >= refrainMinIntervalMs) gaps.add(gap);
+  }
+  if (gaps.length < refrainMinGaps) return false;
+  var sum = 0;
+  for (final gap in gaps) {
+    sum += gap;
+  }
+  final mean = sum / gaps.length;
+  if (mean > refrainMaxIntervalMs) return false;
+  var variance = 0.0;
+  for (final gap in gaps) {
+    final delta = gap - mean;
+    variance += delta * delta;
+  }
+  final cv = math.sqrt(variance / gaps.length) / mean;
+  return cv <= refrainIntervalCvMax;
+}
+
+/// Répétition interne à une épisode.
+///
+/// Musique (ratio de parole bas) ou refrain quasi périodique : on rejette.
+/// Parole insérée sans période : candidat, jamais sauté, confiance selon
+/// le ratio. Sans chronologie de parole, seule la période décide : le
+/// comportement précédent (candidat) reste pour les empreintes anciennes.
+IntraEpisodeVerdict judgeIntraEpisodeRepeat({
+  required List<int> startsMs,
+  required double? speechRatio,
+}) {
+  final periodic = nearPeriodicRefrain(startsMs);
+  final musical = speechRatio != null && speechRatio < intraMusicRejectRatio;
+  final periodicMusic =
+      periodic &&
+      (speechRatio == null || speechRatio < intraPeriodicSpeechEscape);
+  if (musical || periodicMusic) {
+    return const IntraEpisodeVerdict(reject: true, confidence: 0);
+  }
+  return IntraEpisodeVerdict(
+    reject: false,
+    confidence: intraEpisodeConfidence(speechRatio, periodic: periodic),
+  );
+}
+
+/// Confiance d’un candidat intra-épisode. Toujours sous
+/// [crossEpisodeConfidence], pour que le tri place les pubs devant.
+int intraEpisodeConfidence(double? speechRatio, {required bool periodic}) {
+  if (speechRatio == null) return periodic ? 15 : 42;
+  var score = ((speechRatio - 0.25) * 110).round();
+  if (periodic) score -= 12;
+  return score.clamp(8, 80);
+}
+
 /// Classe un motif déjà repéré entre épisodes.
 ///
 /// - Toujours en début, offset stable ou juste après le pré-roll : intro.
 /// - Toujours dans la dernière minute : outro.
 /// - L’offset change d’un épisode à l’autre : pub / promo insérée.
 /// - Offset stable ailleurs : lecture sponsor fixe.
-/// - Une seule épisode (refrain, musique) : candidat, jamais sauté seul.
+/// - Une seule épisode : candidat sans saut. Le finder applique
+///   [judgeIntraEpisodeRepeat] avant, et peut ne rien garder.
 SegmentClassification classifyRepeatedSegment(List<SegmentOccurrence> hits) {
   final episodes = hits.map((hit) => hit.episodeId).toSet();
   if (episodes.length < 2) {

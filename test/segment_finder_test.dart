@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:podavio/data/chromaprint.dart';
 import 'package:podavio/data/segment_finder.dart';
+import 'package:podavio/data/segment_match.dart';
 import 'package:podavio/data/skip_segments.dart';
 
 void main() {
@@ -17,6 +20,7 @@ void main() {
     expect(found, hasLength(1));
     expect(found.single.classification.kind, SkipSegmentKind.ad);
     expect(found.single.classification.autoSkip, isTrue);
+    expect(found.single.classification.confidence, crossEpisodeConfidence);
     expect(found.single.occurrences, hasLength(3));
     expect(found.single.durationMs, greaterThanOrEqualTo(10000));
     final starts = found.single.occurrences.map((hit) => hit.startMs).toList()
@@ -160,6 +164,10 @@ void main() {
     expect(found, hasLength(1));
     expect(found.single.classification.autoSkip, isFalse);
     expect(found.single.classification.kind, isNull);
+    expect(
+      found.single.classification.confidence,
+      lessThan(lowConfidenceCutoff),
+    );
     expect(found.single.occurrences, hasLength(2));
 
     final close = _noise(800, 4);
@@ -201,12 +209,135 @@ void main() {
     expect(plan.patterns.single.kind, SkipSegmentKind.sponsor);
     expect(plan.patterns.single.confirmed, isFalse);
     expect(plan.patterns.single.segments, hasLength(2));
+    expect(plan.patterns.single.confidence, crossEpisodeConfidence);
     expect(
       plan.patterns.single.segments.every(
         (segment) => segment.confirmed == false,
       ),
       isTrue,
     );
+  });
+
+  test('music inside one episode is dropped, speech is only a candidate', () {
+    final motif = _motif(100, 21);
+    final musicValues = _placed(1200, 2, 40, motif);
+    _write(musicValues, 400, motif);
+    // Deux passages de musique, pas une période : le ratio suffit.
+    expect(
+      discoverPatterns([
+        FingerprintEpisode(
+          episodeId: 1,
+          values: musicValues,
+          hopMicros: hop,
+          durationMs: 400000,
+          speech: _level(60, 0),
+        ),
+      ]),
+      isEmpty,
+    );
+
+    final spoken = FingerprintEpisode(
+      episodeId: 4,
+      values: _placed(1200, 3, 40, motif),
+      hopMicros: hop,
+      durationMs: 400000,
+      speech: _level(60, 255),
+    );
+    final copy = FingerprintEpisode(
+      episodeId: 4,
+      values: List<int>.from(spoken.values),
+      hopMicros: hop,
+      durationMs: 400000,
+      speech: _level(60, 255),
+    );
+    _write(copy.values, 400, motif);
+    final kept = discoverPatterns([copy]);
+    expect(kept, hasLength(1));
+    expect(kept.single.classification.autoSkip, isFalse);
+    expect(kept.single.classification.kind, isNull);
+    expect(
+      kept.single.classification.confidence,
+      greaterThanOrEqualTo(lowConfidenceCutoff),
+    );
+    expect(
+      kept.single.classification.confidence,
+      lessThan(crossEpisodeConfidence),
+    );
+
+    // Refrain toutes les ~21 s, trois fois : rejeté même sans note de parole.
+    final loop = _noise(1200, 8);
+    _write(loop, 40, motif);
+    _write(loop, 210, motif);
+    _write(loop, 380, motif);
+    expect(
+      discoverPatterns([
+        FingerprintEpisode(
+          episodeId: 9,
+          values: loop,
+          hopMicros: hop,
+          durationMs: 400000,
+        ),
+      ]),
+      isEmpty,
+    );
+  });
+
+  test('a musical intro shared by episodes is still skipped', () {
+    final jingle = _motif(80, 30);
+    final found = discoverPatterns([
+      _episode(
+        id: 1,
+        length: 1600,
+        seed: 1,
+        at: 6,
+        motif: jingle,
+        speech: _level(30, 0),
+      ),
+      _episode(
+        id: 2,
+        length: 1600,
+        seed: 2,
+        at: 6,
+        motif: jingle,
+        speech: _level(30, 0),
+      ),
+      _episode(
+        id: 3,
+        length: 1600,
+        seed: 3,
+        at: 6,
+        motif: jingle,
+        speech: _level(30, 0),
+      ),
+    ]);
+    expect(found, hasLength(1));
+    expect(found.single.classification.kind, SkipSegmentKind.intro);
+    expect(found.single.classification.autoSkip, isTrue);
+    expect(found.single.classification.confidence, crossEpisodeConfidence);
+  });
+
+  test('a dynamic ad stays an ad when the speech score is high', () {
+    final ad = _motif(120, 44);
+    final found = discoverPatterns([
+      _episode(
+        id: 1,
+        length: 1800,
+        seed: 1,
+        at: 80,
+        motif: ad,
+        speech: _level(40, 255),
+      ),
+      _episode(
+        id: 2,
+        length: 1800,
+        seed: 2,
+        at: 700,
+        motif: ad,
+        speech: _level(40, 255),
+      ),
+    ]);
+    expect(found.single.classification.kind, SkipSegmentKind.ad);
+    expect(found.single.classification.autoSkip, isTrue);
   });
 }
 
@@ -237,6 +368,7 @@ FingerprintEpisode _episode({
   required int at,
   required List<int> motif,
   int durationMs = 400000,
+  Uint8List? speech,
 }) {
   final values = _noise(length, seed + id * 17);
   _write(values, at, motif);
@@ -245,5 +377,16 @@ FingerprintEpisode _episode({
     values: values,
     hopMicros: chromaprintStoredHopMicros,
     durationMs: durationMs,
+    speech: speech,
   );
+}
+
+Uint8List _level(int seconds, int value) {
+  return Uint8List(seconds)..fillRange(0, seconds, value);
+}
+
+List<int> _placed(int length, int seed, int at, List<int> motif) {
+  final values = _noise(length, seed);
+  _write(values, at, motif);
+  return values;
 }

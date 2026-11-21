@@ -468,5 +468,7 @@
   "{count} people are listening.": "Слушают {count} человек.",
   "{count} podcasts to refresh": "{count} подкастов для обновления",
   "{count} waiting": "{count} в очереди",
-  "{seconds} seconds": "{seconds} с"
+  "{seconds} seconds": "{seconds} с",
+  "Hide uncertain passages": "Скрыть неуверенные фрагменты",
+  "Show uncertain passages ({count})": "Показать неуверенные фрагменты ({count})"
 }

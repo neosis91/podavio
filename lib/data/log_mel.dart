@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'chromaprint.dart';
 import 'segment_match.dart';
+import 'speech_music.dart';
 
 /// Fenêtre d’analyse : 32 ms à 8 kHz, puissance de 2 pour la FFT.
 const logMelFrameSize = 256;
@@ -19,8 +20,10 @@ class LogMelClip {
   bool get isEmpty => frames.isEmpty;
 }
 
-/// Empreinte et log-mel des 180 premières secondes, lus sur le même PCM.
-({List<int> fingerprint, Uint8List? logMel}) analyzePcmFileSync(String path) {
+/// Empreinte, log-mel des 180 premières secondes et chronologie parole,
+/// lus sur le même PCM.
+({List<int> fingerprint, Uint8List? logMel, Uint8List speech})
+analyzePcmFileSync(String path) {
   final bytes = File(path).readAsBytesSync();
   final view = ByteData.sublistView(bytes);
   final count = bytes.lengthInBytes ~/ 2;
@@ -37,6 +40,7 @@ class LogMelClip {
     logMel: clip.isEmpty
         ? null
         : encodeLogMel(clip.frames.cast<List<double>>()),
+    speech: speechMusicTimeline(samples),
   );
 }
 

@@ -1,7 +1,9 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'segment_match.dart';
 import 'skip_segments.dart';
+import 'speech_music.dart';
 
 /// Au-delà, une valeur est trop banale (silence) : on n’en garde qu’un
 /// échantillon pour le vote, sinon chaque décalage ramasse des voix.
@@ -25,6 +27,7 @@ class FingerprintEpisode {
     required this.hopMicros,
     required this.durationMs,
     this.preRollEndMs,
+    this.speech,
   });
 
   final int episodeId;
@@ -32,6 +35,9 @@ class FingerprintEpisode {
   final int hopMicros;
   final int durationMs;
   final int? preRollEndMs;
+
+  /// Une octet par seconde, 0 musique … 255 parole. `null` : pas encore noté.
+  final Uint8List? speech;
 }
 
 /// Gabarit déjà en base. Le rapprochement rapide s’en sert avant
@@ -43,6 +49,7 @@ class KnownTemplate {
     required this.fingerprint,
     required this.durationMs,
     required this.confirmed,
+    this.confidence,
   });
 
   final int id;
@@ -52,6 +59,9 @@ class KnownTemplate {
 
   /// Avis agrégé des passages : `false` = ignoré, on le propage.
   final bool? confirmed;
+
+  /// 0–100. `null` : gabarit posé avant le score.
+  final int? confidence;
 }
 
 /// Passage à écrire pour un épisode.
@@ -63,6 +73,7 @@ class PlannedSegment {
     required this.kind,
     required this.confirmed,
     required this.matches,
+    required this.confidence,
   });
 
   final int episodeId;
@@ -71,6 +82,9 @@ class PlannedSegment {
   final SkipSegmentKind kind;
   final bool? confirmed;
   final int matches;
+
+  /// 0–100. Le saut n’en dépend pas.
+  final int confidence;
 }
 
 /// Motif, nouveau ou déjà rattaché à un gabarit.
@@ -82,6 +96,7 @@ class PlannedPattern {
     required this.fingerprint,
     required this.durationMs,
     required this.segments,
+    required this.confidence,
   });
 
   /// `null` : gabarit à créer.
@@ -91,6 +106,9 @@ class PlannedPattern {
   final List<int> fingerprint;
   final int durationMs;
   final List<PlannedSegment> segments;
+
+  /// 0–100, recopié sur le gabarit.
+  final int confidence;
 
   int get occurrences =>
       segments.map((segment) => segment.episodeId).toSet().length;
@@ -113,6 +131,7 @@ AnalysisPlan buildAnalysisPlan({
       if (episode.values.length >= 8 && episode.hopMicros > 0) episode,
   ];
   final hop = usable.isEmpty ? 0 : usable.first.hopMicros;
+  final byId = {for (final episode in usable) episode.episodeId: episode};
   final patterns = <PlannedPattern>[];
   final claimed = <int, List<_Range>>{};
 
@@ -138,6 +157,7 @@ AnalysisPlan buildAnalysisPlan({
             kind: template.kind,
             confirmed: template.confirmed,
             matches: 0,
+            confidence: _templateConfidence(template),
           ),
         );
         (claimed[episode.episodeId] ??= []).add(_Range(startMs, endMs));
@@ -153,6 +173,7 @@ AnalysisPlan buildAnalysisPlan({
           fingerprint: template.fingerprint,
           durationMs: template.durationMs,
           segments: segments,
+          confidence: _templateConfidence(template),
         ),
       ),
     );
@@ -178,6 +199,7 @@ AnalysisPlan buildAnalysisPlan({
             kind: similar.kind,
             confirmed: similar.confirmed,
             matches: 0,
+            confidence: _templateConfidence(similar),
           ),
       ];
       if (host >= 0) {
@@ -189,6 +211,7 @@ AnalysisPlan buildAnalysisPlan({
             fingerprint: patterns[host].fingerprint,
             durationMs: patterns[host].durationMs,
             segments: [...patterns[host].segments, ...extraSegments],
+            confidence: patterns[host].confidence,
           ),
         );
       } else {
@@ -201,6 +224,7 @@ AnalysisPlan buildAnalysisPlan({
               fingerprint: found.fingerprint,
               durationMs: found.durationMs,
               segments: extraSegments,
+              confidence: _templateConfidence(similar),
             ),
           ),
         );
@@ -218,7 +242,7 @@ AnalysisPlan buildAnalysisPlan({
     if (fresh.isEmpty) continue;
     final decision = fresh.length == found.occurrences.length
         ? found.classification
-        : _keep(fresh);
+        : _keep(fresh, byId);
     if (decision == null) continue;
     final kind = decision.kind ?? SkipSegmentKind.other;
     final confirmed = decision.autoSkip ? null : false;
@@ -230,6 +254,7 @@ AnalysisPlan buildAnalysisPlan({
           confirmed: confirmed,
           fingerprint: found.fingerprint,
           durationMs: found.durationMs,
+          confidence: decision.confidence,
           segments: [
             for (final hit in fresh)
               PlannedSegment(
@@ -239,6 +264,7 @@ AnalysisPlan buildAnalysisPlan({
                 kind: kind,
                 confirmed: confirmed,
                 matches: 0,
+                confidence: decision.confidence,
               ),
           ],
         ),
@@ -289,6 +315,7 @@ Map<String, Object?> encodeAnalysisInput({
           episode.durationMs,
           episode.preRollEndMs,
           episode.values,
+          episode.speech,
         ],
     ],
     'templates': [
@@ -299,6 +326,7 @@ Map<String, Object?> encodeAnalysisInput({
           template.confirmed,
           template.durationMs,
           template.fingerprint,
+          template.confidence,
         ],
     ],
   };
@@ -316,6 +344,7 @@ Map<String, Object?> planAnalysisMessage(Map<String, Object?> message) {
         durationMs: row[2]! as int,
         preRollEndMs: row[3] as int?,
         values: (row[4]! as List).cast<int>(),
+        speech: row.length > 5 ? _bytes(row[5]) : null,
       ),
     );
   }
@@ -329,6 +358,7 @@ Map<String, Object?> planAnalysisMessage(Map<String, Object?> message) {
         confirmed: row[2] as bool?,
         durationMs: row[3]! as int,
         fingerprint: (row[4]! as List).cast<int>(),
+        confidence: row.length > 5 ? row[5] as int? : null,
       ),
     );
   }
@@ -352,6 +382,7 @@ AnalysisPlan decodeAnalysisPlan(Map<Object?, Object?> message) {
           kind: _kindOf(segment['kind']! as String),
           confirmed: segment['confirmed'] as bool?,
           matches: segment['matches']! as int,
+          confidence: segment['confidence'] as int? ?? crossEpisodeConfidence,
         ),
       );
     }
@@ -363,6 +394,7 @@ AnalysisPlan decodeAnalysisPlan(Map<Object?, Object?> message) {
         fingerprint: (row['fingerprint']! as List).cast<int>(),
         durationMs: row['durationMs']! as int,
         segments: segments,
+        confidence: row['confidence'] as int? ?? crossEpisodeConfidence,
       ),
     );
   }
@@ -383,6 +415,7 @@ Map<String, Object?> _encodePlan(AnalysisPlan plan) {
           'confirmed': pattern.confirmed,
           'durationMs': pattern.durationMs,
           'fingerprint': pattern.fingerprint,
+          'confidence': pattern.confidence,
           'segments': [
             for (final segment in pattern.segments)
               <String, Object?>{
@@ -392,6 +425,7 @@ Map<String, Object?> _encodePlan(AnalysisPlan plan) {
                 'kind': segment.kind.name,
                 'confirmed': segment.confirmed,
                 'matches': segment.matches,
+                'confidence': segment.confidence,
               },
           ],
         },
@@ -716,7 +750,7 @@ List<DiscoveredPattern> _materialize(
       }
     }
     if (occurrences.isEmpty || longest == null) continue;
-    final decision = _keep(occurrences);
+    final decision = _keep(occurrences, byId);
     if (decision == null) continue;
     final episode = byId[longest.episodeId]!;
     final slice = episode.values.sublist(
@@ -736,15 +770,58 @@ List<DiscoveredPattern> _materialize(
   return found;
 }
 
-SegmentClassification? _keep(List<SegmentOccurrence> hits) {
+SegmentClassification? _keep(
+  List<SegmentOccurrence> hits,
+  Map<int, FingerprintEpisode> byId,
+) {
   if (hits.isEmpty) return null;
   final episodes = hits.map((hit) => hit.episodeId).toSet();
   final long = hits.every((hit) => adDurationQualifies(hit.durationMs));
   if (episodes.length >= 2 && long) return classifyRepeatedSegment(hits);
   if (acceptJingleCandidate(hits)) return classifyRepeatedSegment(hits);
   if (episodes.length < 2 && long) {
-    return const SegmentClassification(kind: null, autoSkip: false);
+    final verdict = judgeIntraEpisodeRepeat(
+      startsMs: [for (final hit in hits) hit.startMs],
+      speechRatio: _speechOf(hits, byId),
+    );
+    if (verdict.reject) return null;
+    return SegmentClassification(
+      kind: null,
+      autoSkip: false,
+      confidence: verdict.confidence,
+    );
   }
+  return null;
+}
+
+double? _speechOf(
+  List<SegmentOccurrence> hits,
+  Map<int, FingerprintEpisode> byId,
+) {
+  var sum = 0.0;
+  var count = 0;
+  for (final hit in hits) {
+    final ratio = speechRatioIn(
+      byId[hit.episodeId]?.speech,
+      hit.startMs,
+      hit.endMs,
+    );
+    if (ratio == null) continue;
+    sum += ratio;
+    count++;
+  }
+  if (count == 0) return null;
+  return sum / count;
+}
+
+int _templateConfidence(KnownTemplate template) {
+  return template.confidence ?? crossEpisodeConfidence;
+}
+
+Uint8List? _bytes(Object? raw) {
+  if (raw == null) return null;
+  if (raw is Uint8List) return raw;
+  if (raw is List) return Uint8List.fromList(raw.cast<int>());
   return null;
 }
 
@@ -793,6 +870,7 @@ PlannedPattern _withMatches(PlannedPattern pattern) {
     confirmed: pattern.confirmed,
     fingerprint: pattern.fingerprint,
     durationMs: pattern.durationMs,
+    confidence: pattern.confidence,
     segments: [
       for (final segment in pattern.segments)
         PlannedSegment(
@@ -802,6 +880,7 @@ PlannedPattern _withMatches(PlannedPattern pattern) {
           kind: segment.kind,
           confirmed: segment.confirmed,
           matches: matches,
+          confidence: segment.confidence,
         ),
     ],
   );

@@ -113,10 +113,80 @@ dans au moins deux podcasts (score ≥ 0,95), est appris sur l’appareil
 - l’offset change d’un épisode à l’autre → pub / promo (insertion
   dynamique) ;
 - offset stable au milieu → lecture sponsor fixe ;
-- répétition vue dans une seule épisode (refrain, musique de fond :
-  3 faux positifs mesurés) → candidat seulement, `autoSkip` faux. On
-  l’enregistre avec `confirmed = false` pour que le lecteur ne le saute
-  pas.
+- répétition vue dans une seule épisode → voir ci-dessous. Jamais
+  sautée : `autoSkip` faux, `confirmed = false`.
+
+## Musique dans une seule épisode
+
+Trois faux positifs mesurés venaient d’une répétition **interne** à
+l’épisode : refrain de *BADABOUM* (14 s et 18 s, Petit Vulgaire), lit
+musical (18 s à 0:10 et 2:49, Petit Poisson Deviendra Podcast), épisode
+musical *En boucle* (18 s, TFTC). Une pub, une promo ou un jingle
+d’intro reviennent **d’un épisode à l’autre**. On ne touche pas à ce
+cas, même quand le son est musical : un jingle d’intro l’est souvent.
+
+Le PCM 11 025 Hz déjà décodé pour Chromaprint est noté dans le même
+isolate, une valeur par seconde (`speech_music.dart`). Pas de modèle.
+Pour chaque seconde :
+
+- variance du taux de passages par zéro, trames de 20 ms (consonnes
+  contre voyelle ou note tenue) ;
+- part de trames sous la moitié de l’énergie moyenne (pauses) ;
+- part de l’enveloppe à 4 Hz (débit syllabique), Goertzel ;
+- flux spectral entre quatre FFT de 512 points ;
+- harmonicité : pic d’autocorrélation entre 80 et 500 Hz ;
+- stabilité du chroma sur ces quatre spectres.
+
+Le score de parole mélange ces rampes. Un son continu, au taux de
+passages par zéro stable, est rabattu : le changement de note d’un
+refrain fait monter le flux, mais ce n’est pas de la parole. Le chroma
+seul ne sépare pas une voyelle tenue d’un accord ; il ne pèse que peu.
+
+Mesuré sur signaux synthétiques, même machine que le débit plus bas :
+
+| Signal | Score |
+| --- | --- |
+| Lit tonal (accord continu) | 0,03 |
+| Refrain chanté, notes enchaînées sans silence | 0,18 |
+| Bruit modulé à 4 Hz, bouffées et pauses | 0,83 |
+| Parole voisée (voyelle, consonne, silence) | 0,89 |
+| La même parole sur le lit tonal | 0,79 |
+
+Seuil de rejet : **0,45** (`intraMusicRejectRatio`). L’écart entre le
+chant (0,18) et la parole sur lit (0,79) laisse de la marge.
+
+Règle, seulement si le motif ne sort pas de l’épisode :
+
+1. Score sous 0,45 → on ne l’enregistre pas.
+2. Trois départs ou plus, intervalles de 8 s à 3 min, écart-type /
+   moyenne ≤ 0,18 (`refrainIntervalCvMax`) → refrain. On le jette,
+   sauf si le score de parole est ≥ 0,75
+   (`intraPeriodicSpeechEscape`) : une lecture répétée à intervalle
+   régulier reste un candidat.
+3. Sinon candidat, `confirmed = false`, jamais sauté automatiquement.
+   Deux occurrences sans période (la pub entendue deux fois dans le
+   seul épisode déjà téléchargé) restent un candidat.
+
+Sans chronologie (empreinte calculée avant cette note), seule la
+période décide. Le candidat ancien, non périodique, reste en base
+jusqu’à la prochaine analyse. Au démarrage et via le bouton de
+l’écran, un épisode dont `episode_fingerprints.speech` est NULL est
+repassé. Un blob de longueur nulle (fichier trop court pour une
+seconde) compte comme déjà calculé.
+
+La confiance (0–100) est stockée sur `skip_segments.confidence` et
+`segment_templates.confidence` (schéma 22). Un motif inter-épisodes
+vaut 90. Un candidat intra-épisode vaut
+`(ratio − 0,25) × 110`, moins 12 s’il est périodique, borné à 8–80.
+Sous 50 (`lowConfidenceCutoff`), l’écran de classement le replie
+derrière « Afficher les passages incertains ». Le tri dans chaque type
+est la confiance décroissante. La confiance ne déclenche pas de saut.
+
+Coût mesuré sur la machine de développement (CPU virtualisé), 20 s de
+PCM tonal extrapolés : **environ 0,7 s par heure** d’audio. Le test
+refuse au-delà de 8 s/h. Ajouté aux 4 à 6 s de Chromaprint, l’heure
+reste du même ordre. L’estimation téléphone, 10 à 20 s, n’a pas été
+remesurée.
 
 ## Durée RSS et fichier
 
@@ -135,7 +205,8 @@ l’isolate. L’appariement Chromaprint de deux épisodes de 30 s reste
 de l’ordre de quelques millisecondes ; y ajouter la recherche log-mel
 porte le total vers 0,2 s. Le log-mel ne couvre que 180 s, donc une
 heure d’audio reste dominée par Chromaprint, environ 4 à 6 s sur cette
-machine. L’estimation téléphone, 10 à 20 s par heure, n’a pas été
+machine, plus environ 0,7 s pour la note parole/musique (voir plus
+haut). L’estimation téléphone, 10 à 20 s par heure, n’a pas été
 remesurée sur un appareil.
 
 ## Décodage
