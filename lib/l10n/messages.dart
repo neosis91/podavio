@@ -539,6 +539,7 @@ const _fr = <String, String>{
       'Affiche le temps restant à droite de la barre de lecture',
   'Skip ads and jingles': 'Sauter pubs et jingles',
   'Skip automatically': 'Saut automatique',
+  'Skip this passage': 'Sauter ce passage',
   'Skips confirmed passages in downloaded episodes':
       'Saute les passages confirmés des épisodes téléchargés',
   'Sky blue': 'Bleu ciel',

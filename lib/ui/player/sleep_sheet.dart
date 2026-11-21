@@ -87,7 +87,7 @@ class _SleepSheetState extends ConsumerState<_SleepSheet> {
     );
     final chapterCount = episodeId == null
         ? 0
-        : ref.watch(chaptersProvider(episodeId)).value?.length ?? 0;
+        : ref.watch(displayChaptersProvider(episodeId)).value?.length ?? 0;
     final chaptersAvailable = chapterCount >= 2;
     final preset = _unit == _SleepUnit.minutes ? _value : null;
     final field = OutlineInputBorder(

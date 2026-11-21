@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
-import '../../data/app_database.dart';
 import '../../data/providers.dart';
+import '../../l10n/l10n.dart';
+import '../../player/chapter_merge.dart';
 import '../../player/player_controller.dart';
 import '../widgets/app_bottom_sheet.dart';
-import 'player_chapter.dart';
 
 Future<void> showChaptersSheet({
   required BuildContext context,
@@ -38,7 +38,7 @@ class _ChaptersSheetState extends ConsumerState<_ChaptersSheet> {
   GlobalKey _keyFor(int chapterId) =>
       _itemKeys.putIfAbsent(chapterId, GlobalKey.new);
 
-  void _scrollToActive(EpisodeChapter? active, {required bool animate}) {
+  void _scrollToActive(DisplayChapter? active, {required bool animate}) {
     if (active == null) return;
     if (_lastScrolledChapterId == active.id) return;
     if (_pendingScrollId == active.id) return;
@@ -63,14 +63,14 @@ class _ChaptersSheetState extends ConsumerState<_ChaptersSheet> {
     final theme = Theme.of(context);
     final episodeId = widget.episodeId;
     final chapters =
-        ref.watch(chaptersProvider(episodeId)).value ??
-        const <EpisodeChapter>[];
+        ref.watch(displayChaptersProvider(episodeId)).value ??
+        const <DisplayChapter>[];
     final loadAsync = ref.watch(chaptersLoadStateProvider(episodeId));
     final episode = ref.watch(episodeProvider(episodeId)).value?.episode;
     final chaptersUrl = episode?.chaptersUrl?.trim() ?? '';
     final fetched = episode?.chaptersFetched ?? false;
     final position = ref.watch(playerProvider.select((s) => s.position));
-    final active = currentChapterFor(chapters, position);
+    final active = currentDisplayChapter(chapters, position);
     final height = MediaQuery.sizeOf(context).height * 0.55;
 
     final phase = loadAsync.asData?.value;
@@ -141,7 +141,7 @@ class _ChaptersSheetState extends ConsumerState<_ChaptersSheet> {
 
   Widget _chapterTile({
     required ThemeData theme,
-    required EpisodeChapter chapter,
+    required DisplayChapter chapter,
     required int index,
     required bool selected,
   }) {
@@ -159,7 +159,11 @@ class _ChaptersSheetState extends ConsumerState<_ChaptersSheet> {
         ),
       ),
       title: Text(
-        chapter.title.isEmpty ? 'Chapitre ${index + 1}' : chapter.title,
+        chapter.title.isEmpty
+            ? 'Chapitre ${index + 1}'
+            : chapter.fromSegment
+            ? context.tr(chapter.title)
+            : chapter.title,
       ),
       onTap: () {
         Navigator.pop(context);
