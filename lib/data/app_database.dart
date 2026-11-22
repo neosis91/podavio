@@ -4,7 +4,6 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import '../core/search.dart';
-import 'chapters_parser.dart';
 import 'feed_text.dart';
 import '../sync/sync_hooks.dart';
 import 'download_policy.dart';

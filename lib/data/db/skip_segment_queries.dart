@@ -146,14 +146,52 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     return query.watch();
   }
 
+  /// Passages actifs de l’épisode : posés à la main, ou retrouvés grâce au
+  /// gabarit d’un passage posé à la main. Les anciens passages détectés
+  /// tout seuls (répétitions, log-mel, virgules, chapitres) restent en base
+  /// mais ne sont plus ni montrés ni sautés.
+  Future<List<SkipSegment>> listActiveSkipSegments(int episodeId) {
+    return _activeSegments(episodeId).get();
+  }
+
+  Stream<List<SkipSegment>> watchActiveSkipSegments(int episodeId) {
+    return _activeSegments(episodeId).watch();
+  }
+
+  SimpleSelectStatement<$SkipSegmentsTable, SkipSegment> _activeSegments(
+    int episodeId,
+  ) {
+    return select(skipSegments)
+      ..where((row) => row.episodeId.equals(episodeId) & _activeSegment)
+      ..orderBy([(row) => OrderingTerm.asc(row.startMs)]);
+  }
+
+  /// Gabarits du podcast rattachés à au moins un passage posé à la main :
+  /// les seuls que l’analyse cherche.
+  Future<Set<int>> manualTemplateIds(int podcastId) async {
+    final rows = await customSelect(
+      'SELECT DISTINCT s.template_id AS template_id '
+      'FROM skip_segments s '
+      'INNER JOIN episodes e ON e.id = s.episode_id '
+      "WHERE e.podcast_id = ? AND s.source = 'manual' "
+      'AND s.template_id IS NOT NULL',
+      variables: [Variable.withInt(podcastId)],
+      readsFrom: {skipSegments, episodes},
+    ).get();
+    return {for (final row in rows) row.read<int>('template_id')};
+  }
+
+  /// Gabarits actifs (rattachés à un passage posé à la main).
   Stream<List<SegmentTemplate>> watchSegmentTemplates(int podcastId) {
-    return (select(segmentTemplates)
-          ..where((row) => row.podcastId.equals(podcastId))
-          ..orderBy([
-            (row) => OrderingTerm.asc(row.kind),
-            (row) => OrderingTerm.asc(row.id),
-          ]))
-        .watch();
+    return customSelect(
+      'SELECT * FROM segment_templates t '
+      'WHERE t.podcast_id = ? AND $_manualTemplateSql '
+      'ORDER BY t.kind, t.id',
+      variables: [Variable.withInt(podcastId)],
+      readsFrom: {segmentTemplates, skipSegments},
+    ).watch().map(
+      (rows) => [for (final row in rows) segmentTemplates.map(row.data)],
+    );
   }
 
   Stream<SkipClassification> watchSkipClassification(int podcastId) {
@@ -176,7 +214,8 @@ mixin _SkipSegmentQueries on _$AppDatabase {
           ])
           ..where(
             episodes.podcastId.equals(podcastId) &
-                skipSegments.templateId.isNull(),
+                skipSegments.templateId.isNull() &
+                skipSegments.source.equalsValue(SkipSegmentSource.manual),
           )
           ..orderBy([
             OrderingTerm.asc(skipSegments.kind),
@@ -289,64 +328,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
       )..where((row) => row.templateId.equals(id))).go();
       await (delete(segmentTemplates)..where((row) => row.id.equals(id))).go();
     });
-  }
-
-  /// Remplace les passages `chapter` de l’épisode d’après ses chapitres.
-  ///
-  /// La fin d’un chapitre est le début du suivant, ou la durée de l’épisode
-  /// pour le dernier. Un avis déjà posé sur le même début et le même type
-  /// est conservé.
-  Future<void> seedChapterSkipSegments(int episodeId) async {
-    final chapters =
-        await (select(episodeChapters)
-              ..where((row) => row.episodeId.equals(episodeId))
-              ..orderBy([
-                (row) => OrderingTerm.asc(row.startMs),
-                (row) => OrderingTerm.asc(row.sortIndex),
-              ]))
-            .get();
-    final episode = await (select(
-      episodes,
-    )..where((table) => table.id.equals(episodeId))).getSingleOrNull();
-    final durationMs = (episode?.durationSeconds ?? 0) * 1000;
-    final previous =
-        await (select(skipSegments)..where(
-              (row) =>
-                  row.episodeId.equals(episodeId) &
-                  row.source.equalsValue(SkipSegmentSource.chapter),
-            ))
-            .get();
-    final kept = <String, bool?>{
-      for (final row in previous)
-        '${row.startMs}:${row.kind.name}': row.confirmed,
-    };
-    await (delete(skipSegments)..where(
-          (row) =>
-              row.episodeId.equals(episodeId) &
-              row.source.equalsValue(SkipSegmentSource.chapter),
-        ))
-        .go();
-    final rows = <SkipSegmentsCompanion>[];
-    for (var i = 0; i < chapters.length; i++) {
-      final kind = skipKindForChapterTitle(chapters[i].title);
-      if (kind == null) continue;
-      final start = chapters[i].startMs;
-      final next = i + 1 < chapters.length ? chapters[i + 1].startMs : null;
-      final end = next ?? (durationMs > start ? durationMs : null);
-      if (end == null || end <= start) continue;
-      rows.add(
-        SkipSegmentsCompanion.insert(
-          episodeId: episodeId,
-          startMs: start,
-          endMs: end,
-          kind: kind,
-          source: SkipSegmentSource.chapter,
-          confirmed: Value(kept['$start:${kind.name}']),
-        ),
-      );
-    }
-    if (rows.isEmpty) return;
-    await batch((statement) => statement.insertAll(skipSegments, rows));
   }
 
   Future<List<SegmentTemplate>> listSegmentTemplates(int podcastId) {
@@ -907,12 +888,14 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     final rows = await customSelect(
       'SELECT t.podcast_id AS podcast_id, t.kind AS kind, COUNT(*) AS n '
       'FROM segment_templates t '
+      'WHERE $_manualTemplateSql '
       'GROUP BY t.podcast_id, t.kind '
       'UNION ALL '
       'SELECT e.podcast_id AS podcast_id, s.kind AS kind, COUNT(*) AS n '
       'FROM skip_segments s '
       'INNER JOIN episodes e ON e.id = s.episode_id '
       'WHERE s.template_id IS NULL '
+      "AND s.source = 'manual' "
       'AND e.download_path IS NOT NULL AND length(e.download_path) > 0 '
       'GROUP BY e.podcast_id, s.kind',
       readsFrom: {segmentTemplates, skipSegments, episodes},
@@ -1106,3 +1089,16 @@ Stream<T> _combineSkip<A, B, C, T>(
     };
   });
 }
+
+/// Gabarit `t` rattaché à un passage posé à la main.
+const _manualTemplateSql =
+    'EXISTS (SELECT 1 FROM skip_segments m '
+    "WHERE m.template_id = t.id AND m.source = 'manual')";
+
+/// Passage manuel, ou occurrence d’un gabarit rattaché à un passage manuel.
+const _activeSegment = CustomExpression<bool>(
+  "(skip_segments.source = 'manual' OR EXISTS ("
+  'SELECT 1 FROM skip_segments m '
+  'WHERE m.template_id = skip_segments.template_id '
+  "AND m.source = 'manual'))",
+);

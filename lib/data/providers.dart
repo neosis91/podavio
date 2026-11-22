@@ -128,7 +128,7 @@ final displayChaptersProvider =
           : seconds * 1000;
       return _mergeChapterStreams(
         database.watchChapters(id),
-        database.watchSkipSegments(id),
+        database.watchActiveSkipSegments(id),
         durationMs: durationMs,
       );
     });

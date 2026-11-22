@@ -56,7 +56,6 @@ mixin _ChapterQueries on _$AppDatabase, _SkipSegmentQueries {
       }
       await (update(episodes)..where((table) => table.id.equals(episodeId)))
           .write(const EpisodesCompanion(chaptersFetched: Value(true)));
-      await seedChapterSkipSegments(episodeId);
     });
   }
 

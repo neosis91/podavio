@@ -11,6 +11,7 @@ import 'package:podavio/data/chromaprint.dart';
 import 'package:podavio/data/models.dart';
 import 'package:podavio/data/pcm_decoder.dart';
 import 'package:podavio/data/providers.dart';
+import 'package:podavio/data/segment_edit.dart';
 import 'package:podavio/data/segment_match.dart';
 import 'package:podavio/data/skip_segments.dart';
 import 'package:podavio/settings/settings_controller.dart';
@@ -44,106 +45,83 @@ void main() {
     expect(measured, const Duration(milliseconds: 1512 * 216614 ~/ 1447));
   });
 
-  test(
-    'analysis is idempotent and keeps an ignored or confirmed template',
-    () async {
-      final database = AppDatabase(NativeDatabase.memory());
-      addTearDown(database.close);
-      final motif = _motif(100, 4);
-      final podcastId = (await database.saveFeed(
-        _draft([_episodeDraft('a', 'Un'), _episodeDraft('b', 'Deux')]),
-      )).podcastId;
-      final episodes = await database.watchEpisodes(podcastId: podcastId).first;
-      final first = episodes
-          .singleWhere((row) => row.episode.guid == 'a')
-          .episode
-          .id;
-      final second = episodes
-          .singleWhere((row) => row.episode.guid == 'b')
-          .episode
-          .id;
-      await _ready(database, first, _placed(1500, 1, 80, motif));
-      await _ready(database, second, _placed(1500, 2, 600, motif));
-
-      await syncPodcastAnalysis(database, podcastId);
-      await syncPodcastAnalysis(database, podcastId);
-
-      final templates = await database.listSegmentTemplates(podcastId);
-      expect(templates, hasLength(1));
-      expect(templates.single.kind, SkipSegmentKind.ad);
-      final before = [
-        ...await database.listSkipSegments(first),
-        ...await database.listSkipSegments(second),
-      ];
-      expect(before, hasLength(2));
-      expect(before.every((row) => row.confirmed == null), isTrue);
-      final ids = before.map((row) => row.id).toList();
-
-      await database.setTemplateReview(templates.single.id, confirmed: false);
-      await database.setTemplateKind(
-        templates.single.id,
-        SkipSegmentKind.sponsor,
-      );
-
-      final thirdId = await _addEpisode(database, podcastId, 'c', 'Trois');
-      await _ready(database, thirdId, _placed(1500, 3, 900, motif));
-      await syncPodcastAnalysis(database, podcastId);
-      await syncPodcastAnalysis(database, podcastId);
-
-      expect(await database.listSegmentTemplates(podcastId), hasLength(1));
-      final again = await database.listSegmentTemplates(podcastId);
-      expect(again.single.kind, SkipSegmentKind.sponsor);
-      expect(again.single.occurrences, 3);
-      final kept = [
-        ...await database.listSkipSegments(first),
-        ...await database.listSkipSegments(second),
-      ];
-      expect(kept.map((row) => row.id).toList(), ids);
-      expect(kept.every((row) => row.confirmed == false), isTrue);
-      expect(kept.every((row) => row.kind == SkipSegmentKind.sponsor), isTrue);
-      final added = await database.listSkipSegments(thirdId);
-      expect(added, hasLength(1));
-      expect(added.single.confirmed, isFalse);
-      expect(added.single.kind, SkipSegmentKind.sponsor);
-      expect(added.single.source, SkipSegmentSource.fingerprint);
-    },
-  );
-
-  test('a confirmed template is inherited by the next episode', () async {
+  test('without a hand-made passage, analysis detects nothing', () async {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
-    final motif = _motif(100, 6);
+    final motif = _motif(100, 4);
     final podcastId = (await database.saveFeed(
       _draft([_episodeDraft('a', 'Un'), _episodeDraft('b', 'Deux')]),
     )).podcastId;
-    final episodes = await database.watchEpisodes(podcastId: podcastId).first;
-    await _ready(
-      database,
-      episodes.singleWhere((row) => row.episode.guid == 'a').episode.id,
-      _placed(1500, 1, 90, motif),
+    final ids = await _ids(database, podcastId);
+    await _ready(database, ids.a, _placed(1500, 1, 80, motif));
+    await _ready(database, ids.b, _placed(1500, 2, 600, motif));
+    final old = await database.insertSkipSegment(
+      episodeId: ids.a,
+      startMs: 1000,
+      endMs: 9000,
+      kind: SkipSegmentKind.ad,
+      source: SkipSegmentSource.fingerprint,
     );
-    await _ready(
-      database,
-      episodes.singleWhere((row) => row.episode.guid == 'b').episode.id,
-      _placed(1500, 2, 640, motif),
-    );
-    await syncPodcastAnalysis(database, podcastId);
-    final template = (await database.listSegmentTemplates(podcastId)).single;
-    await database.setTemplateReview(template.id, confirmed: true);
 
-    final thirdId = await _addEpisode(database, podcastId, 'c', 'Trois');
-    await _ready(database, thirdId, _placed(1500, 3, 1000, motif));
     await syncPodcastAnalysis(database, podcastId);
 
-    final added = await database.listSkipSegments(thirdId);
-    expect(added, hasLength(1));
-    expect(added.single.confirmed, isTrue);
-    expect(added.single.kind, SkipSegmentKind.ad);
-    expect(added.single.templateId, template.id);
+    expect(await database.listSegmentTemplates(podcastId), isEmpty);
+    final rows = [
+      ...await database.listSkipSegments(ids.a),
+      ...await database.listSkipSegments(ids.b),
+    ];
+    expect(rows.map((row) => row.id), [old]);
+    expect(await database.listActiveSkipSegments(ids.a), isEmpty);
   });
 
   test(
-    'deleting a download drops its fingerprint and fingerprint segments',
+    'a hand-made passage is searched in the other episodes, idempotently',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final motif = _motif(100, 6);
+      final podcastId = (await database.saveFeed(
+        _draft([_episodeDraft('a', 'Un'), _episodeDraft('b', 'Deux')]),
+      )).podcastId;
+      final ids = await _ids(database, podcastId);
+      await _ready(database, ids.a, _placed(1500, 1, 90, motif));
+      await _ready(database, ids.b, _placed(1500, 2, 640, motif));
+      final created = await createManualSegment(
+        database,
+        episodeId: ids.a,
+        startMs: _msAt(90, ceil: true),
+        endMs: _msAt(190),
+        kind: SkipSegmentKind.selfPromo,
+      );
+
+      await syncPodcastAnalysis(database, podcastId);
+      await syncPodcastAnalysis(database, podcastId);
+
+      final template = (await database.listSegmentTemplates(podcastId)).single;
+      final own = await database.listSkipSegments(ids.a);
+      expect(own.single.id, created.segmentId);
+      expect(own.single.source, SkipSegmentSource.manual);
+      final found = await database.listActiveSkipSegments(ids.b);
+      expect(found, hasLength(1));
+      expect(found.single.templateId, template.id);
+      expect(found.single.source, SkipSegmentSource.fingerprint);
+      expect(found.single.kind, SkipSegmentKind.selfPromo);
+      expect(found.single.confirmed, isTrue);
+      expect(found.single.startMs, closeTo(_msAt(640), 1500));
+
+      final thirdId = await _addEpisode(database, podcastId, 'c', 'Trois');
+      await _ready(database, thirdId, _placed(1500, 3, 1000, motif));
+      await syncPodcastAnalysis(database, podcastId);
+      expect(
+        (await database.listActiveSkipSegments(ids.b)).single.id,
+        found.single.id,
+      );
+      expect(await database.listActiveSkipSegments(thirdId), hasLength(1));
+    },
+  );
+
+  test(
+    'deleting a download drops its fingerprint and found occurrences',
     () async {
       final database = AppDatabase(NativeDatabase.memory());
       addTearDown(database.close);
@@ -151,47 +129,34 @@ void main() {
       final podcastId = (await database.saveFeed(
         _draft([_episodeDraft('a', 'Un'), _episodeDraft('b', 'Deux')]),
       )).podcastId;
-      final episodes = await database.watchEpisodes(podcastId: podcastId).first;
-      final first = episodes
-          .singleWhere((row) => row.episode.guid == 'a')
-          .episode
-          .id;
-      final second = episodes
-          .singleWhere((row) => row.episode.guid == 'b')
-          .episode
-          .id;
-      await _ready(database, first, _placed(1500, 1, 80, motif));
-      await _ready(database, second, _placed(1500, 2, 500, motif));
-      await syncPodcastAnalysis(database, podcastId);
-      await database.insertSkipSegment(
-        episodeId: first,
-        startMs: 1000,
-        endMs: 2000,
+      final ids = await _ids(database, podcastId);
+      await _ready(database, ids.a, _placed(1500, 1, 80, motif));
+      await _ready(database, ids.b, _placed(1500, 2, 500, motif));
+      await createManualSegment(
+        database,
+        episodeId: ids.a,
+        startMs: _msAt(80, ceil: true),
+        endMs: _msAt(180),
         kind: SkipSegmentKind.ad,
-        source: SkipSegmentSource.chapter,
+      );
+      await syncPodcastAnalysis(database, podcastId);
+      expect(
+        await database.fingerprintSegmentsForPodcast(podcastId),
+        hasLength(1),
       );
 
-      await database.setDownloadPath(first, null);
+      await database.setDownloadPath(ids.b, null);
 
-      expect(await database.fingerprintForEpisode(first), isNull);
-      final left = await database.listSkipSegments(first);
-      expect(left, hasLength(1));
-      expect(left.single.source, SkipSegmentSource.chapter);
-      expect(await database.fingerprintForEpisode(second), isNotNull);
-      final templates = await database.listSegmentTemplates(podcastId);
-      expect(templates, hasLength(1));
-      expect(templates.single.occurrences, 1);
-
-      await database.setDownloadPath(second, null);
-      final kept = await database.listSegmentTemplates(podcastId);
-      expect(kept, hasLength(1));
-      expect(kept.single.occurrences, 0);
+      expect(await database.fingerprintForEpisode(ids.b), isNull);
       expect(await database.fingerprintSegmentsForPodcast(podcastId), isEmpty);
+      final left = await database.listSkipSegments(ids.a);
+      expect(left.single.source, SkipSegmentSource.manual);
+      expect(await database.listSegmentTemplates(podcastId), hasLength(1));
     },
   );
 
   test(
-    'the queue fingerprints two downloads and finds the shared passage',
+    'the queue fingerprints two downloads and finds a hand-made passage',
     () async {
       final database = AppDatabase(NativeDatabase.memory());
       addTearDown(database.close);
@@ -218,22 +183,31 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      await container
-          .read(audioAnalysisProvider.notifier)
-          .analyzeDownloaded(podcastId);
+      final notifier = container.read(audioAnalysisProvider.notifier);
+      await notifier.analyzeDownloaded(podcastId);
 
       expect(await database.fingerprintForEpisode(first.id), isNotNull);
       expect(await database.fingerprintForEpisode(second.id), isNotNull);
-      final segments = [
-        ...await database.listSkipSegments(first.id),
-        ...await database.listSkipSegments(second.id),
-      ];
-      expect(segments, isNotEmpty);
-      final shared = segments.where(
-        (row) => row.source == SkipSegmentSource.fingerprint,
+      expect(await database.envelopeForEpisode(first.id), isNotNull);
+      expect(await database.listSkipSegments(first.id), isEmpty);
+      expect(await database.listSkipSegments(second.id), isEmpty);
+
+      final adStartMs = atA * 1000 ~/ chromaprintSampleRate;
+      await createManualSegment(
+        database,
+        episodeId: first.id,
+        startMs: adStartMs,
+        endMs: adStartMs + 20000,
+        kind: SkipSegmentKind.ad,
       );
-      expect(shared.map((row) => row.episodeId).toSet(), {first.id, second.id});
-      expect(shared.every((row) => row.endMs - row.startMs >= 8000), isTrue);
+      await notifier.analyzeDownloaded(podcastId);
+
+      final found = await database.listActiveSkipSegments(second.id);
+      expect(found, hasLength(1));
+      expect(found.single.source, SkipSegmentSource.fingerprint);
+      final expected = atB * 1000 ~/ chromaprintSampleRate;
+      expect(found.single.startMs, closeTo(expected, 1500));
+      expect(found.single.endMs - found.single.startMs, greaterThan(15000));
       expect(container.read(audioAnalysisProvider).pendingFor(podcastId), 0);
     },
   );
@@ -482,6 +456,18 @@ Future<void> _until(
     }
     await Future<void>.delayed(const Duration(milliseconds: 5));
   }
+}
+
+Future<({int a, int b})> _ids(AppDatabase database, int podcastId) async {
+  final episodes = await database.watchEpisodes(podcastId: podcastId).first;
+  int id(String guid) =>
+      episodes.singleWhere((row) => row.episode.guid == guid).episode.id;
+  return (a: id('a'), b: id('b'));
+}
+
+int _msAt(int index, {bool ceil = false}) {
+  final ms = index * chromaprintStoredHopMicros / 1000;
+  return ceil ? ms.ceil() : ms.floor();
 }
 
 Future<void> _ready(

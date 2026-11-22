@@ -131,7 +131,7 @@ void main() {
       startMs: 5000,
       endMs: 25000,
       kind: SkipSegmentKind.ad,
-      source: SkipSegmentSource.fingerprint,
+      source: SkipSegmentSource.manual,
       matches: 4,
       templateId: templateId,
     );
@@ -171,7 +171,7 @@ void main() {
     expect((await database.watchSegmentTemplates(podcastId).first), isEmpty);
   });
 
-  test('chapter seeding creates and preserves skip segments', () async {
+  test('chapters no longer become skip segments on their own', () async {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
     final podcastId = (await database.saveFeed(_draft(seconds: 600))).podcastId;
@@ -193,55 +193,12 @@ void main() {
         title: const Value('Publicité'),
         sortIndex: const Value(1),
       ),
-      EpisodeChaptersCompanion.insert(
-        episodeId: episodeId,
-        startMs: 90000,
-        title: const Value('Interview'),
-        sortIndex: const Value(2),
-      ),
-      EpisodeChaptersCompanion.insert(
-        episodeId: episodeId,
-        startMs: 500000,
-        title: const Value('Sponsorisé'),
-        sortIndex: const Value(3),
-      ),
     ]);
 
-    final seeded = await database.listSkipSegments(episodeId);
-    expect(seeded, hasLength(2));
-    expect(seeded[0].source, SkipSegmentSource.chapter);
-    expect(seeded[0].kind, SkipSegmentKind.ad);
-    expect(seeded[0].startMs, 60000);
-    expect(seeded[0].endMs, 90000);
-    expect(seeded[0].confirmed, isNull);
-    expect(seeded[1].kind, SkipSegmentKind.sponsor);
-    expect(seeded[1].startMs, 500000);
-    expect(seeded[1].endMs, 600000);
-
-    await database.setSkipSegmentReview(seeded[0].id, confirmed: false);
-    await database.replaceChapters(episodeId, [
-      EpisodeChaptersCompanion.insert(
-        episodeId: episodeId,
-        startMs: 60000,
-        title: const Value('Pub'),
-        sortIndex: const Value(0),
-      ),
-      EpisodeChaptersCompanion.insert(
-        episodeId: episodeId,
-        startMs: 90000,
-        title: const Value('Suite'),
-        sortIndex: const Value(1),
-      ),
-    ]);
-    final again = await database.listSkipSegments(episodeId);
-    expect(again, hasLength(1));
-    expect(again.single.confirmed, isFalse);
-    expect(again.single.kind, SkipSegmentKind.ad);
-
+    expect(await database.listSkipSegments(episodeId), isEmpty);
     final loose = await database.watchSkipClassification(podcastId).first;
     expect(loose.templates, isEmpty);
-    expect(loose.segments.single.episodeTitle, 'Premier');
-    expect(loose.segments.single.segment.id, again.single.id);
+    expect(loose.segments, isEmpty);
   });
 
   test('skip decision respects download, kinds, review and seek-back', () {
