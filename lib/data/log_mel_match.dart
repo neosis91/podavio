@@ -476,7 +476,12 @@ List<ContentSting> findContentStings({
     for (var origin = 0; origin <= last; origin += step) {
       final startMs = origin * logMelHopMs;
       if (startMs > logMelSearchWindowMs) break;
-      if (!_inFocus(focus, anchor.episodeId, startMs, startMs + contentStingMs)) {
+      if (!_inFocus(
+        focus,
+        anchor.episodeId,
+        startMs,
+        startMs + contentStingMs,
+      )) {
         continue;
       }
       if (!_voiced(needle, origin, width)) continue;

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:podavio/data/chromaprint.dart';
+import 'package:podavio/data/envelope.dart';
 import 'package:podavio/data/segment_finder.dart';
 import 'package:podavio/data/segment_match.dart';
 import 'package:podavio/data/skip_segments.dart';
@@ -422,6 +423,112 @@ void main() {
     expect(short - byId[1]!.startMs, lessThanOrEqualTo(60000));
     expect(long - byId[2]!.startMs, lessThanOrEqualTo(60000));
     expect((byId[2]!.startMs - byId[1]!.startMs).abs(), greaterThan(30000));
+  });
+  test('an episode that matches a known template is not compared again', () {
+    final known = _motif(100, 41);
+    final other = _motif(100, 42);
+    final first = _noise(2000, 5);
+    final second = _noise(2000, 6);
+    _write(first, 100, known);
+    _write(second, 300, known);
+    _write(first, 900, other);
+    _write(second, 1300, other);
+    FingerprintEpisode episode(int id, List<int> values) => FingerprintEpisode(
+      episodeId: id,
+      values: values,
+      hopMicros: hop,
+      durationMs: 400000,
+    );
+    final plan = buildAnalysisPlan(
+      episodes: [episode(1, first), episode(2, second)],
+      templates: [
+        KnownTemplate(
+          id: 7,
+          kind: SkipSegmentKind.ad,
+          fingerprint: known,
+          durationMs: _ms(100),
+          confirmed: null,
+        ),
+      ],
+      focusEpisodeId: 2,
+      contextLayer: false,
+    );
+    expect(plan.patterns, hasLength(1));
+    expect(plan.patterns.single.templateId, 7);
+  });
+
+  test('a shared portion longer than two minutes is not compared', () {
+    final long = _motif(1100, 43);
+    final found = discoverPatterns([
+      _episode(id: 1, length: 3000, seed: 1, at: 100, motif: long),
+      _episode(id: 2, length: 3000, seed: 2, at: 600, motif: long),
+    ]);
+    expect(found, isEmpty);
+  });
+
+  test('envelopes that do not follow each other drop the chroma match', () {
+    final motif = _motif(160, 44);
+    FingerprintEpisode episode(int id, int at, Uint8List envelope) {
+      final values = _noise(2000, id * 31);
+      _write(values, at, motif);
+      return FingerprintEpisode(
+        episodeId: id,
+        values: values,
+        hopMicros: hop,
+        durationMs: _ms(2000),
+        envelope: envelope,
+      );
+    }
+
+    Uint8List envelope(int seed) {
+      final frames = _ms(2000) ~/ envelopeHopMs + 50;
+      final out = Uint8List(frames);
+      var state = seed;
+      for (var i = 0; i < frames; i++) {
+        state = (1664525 * state + 1013904223) & 0x7fffffff;
+        out[i] = 20 + state % 200;
+      }
+      return out;
+    }
+
+    final a = envelope(1);
+    final b = envelope(2);
+    final shift = (_ms(700) - _ms(100)) ~/ envelopeHopMs;
+    final copied = Uint8List.fromList(b);
+    for (
+      var i = _ms(100) ~/ envelopeHopMs;
+      i < _ms(260) ~/ envelopeHopMs;
+      i++
+    ) {
+      copied[i + shift] = a[i];
+    }
+    final unrelated = discoverPatterns([
+      episode(1, 100, a),
+      episode(2, 700, b),
+    ]);
+    expect(unrelated, isEmpty);
+    final shared = discoverPatterns([
+      episode(1, 100, a),
+      episode(2, 700, copied),
+    ]);
+    expect(shared, hasLength(1));
+    for (final hit in shared.single.occurrences) {
+      final at = hit.episodeId == 1 ? _ms(100) : _ms(700);
+      expect(hit.startMs, closeTo(at, 1500));
+    }
+  });
+
+  test('an Olaf blob is not a Chromaprint print', () {
+    final olaf = Uint8List.fromList([
+      0x4F,
+      0x6C,
+      0x61,
+      0x66,
+      ...List.filled(48, 1),
+    ]);
+    expect(isChromaprintPrint(olaf), isFalse);
+    expect(isChromaprintPrint(encodeFingerprint(_motif(16, 1))), isTrue);
+    expect(isChromaprintPrint(Uint8List(0)), isFalse);
   });
 }
 

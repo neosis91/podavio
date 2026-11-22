@@ -16,7 +16,10 @@ void main() {
     expect(byId.keys.toSet(), {1, 2, 3});
     for (final entry in {1: 20000, 2: 47000, 3: 33000}.entries) {
       final hit = byId[entry.key]!;
-      expect(hit.startMs, inInclusiveRange(entry.value - 2500, entry.value + 3000));
+      expect(
+        hit.startMs,
+        inInclusiveRange(entry.value - 2500, entry.value + 3000),
+      );
       expect(hit.endMs - hit.startMs, lessThanOrEqualTo(chromaprintStingMaxMs));
     }
   });

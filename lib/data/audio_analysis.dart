@@ -614,8 +614,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
           ? null
           : await database.logMelForEpisode(episode.id);
       if (!live()) return;
-      final needPrint =
-          existing == null || !isChromaprintPrint(existing.data);
+      final needPrint = existing == null || !isChromaprintPrint(existing.data);
       final needSpeech = existing == null || existing.speech == null;
       final watch = Stopwatch()..start();
       if (needPrint || mel == null || needSpeech) {

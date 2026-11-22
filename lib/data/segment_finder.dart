@@ -442,12 +442,7 @@ AnalysisPlan _withContext(
 bool _contextOverlaps(AdContextHit hit, List<AdContextHit> others) {
   for (final other in others) {
     if (other.episodeId != hit.episodeId) continue;
-    if (_overlapFraction(
-          hit.startMs,
-          hit.endMs,
-          other.startMs,
-          other.endMs,
-        ) >=
+    if (_overlapFraction(hit.startMs, hit.endMs, other.startMs, other.endMs) >=
         0.5) {
       return true;
     }
@@ -751,13 +746,7 @@ bool _compare(
     // Des ancres trop espacées ne font pas une pub : on évite de
     // reparcourir tout l’épisode pour un décalage de silence.
     if (span > count * 80 + 128) continue;
-    final window = _tightSpan(
-      a.values,
-      b.values,
-      candidate.key,
-      low,
-      high,
-    );
+    final window = _tightSpan(a.values, b.values, candidate.key, low, high);
     for (final run in _runs(
       a.values,
       b.values,
@@ -1165,13 +1154,7 @@ List<_Range> _matchNeedle(
     final (low, high, count) = candidate.value.densest();
     final span = high - low + 1;
     if (span > count * 80 + 128) continue;
-    final window = _tightSpan(
-      haystack,
-      needle,
-      candidate.key,
-      low,
-      high,
-    );
+    final window = _tightSpan(haystack, needle, candidate.key, low, high);
     for (final run in _runs(
       haystack,
       needle,
