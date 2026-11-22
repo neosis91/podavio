@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:olaf_ffi/olaf_ffi.dart';
 
+import 'ad_context.dart';
 import 'envelope.dart';
 import 'olaf_sting.dart';
 import 'segment_finder.dart';
@@ -68,6 +69,8 @@ class OlafAdEpisode {
     required this.durationMs,
     this.envelope,
     this.preRollEndMs,
+    this.speech,
+    this.chapters = const [],
   });
 
   final int episodeId;
@@ -75,6 +78,8 @@ class OlafAdEpisode {
   final int durationMs;
   final Uint8List? envelope;
   final int? preRollEndMs;
+  final Uint8List? speech;
+  final List<AdContextChapter> chapters;
 }
 
 class OlafAdTemplate {
@@ -105,6 +110,9 @@ AnalysisPlan planOlafAds({
   required List<OlafAdEpisode> episodes,
   required List<OlafAdTemplate> templates,
   int? focusEpisodeId,
+  bool contextLayer = true,
+  bool useMn04 = false,
+  List<Mn04Cue> mn04 = const [],
 }) {
   final usable = <_Episode>[];
   for (final episode in episodes) {
@@ -221,7 +229,9 @@ AnalysisPlan planOlafAds({
       ),
     );
   }
-  return AnalysisPlan(patterns);
+  final plan = AnalysisPlan(patterns);
+  if (!contextLayer) return plan;
+  return _withContext(plan, byId, useMn04: useMn04, mn04: mn04);
 }
 
 /// Entrée d’isolate. Le message ne contient que des types transportables.
@@ -236,6 +246,8 @@ Map<String, Object?> planOlafAnalysisMessage(Map<String, Object?> message) {
         preRollEndMs: row[2] as int?,
         prints: _asBytes(row[3]) ?? Uint8List(0),
         envelope: row.length > 4 ? _asBytes(row[4]) : null,
+        speech: row.length > 5 ? _asBytes(row[5]) : null,
+        chapters: row.length > 6 ? _chaptersOf(row[6]) : const [],
       ),
     );
   }
@@ -258,6 +270,9 @@ Map<String, Object?> planOlafAnalysisMessage(Map<String, Object?> message) {
       episodes: episodes,
       templates: templates,
       focusEpisodeId: message['focus'] as int?,
+      contextLayer: message['context'] != false,
+      useMn04: message['mn04'] == true,
+      mn04: _mn04Of(message['mn04Cues']),
     ),
   );
 }
@@ -275,6 +290,190 @@ class _Episode {
   Uint8List? get envelope => source.envelope;
 
   int? get preRollEndMs => source.preRollEndMs;
+
+  Uint8List? get speech => source.speech;
+
+  List<AdContextChapter> get chapters => source.chapters;
+}
+
+AnalysisPlan _withContext(
+  AnalysisPlan plan,
+  Map<int, _Episode> byId, {
+  required bool useMn04,
+  required List<Mn04Cue> mn04,
+}) {
+  final episodes = {
+    for (final episode in byId.values)
+      episode.id: AdContextEpisode(
+        durationMs: episode.durationMs,
+        envelope: episode.envelope,
+        speech: episode.speech,
+        chapters: episode.chapters,
+      ),
+  };
+  final kept = <PlannedPattern>[];
+  final keptHits = <AdContextHit>[];
+  for (final pattern in plan.patterns) {
+    final fusion = fuseAdContext(
+      matches: [
+        for (final segment in pattern.segments)
+          AdContextHit(
+            episodeId: segment.episodeId,
+            startMs: segment.startMs,
+            endMs: segment.endMs,
+          ),
+      ],
+      episodes: episodes,
+      useMn04: useMn04,
+      mn04: mn04,
+      propose: false,
+    );
+    if (fusion.matches.isEmpty) continue;
+    final ids = fusion.matches.map((hit) => hit.episodeId).toSet();
+    if (pattern.templateId == null && ids.length < 2) continue;
+    final duration = fusion.matches
+        .map((hit) => hit.endMs - hit.startMs)
+        .reduce(math.max);
+    keptHits.addAll(fusion.matches);
+    kept.add(
+      PlannedPattern(
+        templateId: pattern.templateId,
+        kind: pattern.kind,
+        confirmed: pattern.confirmed,
+        fingerprint: pattern.fingerprint,
+        fingerprintBytes: pattern.fingerprintBytes,
+        durationMs: duration,
+        confidence: pattern.confidence,
+        segments: [
+          for (final hit in fusion.matches)
+            PlannedSegment(
+              episodeId: hit.episodeId,
+              startMs: hit.startMs,
+              endMs: hit.endMs,
+              kind: pattern.kind,
+              confirmed: pattern.confirmed,
+              matches: ids.length,
+              confidence: pattern.confidence,
+            ),
+        ],
+      ),
+    );
+  }
+  final extra = fuseAdContext(
+    matches: const [],
+    episodes: episodes,
+    useMn04: useMn04,
+    mn04: mn04,
+  );
+  for (final hit in extra.proposed) {
+    if (_contextOverlaps(hit, keptHits)) continue;
+    final episode = byId[hit.episodeId];
+    if (episode == null) continue;
+    final bytes = _slicePrints(episode.table, hit.startMs, hit.endMs);
+    if ((bytes.length - 4) ~/ 12 < 8) continue;
+    final length = hit.endMs - hit.startMs;
+    final kind = length > olafAdMaxDurationMs
+        ? SkipSegmentKind.sponsor
+        : _inOutro(episode.durationMs, hit.startMs)
+        ? SkipSegmentKind.outro
+        : SkipSegmentKind.ad;
+    final confidence = (hit.score * 70).round().clamp(8, 70);
+    keptHits.add(hit);
+    kept.add(
+      PlannedPattern(
+        templateId: null,
+        kind: kind,
+        confirmed: false,
+        fingerprint: const [],
+        fingerprintBytes: bytes,
+        durationMs: length,
+        confidence: confidence,
+        segments: [
+          PlannedSegment(
+            episodeId: hit.episodeId,
+            startMs: hit.startMs,
+            endMs: hit.endMs,
+            kind: kind,
+            confirmed: false,
+            matches: 1,
+            confidence: confidence,
+          ),
+        ],
+      ),
+    );
+  }
+  return AnalysisPlan(kept);
+}
+
+bool _contextOverlaps(AdContextHit hit, List<AdContextHit> others) {
+  final length = hit.endMs - hit.startMs;
+  for (final other in others) {
+    if (other.episodeId != hit.episodeId) continue;
+    final start = math.max(hit.startMs, other.startMs);
+    final end = math.min(hit.endMs, other.endMs);
+    if (end <= start) continue;
+    final shorter = math.min(length, other.endMs - other.startMs);
+    if (shorter > 0 && (end - start) * 2 >= shorter) return true;
+  }
+  return false;
+}
+
+Uint8List _slicePrints(_Table table, int startMs, int endMs) {
+  final origin = startMs ~/ olafStepMs;
+  final end = endMs ~/ olafStepMs;
+  final marks = <OlafLandmark>[];
+  for (var i = 0; i < table.count; i++) {
+    final time = table.timeAt(i);
+    if (time < origin || time > end) continue;
+    marks.add(OlafLandmark(hash: table.hashAt(i), t1: time - origin));
+  }
+  return encodeOlafAdPrints(marks);
+}
+
+List<AdContextChapter> _chaptersOf(Object? raw) {
+  if (raw is! List) return const [];
+  final chapters = <AdContextChapter>[];
+  for (final item in raw) {
+    if (item is! List || item.length < 3) continue;
+    final start = item[0];
+    final end = item[1];
+    final title = item[2];
+    if (start is! int || end is! int || title is! String) continue;
+    if (end <= start) continue;
+    chapters.add(AdContextChapter(startMs: start, endMs: end, title: title));
+  }
+  return chapters;
+}
+
+List<Mn04Cue> _mn04Of(Object? raw) {
+  if (raw is! List) return const [];
+  final cues = <Mn04Cue>[];
+  for (final item in raw) {
+    if (item is! List || item.length < 8) continue;
+    final episodeId = item[0];
+    final start = item[1];
+    final end = item[2];
+    if (episodeId is! int || start is! int || end is! int) continue;
+    cues.add(
+      Mn04Cue(
+        episodeId: episodeId,
+        startMs: start,
+        endMs: end,
+        speech: _asDouble(item[3]),
+        music: _asDouble(item[4]),
+        jingle: _asDouble(item[5]),
+        backgroundMusic: _asDouble(item[6]),
+        scoreJump: _asDouble(item[7]),
+      ),
+    );
+  }
+  return cues;
+}
+
+double _asDouble(Object? raw) {
+  if (raw is double) return raw;
+  if (raw is int) return raw.toDouble();
+  return 0;
 }
 
 class _Table {

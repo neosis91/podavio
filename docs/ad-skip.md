@@ -50,6 +50,27 @@ Pour les épisodes téléchargés d’un même podcast, sur les landmarks Olaf :
 7. Le motif devient un `SegmentTemplate` (landmarks Olaf, durée, type)
    et un `SkipSegment` par épisode (`source = fingerprint`).
 
+## Contexte
+
+Après l'empreinte, un score local relit l'enveloppe déjà gardée
+(niveau court, façon LUFS, sur 400 ms), la chronologie parole/musique
+et les chapitres dont le titre annonce une pub ou un sponsor. Rien
+n'est redécodé, et aucun modèle n'est chargé par l'application.
+
+Le score assemble les silences tenus, les sauts de niveau, le
+changement de dynamique, la parole posée sur un lit, la position dans
+l'épisode et le chapitre. Une correspondance d'empreinte reste, sauf
+un ton plat d'environ 15 s sans parole et sans saut de niveau : ce
+faux positif est rejeté. Le contexte peut allonger une lecture au-delà
+de la minute, jusqu'à 120 s, ou proposer seul un passage au-dessus de
+0,78. En dessous, la parole ordinaire ne devient pas un passage.
+
+EfficientAT mn04 (MIT) peut ajouter ses scores parole, musique,
+jingle et musique de fond, plus le saut entre vecteurs de classes.
+Le graphe n'est pas dans l'application : le banc `tool/efficientat_mn04.py`
+le fait tourner hors ligne s'il est présent sur la machine. Sans ces
+mesures, la détection n'en dépend pas.
+
 ## Jingles d’intro courts
 
 Le log-mel cherche un jingle dans les **180 premières secondes**

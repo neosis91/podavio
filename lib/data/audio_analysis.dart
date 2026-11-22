@@ -988,6 +988,9 @@ Future<void> syncPodcastAnalysis(
 }) async {
   final stored = await database.fingerprintedDownloads(podcastId);
   final envelopes = await database.fingerprintEnvelopes(podcastId);
+  final marks = await database.chapterMarksForEpisodes([
+    for (final row in stored) row.episode.id,
+  ]);
   final episodes = <Object?>[];
   for (final row in stored) {
     final bytes = row.fingerprint.data;
@@ -999,12 +1002,23 @@ Future<void> syncPodcastAnalysis(
       rssDurationMs: fromRss > 0 ? fromRss : null,
       fileDurationMs: fromPrint > 0 ? fromPrint : fromRss,
     );
+    final chapters = marks[row.episode.id] ?? const [];
+    final encoded = <Object?>[];
+    for (var i = 0; i < chapters.length; i++) {
+      final end = i + 1 < chapters.length
+          ? chapters[i + 1].startMs
+          : durationMs;
+      if (end <= chapters[i].startMs) continue;
+      encoded.add(<Object?>[chapters[i].startMs, end, chapters[i].title]);
+    }
     episodes.add(<Object?>[
       row.episode.id,
       durationMs,
       preRoll,
       bytes,
       envelopes[row.episode.id],
+      row.fingerprint.speech,
+      encoded,
     ]);
   }
   if (episodes.isNotEmpty) {
