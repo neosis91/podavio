@@ -1,2 +1,0 @@
-- A local context score, from silence, loudness, dynamic range, speech and chapters, confirms or rejects a fingerprint match and can propose a passage the fingerprint missed.
-- EfficientAT mn04 labels can be fused as extra evidence when the optional offline model is enabled. The app does not bundle a neural runtime.

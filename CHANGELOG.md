@@ -9,6 +9,11 @@ La fusion de `develop` dans `main` publie cette version.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 
+## 2026.11.18
+
+- A local context score, from silence, loudness, dynamic range, speech and chapters, confirms or rejects a fingerprint match and can propose a passage the fingerprint missed. - EfficientAT mn04 labels can be fused as extra evidence when the optional offline model is enabled. The app does not bundle a neural runtime.
+- Repeated ads in downloaded episodes are matched with Olaf landmarks instead of Chromaprint, and a match is capped at 60 seconds. The start and end still snap to silence. - A new episode is compared with saved ad sequences first, and preview playback stops at the end of the detected passage.
+
 ## 2026.11.17
 
 - Ad ends extend to the next short silence, a repeated sting just after an ad is its own chapter, and an outro runs through to the end of the file. Content between detected segments keeps the podcaster's chapter titles, or is named Episode when the feed has none.
