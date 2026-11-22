@@ -1,1 +1,0 @@
-- Nothing is detected on its own any more: the analysis only prepares each download and searches it for the passages created by hand. Previously detected passages and chapter-based passages are kept in the database but no longer shown or skipped.
