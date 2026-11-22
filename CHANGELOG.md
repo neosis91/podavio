@@ -16,6 +16,9 @@ dans son titre, ou l’étiquette `skip-changelog`.
 
 - Settings include an Analysis management page that lists every podcast with at least one download, grouped by hosting source, with status and known ad, sting, sponsor, and outro counts. Automatic skip applies to the whole app, and a repeated portion longer than two minutes stays out of the comparison.
 
+- Olaf ad and sting matching builds each episode's hash index once, in a compact packed table, and reuses it for every template and every pair. Detection results are unchanged, and template location plus pair alignment run 15 to 22 times faster in a synthetic benchmark on a desktop VM.
+
+
 
 ## 2026.11.17
 
