@@ -460,7 +460,8 @@ class AppDatabase extends _$AppDatabase
       await customStatement('PRAGMA foreign_keys = ON');
       await _ensureFingerprintStatus();
       await _ensureFingerprintEnvelope();
-      await _ensureFingerprintOlaf();
+      await _dropFingerprintOlaf();
+      await _ensureSegmentAnnotations();
       // Idempotent : v8 a pu être appliqué avant l’ajout des indexes.
       await _createEpisodeIndexes();
       await _ensureDefaultPlaylist();
@@ -522,15 +523,30 @@ class AppDatabase extends _$AppDatabase
     );
   }
 
-  /// Empreinte Olaf (hash uint64 + t1 uint32). Hors schéma Drift, comme
-  /// l’enveloppe : les épisodes déjà analysés restent `NULL`.
-  Future<void> _ensureFingerprintOlaf() async {
+  /// Landmarks de l’ancien détecteur Olaf, hors schéma Drift. Plus rien
+  /// ne les lit : la colonne est retirée pour rendre la place.
+  Future<void> _dropFingerprintOlaf() async {
     final rows = await customSelect('PRAGMA table_info(episode_fingerprints)')
         .get();
-    if (rows.isEmpty) return;
-    if (rows.any((row) => row.read<String>('name') == 'olaf')) return;
-    await customStatement(
-      'ALTER TABLE episode_fingerprints ADD COLUMN olaf BLOB',
+    if (!rows.any((row) => row.read<String>('name') == 'olaf')) return;
+    await customStatement('ALTER TABLE episode_fingerprints DROP COLUMN olaf');
+  }
+
+  /// Bornes corrigées à la main, hors schéma Drift. Le passage peut être
+  /// effacé ensuite : la ligne garde l’épisode et les deux paires de bornes.
+  Future<void> _ensureSegmentAnnotations() {
+    return customStatement(
+      'CREATE TABLE IF NOT EXISTS segment_annotations ('
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'segment_id INTEGER NOT NULL, '
+      'episode_id INTEGER NOT NULL, '
+      'kind TEXT NOT NULL, '
+      'detected_source TEXT NOT NULL, '
+      'detected_start_ms INTEGER NOT NULL, '
+      'detected_end_ms INTEGER NOT NULL, '
+      'corrected_start_ms INTEGER NOT NULL, '
+      'corrected_end_ms INTEGER NOT NULL, '
+      'created_at INTEGER NOT NULL)',
     );
   }
 

@@ -27,6 +27,10 @@ const jingleMinEpisodes = 3;
 /// Deux offsets « au même endroit » : précision de frontière mesurée ±1 s.
 const stableOffsetSlackMs = 2000;
 
+/// Au-delà, la portion ne participe pas à la comparaison : c’est trop long
+/// pour une pub, une virgule, un sponsor ou un outro.
+const comparisonMaxPortionMs = 120000;
+
 /// Fin d’épisode : un motif toujours dans cette fenêtre est un outro.
 const outroWindowMs = 60000;
 

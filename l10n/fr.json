@@ -613,5 +613,20 @@
   "Applies to every podcast.": "S’applique à tous les podcasts.",
   "No downloaded episodes to analyse.": "Aucun épisode téléchargé à analyser.",
   "No segments yet": "Aucune séquence pour l’instant",
-  "Ads, stings, sponsors, and outros in downloaded episodes.": "Pubs, virgules, sponsors et outros des épisodes téléchargés."
+  "Ads, stings, sponsors, and outros in downloaded episodes.": "Pubs, virgules, sponsors et outros des épisodes téléchargés.",
+  "Waveform": "Forme d’onde",
+  "Save": "Enregistrer",
+  "Analyse the episode to see its waveform.": "Analysez l’épisode pour voir sa forme d’onde.",
+  "Zoom out": "Dézoomer",
+  "Zoom in": "Zoomer",
+  "Cursor": "Curseur",
+  "Play from cursor": "Lire depuis le curseur",
+  "Start": "Début",
+  "End": "Fin",
+  "0.5 s earlier": "0,5 s plus tôt",
+  "0.5 s later": "0,5 s plus tard",
+  "Listen around the cut": "Écouter autour de la coupe",
+  "Adjust bounds": "Ajuster les bornes",
+  "This passage no longer exists.": "Ce passage n’existe plus.",
+  "Saved bounds are kept by later analyses and become the reference for this passage.": "Les bornes enregistrées sont gardées par les analyses suivantes et deviennent la référence de ce passage."
 }

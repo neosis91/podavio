@@ -48,31 +48,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     );
   }
 
-  Future<void> setFingerprintOlaf(int episodeId, Uint8List prints) {
-    return customStatement(
-      'UPDATE episode_fingerprints SET olaf = ? WHERE episode_id = ?',
-      [prints, episodeId],
-    );
-  }
-
-  Future<Map<int, Uint8List>> olafPrintsForEpisodes(
-    List<int> episodeIds,
-  ) async {
-    if (episodeIds.isEmpty) return const {};
-    final rows = await customSelect(
-      'SELECT episode_id, olaf FROM episode_fingerprints '
-      'WHERE olaf IS NOT NULL AND episode_id IN (${episodeIds.join(',')})',
-      readsFrom: {episodeFingerprints},
-    ).get();
-    final found = <int, Uint8List>{};
-    for (final row in rows) {
-      final bytes = row.read<Uint8List?>('olaf');
-      if (bytes == null || bytes.length < 12) continue;
-      found[row.read<int>('episode_id')] = bytes;
-    }
-    return found;
-  }
-
   Future<void> setFingerprintEnvelope(int episodeId, Uint8List envelope) {
     return customStatement(
       'UPDATE episode_fingerprints SET envelope = ? WHERE episode_id = ?',
@@ -535,21 +510,142 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     required int? templateId,
     Value<int?>? confidence,
   }) {
-    return (update(skipSegments)..where((row) => row.id.equals(id))).write(
-      SkipSegmentsCompanion(
-        startMs: Value(startMs),
-        endMs: Value(endMs),
-        matches: Value(matches),
-        templateId: Value(templateId),
-        confidence: confidence ?? const Value.absent(),
-      ),
-    );
+    return (update(skipSegments)..where(
+          (row) =>
+              row.id.equals(id) &
+              row.source.equalsValue(SkipSegmentSource.manual).not(),
+        ))
+        .write(
+          SkipSegmentsCompanion(
+            startMs: Value(startMs),
+            endMs: Value(endMs),
+            matches: Value(matches),
+            templateId: Value(templateId),
+            confidence: confidence ?? const Value.absent(),
+          ),
+        );
   }
 
   Future<void> touchSegmentTemplate(int id, {required int occurrences}) {
     return (update(segmentTemplates)..where((row) => row.id.equals(id))).write(
       SegmentTemplatesCompanion(occurrences: Value(occurrences)),
     );
+  }
+
+  Future<void> setSegmentTemplateFingerprint(
+    int id,
+    Uint8List fingerprint, {
+    int? durationMs,
+  }) {
+    return (update(segmentTemplates)..where((row) => row.id.equals(id))).write(
+      SegmentTemplatesCompanion(
+        fingerprint: Value(fingerprint),
+        durationMs: durationMs == null
+            ? const Value.absent()
+            : Value(durationMs),
+      ),
+    );
+  }
+
+  Future<SkipSegment?> skipSegmentById(int id) {
+    return (select(
+      skipSegments,
+    )..where((row) => row.id.equals(id))).getSingleOrNull();
+  }
+
+  /// Bornes corrigées à la main : le passage devient `manual` et confirmé.
+  /// Une nouvelle analyse ne réécrit que les lignes `fingerprint`.
+  Future<void> setManualSegmentBounds(
+    int id, {
+    required int startMs,
+    required int endMs,
+    int? templateId,
+  }) {
+    return (update(skipSegments)..where((row) => row.id.equals(id))).write(
+      SkipSegmentsCompanion(
+        startMs: Value(startMs),
+        endMs: Value(endMs),
+        source: const Value(SkipSegmentSource.manual),
+        confirmed: const Value(true),
+        templateId: templateId == null
+            ? const Value.absent()
+            : Value(templateId),
+      ),
+    );
+  }
+
+  /// Passages corrigés à la main du podcast, que l’analyse ne recouvre pas.
+  Future<List<SkipSegment>> manualSegmentsForPodcast(int podcastId) async {
+    final query =
+        select(skipSegments).join([
+          innerJoin(episodes, episodes.id.equalsExp(skipSegments.episodeId)),
+        ])..where(
+          episodes.podcastId.equals(podcastId) &
+              skipSegments.source.equalsValue(SkipSegmentSource.manual),
+        );
+    final rows = await query.get();
+    return [for (final row in rows) row.readTable(skipSegments)];
+  }
+
+  Future<Uint8List?> envelopeForEpisode(int episodeId) async {
+    final row = await customSelect(
+      'SELECT envelope FROM episode_fingerprints WHERE episode_id = ?',
+      variables: [Variable.withInt(episodeId)],
+      readsFrom: {episodeFingerprints},
+    ).getSingleOrNull();
+    final bytes = row?.read<Uint8List?>('envelope');
+    return bytes == null || bytes.isEmpty ? null : bytes;
+  }
+
+  /// Vérité terrain locale : bornes détectées puis corrigées, une ligne
+  /// par enregistrement. Sert plus tard à régler les seuils, hors réseau.
+  Future<void> insertSegmentAnnotation({
+    required int segmentId,
+    required int episodeId,
+    required SkipSegmentKind kind,
+    required SkipSegmentSource detectedSource,
+    required int detectedStartMs,
+    required int detectedEndMs,
+    required int correctedStartMs,
+    required int correctedEndMs,
+    DateTime? createdAt,
+  }) {
+    return customStatement(
+      'INSERT INTO segment_annotations (segment_id, episode_id, kind, '
+      'detected_source, detected_start_ms, detected_end_ms, '
+      'corrected_start_ms, corrected_end_ms, created_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        segmentId,
+        episodeId,
+        kind.name,
+        detectedSource.name,
+        detectedStartMs,
+        detectedEndMs,
+        correctedStartMs,
+        correctedEndMs,
+        (createdAt ?? DateTime.now()).millisecondsSinceEpoch,
+      ],
+    );
+  }
+
+  Future<List<SegmentAnnotation>> listSegmentAnnotations() async {
+    final rows = await customSelect(
+      'SELECT * FROM segment_annotations ORDER BY id',
+    ).get();
+    return [
+      for (final row in rows)
+        SegmentAnnotation(
+          segmentId: row.read<int>('segment_id'),
+          episodeId: row.read<int>('episode_id'),
+          kind: row.read<String>('kind'),
+          detectedSource: row.read<String>('detected_source'),
+          detectedStartMs: row.read<int>('detected_start_ms'),
+          detectedEndMs: row.read<int>('detected_end_ms'),
+          correctedStartMs: row.read<int>('corrected_start_ms'),
+          correctedEndMs: row.read<int>('corrected_end_ms'),
+        ),
+    ];
   }
 
   Future<void> setTemplateLogMel(int id, Uint8List logMel) {

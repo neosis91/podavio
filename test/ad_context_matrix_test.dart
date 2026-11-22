@@ -4,11 +4,9 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:olaf_ffi/olaf_ffi.dart';
 import 'package:podavio/data/ad_context.dart';
 import 'package:podavio/data/chromaprint.dart';
 import 'package:podavio/data/envelope.dart';
-import 'package:podavio/data/olaf_ads.dart';
 import 'package:podavio/data/segment_finder.dart';
 import 'package:podavio/data/speech_music.dart';
 
@@ -16,7 +14,6 @@ import 'package:podavio/data/speech_music.dart';
 void main() {
   test('full synthetic matrix for fingerprint, context and mn04', () async {
     if (Platform.environment['AD_CONTEXT_MATRIX'] != '1') return;
-    expect(await ensureOlafLibrary(), isTrue);
     final root = Directory.systemTemp.createTempSync('podavio-ad-matrix');
     addTearDown(() {
       if (root.existsSync()) root.deleteSync(recursive: true);
@@ -200,7 +197,6 @@ class _Ep {
   _Ep({
     required this.id,
     required this.path,
-    required this.prints,
     required this.chroma,
     required this.envelope,
     required this.speech,
@@ -211,7 +207,6 @@ class _Ep {
 
   final int id;
   final String path;
-  final Uint8List prints;
   final List<int> chroma;
   final Uint8List envelope;
   final Uint8List speech;
@@ -259,15 +254,16 @@ List<_Iv> _predict(
   required List<Mn04Cue> cues,
   bool useMn04 = false,
 }) {
-  final olaf = planOlafAds(
+  final plan = buildAnalysisPlan(
     episodes: [
       for (final episode in item.episodes)
-        OlafAdEpisode(
+        FingerprintEpisode(
           episodeId: episode.id,
-          prints: episode.prints,
+          values: episode.chroma,
+          hopMicros: chromaprintStoredHopMicros,
           durationMs: episode.durationMs,
-          envelope: episode.envelope,
           speech: episode.speech,
+          envelope: episode.envelope,
         ),
     ],
     templates: const [],
@@ -275,47 +271,10 @@ List<_Iv> _predict(
     useMn04: useMn04,
     mn04: cues,
   );
-  final chroma = discoverPatterns([
-    for (final episode in item.episodes)
-      FingerprintEpisode(
-        episodeId: episode.id,
-        values: episode.chroma,
-        hopMicros: chromaprintStoredHopMicros,
-        durationMs: episode.durationMs,
-        speech: episode.speech,
-        envelope: episode.envelope,
-      ),
-  ]);
-  final chromaHits = [
-    for (final pattern in chroma)
-      for (final hit in pattern.occurrences)
-        AdContextHit(
-          episodeId: hit.episodeId,
-          startMs: hit.startMs,
-          endMs: hit.endMs,
-        ),
-  ];
-  final kept = context
-      ? fuseAdContext(
-          matches: chromaHits,
-          episodes: {
-            for (final episode in item.episodes)
-              episode.id: AdContextEpisode(
-                durationMs: episode.durationMs,
-                envelope: episode.envelope,
-                speech: episode.speech,
-              ),
-          },
-          useMn04: useMn04,
-          mn04: cues,
-          propose: false,
-        ).matches
-      : chromaHits;
   return _merge([
-    for (final pattern in olaf.patterns)
+    for (final pattern in plan.patterns)
       for (final segment in pattern.segments)
         _Iv(segment.episodeId, segment.startMs, segment.endMs),
-    for (final hit in kept) _Iv(hit.episodeId, hit.startMs, hit.endMs),
   ]);
 }
 
@@ -652,21 +611,11 @@ Future<void> _storeHour(
   } finally {
     file.closeSync();
   }
-  watch.start();
-  final marks = fingerprintPcmFile(
-    path,
-    sampleRate: rate,
-    maxMs: 0,
-    keepModulus: olafAdKeepModulus,
-  );
-  note();
-  watch.stop();
   _keep(
     item,
     _Ep(
       id: id,
       path: path,
-      prints: encodeOlafAdPrints(marks ?? const []),
       chroma: chroma.finish(),
       envelope: envelope.finish(),
       speech: speech.finish(),
@@ -714,18 +663,11 @@ _Ep _analyze(String path, int id) {
   } finally {
     file.closeSync();
   }
-  final marks = fingerprintPcmFile(
-    path,
-    sampleRate: chromaprintSampleRate,
-    maxMs: 0,
-    keepModulus: olafAdKeepModulus,
-  );
   note();
   watch.stop();
   return _Ep(
     id: id,
     path: path,
-    prints: encodeOlafAdPrints(marks ?? const []),
     chroma: chroma.finish(),
     envelope: envelope.finish(),
     speech: speech.finish(),
@@ -917,7 +859,10 @@ Int16List _voiced(int ms, {required int seed}) {
   final period = rate ~/ 4;
   final vowel = (rate * 0.09).round();
   final consonant = (rate * 0.035).round();
-  const pitches = [120.0, 140.0, 110.0, 160.0, 130.0];
+  final pitches = <double>[];
+  for (var i = 0; i < count ~/ period + 1; i++) {
+    pitches.add(100 + (next() + 1) * 40);
+  }
   for (var i = 0; i < count; i++) {
     final phase = i % period;
     if (phase >= vowel + consonant) {
@@ -929,7 +874,7 @@ Int16List _voiced(int ms, {required int seed}) {
       out[i] = (next() * 11000).round();
       continue;
     }
-    final pitch = pitches[(i ~/ period) % pitches.length];
+    final pitch = pitches[i ~/ period];
     final sample =
         0.62 * math.sin(2 * math.pi * pitch * t) +
         0.22 * math.sin(2 * math.pi * pitch * 2 * t) +

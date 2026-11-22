@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
 
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:olaf_ffi/olaf_ffi.dart';
 
 import 'analysis_pace.dart';
 import 'app_database.dart';
@@ -16,8 +16,6 @@ import 'episode_audio_analyzer.dart';
 import 'log_mel.dart';
 import 'log_mel_match.dart';
 import 'network_stings.dart';
-import 'olaf_ads.dart';
-import 'olaf_sting.dart';
 import 'pcm_decoder.dart';
 import 'providers.dart';
 import '../settings/settings_controller.dart';
@@ -29,7 +27,7 @@ final pcmDecoderProvider = Provider<PcmDecoder>((ref) {
   return const PlatformPcmDecoder();
 });
 
-/// Vrai moteur : décodage natif, landmarks Olaf, motifs du podcast.
+/// Vrai moteur : décodage natif, empreinte Chromaprint, motifs du podcast.
 final episodeAudioAnalyzerProvider = Provider<EpisodeAudioAnalyzer>((ref) {
   return ChromaprintEpisodeAudioAnalyzer(
     database: ref.watch(databaseProvider),
@@ -412,7 +410,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         final mel = await database.logMelForEpisode(episode.id);
         final status = await database.fingerprintStatus(episode.id);
         if (stored == null ||
-            !isOlafAdPrint(stored.data) ||
+            !isChromaprintPrint(stored.data) ||
             stored.speech == null ||
             mel == null ||
             status == 'failed' ||
@@ -616,7 +614,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
           ? null
           : await database.logMelForEpisode(episode.id);
       if (!live()) return;
-      final needPrint = existing == null || !isOlafAdPrint(existing.data);
+      final needPrint = existing == null || !isChromaprintPrint(existing.data);
       final needSpeech = existing == null || existing.speech == null;
       final watch = Stopwatch()..start();
       if (needPrint || mel == null || needSpeech) {
@@ -652,7 +650,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
           _step(AnalysisStep.saving);
           await database.upsertEpisodeFingerprint(
             episodeId: episode.id,
-            data: analyzed.olafAds ?? Uint8List(0),
+            data: encodeFingerprint(analyzed.fingerprint),
             hopMicros: chromaprintStoredHopMicros,
             speech: analyzed.speech,
           );
@@ -660,11 +658,6 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         if (!live()) return;
         if (analyzed.envelope.isNotEmpty) {
           await database.setFingerprintEnvelope(episode.id, analyzed.envelope);
-        }
-        if (!live()) return;
-        final olaf = analyzed.olaf;
-        if (olaf != null && olaf.isNotEmpty) {
-          await database.setFingerprintOlaf(episode.id, olaf);
         }
         if (!live()) return;
         if (analyzed.logMel != null) {
@@ -771,9 +764,8 @@ class ChromaprintEpisodeAudioAnalyzer implements EpisodeAudioAnalyzer {
   @override
   Future<Uint8List?> computeFingerprint(File file) async {
     final analyzed = await _analyzeDecoded(decoder, file.path);
-    final ads = analyzed?.olafAds;
-    if (ads == null || ads.length <= 4) return null;
-    return ads;
+    if (analyzed == null || analyzed.fingerprint.isEmpty) return null;
+    return encodeFingerprint(analyzed.fingerprint);
   }
 
   @override
@@ -815,8 +807,6 @@ Future<PcmAnalysis?> _analyzeDecoded(
       fingerprintMs: raw[6]! as int,
       logMelMs: raw[7]! as int,
       speechMs: raw[8]! as int,
-      olaf: raw.length > 10 ? raw[10] as Uint8List? : null,
-      olafAds: raw.length > 11 ? raw[11] as Uint8List? : null,
     );
   } finally {
     await _deleteDecoded(decoded.path);
@@ -845,13 +835,7 @@ void analyzePcmEntry(List<Object?> args) {
   final send = args[0]! as SendPort;
   final path = args[1]! as String;
   try {
-    send.send(
-      _pcmMessage(
-        analyzePcmFileSync(path),
-        _olafPrints(path),
-        _olafAdPrints(path),
-      ),
-    );
+    send.send(_pcmMessage(analyzePcmFileSync(path)));
   } catch (error, stack) {
     send.send(<Object?>['error', '$error', '$stack']);
   }
@@ -872,7 +856,7 @@ void analyzePcmPacedEntry(List<Object?> args) {
   unawaited(() async {
     try {
       final result = await analyzePcmFilePaced(path, () => mode);
-      send.send(_pcmMessage(result, _olafPrints(path), _olafAdPrints(path)));
+      send.send(_pcmMessage(result));
     } catch (error, stack) {
       send.send(<Object?>['error', '$error', '$stack']);
     } finally {
@@ -881,11 +865,7 @@ void analyzePcmPacedEntry(List<Object?> args) {
   }());
 }
 
-List<Object?> _pcmMessage(
-  PcmAnalysis result,
-  Uint8List? olaf,
-  Uint8List? olafAds,
-) {
+List<Object?> _pcmMessage(PcmAnalysis result) {
   return <Object?>[
     result.fingerprint,
     result.logMel,
@@ -897,53 +877,7 @@ List<Object?> _pcmMessage(
     result.logMelMs,
     result.speechMs,
     result.envelope,
-    olaf,
-    olafAds,
   ];
-}
-
-/// Second passage sur le PCM déjà décodé. Un échec de la bibliothèque
-/// native laisse l’épisode sans empreinte : le log-mel, lui, est déjà fait.
-Uint8List? _olafPrints(String path) {
-  try {
-    final prints = fingerprintPcmFile(
-      path,
-      sampleRate: chromaprintSampleRate,
-      maxMs: logMelSearchWindowMs,
-    );
-    if (prints == null || prints.isEmpty) return null;
-    return encodeOlafPrints(prints);
-  } catch (_) {
-    return null;
-  }
-}
-
-/// Landmarks de tout le fichier, sous-échantillonnés, pour les pubs et
-/// les outros. Le passage des virgules courtes reste [_olafPrints].
-Uint8List? _olafAdPrints(String path) {
-  try {
-    final prints = fingerprintPcmFile(
-      path,
-      sampleRate: chromaprintSampleRate,
-      maxMs: 0,
-      keepModulus: olafAdKeepModulus,
-    );
-    if (prints == null) return null;
-    return encodeOlafAdPrints(prints);
-  } catch (_) {
-    return null;
-  }
-}
-
-void planOlafAnalysisEntry(List<Object?> args) {
-  final send = args[0]! as SendPort;
-  try {
-    send.send(
-      planOlafAnalysisMessage(Map<String, Object?>.from(args[1]! as Map)),
-    );
-  } catch (error, stack) {
-    send.send(<Object?>['error', '$error', '$stack']);
-  }
 }
 
 void planAnalysisEntry(List<Object?> args) {
@@ -1016,10 +950,12 @@ Future<void> syncPodcastAnalysis(
     for (final row in cohort) row.episode.id,
   ]);
   final episodes = <Object?>[];
+  final printsById = <int, ({Uint8List bytes, int hopMicros})>{};
   for (final row in cohort) {
     final bytes = row.fingerprint.data;
-    if (!isOlafAdPrint(bytes)) continue;
-    final fromPrint = olafAdLastMs(bytes);
+    if (!isChromaprintPrint(bytes)) continue;
+    final hop = row.fingerprint.hopMicros;
+    final fromPrint = hop <= 0 ? 0 : bytes.lengthInBytes ~/ 4 * hop ~/ 1000;
     final fromRss = (row.episode.durationSeconds ?? 0) * 1000;
     final durationMs = fromPrint > fromRss ? fromPrint : fromRss;
     final preRoll = approximateInsertedAdMs(
@@ -1037,27 +973,39 @@ Future<void> syncPodcastAnalysis(
     }
     episodes.add(<Object?>[
       row.episode.id,
+      hop,
       durationMs,
       preRoll,
       bytes,
-      envelopes[row.episode.id],
       row.fingerprint.speech,
+      envelopes[row.episode.id],
       encoded,
     ]);
+    printsById[row.episode.id] = (bytes: bytes, hopMicros: hop);
   }
   if (episodes.isNotEmpty) {
     final templates = <Object?>[];
     final reviews = await database.templateReviews(podcastId);
     final ownTemplates = await database.listSegmentTemplates(podcastId);
     final ownTemplateIds = {for (final template in ownTemplates) template.id};
+    final stale = [
+      for (final template in ownTemplates)
+        if (!isChromaprintPrint(template.fingerprint)) template.id,
+    ];
+    final recut = stale.isEmpty
+        ? const <int, Uint8List>{}
+        : await _recutTemplates(database, podcastId, stale, printsById);
     for (final template in ownTemplates) {
-      if (!isOlafAdPrint(template.fingerprint)) continue;
+      final print = isChromaprintPrint(template.fingerprint)
+          ? template.fingerprint
+          : recut[template.id];
+      if (print == null) continue;
       templates.add(<Object?>[
         template.id,
         template.kind.name,
         reviews[template.id],
         template.durationMs,
-        template.fingerprint,
+        print,
         template.confidence,
       ]);
     }
@@ -1068,7 +1016,7 @@ Future<void> syncPodcastAnalysis(
     };
     final raw = offUi == null
         ? await _runPlanAnalysis(message)
-        : await offUi(planOlafAnalysisEntry, message);
+        : await offUi(planAnalysisEntry, message);
     if (raw is Map) {
       final plan = decodeAnalysisPlan(Map<Object?, Object?>.from(raw));
       await applyAnalysisPlan(
@@ -1081,10 +1029,40 @@ Future<void> syncPodcastAnalysis(
   await applyLogMelFindings(database, podcastId, offUi: offUi);
 }
 
+/// Gabarits posés par l’ancien détecteur Olaf : la tranche Chromaprint est
+/// recoupée dans l’empreinte d’un épisode qui porte déjà le passage, puis
+/// réécrite. Le gabarit garde son id, donc ses avis. Sans épisode
+/// réempreinté, il attend l’analyse suivante.
+Future<Map<int, Uint8List>> _recutTemplates(
+  AppDatabase database,
+  int podcastId,
+  List<int> templateIds,
+  Map<int, ({Uint8List bytes, int hopMicros})> printsById,
+) async {
+  final wanted = templateIds.toSet();
+  final recut = <int, Uint8List>{};
+  for (final segment in await database.fingerprintSegmentsForPodcast(
+    podcastId,
+  )) {
+    final id = segment.templateId;
+    if (id == null || !wanted.contains(id) || recut.containsKey(id)) continue;
+    final print = printsById[segment.episodeId];
+    if (print == null || print.hopMicros <= 0) continue;
+    final values = decodeFingerprint(print.bytes);
+    final from = segment.startMs * 1000 ~/ print.hopMicros;
+    final to = math.min(values.length, segment.endMs * 1000 ~/ print.hopMicros);
+    if (to - from < 8) continue;
+    final bytes = encodeFingerprint(values.sublist(from, to));
+    await database.setSegmentTemplateFingerprint(id, bytes);
+    recut[id] = bytes;
+  }
+  return recut;
+}
+
 /// Isolate.run ne doit pas fermer sur la base : le contexte capturerait
 /// la connexion SQLite, qui ne traverse pas un isolate.
 Future<Object?> _runPlanAnalysis(Map<String, Object?> message) {
-  return Isolate.run(() => planOlafAnalysisMessage(message));
+  return Isolate.run(() => planAnalysisMessage(message));
 }
 
 Future<Object?> _runPlanLogMel(Map<String, Object?> message) {
@@ -1117,7 +1095,6 @@ AnalysisPlan _keepFocusEpisodes(
         kind: pattern.kind,
         confirmed: pattern.confirmed,
         fingerprint: pattern.fingerprint,
-        fingerprintBytes: pattern.fingerprintBytes,
         durationMs: pattern.durationMs,
         confidence: pattern.confidence,
         segments: segments,
@@ -1134,6 +1111,7 @@ Future<void> applyAnalysisPlan(
   AnalysisPlan plan,
 ) async {
   final existing = await database.fingerprintSegmentsForPodcast(podcastId);
+  final manual = await database.manualSegmentsForPodcast(podcastId);
   final keptForLogMel = {
     for (final template in await database.listSegmentTemplates(podcastId))
       if (template.logMel != null) template.id,
@@ -1141,14 +1119,17 @@ Future<void> applyAnalysisPlan(
   final touched = <int>{};
   await database.transaction(() async {
     for (final pattern in plan.patterns) {
-      if (pattern.segments.isEmpty) continue;
-      if (pattern.fingerprint.isEmpty &&
-          (pattern.fingerprintBytes == null ||
-              pattern.fingerprintBytes!.isEmpty)) {
-        continue;
-      }
+      if (pattern.segments.isEmpty || pattern.fingerprint.isEmpty) continue;
       final templateId = await _upsertTemplate(database, podcastId, pattern);
       for (final desired in pattern.segments) {
+        if (overlapsManual(
+          manual,
+          desired.episodeId,
+          desired.startMs,
+          desired.endMs,
+        )) {
+          continue;
+        }
         final prior = _prior(existing, desired, templateId, touched);
         if (prior != null) {
           touched.add(prior.id);
@@ -1187,6 +1168,24 @@ Future<void> applyAnalysisPlan(
   });
 }
 
+/// Vrai si un passage corrigé à la main couvre déjà la moitié de
+/// [startMs]–[endMs] : l’analyse ne le double ni ne le déplace.
+bool overlapsManual(
+  List<SkipSegment> manual,
+  int episodeId,
+  int startMs,
+  int endMs,
+) {
+  final length = endMs - startMs;
+  for (final row in manual) {
+    if (row.episodeId != episodeId) continue;
+    final overlap = math.min(endMs, row.endMs) - math.max(startMs, row.startMs);
+    final shorter = math.min(length, row.endMs - row.startMs);
+    if (overlap > 0 && overlap * 2 >= shorter) return true;
+  }
+  return false;
+}
+
 Future<int> _upsertTemplate(
   AppDatabase database,
   int podcastId,
@@ -1197,8 +1196,7 @@ Future<int> _upsertTemplate(
   return database.insertSegmentTemplate(
     podcastId: podcastId,
     kind: pattern.kind,
-    fingerprint:
-        pattern.fingerprintBytes ?? encodeFingerprint(pattern.fingerprint),
+    fingerprint: encodeFingerprint(pattern.fingerprint),
     durationMs: pattern.durationMs,
     occurrences: pattern.occurrences,
     confidence: pattern.confidence,
@@ -1297,10 +1295,24 @@ Future<void> applyLogMelFindings(
   final bundled = await loadBundledNetworkStings();
   final learnedRows = await database.listLearnedNetworkStings();
   final segments = await database.fingerprintSegmentsForPodcast(podcastId);
-  final olafIds = <int>[
-    for (final row in episodeRows) (row as List)[0]! as int,
-  ];
-  final olaf = await database.olafPrintsForEpisodes(olafIds);
+  final chroma = <Object?>[];
+  for (final row in episodeRows) {
+    final id = (row as List)[0]! as int;
+    final print = await database.fingerprintForEpisode(id);
+    if (print == null || !isChromaprintPrint(print.data)) continue;
+    final hop = print.hopMicros;
+    final keep = hop <= 0
+        ? 0
+        : math.min(
+            print.data.lengthInBytes ~/ 4,
+            logMelSearchWindowMs * 1000 ~/ hop + 1,
+          );
+    chroma.add(<Object?>[
+      id,
+      Uint8List.sublistView(print.data, 0, keep * 4),
+      hop,
+    ]);
+  }
   final boundaries = [...await database.dynamicAdBoundaries()]
     ..sort((a, b) => b.episodeId.compareTo(a.episodeId));
   final message = <String, Object?>{
@@ -1335,10 +1347,7 @@ Future<void> applyLogMelFindings(
     'learned': [
       for (final sting in learnedRows) <Object?>[sting.id, sting.logMel],
     ],
-    'olaf': [
-      for (final id in olafIds)
-        if (olaf[id] != null) <Object?>[id, olaf[id]],
-    ],
+    'chroma': chroma,
   };
   final watch = Stopwatch()..start();
   final raw = offUi == null
@@ -1536,8 +1545,14 @@ Future<int?> _upsertLoose(
   required int? templateId,
   List<SkipSegment> existing = const [],
 }) async {
+  final all = await database.listSkipSegments(episodeId);
+  final manual = [
+    for (final row in all)
+      if (row.source == SkipSegmentSource.manual) row,
+  ];
+  if (overlapsManual(manual, episodeId, startMs, endMs)) return null;
   final rows = existing.isEmpty
-      ? await database.listSkipSegments(episodeId)
+      ? all
       : existing.where((row) => row.episodeId == episodeId);
   SkipSegment? prior;
   for (final row in rows) {
