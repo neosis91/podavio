@@ -12,6 +12,7 @@ import '../l10n/l10n.dart';
 import '../player/player_controller.dart';
 import '../settings/settings_controller.dart';
 import 'playlist_membership.dart';
+import 'podcast/passage_creation.dart';
 import 'podcast/cover_palette.dart';
 import 'podcast/podcast_album_header.dart';
 import 'router.dart';
@@ -231,6 +232,15 @@ class _EpisodeDetailState extends ConsumerState<_EpisodeDetail> {
                       ?.copyWith(color: Colors.white),
                 ),
                 actions: [
+                  if (episode.downloadPath != null)
+                    IconButton(
+                      key: const Key('episode-create-passage'),
+                      tooltip: context.tr('Create a passage'),
+                      color: Colors.white,
+                      icon: const Icon(Icons.content_cut),
+                      onPressed: () =>
+                          openPassageCreator(context, ref, episode.id),
+                    ),
                   _HeartButton(
                     favorite: episode.favorite,
                     onPressed: _toggleFavorite,

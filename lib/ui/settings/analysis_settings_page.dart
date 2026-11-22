@@ -8,6 +8,7 @@ import '../../data/providers.dart';
 import '../../data/skip_segments.dart';
 import '../../l10n/l10n.dart';
 import '../../settings/global_skip.dart';
+import '../podcast/passage_creation.dart';
 import '../router.dart';
 import '../widgets/cover.dart';
 import '../widgets/empty_state.dart';
@@ -46,6 +47,7 @@ final analysisOverviewProvider = StreamProvider<List<AnalysisOverviewPodcast>>((
               count: row.count,
             ),
       ],
+      manualSegments: facts.manual,
     ),
   );
 });
@@ -155,22 +157,25 @@ AnalysisOverviewPodcast _withLiveStatus(
       queued: queued,
     ),
     counts: row.counts,
+    manualSegments: row.manualSegments,
   );
 }
 
-class _AnalysisPodcastTile extends StatelessWidget {
+class _AnalysisPodcastTile extends ConsumerWidget {
   const _AnalysisPodcastTile({required this.row});
 
   final AnalysisOverviewPodcast row;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final counts = [
       for (final kind in analysisCountKinds)
         if (row.countOf(kind) > 0)
           '${context.tr(skipKindLabel(kind))} ${row.countOf(kind)}',
+      if (row.manualSegments > 0)
+        '${context.tr('By hand')} ${row.manualSegments}',
     ];
     final detail = counts.isEmpty
         ? context.tr('No segments yet')
@@ -190,7 +195,17 @@ class _AnalysisPodcastTile extends StatelessWidget {
           color: scheme.onSurfaceVariant,
         ),
       ),
-      trailing: const Icon(Icons.chevron_right),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: context.tr('Create a passage'),
+            icon: const Icon(Icons.content_cut),
+            onPressed: () => pickEpisodeForPassage(context, ref, row.id),
+          ),
+          const Icon(Icons.chevron_right),
+        ],
+      ),
       onTap: () => context.push(AppRoutes.podcastSkipSegments(row.id)),
     );
   }
