@@ -21,6 +21,7 @@ class PcmAnalysis {
     required this.fingerprintMs,
     required this.logMelMs,
     required this.speechMs,
+    this.olaf,
   });
 
   final List<int> fingerprint;
@@ -35,6 +36,10 @@ class PcmAnalysis {
   final int fingerprintMs;
   final int logMelMs;
   final int speechMs;
+
+  /// Landmarks Olaf des trois premières minutes. Null si la bibliothèque
+  /// native n’est pas là : la recherche log-mel reste alors le repli.
+  final Uint8List? olaf;
 }
 
 /// Fenêtre d’analyse : 32 ms à 8 kHz, puissance de 2 pour la FFT.

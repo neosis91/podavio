@@ -2,8 +2,9 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'envelope.dart';
-import 'segment_match.dart';
 import 'log_mel.dart';
+import 'olaf_sting.dart';
+import 'segment_match.dart';
 
 /// Spectrogrammes chargés ensemble pour la recherche des jingles courts.
 /// Au-delà, seuls les épisodes les plus récents sont comparés.
@@ -959,7 +960,8 @@ Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
       endMs: endMs,
     ));
   }
-  final postAd = findContentStings(episodes: episodes, covered: covered);
+  final olaf = _olafStings(message, episodes, covered);
+  final postAd = olaf ?? findContentStings(episodes: episodes, covered: covered);
 
   return {
     'jingles': jingles,
@@ -975,6 +977,47 @@ Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
         },
     ],
   };
+}
+
+/// Olaf remplace la recherche log-mel dès que chaque épisode comparé a
+/// ses landmarks. Une liste vide veut dire qu’Olaf n’a pas trouvé de
+/// virgule : on ne revient pas au log-mel. `null` : pas encore d’empreinte
+/// Olaf, le log-mel reste le détecteur.
+List<ContentSting>? _olafStings(
+  Map<String, Object?> message,
+  List<EpisodeMel> episodes,
+  List<({int episodeId, int startMs, int endMs})> covered,
+) {
+  final raw = message['olaf'];
+  if (raw is! List || episodes.length < 2) return null;
+  final prints = <int, Uint8List>{};
+  for (final item in raw) {
+    if (item is! List || item.length < 2) continue;
+    final bytes = item[1];
+    if (bytes is! Uint8List || bytes.length < 12) continue;
+    prints[item[0]! as int] = bytes;
+  }
+  if (episodes.any((episode) => !prints.containsKey(episode.episodeId))) {
+    return null;
+  }
+  final found = findOlafContentSting(
+    [
+      for (final episode in episodes)
+        OlafEpisodePrints(
+          episodeId: episode.episodeId,
+          prints: decodeOlafPrints(prints[episode.episodeId]!),
+        ),
+    ],
+    covered: covered,
+  );
+  return [
+    for (final hit in found)
+      ContentSting(
+        episodeId: hit.episodeId,
+        startMs: hit.startMs,
+        endMs: hit.endMs,
+      ),
+  ];
 }
 
 ({int id, LogMelClip? clip})? _knownTemplate(

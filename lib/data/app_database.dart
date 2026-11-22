@@ -460,6 +460,7 @@ class AppDatabase extends _$AppDatabase
       await customStatement('PRAGMA foreign_keys = ON');
       await _ensureFingerprintStatus();
       await _ensureFingerprintEnvelope();
+      await _ensureFingerprintOlaf();
       // Idempotent : v8 a pu être appliqué avant l’ajout des indexes.
       await _createEpisodeIndexes();
       await _ensureDefaultPlaylist();
@@ -518,6 +519,18 @@ class AppDatabase extends _$AppDatabase
     if (rows.any((row) => row.read<String>('name') == 'envelope')) return;
     await customStatement(
       'ALTER TABLE episode_fingerprints ADD COLUMN envelope BLOB',
+    );
+  }
+
+  /// Empreinte Olaf (hash uint64 + t1 uint32). Hors schéma Drift, comme
+  /// l’enveloppe : les épisodes déjà analysés restent `NULL`.
+  Future<void> _ensureFingerprintOlaf() async {
+    final rows = await customSelect('PRAGMA table_info(episode_fingerprints)')
+        .get();
+    if (rows.isEmpty) return;
+    if (rows.any((row) => row.read<String>('name') == 'olaf')) return;
+    await customStatement(
+      'ALTER TABLE episode_fingerprints ADD COLUMN olaf BLOB',
     );
   }
 

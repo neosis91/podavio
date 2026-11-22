@@ -8,12 +8,16 @@ class SkipCandidate {
     required this.endMs,
     required this.kind,
     required this.confirmed,
+    this.networkSting = false,
   });
 
   final int id;
   final int startMs;
   final int endMs;
   final SkipSegmentKind kind;
+
+  /// Virgule de réseau. Elle se saute avec les pubs, même séparée d’un silence.
+  final bool networkSting;
 
   /// `null` : pas encore revu. `true` : confirmé. `false` : ignoré.
   final bool? confirmed;
@@ -68,7 +72,7 @@ SkipDecision? decideSkipSegment({
   SkipCandidate? chosen;
   for (final segment in segments) {
     if (segment.confirmed == false) continue;
-    if (!autoSkipKinds.contains(segment.kind)) continue;
+    if (!_skipsWithAds(segment, autoSkipKinds)) continue;
     if (heldIds.contains(segment.id)) continue;
     if (segment.endMs <= segment.startMs) continue;
     if (!segment.contains(positionMs)) continue;
@@ -80,6 +84,11 @@ SkipDecision? decideSkipSegment({
     seekToMs: _contiguousSkipEnd(chosen, segments, autoSkipKinds),
     returnToMs: positionMs,
   );
+}
+
+bool _skipsWithAds(SkipCandidate segment, Set<SkipSegmentKind> kinds) {
+  if (kinds.contains(segment.kind)) return true;
+  return segment.networkSting && kinds.contains(SkipSegmentKind.ad);
 }
 
 /// Une pub et la virgule collée juste après forment un seul saut.
@@ -149,7 +158,7 @@ SkipOffer? manualSkipOffer({
     if (segment.confirmed == false) continue;
     if (segment.endMs <= segment.startMs) continue;
     if (!segment.contains(positionMs)) continue;
-    if (autoSkipAds && autoSkipKinds.contains(segment.kind)) {
+    if (autoSkipAds && _skipsWithAds(segment, autoSkipKinds)) {
       coveredByAuto = true;
       continue;
     }

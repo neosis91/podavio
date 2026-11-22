@@ -461,6 +461,56 @@ void main() {
     );
     expect(rejected?.seekToMs, 30000);
   });
+
+  test('a network sting skips with the ads even across a silence', () {
+    final decision = decideSkipSegment(
+      positionMs: 70000,
+      previousMs: 69000,
+      playing: true,
+      fromDownload: true,
+      autoSkipAds: true,
+      autoSkipKinds: const {SkipSegmentKind.ad},
+      segments: [
+        const SkipCandidate(
+          id: 1,
+          startMs: 0,
+          endMs: 60000,
+          kind: SkipSegmentKind.ad,
+          confirmed: null,
+        ),
+        const SkipCandidate(
+          id: 2,
+          startMs: 68000,
+          endMs: 71000,
+          kind: SkipSegmentKind.jingle,
+          confirmed: null,
+          networkSting: true,
+        ),
+      ],
+      heldIds: <int>{},
+    );
+    expect(decision?.seekToMs, 71000);
+
+    final plain = decideSkipSegment(
+      positionMs: 70000,
+      previousMs: 69000,
+      playing: true,
+      fromDownload: true,
+      autoSkipAds: true,
+      autoSkipKinds: const {SkipSegmentKind.ad},
+      segments: [
+        const SkipCandidate(
+          id: 2,
+          startMs: 68000,
+          endMs: 71000,
+          kind: SkipSegmentKind.jingle,
+          confirmed: null,
+        ),
+      ],
+      heldIds: <int>{},
+    );
+    expect(plain, isNull);
+  });
 }
 
 FeedDraft _draft({int seconds = 120}) {

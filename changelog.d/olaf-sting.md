@@ -1,0 +1,1 @@
+- Short network stings in the first three minutes are detected with Olaf landmarks. On the nine RTL openings this matches the log-mel sting, in about a second instead of about sixteen, and the landmarks take about half a megabyte instead of about fifty.
