@@ -229,11 +229,11 @@ void main() {
         ...await database.listSkipSegments(second.id),
       ];
       expect(segments, isNotEmpty);
-      expect(
-        segments.every((row) => row.source == SkipSegmentSource.fingerprint),
-        isTrue,
+      final shared = segments.where(
+        (row) => row.source == SkipSegmentSource.fingerprint,
       );
-      expect(segments.any((row) => row.endMs - row.startMs >= 8000), isTrue);
+      expect(shared.map((row) => row.episodeId).toSet(), {first.id, second.id});
+      expect(shared.every((row) => row.endMs - row.startMs >= 8000), isTrue);
       expect(container.read(audioAnalysisProvider).pendingFor(podcastId), 0);
     },
   );
@@ -569,10 +569,14 @@ Int16List _sweep(int count, double base) {
   for (var i = 0; i < count; i++) {
     final t = i / chromaprintSampleRate;
     final freq = base + 80 * math.sin(2 * math.pi * 1.7 * t);
+    // Niveau qui bouge comme une voix : une enveloppe plate ne prouve rien.
+    final gain =
+        0.6 +
+        0.4 * math.sin(2 * math.pi * 2.3 * t) * math.sin(0.74 * math.pi * t);
     final sample =
         0.55 * math.sin(2 * math.pi * freq * t) +
         0.25 * math.sin(2 * math.pi * freq * 1.5 * t);
-    out[i] = (sample * 32767).round().clamp(-32768, 32767);
+    out[i] = (sample * gain * 32767).round().clamp(-32768, 32767);
   }
   return out;
 }

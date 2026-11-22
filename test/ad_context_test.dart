@@ -233,7 +233,7 @@ Uint8List _varying(int ms) {
     if (i >= 0 && i < out.length) out[i] = 0;
   }
   for (var i = open; i < close && i < out.length; i++) {
-    out[i] = 200;
+    out[i] = 140 + ((i - open) * 37 + (i - open) ~/ 7 * 11) % 100;
   }
   for (var i = close; i < close + gap && i < out.length; i++) {
     out[i] = 0;

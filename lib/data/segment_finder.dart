@@ -888,11 +888,13 @@ _Range? _envelopeTrim(
   return _Range(start, end, matches);
 }
 
-/// Écart-type sous 8 % de la moyenne (au carré) : niveau tenu, silence ou ton.
+/// Écart-type sous 8 % de la moyenne (au carré) : niveau tenu, silence,
+/// ton ou bruit.
 const _steadyCv2 = 0.0064;
 
-/// Corrélation de Pearson entre `ea[i]` et `eb[i - shift]`. Deux fenêtres
-/// au niveau tenu (silence, ton) comptent comme pareilles ; une seule, non.
+/// Corrélation de Pearson entre `ea[i]` et `eb[i - shift]`. Une fenêtre au
+/// niveau tenu (silence, ton, bruit) ne prouve rien : elle vaut 0. Deux
+/// bruits au même niveau ne passent donc pas pour la même pub.
 double _pearson(Uint8List ea, Uint8List eb, int from, int to, int shift) {
   var n = 0;
   var sa = 0.0;
@@ -917,7 +919,6 @@ double _pearson(Uint8List ea, Uint8List eb, int from, int to, int shift) {
   final vb = sbb - sb * sb / n;
   final steadyA = va <= _steadyCv2 * sa * sa / n;
   final steadyB = vb <= _steadyCv2 * sb * sb / n;
-  if (steadyA && steadyB) return 1;
   if (steadyA || steadyB) return 0;
   return (sab - sa * sb / n) / math.sqrt(va * vb);
 }
