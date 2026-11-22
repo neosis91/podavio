@@ -613,5 +613,20 @@
   "Applies to every podcast.": "Applies to every podcast.",
   "No downloaded episodes to analyse.": "No downloaded episodes to analyse.",
   "No segments yet": "No segments yet",
-  "Ads, stings, sponsors, and outros in downloaded episodes.": "Ads, stings, sponsors, and outros in downloaded episodes."
+  "Ads, stings, sponsors, and outros in downloaded episodes.": "Ads, stings, sponsors, and outros in downloaded episodes.",
+  "Waveform": "Waveform",
+  "Save": "Save",
+  "Analyse the episode to see its waveform.": "Analyse the episode to see its waveform.",
+  "Zoom out": "Zoom out",
+  "Zoom in": "Zoom in",
+  "Cursor": "Cursor",
+  "Play from cursor": "Play from cursor",
+  "Start": "Start",
+  "End": "End",
+  "0.5 s earlier": "0.5 s earlier",
+  "0.5 s later": "0.5 s later",
+  "Listen around the cut": "Listen around the cut",
+  "Adjust bounds": "Adjust bounds",
+  "This passage no longer exists.": "This passage no longer exists.",
+  "Saved bounds are kept by later analyses and become the reference for this passage.": "Saved bounds are kept by later analyses and become the reference for this passage."
 }

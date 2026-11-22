@@ -1,0 +1,303 @@
+import 'dart:typed_data';
+
+import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:podavio/data/app_database.dart';
+import 'package:podavio/data/audio_analysis.dart';
+import 'package:podavio/data/models.dart';
+import 'package:podavio/data/segment_edit.dart';
+import 'package:podavio/data/segment_finder.dart';
+import 'package:podavio/data/skip_segments.dart';
+import 'package:podavio/ui/podcast/segment_waveform_page.dart';
+
+const _hop = 123809;
+
+void main() {
+  group('bornes', () {
+    test('clampBounds garde l’épisode et une seconde au moins', () {
+      expect(clampBounds(-800, 5000, durationMs: 60000), (
+        startMs: 0,
+        endMs: 5000,
+      ));
+      expect(clampBounds(4800, 4500, durationMs: 60000), (
+        startMs: 4800,
+        endMs: 5800,
+      ));
+      expect(clampBounds(59500, 61000, durationMs: 60000), (
+        startMs: 59000,
+        endMs: 60000,
+      ));
+    });
+
+    test('sliceChromaprint coupe aux bornes, au pas de l’empreinte', () {
+      final values = List<int>.generate(500, (i) => i * 7919);
+      final slice = sliceChromaprint(
+        encodeFingerprint(values),
+        _hop,
+        startMs: 10000,
+        endMs: 20000,
+      )!;
+      final decoded = decodeFingerprint(slice);
+      final from = (10000 * 1000 / _hop).floor();
+      expect(decoded.first, values[from]);
+      expect(decoded.length, closeTo(10000 * 1000 / _hop, 2));
+      expect(
+        sliceChromaprint(
+          encodeFingerprint(values),
+          _hop,
+          startMs: 1000,
+          endMs: 1500,
+        ),
+        isNull,
+      );
+    });
+
+    test('waveformColumns : crête et RMS par colonne, silence à zéro', () {
+      final envelope = Uint8List(500);
+      for (var i = 100; i < 200; i++) {
+        envelope[i] = 200;
+      }
+      final columns = waveformColumns(
+        envelope,
+        startMs: 0,
+        endMs: 10000,
+        columns: 5,
+      );
+      expect(columns, hasLength(5));
+      expect(columns[0].peak, 0);
+      expect(columns[1].peak, greaterThan(0.9));
+      expect(columns[1].rms, closeTo(columns[1].peak, 1e-9));
+      expect(columns[4].rms, 0);
+    });
+  });
+
+  group('enregistrement', () {
+    late AppDatabase database;
+    late int podcastId;
+    late int episodeId;
+    final values = List<int>.generate(
+      2000,
+      (i) => (i * 2654435761) & 0xffffffff,
+    );
+
+    setUp(() async {
+      database = AppDatabase(NativeDatabase.memory());
+      podcastId = (await database.saveFeed(
+        const FeedDraft(
+          feedUrl: 'https://example.com/feed.xml',
+          title: 'Essai',
+          author: 'Auteur',
+          description: 'Description',
+          episodes: [
+            EpisodeDraft(
+              guid: 'a',
+              title: 'Un',
+              description: 'Notes',
+              audioUrl: 'https://example.com/a.mp3',
+              durationSeconds: 240,
+            ),
+          ],
+        ),
+      )).podcastId;
+      final episodes = await database.watchEpisodes(podcastId: podcastId).first;
+      episodeId = episodes.single.episode.id;
+      await database.upsertEpisodeFingerprint(
+        episodeId: episodeId,
+        data: encodeFingerprint(values),
+        hopMicros: _hop,
+      );
+    });
+
+    tearDown(() => database.close());
+
+    test('retaille le gabarit, valide le passage, garde la vérité', () async {
+      final templateId = await database.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.ad,
+        fingerprint: encodeFingerprint(values.sublist(80, 240)),
+        durationMs: 20000,
+      );
+      final segmentId = await database.insertSkipSegment(
+        episodeId: episodeId,
+        startMs: 10000,
+        endMs: 30000,
+        kind: SkipSegmentKind.ad,
+        source: SkipSegmentSource.fingerprint,
+        templateId: templateId,
+      );
+
+      await saveSegmentBounds(
+        database,
+        segmentId: segmentId,
+        startMs: 11500,
+        endMs: 29000,
+      );
+
+      final row = (await database.skipSegmentById(segmentId))!;
+      expect((row.startMs, row.endMs), (11500, 29000));
+      expect(row.source, SkipSegmentSource.manual);
+      expect(row.confirmed, isTrue);
+      final template = (await database.listSegmentTemplates(podcastId)).single;
+      expect(template.durationMs, 17500);
+      expect(
+        decodeFingerprint(template.fingerprint),
+        values.sublist(
+          (11500 * 1000 / _hop).floor(),
+          (29000 * 1000 / _hop).ceil(),
+        ),
+      );
+      final truth = (await database.listSegmentAnnotations()).single;
+      expect(truth.segmentId, segmentId);
+      expect(truth.detectedSource, 'fingerprint');
+      expect((truth.detectedStartMs, truth.detectedEndMs), (10000, 30000));
+      expect((truth.correctedStartMs, truth.correctedEndMs), (11500, 29000));
+    });
+
+    test('crée un gabarit pour un passage qui n’en avait pas', () async {
+      final segmentId = await database.insertSkipSegment(
+        episodeId: episodeId,
+        startMs: 40000,
+        endMs: 50000,
+        kind: SkipSegmentKind.jingle,
+        source: SkipSegmentSource.network,
+      );
+      await saveSegmentBounds(
+        database,
+        segmentId: segmentId,
+        startMs: 40500,
+        endMs: 50000,
+      );
+      final row = (await database.skipSegmentById(segmentId))!;
+      final template = (await database.listSegmentTemplates(podcastId)).single;
+      expect(row.templateId, template.id);
+      expect(template.kind, SkipSegmentKind.jingle);
+      expect(template.durationMs, 9500);
+    });
+
+    test('une nouvelle analyse ne déplace ni ne double le passage', () async {
+      final segmentId = await database.insertSkipSegment(
+        episodeId: episodeId,
+        startMs: 10000,
+        endMs: 30000,
+        kind: SkipSegmentKind.ad,
+        source: SkipSegmentSource.fingerprint,
+      );
+      await saveSegmentBounds(
+        database,
+        segmentId: segmentId,
+        startMs: 12000,
+        endMs: 28000,
+      );
+      final template = (await database.listSegmentTemplates(podcastId)).single;
+
+      await applyAnalysisPlan(
+        database,
+        podcastId,
+        AnalysisPlan([
+          PlannedPattern(
+            templateId: template.id,
+            kind: SkipSegmentKind.ad,
+            confirmed: null,
+            fingerprint: values.sublist(80, 240),
+            durationMs: 20000,
+            confidence: 80,
+            segments: [
+              PlannedSegment(
+                episodeId: episodeId,
+                startMs: 10000,
+                endMs: 30000,
+                kind: SkipSegmentKind.ad,
+                confirmed: null,
+                matches: 2,
+                confidence: 80,
+              ),
+            ],
+          ),
+        ]),
+      );
+      await database.updateFingerprintSegment(
+        id: segmentId,
+        startMs: 0,
+        endMs: 5000,
+        matches: 1,
+        templateId: null,
+      );
+
+      final rows = await database.listSkipSegments(episodeId);
+      expect(rows, hasLength(1));
+      expect((rows.single.startMs, rows.single.endMs), (12000, 28000));
+      expect(rows.single.source, SkipSegmentSource.manual);
+    });
+  });
+
+  group('forme d’onde', () {
+    Future<List<(int, int)>> pump(
+      WidgetTester tester, {
+      List<(int, int)>? listened,
+    }) async {
+      final saved = <(int, int)>[];
+      final envelope = Uint8List(60000 ~/ 20);
+      for (var i = 0; i < envelope.length; i++) {
+        envelope[i] = (i ~/ 25).isEven ? 120 : 30;
+      }
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SegmentWaveformPage(
+            envelope: envelope,
+            durationMs: 60000,
+            startMs: 20000,
+            endMs: 30000,
+            onListen: (from, to) async => listened?.add((from, to)),
+            onSave: (start, end) async {
+              saved.add((start, end));
+              return true;
+            },
+          ),
+        ),
+      );
+      return saved;
+    }
+
+    testWidgets('±0,5 s déplace les bornes et Enregistrer les renvoie', (
+      tester,
+    ) async {
+      final saved = await pump(tester);
+      expect(find.byType(CustomPaint), findsWidgets);
+      await tester.tap(find.byKey(const Key('start-minus')));
+      await tester.tap(find.byKey(const Key('end-plus')));
+      await tester.tap(find.byKey(const Key('end-plus')));
+      await tester.pump();
+      expect(find.text('0:19.5'), findsOneWidget);
+      expect(find.text('0:31.0'), findsOneWidget);
+      await tester.tap(find.text('Enregistrer'));
+      await tester.pump();
+      expect(saved, [(19500, 31000)]);
+    });
+
+    testWidgets('glisser une poignée la déplace', (tester) async {
+      final saved = await pump(tester);
+      final wave = find.byKey(const Key('waveform'));
+      final box = tester.getRect(wave);
+      // Vue initiale 10–40 s : le début (20 s) est au tiers de la largeur.
+      final from = Offset(box.left + box.width / 3, box.center.dy);
+      await tester.dragFrom(from, Offset(box.width / 30, 0));
+      await tester.pump();
+      await tester.tap(find.text('Enregistrer'));
+      await tester.pump();
+      expect(saved.single.$1, greaterThan(20500));
+      expect(saved.single.$1, lessThan(21500));
+      expect(saved.single.$2, 30000);
+    });
+
+    testWidgets('écoute autour de la coupe et depuis le curseur', (
+      tester,
+    ) async {
+      final listened = <(int, int)>[];
+      await pump(tester, listened: listened);
+      await tester.tap(find.byTooltip('Écouter autour de la coupe').first);
+      await tester.tap(find.text('Lire depuis le curseur'));
+      expect(listened, [(18000, 22000), (20000, 30000)]);
+    });
+  });
+}

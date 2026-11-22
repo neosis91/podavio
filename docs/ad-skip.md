@@ -11,44 +11,67 @@ Les constantes vivent dans `lib/data/segment_match.dart`.
 
 ## Empreinte
 
-Les pubs, les sponsors et les outros passent par Olaf (Joren Six,
-<https://github.com/JorenSix/Olaf>, AGPL-3.0), le même extracteur que
-les virgules courtes, vendu dans `packages/olaf_ffi`. Chromaprint reste
-dans le dépôt, mais le chemin de détection ne l’appelle plus. Le code
-natif n’est appelé que depuis l’isolate d’analyse.
+Tous les types de passages (pubs, sponsors, outros, intros, autopromos,
+jingles, virgules, autres) passent par Chromaprint : portage Dart dans
+`lib/data/chromaprint.dart`, même empreinte que `fpcalc` 1.5.1
+(algorithme 2, 11 025 Hz mono, trame 4096, pas 1365 ≈ 124 ms). Aucune
+bibliothèque native, aucun appel réseau. L’ancien détecteur Olaf
+(`packages/olaf_ffi`, AGPL-3.0) est retiré.
 
-L’épisode entier est empreinté. Un landmark sur seize est conservé
-(`olafAdKeepModulus`), choisi sur les bits de fréquence du hash, pour
-que les deux copies d’une pub gardent les mêmes points et que le blob
-reste petit. Une correspondance est plafonnée à 60 s
-(`olafAdMaxDurationMs`). Les virgules courtes gardent, à part, les
-landmarks denses des trois premières minutes.
-
-- Le blob `episode_fingerprints.data` commence par les quatre octets
-  `Olaf`, puis un landmark par 12 octets (hash 64 bits, trame de 8 ms).
-  La colonne `hop_micros` reste remplie, elle ne sert plus au rapprochement.
+- `episode_fingerprints.data` : une valeur 32 bits par pas, little-endian.
+- Un blob qui commence par `Olaf` vient de l’ancien détecteur
+  (`isChromaprintPrint` le refuse) : l’épisode repasse dans la file et
+  est réempreinté. Un gabarit Olaf est retaillé dans la nouvelle
+  empreinte d’un de ses passages (`_recutTemplates`) : il garde son id,
+  son type, son nom et son avis. La colonne `olaf` est supprimée.
 
 ## Repérer un passage répété
 
-Pour les épisodes téléchargés d’un même podcast, sur les landmarks Olaf :
+Pour les épisodes téléchargés d’un même podcast, sur les valeurs
+Chromaprint (index inversé construit une fois par épisode) :
 
 1. Les séquences déjà gardées (gabarits en base) sont essayées d’abord.
    Si l’épisode en cours en reconnaît une, on ne le compare pas aux
    autres épisodes.
-2. Sinon, histogramme de décalage contre les épisodes suivants, dans
-   l’ordre. Au premier qui partage un passage, on s’arrête. Un second
-   passage qui n’existe que plus loin n’est pas cherché.
-3. Un pic local d’au moins 12 voix (`olafAdMinVotes`), sur au moins
-   10 s (`adMinDurationMs`), est un passage. Au-delà de 60 s, on ne
-   garde que la fenêtre d’une minute la plus fournie.
-4. Un trou de plus de 2,5 s coupe deux pubs collées au même décalage.
-5. Le début et la fin repassent par le recalage d’enveloppe et le
+2. Sinon, comparaison à lui-même, puis aux épisodes suivants, dans
+   l’ordre. Au premier qui partage un passage, on s’arrête.
+3. Vote par décalage sur les valeurs exactes. Pour chaque décalage, seule
+   la fenêtre de 512 points la plus dense est vérifiée : quelques votes
+   au hasard loin de la pub n’élargissent plus la plage.
+4. Vérification par distance de Hamming (≤ 6 bits sur 32), puis par
+   l’enveloppe : corrélation ≥ 0,9 par fenêtre d’une seconde, recalée de
+   ±40 ms. Une voix sur les mêmes notes trompe le chroma, pas l’enveloppe.
+   Une fenêtre au niveau tenu (silence, ton, bruit) ne prouve rien.
+5. Au moins 10 s (`adMinDurationMs`). Une portion de plus de 2 min
+   (`comparisonMaxPortionMs`) sort de la comparaison.
+6. Le début et la fin repassent par le recalage d’enveloppe et le
    silence tenu, puis, dans les trois premières minutes, par le log-mel.
-6. Un passage toujours dans la dernière minute est un outro : les bouts
+7. Un passage toujours dans la dernière minute est un outro : les bouts
    séparés d’au plus 5 s sont recollés, et s’il s’arrête à moins de 15 s
    de la fin du fichier il va jusqu’au bout.
-7. Le motif devient un `SegmentTemplate` (landmarks Olaf, durée, type)
-   et un `SkipSegment` par épisode (`source = fingerprint`).
+8. Le motif devient un `SegmentTemplate` (valeurs Chromaprint, durée,
+   type) et un `SkipSegment` par épisode (`source = fingerprint`).
+
+### Paramètres essayés
+
+Matrice synthétique `AD_CONTEXT_MATRIX=1 flutter test
+test/ad_context_matrix_test.dart` (2,54 h d’audio, 43 pubs), mesurée sur
+la VM de développement (Xeon virtualisé, 4 cœurs), **pas sur un Pixel 7**.
+Configuration de production (contexte actif) :
+
+| Détecteur | VP | FP | FN | Précision | Rappel | Erreur de bord | s / h audio |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Olaf (develop) | 38 | 3 | 5 | 0,927 | 0,884 | 4642 ms | 2,88 |
+| Chromaprint (cette version) | 38 | 2 | 5 | 0,950 | 0,884 | 3461 ms | 6,22 |
+
+- Gardés : vote borné à la fenêtre la plus dense, vérification par
+  l’enveloppe, plafond de 2 min.
+- Essayés sans gain : Hamming 4 ou 3 bits (au lieu de 6), plus de
+  candidats par décalage, coupure sur silence dans une portion.
+- Non faits : algorithmes TEST1/3/5 et retrait du silence de TEST4
+  (l’empreinte ne serait plus celle de `fpcalc`), autre fréquence
+  d’échantillonnage, rééchantillonnage ±2 % pour les copies accélérées
+  (2 à 3 fois le calcul ; aucun des deux détecteurs ne les trouve).
 
 ## Contexte
 
@@ -300,40 +323,6 @@ fichier et une copie `Int16` : 318 Mo de RSS. Le chemin par blocs
 finissait en 5,7 s, avec 12 Mo retenus et +36 Mo de RSS. Ce plafond
 n’est pas relevé.
 
-### Index Olaf
-
-Chaque épisode construit une seule fois son index hash → temps
-(`lib/data/olaf_index.dart` : adressage ouvert sur un `Uint64List`, temps
-rangés bout à bout dans un `Uint32List` avec un tableau d’offsets). Les
-gabarits et les paires le réutilisent, au lieu de reconstruire une `Map`
-par appel. Les votes sortent dans le même ordre : les plans ne changent
-pas (`test/olaf_index_test.dart` compare à l’ancien chemin `Map`).
-
-Banc `test/support/olaf_index_bench.dart`, landmarks synthétiques
-(12 épisodes × 60 min, 179 238 landmarks, 20 gabarits, 66 paires, médiane
-de 5 passages), mesuré sur la VM de CI (Xeon virtualisé, 4 cœurs), pas
-sur un Pixel 7 :
-
-| Variante | JIT (`flutter test`) | AOT (`dart compile exe`) |
-| --- | --- | --- |
-| ancien (`Map` reconstruite à chaque appel) | 1017 ms | 718 ms |
-| `Map` construite une fois par épisode | 105 ms | 104 ms |
-| table compacte une fois par épisode | 45 ms | 46 ms |
-
-L’index compact d’un épisode de 15 062 landmarks occupe 631 ko.
-
-```sh
-OLAF_INDEX_BENCH=1 flutter test test/olaf_index_bench_test.dart
-dart compile exe tool/olaf_index_bench.dart -o /tmp/olaf_bench && /tmp/olaf_bench
-```
-
-Sur un Pixel 7 branché en adb (débogage USB actif) :
-`flutter run --release -d <id> -t tool/olaf_index_bench.dart`, le
-rapport s’affiche dans la console et dans `adb logcat`. Le banc est
-synthétique et n’a pas besoin de la bibliothèque native. `OLAF_AD_PCM`
-ne s’applique pas : ce test lit des fichiers PCM de l’hôte sous
-`flutter test`, qui tourne sur l’hôte et non sur le téléphone.
-
 ## Décodage
 
 Branché.
@@ -421,15 +410,12 @@ portion démarre et finit sur un vrai silence, pas sur un creux bref. Une
 virgule d’environ 3 secondes répétée n’importe où dans les trois premières
 minutes, même à une heure différente d’un épisode à l’autre, devient un
 passage `jingle` de source `network` (chapitre « Virgule réseau »).
-Olaf pose des landmarks (pics spectraux, paires, hash 64 bits, vote par
-décalage) sur ces trois minutes et désigne les épisodes. La fenêtre de
-3 s, et donc le début et la fin du chapitre après le silence, restent
-ceux du log-mel : sur les neuf épisodes RTL du 21 novembre 2026, les
-heures sont les mêmes, et Dreyfus, Lesseps et de Gaulle n’en ont pas.
-L’extraction, le vote et ce calage local prennent environ 1,2 s, contre
-environ 16 s pour parcourir toutes les fenêtres, et les landmarks tiennent
-dans 0,5 Mo au lieu d’environ 50 Mo de trames. Tant qu’un épisode comparé
-n’a pas encore ces landmarks, la recherche log-mel reste le détecteur :
+Chromaprint, sur ces trois minutes, désigne les épisodes qui partagent
+une virgule (`lib/data/chromaprint_sting.dart`). La fenêtre de 3 s, et
+donc le début et la fin du chapitre après le silence, restent ceux du
+log-mel. Quand tous les épisodes ont leur empreinte et que Chromaprint
+ne trouve rien, il n’y a pas de virgule. Tant qu’un épisode comparé n’a
+pas encore d’empreinte, la recherche log-mel reste le détecteur :
 trames centrées, deux épisodes si la copie est franche (score ≥ 0,90),
 trois sinon (0,85). Un motif plus long déjà repéré n’est pas réutilisé.
 La virgule se saute avec les pubs, même quand un silence la sépare de
@@ -457,6 +443,29 @@ et le test de position ne refait pas de requête. Le saut a lieu si :
 Un retour manuel dans le passage (seek arrière, y compris depuis la
 notification via `PlaybackHandler.onUserSeek`) le marque comme tenu : on
 ne le ressaute pas. Un bandeau « Passage ignoré » propose d’annuler.
+
+## Correction à la main
+
+Dans la liste des passages d’un podcast, « Ajuster les bornes » ouvre
+l’éditeur (`lib/ui/podcast/segment_editor_page.dart`) : début et fin au
+dixième de seconde, boutons ±0,5 s, écoute de 2 s avant à 2 s après
+chaque coupe. « Forme d’onde » ouvre une page à part
+(`segment_waveform_page.dart`) : passage surligné, contexte avant et
+après (au moins 10 s), poignées à glisser, zoom, curseur, tête de
+lecture, lecture depuis le curseur. L’onde vient de l’enveloppe RMS
+20 ms déjà calculée à l’analyse et gardée avec l’empreinte (crête et
+RMS par colonne, échelle dB) : rien n’est redécodé, aucune dépendance.
+
+L’enregistrement (`saveSegmentBounds`, `lib/data/segment_edit.dart`) :
+
+1. retaille l’empreinte Chromaprint de référence dans celle de l’épisode,
+   aux nouvelles bornes : le gabarit du passage (créé s’il n’existait
+   pas) sert ensuite aux autres épisodes ;
+2. passe le passage en `source = manual`, confirmé. L’analyse ne réécrit
+   que les lignes `fingerprint` et ne pose pas de passage qui recouvre
+   un passage manuel ;
+3. ajoute une ligne à `segment_annotations` (bornes et source détectées,
+   bornes corrigées, date), en local, pour régler plus tard les seuils.
 
 ## Reste à faire
 

@@ -19,6 +19,8 @@ const interfaceMessages = <String, Map<String, String>>{
 };
 
 const _fr = <String, String>{
+  '0.5 s earlier': '0,5 s plus tôt',
+  '0.5 s later': '0,5 s plus tard',
   '1 at a time': '1 à la fois',
   '1 day after listening': '1 jour après l’écoute',
   '1 episode': '1 épisode',
@@ -62,6 +64,7 @@ const _fr = <String, String>{
   'Add to playlist': 'Ajouter à la playlist',
   'Adds the episode to the playlist when the download finishes':
       'Place l’épisode dans la playlist dès la fin du téléchargement',
+  'Adjust bounds': 'Ajuster les bornes',
   'Adjusts the displayed position and duration to the playback speed':
       'Ajuste la position et la durée affichées selon la vitesse de lecture',
   'Ads and jingles': 'Pubs et jingles',
@@ -82,6 +85,8 @@ const _fr = <String, String>{
   'Alternative Health': 'Médecines alternatives',
   'Always shown': 'Toujours affiché',
   'Amber': 'Ambre',
+  'Analyse the episode to see its waveform.':
+      'Analysez l’épisode pour voir sa forme d’onde.',
   'Analysed': 'Analysé',
   'Analysis management': 'Gestion des analyses',
   'Analyze downloaded episodes': 'Analyser les épisodes téléchargés',
@@ -187,6 +192,7 @@ const _fr = <String, String>{
   'Crafts': 'Artisanat',
   'Create a device': 'Créer un appareil',
   'Cricket': 'Cricket',
+  'Cursor': 'Curseur',
   'Cyan': 'Cyan',
   'Daily News': 'Quotidien',
   'Dark': 'Sombre',
@@ -235,6 +241,7 @@ const _fr = <String, String>{
   'Education': 'Éducation',
   'Education for Kids': 'Éducation des enfants',
   'Encrypted link to the browser': 'Lien chiffré vers le navigateur',
+  'End': 'Fin',
   'Enter the 4-character code.': 'Indiquez le code à 4 caractères.',
   'Enter the address (URL or IP) of your synchronization server.':
       'Indiquez l’adresse (URL ou IP) de votre serveur de synchronisation.',
@@ -353,6 +360,7 @@ const _fr = <String, String>{
   'Link copied': 'Lien copié',
   'Linked devices': 'Appareils connectés',
   'List density': 'Densité des listes',
+  'Listen around the cut': 'Écouter autour de la coupe',
   'Listen together': 'Écoutons ensemble',
   'Listening language': 'Langue d’écoute',
   'Log in': 'Se connecter',
@@ -456,6 +464,7 @@ const _fr = <String, String>{
   'Play an episode to start a session.':
       'Lancez un épisode pour ouvrir une session.',
   'Play count': 'Nombre lus',
+  'Play from cursor': 'Lire depuis le curseur',
   'Play here': 'Jouer ici',
   'Play next': 'Lire ensuite',
   'Playback': 'Lecture',
@@ -516,7 +525,9 @@ const _fr = <String, String>{
   'Rugby': 'Rugby',
   'Running': 'Course à pied',
   'Safety number': 'Empreinte de sécurité',
+  'Save': 'Enregistrer',
   'Saved': 'Téléchargé',
+  'Saved bounds are kept by later analyses and become the reference for this passage.': 'Les bornes enregistrées sont gardées par les analyses suivantes et deviennent la référence de ce passage.',
   'Saves a copy every 3 days and keeps the 5 most recent.':
       'Enregistre une copie tous les 3 jours et conserve les 5 plus récentes.',
   'Saving the fingerprint': 'Enregistrement de l’empreinte',
@@ -585,6 +596,7 @@ const _fr = <String, String>{
   'Sports': 'Sports',
   'Sports News': 'Actualités sportives',
   'Stand-Up': 'Stand-up',
+  'Start': 'Début',
   'Start a session': 'Ouvrir une session',
   'Started and not finished': 'Commencés et non terminés',
   'Statistics': 'Statistiques',
@@ -638,6 +650,7 @@ const _fr = <String, String>{
   'This episode is not in your library.':
       'Cet épisode n’est pas dans votre bibliothèque.',
   'This install cannot be shared offline. Download Podavio once from podavio.com while online, then try again.': 'Cette installation ne peut pas être partagée hors ligne. Téléchargez Podavio une fois depuis podavio.com en étant en ligne, puis réessayez.',
+  'This passage no longer exists.': 'Ce passage n’existe plus.',
   'This refresh will use mobile data.':
       'Cette actualisation utilisera les données mobiles.',
   'This replaces your current subscriptions, queue, favorites, and playback progress. Downloaded audio files are not restored. Continue?': 'Cela remplace vos abonnements, file d’attente, favoris et progression d’écoute. Les fichiers audio téléchargés ne sont pas restaurés. Continuer ?',
@@ -680,6 +693,7 @@ const _fr = <String, String>{
   'Waiting for the others.': 'En attente des autres.',
   'Waiting in the queue': 'En attente dans la file',
   'Wallpaper': 'Fond d’écran',
+  'Waveform': 'Forme d’onde',
   'Welcome to Podavio': 'Bienvenue dans Podavio',
   'What\'s new': 'Les nouveautés',
   'When this is on, the newest unplayed or in-progress episodes stay on the device, up to this limit. Finished episodes are not downloaded.': 'Quand c’est activé, les épisodes non lus ou en cours les plus récents restent sur l’appareil, jusqu’à cette limite. Les épisodes déjà écoutés ne sont pas téléchargés.',
@@ -696,6 +710,8 @@ const _fr = <String, String>{
   'Your library stays encrypted end to end.':
       'Votre bibliothèque reste chiffrée de bout en bout.',
   'Your name': 'Votre nom',
+  'Zoom in': 'Zoomer',
+  'Zoom out': 'Dézoomer',
   'gPodder': 'gPodder',
   'gPodder Sync': 'gPodder Sync',
   'gpodder.net, or a compatible server you host.':

@@ -1,10 +1,11 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:olaf_ffi/olaf_ffi.dart';
 import 'package:podavio/data/ad_context.dart';
 import 'package:podavio/data/envelope.dart';
-import 'package:podavio/data/olaf_ads.dart';
+import 'package:podavio/data/chromaprint.dart';
+import 'package:podavio/data/segment_finder.dart';
 
 void main() {
   test('a flat 15 s tone is kept without context and rejected with it', () {
@@ -22,12 +23,12 @@ void main() {
         speech: _speech(40, 15),
       ),
     ];
-    final off = planOlafAds(
+    final off = buildAnalysisPlan(
       episodes: episodes,
       templates: const [],
       contextLayer: false,
     );
-    final on = planOlafAds(episodes: episodes, templates: const []);
+    final on = buildAnalysisPlan(episodes: episodes, templates: const []);
     expect(off.patterns, isNotEmpty);
     expect(on.patterns, isEmpty);
   });
@@ -43,12 +44,12 @@ void main() {
         speech: _speech(20, 230),
       ),
     ];
-    final off = planOlafAds(
+    final off = buildAnalysisPlan(
       episodes: episodes,
       templates: const [],
       contextLayer: false,
     );
-    final on = planOlafAds(episodes: episodes, templates: const []);
+    final on = buildAnalysisPlan(episodes: episodes, templates: const []);
     expect(off.patterns, isEmpty);
     expect(on.patterns, hasLength(1));
     final segment = on.patterns.single.segments.single;
@@ -57,34 +58,31 @@ void main() {
     expect(segment.endMs - segment.startMs, inInclusiveRange(15000, 25000));
   });
 
-  test('a 70 s read stays capped without context and is extended with it', () {
+  test('a 70 s read is kept whole, and context keeps it under 120 s', () {
     final ad = _inserted(startMs: 9000, lengthMs: 70000, totalMs: 100000);
     final episodes = [
       _episode(
         1,
-        _span(10000, 80000, hashes: 120),
+        _span(10000, 80000),
         durationMs: 100000,
         envelope: ad.envelope,
         speech: ad.speech,
       ),
       _episode(
         2,
-        _span(20000, 90000, hashes: 120),
+        _span(20000, 90000),
         durationMs: 110000,
         envelope: _shift(ad.envelope, 10000),
         speech: ad.speech,
       ),
     ];
-    final off = planOlafAds(
+    final off = buildAnalysisPlan(
       episodes: episodes,
       templates: const [],
       contextLayer: false,
     );
-    final on = planOlafAds(episodes: episodes, templates: const []);
+    final on = buildAnalysisPlan(episodes: episodes, templates: const []);
     expect(off.patterns, isNotEmpty);
-    for (final segment in off.patterns.expand((item) => item.segments)) {
-      expect(segment.endMs - segment.startMs, lessThanOrEqualTo(60000));
-    }
     final lengths = [
       for (final segment in on.patterns.expand((item) => item.segments))
         segment.endMs - segment.startMs,
@@ -173,31 +171,38 @@ void main() {
   });
 }
 
-OlafAdEpisode _episode(
+FingerprintEpisode _episode(
   int id,
-  Uint8List prints, {
+  ({int startMs, int endMs, int salt}) span, {
   int durationMs = 400000,
   Uint8List? envelope,
   Uint8List? speech,
 }) {
-  return OlafAdEpisode(
+  final hop = chromaprintStoredHopMicros / 1000;
+  final values = List<int>.generate(
+    (durationMs / hop).floor(),
+    (index) => (id * 7919 + index * 104729) & 0x7fffffff,
+  );
+  final from = (span.startMs / hop).ceil();
+  final to = math.min(values.length, (span.endMs / hop).floor());
+  for (var i = from; i < to; i++) {
+    values[i] = span.salt * 100000 + i - from;
+  }
+  return FingerprintEpisode(
     episodeId: id,
-    prints: prints,
+    values: values,
+    hopMicros: chromaprintStoredHopMicros,
     durationMs: durationMs,
     envelope: envelope,
     speech: speech,
   );
 }
 
-Uint8List _span(int startMs, int endMs, {int salt = 7, int hashes = 80}) {
-  final start = startMs ~/ olafStepMs;
-  final frames = (endMs - startMs) ~/ olafStepMs;
-  final step = frames ~/ (hashes - 1);
-  return encodeOlafAdPrints([
-    for (var i = 0; i < hashes; i++)
-      OlafLandmark(hash: salt * 100000 + i, t1: start + i * step),
-  ]);
-}
+({int startMs, int endMs, int salt}) _span(
+  int startMs,
+  int endMs, {
+  int salt = 7,
+}) => (startMs: startMs, endMs: endMs, salt: salt);
 
 Uint8List _flat(int ms, int level) {
   return Uint8List(ms ~/ envelopeHopMs)
@@ -228,7 +233,7 @@ Uint8List _varying(int ms) {
     if (i >= 0 && i < out.length) out[i] = 0;
   }
   for (var i = open; i < close && i < out.length; i++) {
-    out[i] = 200;
+    out[i] = 140 + ((i - open) * 37 + (i - open) ~/ 7 * 11) % 100;
   }
   for (var i = close; i < close + gap && i < out.length; i++) {
     out[i] = 0;

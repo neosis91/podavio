@@ -111,3 +111,37 @@ List<int> decodeFingerprint(Uint8List data) {
   final count = data.lengthInBytes ~/ 4;
   return [for (var i = 0; i < count; i++) view.getUint32(i * 4, Endian.little)];
 }
+
+/// Vrai pour un blob Chromaprint utilisable. Un blob qui commence par
+/// `Olaf` vient de l’ancien détecteur : l’épisode est réempreinté, et le
+/// gabarit est retaillé dans la nouvelle empreinte.
+bool isChromaprintPrint(Uint8List data) {
+  if (data.lengthInBytes < 32 || data.lengthInBytes % 4 != 0) return false;
+  return !(data[0] == 0x4F &&
+      data[1] == 0x6C &&
+      data[2] == 0x61 &&
+      data[3] == 0x66);
+}
+
+/// Bornes d’un passage avant et après correction à la main.
+class SegmentAnnotation {
+  const SegmentAnnotation({
+    required this.segmentId,
+    required this.episodeId,
+    required this.kind,
+    required this.detectedSource,
+    required this.detectedStartMs,
+    required this.detectedEndMs,
+    required this.correctedStartMs,
+    required this.correctedEndMs,
+  });
+
+  final int segmentId;
+  final int episodeId;
+  final String kind;
+  final String detectedSource;
+  final int detectedStartMs;
+  final int detectedEndMs;
+  final int correctedStartMs;
+  final int correctedEndMs;
+}

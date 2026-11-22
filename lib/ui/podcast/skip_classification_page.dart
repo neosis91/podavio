@@ -17,6 +17,7 @@ import '../widgets/choice_dialog.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/list_metrics.dart';
 import '../widgets/messages.dart';
+import 'segment_editor_page.dart';
 
 final skipClassificationProvider =
     StreamProvider.family<SkipClassification, int>((ref, podcastId) {
@@ -405,6 +406,10 @@ class _SegmentTile extends ConsumerWidget {
                 child: Text(context.tr('Change kind')),
               ),
               PopupMenuItem(
+                value: _SegmentAction.adjust,
+                child: Text(context.tr('Adjust bounds')),
+              ),
+              PopupMenuItem(
                 value: _SegmentAction.confirm,
                 child: Text(context.tr('Confirm')),
               ),
@@ -510,6 +515,26 @@ class _SegmentTile extends ConsumerWidget {
         } else {
           await db.setSkipSegmentKind(segment!.id, choice);
         }
+      case _SegmentAction.adjust:
+        var segmentId = segment?.id;
+        if (template != null) {
+          final target = await db.previewTargetForTemplate(template.id);
+          segmentId = target?.segmentId;
+        }
+        if (!context.mounted) return;
+        final editId = segmentId;
+        if (editId == null) {
+          showMessage(
+            context,
+            context.tr('Download the episode to preview this passage.'),
+          );
+          return;
+        }
+        await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => SegmentEditorPage(segmentId: editId),
+          ),
+        );
       case _SegmentAction.confirm:
         if (template != null) {
           await db.setTemplateReview(template.id, confirmed: true);
@@ -554,7 +579,7 @@ class _SegmentTile extends ConsumerWidget {
   }
 }
 
-enum _SegmentAction { kind, confirm, ignore, rename, delete }
+enum _SegmentAction { kind, adjust, confirm, ignore, rename, delete }
 
 String _templateTitle(BuildContext context, SegmentTemplate template) {
   final label = template.label?.trim() ?? '';
