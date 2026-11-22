@@ -7,10 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:podavio/data/app_database.dart';
 import 'package:podavio/data/audio_analysis.dart';
-import 'package:olaf_ffi/olaf_ffi.dart';
 import 'package:podavio/data/chromaprint.dart';
 import 'package:podavio/data/models.dart';
-import 'package:podavio/data/olaf_ads.dart';
 import 'package:podavio/data/pcm_decoder.dart';
 import 'package:podavio/data/providers.dart';
 import 'package:podavio/data/segment_match.dart';
@@ -51,6 +49,7 @@ void main() {
     () async {
       final database = AppDatabase(NativeDatabase.memory());
       addTearDown(database.close);
+      final motif = _motif(100, 4);
       final podcastId = (await database.saveFeed(
         _draft([_episodeDraft('a', 'Un'), _episodeDraft('b', 'Deux')]),
       )).podcastId;
@@ -63,8 +62,8 @@ void main() {
           .singleWhere((row) => row.episode.guid == 'b')
           .episode
           .id;
-      await _ready(database, first, 10000);
-      await _ready(database, second, 80000);
+      await _ready(database, first, _placed(1500, 1, 80, motif));
+      await _ready(database, second, _placed(1500, 2, 600, motif));
 
       await syncPodcastAnalysis(database, podcastId);
       await syncPodcastAnalysis(database, podcastId);
@@ -87,7 +86,7 @@ void main() {
       );
 
       final thirdId = await _addEpisode(database, podcastId, 'c', 'Trois');
-      await _ready(database, thirdId, 140000);
+      await _ready(database, thirdId, _placed(1500, 3, 900, motif));
       await syncPodcastAnalysis(database, podcastId);
       await syncPodcastAnalysis(database, podcastId);
 
@@ -113,6 +112,7 @@ void main() {
   test('a confirmed template is inherited by the next episode', () async {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
+    final motif = _motif(100, 6);
     final podcastId = (await database.saveFeed(
       _draft([_episodeDraft('a', 'Un'), _episodeDraft('b', 'Deux')]),
     )).podcastId;
@@ -120,19 +120,19 @@ void main() {
     await _ready(
       database,
       episodes.singleWhere((row) => row.episode.guid == 'a').episode.id,
-      12000,
+      _placed(1500, 1, 90, motif),
     );
     await _ready(
       database,
       episodes.singleWhere((row) => row.episode.guid == 'b').episode.id,
-      90000,
+      _placed(1500, 2, 640, motif),
     );
     await syncPodcastAnalysis(database, podcastId);
     final template = (await database.listSegmentTemplates(podcastId)).single;
     await database.setTemplateReview(template.id, confirmed: true);
 
     final thirdId = await _addEpisode(database, podcastId, 'c', 'Trois');
-    await _ready(database, thirdId, 150000);
+    await _ready(database, thirdId, _placed(1500, 3, 1000, motif));
     await syncPodcastAnalysis(database, podcastId);
 
     final added = await database.listSkipSegments(thirdId);
@@ -147,6 +147,7 @@ void main() {
     () async {
       final database = AppDatabase(NativeDatabase.memory());
       addTearDown(database.close);
+      final motif = _motif(100, 8);
       final podcastId = (await database.saveFeed(
         _draft([_episodeDraft('a', 'Un'), _episodeDraft('b', 'Deux')]),
       )).podcastId;
@@ -159,8 +160,8 @@ void main() {
           .singleWhere((row) => row.episode.guid == 'b')
           .episode
           .id;
-      await _ready(database, first, 20000);
-      await _ready(database, second, 70000);
+      await _ready(database, first, _placed(1500, 1, 80, motif));
+      await _ready(database, second, _placed(1500, 2, 500, motif));
       await syncPodcastAnalysis(database, podcastId);
       await database.insertSkipSegment(
         episodeId: first,
@@ -192,7 +193,6 @@ void main() {
   test(
     'the queue fingerprints two downloads and finds the shared passage',
     () async {
-      expect(await ensureOlafLibrary(), isTrue);
       final database = AppDatabase(NativeDatabase.memory());
       addTearDown(database.close);
       final ad = _sweep(chromaprintSampleRate * 20, 220);
@@ -202,10 +202,8 @@ void main() {
       final episodes = await database.watchEpisodes(podcastId: podcastId).first;
       final first = episodes[0].episode;
       final second = episodes[1].episode;
-      // 441 source samples is five Olaf hops after 11025 → 16000,
-      // so both copies land on the same FFT grid.
-      final atA = 441 * 40;
-      final atB = 441 * 200;
+      final atA = chromaprintHopSamples * 20;
+      final atB = chromaprintHopSamples * 80;
       final pcm = {
         '/tmp/a.pcm': _mix(_bed(30, 90), ad, atA),
         '/tmp/b.pcm': _mix(_bed(30, 140), ad, atB),
@@ -414,7 +412,7 @@ void main() {
     await database.setDownloadPath(episode.id, '/tmp/a.pcm');
     await database.upsertEpisodeFingerprint(
       episodeId: episode.id,
-      data: encodeOlafAdPrints(const []),
+      data: encodeFingerprint(_motif(32, 1)),
       hopMicros: chromaprintStoredHopMicros,
       speech: Uint8List(4),
     );
@@ -486,22 +484,33 @@ Future<void> _until(
   }
 }
 
-Future<void> _ready(AppDatabase database, int episodeId, int startMs) async {
+Future<void> _ready(
+  AppDatabase database,
+  int episodeId,
+  List<int> values,
+) async {
   await database.setDownloadPath(episodeId, '/tmp/episode-$episodeId.mp3');
   await database.upsertEpisodeFingerprint(
     episodeId: episodeId,
-    data: _adAt(startMs),
+    data: encodeFingerprint(values),
     hopMicros: chromaprintStoredHopMicros,
   );
 }
 
-/// 80 landmarks over about 12.6 s, the same hashes in every episode.
-Uint8List _adAt(int startMs) {
-  final start = startMs ~/ olafStepMs;
-  return encodeOlafAdPrints([
-    for (var i = 0; i < 80; i++)
-      OlafLandmark(hash: 900000 + i, t1: start + i * 20),
-  ]);
+List<int> _motif(int length, int salt) {
+  return [for (var i = 0; i < length; i++) 0xC0000000 + salt * 1000 + i];
+}
+
+List<int> _placed(int length, int seed, int at, List<int> motif) {
+  var state = seed;
+  final values = List<int>.generate(length, (_) {
+    state = (1664525 * state + 1013904223) & 0x7fffffff;
+    return state;
+  });
+  for (var i = 0; i < motif.length; i++) {
+    values[at + i] = motif[i];
+  }
+  return values;
 }
 
 Future<int> _addEpisode(

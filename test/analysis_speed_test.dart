@@ -36,7 +36,7 @@ void main() {
     final rssBefore = ProcessInfo.currentRss;
     final analyzed = analyzePcmFileSync(file.path);
     final rssAfter = ProcessInfo.currentRss;
-    expect(analyzed.fingerprint, isEmpty);
+    expect(analyzed.fingerprint, isNotEmpty);
     expect(analyzed.retainedBytes, lessThan(32 * 1024 * 1024));
     // ignore: avoid_print
     print(
