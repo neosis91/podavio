@@ -1,1 +1,0 @@
-- Create a passage by hand (ad, jingle, intro, outro, self-promo, other, with an optional name) from the episode, the player or analysis management, using the waveform and ±0.5 s controls; it is found in other episodes, skipped automatically, kept by later analyses, and can be deleted.
