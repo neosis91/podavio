@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'analysis_pace.dart';
 import 'app_database.dart';
-import 'hosting_source.dart';
 import 'chromaprint.dart';
 import 'envelope.dart';
 import 'episode_audio_analyzer.dart';
@@ -911,41 +910,25 @@ Future<void> _deleteDecoded(String path) async {
   }
 }
 
-/// Recharge les empreintes du podcast et réécrit les passages.
+/// Cherche les portions posées à la main dans les épisodes du podcast.
 ///
-/// Un second appel avec les mêmes empreintes ne duplique pas les lignes
-/// et ne revient pas sur un avis déjà posé.
+/// Rien n’est détecté tout seul : seuls les gabarits rattachés à un passage
+/// manuel sont cherchés (Chromaprint, vote d’offset, enveloppe, bornes).
+/// Sans portion, l’analyse s’arrête à l’empreinte et à l’enveloppe déjà
+/// enregistrées. Un second appel ne duplique pas les lignes et ne revient
+/// pas sur un avis déjà posé.
 Future<void> syncPodcastAnalysis(
   AppDatabase database,
   int podcastId, {
   int? focusEpisodeId,
   Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
 }) async {
+  final searched = await database.manualTemplateIds(podcastId);
+  if (searched.isEmpty) return;
   final stored = await database.fingerprintedDownloads(podcastId);
   final cohort = [...stored];
-  if (stored.length >= 2) {
-    final ids = comparisonPodcastIds(
-      focusPodcastId: podcastId,
-      focusDownloadCount: stored.length,
-      hosts: await database.downloadedHostingRows(),
-    );
-    for (final id in ids) {
-      if (id == podcastId) continue;
-      cohort.addAll(await database.fingerprintedDownloads(id));
-    }
-  }
   final focusEpisodeIds = {for (final row in stored) row.episode.id};
   final envelopes = await database.fingerprintEnvelopes(podcastId);
-  if (cohort.length > stored.length) {
-    final seen = <int>{podcastId};
-    for (final row in cohort) {
-      if (!seen.add(row.episode.podcastId)) continue;
-      if (row.episode.podcastId == podcastId) continue;
-      envelopes.addAll(
-        await database.fingerprintEnvelopes(row.episode.podcastId),
-      );
-    }
-  }
   final marks = await database.chapterMarksForEpisodes([
     for (final row in cohort) row.episode.id,
   ]);
@@ -986,7 +969,10 @@ Future<void> syncPodcastAnalysis(
   if (episodes.isNotEmpty) {
     final templates = <Object?>[];
     final reviews = await database.templateReviews(podcastId);
-    final ownTemplates = await database.listSegmentTemplates(podcastId);
+    final ownTemplates = [
+      for (final template in await database.listSegmentTemplates(podcastId))
+        if (searched.contains(template.id)) template,
+    ];
     final ownTemplateIds = {for (final template in ownTemplates) template.id};
     final stale = [
       for (final template in ownTemplates)
@@ -1013,6 +999,7 @@ Future<void> syncPodcastAnalysis(
       'episodes': episodes,
       'templates': templates,
       'focus': focusEpisodeId,
+      'discover': false,
     };
     final raw = offUi == null
         ? await _runPlanAnalysis(message)
@@ -1023,10 +1010,10 @@ Future<void> syncPodcastAnalysis(
         database,
         podcastId,
         _keepFocusEpisodes(plan, focusEpisodeIds, ownTemplateIds),
+        searchedTemplates: searched,
       );
     }
   }
-  await applyLogMelFindings(database, podcastId, offUi: offUi);
 }
 
 /// Gabarits posés par l’ancien détecteur Olaf : la tranche Chromaprint est
@@ -1041,9 +1028,12 @@ Future<Map<int, Uint8List>> _recutTemplates(
 ) async {
   final wanted = templateIds.toSet();
   final recut = <int, Uint8List>{};
-  for (final segment in await database.fingerprintSegmentsForPodcast(
-    podcastId,
-  )) {
+  // Un passage créé à la main avant l’empreinte de son épisode a un gabarit
+  // vide : ses bornes, posées à la main, passent avant celles détectées.
+  for (final segment in [
+    ...await database.manualSegmentsForPodcast(podcastId),
+    ...await database.fingerprintSegmentsForPodcast(podcastId),
+  ]) {
     final id = segment.templateId;
     if (id == null || !wanted.contains(id) || recut.containsKey(id)) continue;
     final print = printsById[segment.episodeId];
@@ -1105,11 +1095,15 @@ AnalysisPlan _keepFocusEpisodes(
 }
 
 /// Écrit [plan] sans doublon. Un passage déjà revu garde son avis et son type.
+///
+/// [searchedTemplates] : seules les occurrences de ces gabarits sont
+/// revues ; les anciens passages détectés restent tels quels en base.
 Future<void> applyAnalysisPlan(
   AppDatabase database,
   int podcastId,
-  AnalysisPlan plan,
-) async {
+  AnalysisPlan plan, {
+  Set<int>? searchedTemplates,
+}) async {
   final existing = await database.fingerprintSegmentsForPodcast(podcastId);
   final manual = await database.manualSegmentsForPodcast(podcastId);
   final keptForLogMel = {
@@ -1159,6 +1153,10 @@ Future<void> applyAnalysisPlan(
     }
     for (final row in existing) {
       if (touched.contains(row.id) || row.confirmed == true) continue;
+      if (searchedTemplates != null &&
+          !searchedTemplates.contains(row.templateId)) {
+        continue;
+      }
       if (row.templateId != null && keptForLogMel.contains(row.templateId)) {
         continue;
       }

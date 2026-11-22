@@ -59,11 +59,26 @@ void main() {
     )).podcastId;
     final episode = (await database.episodesForPodcast(shownId)).single;
     await database.setDownloadPath(episode.id, '/tmp/one.mp3');
-    await database.insertSegmentTemplate(
+    final templateId = await database.insertSegmentTemplate(
       podcastId: shownId,
       kind: SkipSegmentKind.ad,
       durationMs: 15000,
       occurrences: 1,
+    );
+    await database.insertSkipSegment(
+      episodeId: episode.id,
+      startMs: 1000,
+      endMs: 16000,
+      kind: SkipSegmentKind.ad,
+      source: SkipSegmentSource.manual,
+      confirmed: true,
+      templateId: templateId,
+    );
+    await database.insertSegmentTemplate(
+      podcastId: shownId,
+      kind: SkipSegmentKind.ad,
+      durationMs: 15000,
+      occurrences: 3,
     );
 
     final secondId = (await database.saveFeed(
@@ -121,6 +136,8 @@ void main() {
     expect(texts.any((text) => text.contains('En attente')), isTrue);
     expect(texts.any((text) => text.contains('Analysé')), isTrue);
     expect(texts.any((text) => text.contains('Publicité 1')), isTrue);
+    expect(texts.any((text) => text.contains('À la main 1')), isTrue);
+    expect(texts.any((text) => text.contains('Rien n’est détecté')), isTrue);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

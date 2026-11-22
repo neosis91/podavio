@@ -142,7 +142,7 @@ class PlaybackPage extends ConsumerWidget {
             title: Text(context.tr('Analyze downloads automatically')),
             subtitle: Text(
               context.tr(
-                'Finds repeated ads and jingles in downloaded episodes. Turn this off if the app stops responding.',
+                'Prepares each download (fingerprint and waveform) and searches it for the passages created by hand. Nothing is detected on its own. Turn this off if the app stops responding.',
               ),
             ),
             value: settings.automaticAudioAnalysis,

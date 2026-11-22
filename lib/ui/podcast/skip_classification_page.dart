@@ -17,6 +17,7 @@ import '../widgets/choice_dialog.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/list_metrics.dart';
 import '../widgets/messages.dart';
+import 'passage_creation.dart';
 import 'segment_editor_page.dart';
 
 final skipClassificationProvider =
@@ -71,6 +72,14 @@ class SkipClassificationPage extends ConsumerWidget {
         return Scaffold(
           appBar: AppBar(
             toolbarHeight: 72,
+            actions: [
+              IconButton(
+                key: const Key('pick-episode-for-passage'),
+                tooltip: context.tr('Create a passage'),
+                icon: const Icon(Icons.content_cut),
+                onPressed: () => pickEpisodeForPassage(context, ref, podcastId),
+              ),
+            ],
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -123,12 +132,12 @@ class SkipClassificationPage extends ConsumerWidget {
                       .read(globalSkipSettingsProvider.notifier)
                       .setKind(kind, enabled: enabled),
                 ),
-              _Section(context.tr('Detected segments')),
+              _Section(context.tr('Passages created by hand')),
               SwitchListTile(
                 title: Text(context.tr('Analyze downloads automatically')),
                 subtitle: Text(
                   context.tr(
-                    'Finds repeated ads and jingles in downloaded episodes. Turn this off if the app stops responding.',
+                    'Prepares each download (fingerprint and waveform) and searches it for the passages created by hand. Nothing is detected on its own. Turn this off if the app stops responding.',
                   ),
                 ),
                 value: ref.watch(settingsProvider).automaticAudioAnalysis,
@@ -212,18 +221,7 @@ class SkipClassificationPage extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: Text(
                 context.tr(
-                  'At least two downloaded episodes of the same podcast are needed before repeated ads and jingles can be found.',
-                ),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              child: Text(
-                context.tr(
-                  'A chapter title that looks like an ad is still suggested on its own.',
+                  'No passage created yet. Create one from an episode, the player or the button above: the analysis then searches for it in the other downloaded episodes.',
                 ),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -410,6 +408,10 @@ class _SegmentTile extends ConsumerWidget {
                 child: Text(context.tr('Adjust bounds')),
               ),
               PopupMenuItem(
+                value: _SegmentAction.create,
+                child: Text(context.tr('Create a passage')),
+              ),
+              PopupMenuItem(
                 value: _SegmentAction.confirm,
                 child: Text(context.tr('Confirm')),
               ),
@@ -535,6 +537,18 @@ class _SegmentTile extends ConsumerWidget {
             builder: (_) => SegmentEditorPage(segmentId: editId),
           ),
         );
+      case _SegmentAction.create:
+        var episodeId = segment?.episodeId;
+        if (template != null) {
+          final target = await db.previewTargetForTemplate(template.id);
+          episodeId = target?.episodeId;
+        }
+        if (!context.mounted) return;
+        if (episodeId == null) {
+          await pickEpisodeForPassage(context, ref, podcastId);
+          return;
+        }
+        await openPassageCreator(context, ref, episodeId);
       case _SegmentAction.confirm:
         if (template != null) {
           await db.setTemplateReview(template.id, confirmed: true);
@@ -575,11 +589,12 @@ class _SegmentTile extends ConsumerWidget {
         } else {
           await db.deleteSkipSegment(segment!.id);
         }
+        unawaited(ref.read(playerProvider.notifier).reloadSkipSegments());
     }
   }
 }
 
-enum _SegmentAction { kind, adjust, confirm, ignore, rename, delete }
+enum _SegmentAction { kind, adjust, create, confirm, ignore, rename, delete }
 
 String _templateTitle(BuildContext context, SegmentTemplate template) {
   final label = template.label?.trim() ?? '';

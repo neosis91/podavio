@@ -151,6 +151,7 @@ AnalysisPlan buildAnalysisPlan({
   bool contextLayer = true,
   bool useMn04 = false,
   List<Mn04Cue> mn04 = const [],
+  bool discover = true,
 }) {
   final usable = [
     for (final episode in episodes)
@@ -216,6 +217,9 @@ AnalysisPlan buildAnalysisPlan({
     );
   }
 
+  // Sans découverte, seuls les gabarits donnés sont cherchés : pas de
+  // nouveau motif par répétition, pas de couche de contexte.
+  if (!discover) return AnalysisPlan(patterns);
   final discovered = focusEpisodeId != null && known.contains(focusEpisodeId)
       ? const <DiscoveredPattern>[]
       : _discoverPatterns(
@@ -593,6 +597,7 @@ Map<String, Object?> planAnalysisMessage(Map<String, Object?> message) {
       contextLayer: message['context'] != false,
       useMn04: message['mn04'] == true,
       mn04: _mn04Of(message['mn04Cues']),
+      discover: message['discover'] != false,
     ),
   );
 }

@@ -11,6 +11,7 @@ import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
 import '../widgets/brand.dart';
 import '../widgets/episode_tile.dart';
+import '../podcast/passage_creation.dart';
 import 'audio_output_sheet.dart';
 import 'player_panel.dart';
 import 'player_sheets.dart';
@@ -253,6 +254,23 @@ class PlayerTransport extends ConsumerWidget {
                 icon: const TuneIcon(),
               ),
               const Spacer(),
+              IconButton(
+                key: const Key('create-passage-here'),
+                tooltip: context.tr('Create a passage here'),
+                onPressed: episodeId == null
+                    ? null
+                    : () => openPassageCreator(
+                        context,
+                        ref,
+                        episodeId,
+                        positionMs: ref
+                            .read(playerProvider)
+                            .position
+                            .inMilliseconds,
+                        waveformFirst: true,
+                      ),
+                icon: const Icon(Icons.content_cut),
+              ),
               if (hasChapters)
                 IconButton(
                   tooltip: context.tr('Chapters'),

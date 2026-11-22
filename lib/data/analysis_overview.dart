@@ -68,6 +68,7 @@ class AnalysisOverviewPodcast {
     required this.hostingSource,
     required this.status,
     required this.counts,
+    this.manualSegments = 0,
   });
 
   final int id;
@@ -78,6 +79,9 @@ class AnalysisOverviewPodcast {
   final String hostingSource;
   final AnalysisOverviewStatus status;
   final Map<SkipSegmentKind, int> counts;
+
+  /// Passages posés à la main (créés ou corrigés), tous types confondus.
+  final int manualSegments;
 
   int countOf(SkipSegmentKind kind) => counts[kind] ?? 0;
 }
@@ -120,6 +124,7 @@ List<AnalysisOverviewPodcast> buildAnalysisOverview({
   required List<AnalysisCatalogPodcast> catalog,
   required List<AnalysisDownloadFact> downloads,
   required List<AnalysisSegmentFact> segments,
+  Map<int, int> manualSegments = const {},
   Set<int> runningPodcastIds = const {},
   Set<int> queuedPodcastIds = const {},
 }) {
@@ -162,6 +167,7 @@ List<AnalysisOverviewPodcast> buildAnalysisOverview({
           queued: queuedPodcastIds.contains(id),
         ),
         counts: Map.unmodifiable(counts[id] ?? const {}),
+        manualSegments: manualSegments[id] ?? 0,
       ),
     );
   }

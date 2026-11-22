@@ -34,6 +34,7 @@ class SegmentWaveformPage extends StatefulWidget {
     required this.endMs,
     required this.onListen,
     required this.onSave,
+    this.saveLabel = 'Save',
     this.playhead,
   });
 
@@ -43,6 +44,9 @@ class SegmentWaveformPage extends StatefulWidget {
   final int endMs;
   final PassageListener onListen;
   final BoundsSaver onSave;
+
+  /// Clé anglaise du bouton d’enregistrement.
+  final String saveLabel;
 
   /// Position de lecture dans cet épisode, `null` s’il ne joue pas.
   final ValueListenable<int?>? playhead;
@@ -124,7 +128,7 @@ class _SegmentWaveformPageState extends State<SegmentWaveformPage> {
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
-            child: Text(context.tr('Save')),
+            child: Text(context.tr(widget.saveLabel)),
           ),
         ],
       ),
@@ -264,6 +268,7 @@ class BoundControls extends StatelessWidget {
     required this.valueMs,
     required this.onStep,
     required this.onListen,
+    this.onHere,
   });
 
   /// `start` ou `end`, pour les clés des boutons.
@@ -272,6 +277,9 @@ class BoundControls extends StatelessWidget {
   final int valueMs;
   final ValueChanged<int> onStep;
   final VoidCallback onListen;
+
+  /// Pose la borne à la position de lecture. Sans elle, pas de bouton.
+  final VoidCallback? onHere;
 
   @override
   Widget build(BuildContext context) {
@@ -282,6 +290,13 @@ class BoundControls extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (onHere != null)
+            IconButton(
+              key: Key('$id-here'),
+              tooltip: context.tr('Set to the playback position'),
+              icon: const Icon(Icons.my_location),
+              onPressed: onHere,
+            ),
           IconButton(
             key: Key('$id-minus'),
             tooltip: context.tr('0.5 s earlier'),

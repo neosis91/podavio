@@ -15,6 +15,7 @@ import '../../player/player_controller.dart';
 import '../../player/player_sheet_controller.dart';
 import '../../settings/settings_controller.dart';
 import '../playlist_membership.dart';
+import '../podcast/passage_creation.dart';
 import '../router.dart';
 import 'app_bottom_sheet.dart';
 import 'mobile_data_prompt.dart';
@@ -68,6 +69,10 @@ Future<void> showEpisodeActionsSheet(
           Navigator.pop(sheetContext);
           await showPlaylistMembershipSheet(context, ref, current);
         },
+        onCreatePassage: () async {
+          Navigator.pop(sheetContext);
+          await openPassageCreator(context, ref, entry.episode.id);
+        },
         onMoveUp: onMoveUp == null
             ? null
             : () {
@@ -120,6 +125,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
     required this.onOpenPodcast,
     required this.onShare,
     required this.onPlaylists,
+    required this.onCreatePassage,
     this.onMoveUp,
     this.onMoveDown,
     this.onRemove,
@@ -135,6 +141,7 @@ class _EpisodeActionsSheet extends ConsumerWidget {
   final ValueChanged<int> onOpenPodcast;
   final Future<void> Function(EpisodeEntry entry) onShare;
   final Future<void> Function(EpisodeEntry entry) onPlaylists;
+  final Future<void> Function() onCreatePassage;
   final VoidCallback? onMoveUp;
   final VoidCallback? onMoveDown;
   final VoidCallback? onRemove;
@@ -217,6 +224,12 @@ class _EpisodeActionsSheet extends ConsumerWidget {
         label: context.tr('Playlists'),
         onTap: () => onPlaylists(entry),
       ),
+      if (episode.downloadPath != null)
+        _SheetAction(
+          icon: const Icon(Icons.content_cut),
+          label: context.tr('Create a passage'),
+          onTap: onCreatePassage,
+        ),
       if (showPodcastLink)
         _SheetAction(
           icon: const SubscriptionsIcon(),
