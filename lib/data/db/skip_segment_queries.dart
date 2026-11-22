@@ -599,13 +599,14 @@ mixin _SkipSegmentQueries on _$AppDatabase {
 
   /// Vérité terrain locale : bornes détectées puis corrigées, une ligne
   /// par enregistrement. Sert plus tard à régler les seuils, hors réseau.
+  /// Sans source détectée, le passage a été créé à la main.
   Future<void> insertSegmentAnnotation({
     required int segmentId,
     required int episodeId,
     required SkipSegmentKind kind,
-    required SkipSegmentSource detectedSource,
-    required int detectedStartMs,
-    required int detectedEndMs,
+    SkipSegmentSource? detectedSource,
+    int? detectedStartMs,
+    int? detectedEndMs,
     required int correctedStartMs,
     required int correctedEndMs,
     DateTime? createdAt,
@@ -619,7 +620,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
         segmentId,
         episodeId,
         kind.name,
-        detectedSource.name,
+        detectedSource?.name,
         detectedStartMs,
         detectedEndMs,
         correctedStartMs,
@@ -639,13 +640,54 @@ mixin _SkipSegmentQueries on _$AppDatabase {
           segmentId: row.read<int>('segment_id'),
           episodeId: row.read<int>('episode_id'),
           kind: row.read<String>('kind'),
-          detectedSource: row.read<String>('detected_source'),
-          detectedStartMs: row.read<int>('detected_start_ms'),
-          detectedEndMs: row.read<int>('detected_end_ms'),
+          detectedSource: row.read<String?>('detected_source'),
+          detectedStartMs: row.read<int?>('detected_start_ms'),
+          detectedEndMs: row.read<int?>('detected_end_ms'),
           correctedStartMs: row.read<int>('corrected_start_ms'),
           correctedEndMs: row.read<int>('corrected_end_ms'),
         ),
     ];
+  }
+
+  /// Épisodes où créer un passage : analysés d’abord (enveloppe stockée),
+  /// puis téléchargés, puis les autres, du plus récent au plus ancien.
+  Future<List<PassageEpisodeChoice>> passageEpisodeChoices(
+    int podcastId, {
+    int limit = 100,
+  }) async {
+    final rows = await customSelect(
+      'SELECT e.id AS id, e.title AS title, '
+      'CASE WHEN e.download_path IS NOT NULL AND length(e.download_path) > 0 '
+      'THEN 1 ELSE 0 END AS downloaded, '
+      'CASE WHEN f.envelope IS NOT NULL AND length(f.envelope) > 0 '
+      'THEN 1 ELSE 0 END AS analysed '
+      'FROM episodes e '
+      'LEFT JOIN episode_fingerprints f ON f.episode_id = e.id '
+      'WHERE e.podcast_id = ? '
+      'ORDER BY analysed DESC, downloaded DESC, e.published_at DESC, e.id DESC '
+      'LIMIT ?',
+      variables: [Variable.withInt(podcastId), Variable.withInt(limit)],
+      readsFrom: {episodes, episodeFingerprints},
+    ).get();
+    return [
+      for (final row in rows)
+        PassageEpisodeChoice(
+          episodeId: row.read<int>('id'),
+          title: row.read<String>('title'),
+          downloaded: row.read<int>('downloaded') == 1,
+          analysed: row.read<int>('analysed') == 1,
+        ),
+    ];
+  }
+
+  /// Vrai si [segmentId] a été créé à la main (vérité sans bornes détectées).
+  Future<bool> isCreatedSegment(int segmentId) async {
+    final row = await customSelect(
+      'SELECT 1 FROM segment_annotations '
+      'WHERE segment_id = ? AND detected_source IS NULL LIMIT 1',
+      variables: [Variable.withInt(segmentId)],
+    ).getSingleOrNull();
+    return row != null;
   }
 
   Future<void> setTemplateLogMel(int id, Uint8List logMel) {
@@ -797,8 +839,24 @@ mixin _SkipSegmentQueries on _$AppDatabase {
         catalog: await _analysisCatalog(),
         downloads: await _analysisDownloads(),
         segments: await _analysisSegments(),
+        manual: await _analysisManual(),
       );
     });
+  }
+
+  /// Passages posés à la main (créés ou corrigés), par podcast.
+  Future<Map<int, int>> _analysisManual() async {
+    final rows = await customSelect(
+      'SELECT e.podcast_id AS podcast_id, COUNT(*) AS n '
+      'FROM skip_segments s '
+      'INNER JOIN episodes e ON e.id = s.episode_id '
+      "WHERE s.source = 'manual' "
+      'GROUP BY e.podcast_id',
+      readsFrom: {skipSegments, episodes},
+    ).get();
+    return {
+      for (final row in rows) row.read<int>('podcast_id'): row.read<int>('n'),
+    };
   }
 
   Future<List<AnalysisCatalogRow>> _analysisCatalog() async {
@@ -933,11 +991,31 @@ class AnalysisFacts {
     required this.catalog,
     required this.downloads,
     required this.segments,
+    this.manual = const {},
   });
 
   final List<AnalysisCatalogRow> catalog;
   final List<AnalysisDownloadRow> downloads;
   final List<AnalysisSegmentRow> segments;
+
+  /// Passages posés à la main, par id de podcast.
+  final Map<int, int> manual;
+}
+
+class PassageEpisodeChoice {
+  const PassageEpisodeChoice({
+    required this.episodeId,
+    required this.title,
+    required this.downloaded,
+    required this.analysed,
+  });
+
+  final int episodeId;
+  final String title;
+  final bool downloaded;
+
+  /// L’enveloppe est stockée : forme d’onde et empreinte disponibles.
+  final bool analysed;
 }
 
 class AnalysisCatalogRow {

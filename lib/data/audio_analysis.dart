@@ -1041,9 +1041,12 @@ Future<Map<int, Uint8List>> _recutTemplates(
 ) async {
   final wanted = templateIds.toSet();
   final recut = <int, Uint8List>{};
-  for (final segment in await database.fingerprintSegmentsForPodcast(
-    podcastId,
-  )) {
+  // Un passage créé à la main avant l’empreinte de son épisode a un gabarit
+  // vide : ses bornes, posées à la main, passent avant celles détectées.
+  for (final segment in [
+    ...await database.manualSegmentsForPodcast(podcastId),
+    ...await database.fingerprintSegmentsForPodcast(podcastId),
+  ]) {
     final id = segment.templateId;
     if (id == null || !wanted.contains(id) || recut.containsKey(id)) continue;
     final print = printsById[segment.episodeId];

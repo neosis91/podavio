@@ -534,20 +534,41 @@ class AppDatabase extends _$AppDatabase
 
   /// Bornes corrigées à la main, hors schéma Drift. Le passage peut être
   /// effacé ensuite : la ligne garde l’épisode et les deux paires de bornes.
-  Future<void> _ensureSegmentAnnotations() {
-    return customStatement(
-      'CREATE TABLE IF NOT EXISTS segment_annotations ('
-      'id INTEGER PRIMARY KEY AUTOINCREMENT, '
-      'segment_id INTEGER NOT NULL, '
-      'episode_id INTEGER NOT NULL, '
-      'kind TEXT NOT NULL, '
-      'detected_source TEXT NOT NULL, '
-      'detected_start_ms INTEGER NOT NULL, '
-      'detected_end_ms INTEGER NOT NULL, '
-      'corrected_start_ms INTEGER NOT NULL, '
-      'corrected_end_ms INTEGER NOT NULL, '
-      'created_at INTEGER NOT NULL)',
+  /// Un passage créé à la main n’a pas de bornes détectées : `NULL`.
+  Future<void> _ensureSegmentAnnotations() async {
+    const columns =
+        'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+        'segment_id INTEGER NOT NULL, '
+        'episode_id INTEGER NOT NULL, '
+        'kind TEXT NOT NULL, '
+        'detected_source TEXT, '
+        'detected_start_ms INTEGER, '
+        'detected_end_ms INTEGER, '
+        'corrected_start_ms INTEGER NOT NULL, '
+        'corrected_end_ms INTEGER NOT NULL, '
+        'created_at INTEGER NOT NULL';
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS segment_annotations ($columns)',
     );
+    final info = await customSelect('PRAGMA table_info(segment_annotations)')
+        .get();
+    final strict = info.any(
+      (row) =>
+          row.read<String>('name') == 'detected_start_ms' &&
+          row.read<int>('notnull') == 1,
+    );
+    if (!strict) return;
+    // SQLite ne sait pas retirer un NOT NULL : la table est recopiée.
+    await transaction(() async {
+      await customStatement('CREATE TABLE segment_annotations_new ($columns)');
+      await customStatement(
+        'INSERT INTO segment_annotations_new SELECT * FROM segment_annotations',
+      );
+      await customStatement('DROP TABLE segment_annotations');
+      await customStatement(
+        'ALTER TABLE segment_annotations_new RENAME TO segment_annotations',
+      );
+    });
   }
 
   /// `running` pendant le calcul, `failed` après délai ou arrêt,

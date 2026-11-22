@@ -1094,19 +1094,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       if (downloaded) {
         final rows = await db.listSkipSegments(episode.id);
         if (!ref.mounted || _disposed || _ui.episodeId != episode.id) return;
-        _skipWindows = [
-          for (final row in rows)
-            SkipCandidate(
-              id: row.id,
-              startMs: row.startMs,
-              endMs: row.endMs,
-              kind: row.kind,
-              confirmed: row.confirmed,
-              networkSting:
-                  row.kind == SkipSegmentKind.jingle &&
-                  row.source == SkipSegmentSource.network,
-            ),
-        ];
+        _skipWindows = _skipCandidates(rows);
         _emit(_withSkip(_ui));
       }
       final preview = _previewSeek;
@@ -1383,6 +1371,37 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     if (position < limit) return;
     _outroSkippedEpisodeId = id;
     unawaited(_onCompleted());
+  }
+
+  /// Relit les passages de l’épisode en cours après une modification à la
+  /// main. Un passage qui couvre déjà la position n’est pas sauté aussitôt.
+  Future<void> reloadSkipSegments() async {
+    final id = _ui.episodeId;
+    if (id == null || !_playingFromDownload || _disposed) return;
+    final rows = await ref.read(databaseProvider).listSkipSegments(id);
+    if (!ref.mounted || _disposed || _ui.episodeId != id) return;
+    _skipWindows = _skipCandidates(rows);
+    final position = _ui.position.inMilliseconds;
+    for (final window in _skipWindows) {
+      if (window.contains(position)) _heldSegmentIds.add(window.id);
+    }
+    _emit(_withSkip(_ui));
+  }
+
+  List<SkipCandidate> _skipCandidates(List<SkipSegment> rows) {
+    return [
+      for (final row in rows)
+        SkipCandidate(
+          id: row.id,
+          startMs: row.startMs,
+          endMs: row.endMs,
+          kind: row.kind,
+          confirmed: row.confirmed,
+          networkSting:
+              row.kind == SkipSegmentKind.jingle &&
+              row.source == SkipSegmentSource.network,
+        ),
+    ];
   }
 
   void _resetSegmentSkip({required bool fromDownload}) {
