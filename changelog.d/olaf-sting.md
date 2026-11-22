@@ -1,1 +1,0 @@
-- Short network stings in the first three minutes are located with Olaf landmarks. The chapter keeps the log-mel window, so the start and the end stay the same, in about a second instead of about sixteen.
