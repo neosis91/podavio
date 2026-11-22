@@ -1,0 +1,128 @@
+import 'dart:typed_data';
+
+import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:podavio/data/app_database.dart';
+import 'package:podavio/data/models.dart';
+import 'package:podavio/data/providers.dart';
+import 'package:podavio/data/skip_segments.dart';
+import 'package:podavio/ui/settings/analysis_settings_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('zero downloads stay hidden and one download is listed', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final hidden = await database.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/empty.xml',
+        title: 'Suivi sans fichier',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'empty',
+            title: 'Pas téléchargé',
+            description: 'Notes',
+            audioUrl: 'https://example.com/empty.mp3',
+          ),
+        ],
+      ),
+    );
+    expect(hidden.podcastId, isPositive);
+
+    final shownId = (await database.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://feeds.audiomeans.fr/show.xml',
+        title: 'Un téléchargement',
+        author: 'Auteur',
+        description: 'Description',
+        imageUrl: null,
+        episodes: [
+          EpisodeDraft(
+            guid: 'one',
+            title: 'Épisode',
+            description: 'Notes',
+            audioUrl: 'https://audio.audiomeans.fr/one.mp3',
+          ),
+        ],
+      ),
+    )).podcastId;
+    final episode = (await database.episodesForPodcast(shownId)).single;
+    await database.setDownloadPath(episode.id, '/tmp/one.mp3');
+    await database.insertSegmentTemplate(
+      podcastId: shownId,
+      kind: SkipSegmentKind.ad,
+      durationMs: 15000,
+      occurrences: 1,
+    );
+
+    final secondId = (await database.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://feeds.audiomeans.fr/other.xml',
+        title: 'Même hébergeur',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'two',
+            title: 'Autre',
+            description: 'Notes',
+            audioUrl: 'https://podcasts.audiomeans.fr/two.mp3',
+          ),
+        ],
+      ),
+    )).podcastId;
+    final second = (await database.episodesForPodcast(secondId)).single;
+    await database.setDownloadPath(second.id, '/tmp/two.mp3');
+    await database.upsertEpisodeFingerprint(
+      episodeId: second.id,
+      data: Uint8List(0),
+      hopMicros: 0,
+    );
+    await database.markFingerprintDone(second.id);
+
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
+          databaseProvider.overrideWithValue(database),
+        ],
+        child: const MaterialApp(home: AnalysisSettingsPage()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final texts = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((text) => text.data)
+        .whereType<String>()
+        .toList();
+    expect(texts, contains('Gestion des analyses'));
+    expect(texts, contains('Un téléchargement'));
+    expect(texts, contains('Même hébergeur'));
+    expect(texts.any((text) => text.contains('Suivi sans fichier')), isFalse);
+    expect(texts.where((text) => text == 'Audiomeans'), hasLength(1));
+    expect(texts.any((text) => text.contains('En attente')), isTrue);
+    expect(texts.any((text) => text.contains('Analysé')), isTrue);
+    expect(texts.any((text) => text.contains('Publicité 1')), isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+}

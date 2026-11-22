@@ -1,0 +1,1 @@
+Settings include an Analysis management page that lists every podcast with at least one download, grouped by hosting source, with status and known ad, sting, sponsor, and outro counts. Automatic skip applies to the whole app, and a repeated portion longer than two minutes stays out of the comparison.

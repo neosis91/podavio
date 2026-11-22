@@ -1,3 +1,4 @@
+export 'settings/analysis_settings_page.dart';
 export 'settings/appearance_page.dart';
 export 'settings/download_settings_page.dart';
 export 'settings/eco_mode_page.dart';

@@ -17,6 +17,10 @@ const olafAdKeepModulus = 16;
 /// Une pub retenue ne dépasse pas une minute.
 const olafAdMaxDurationMs = 60000;
 
+/// Au-delà, la portion ne participe pas à la comparaison : c’est trop long
+/// pour une pub, une virgule, un sponsor ou un outro.
+const comparisonMaxPortionMs = 120000;
+
 /// En dessous, le pic de l’histogramme est un hasard.
 const olafAdMinVotes = 12;
 
@@ -690,6 +694,9 @@ List<List<(int, int)>> _splitGaps(List<(int, int)> votes) {
 
 List<(int, int)> _capRun(List<(int, int)> run) {
   if (run.length < 2) return run;
+  if ((run.last.$2 - run.first.$2) * olafStepMs > comparisonMaxPortionMs) {
+    return const [];
+  }
   final maxFrames = olafAdMaxDurationMs ~/ olafStepMs;
   if (run.last.$2 - run.first.$2 <= maxFrames) return run;
   var bestL = 0;
