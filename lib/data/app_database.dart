@@ -461,6 +461,7 @@ class AppDatabase extends _$AppDatabase
       await _ensureFingerprintStatus();
       await _ensureFingerprintEnvelope();
       await _dropFingerprintOlaf();
+      await _ensureSegmentAnnotations();
       // Idempotent : v8 a pu être appliqué avant l’ajout des indexes.
       await _createEpisodeIndexes();
       await _ensureDefaultPlaylist();
@@ -529,6 +530,24 @@ class AppDatabase extends _$AppDatabase
         .get();
     if (!rows.any((row) => row.read<String>('name') == 'olaf')) return;
     await customStatement('ALTER TABLE episode_fingerprints DROP COLUMN olaf');
+  }
+
+  /// Bornes corrigées à la main, hors schéma Drift. Le passage peut être
+  /// effacé ensuite : la ligne garde l’épisode et les deux paires de bornes.
+  Future<void> _ensureSegmentAnnotations() {
+    return customStatement(
+      'CREATE TABLE IF NOT EXISTS segment_annotations ('
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'segment_id INTEGER NOT NULL, '
+      'episode_id INTEGER NOT NULL, '
+      'kind TEXT NOT NULL, '
+      'detected_source TEXT NOT NULL, '
+      'detected_start_ms INTEGER NOT NULL, '
+      'detected_end_ms INTEGER NOT NULL, '
+      'corrected_start_ms INTEGER NOT NULL, '
+      'corrected_end_ms INTEGER NOT NULL, '
+      'created_at INTEGER NOT NULL)',
+    );
   }
 
   /// `running` pendant le calcul, `failed` après délai ou arrêt,

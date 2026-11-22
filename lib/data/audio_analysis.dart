@@ -1111,6 +1111,7 @@ Future<void> applyAnalysisPlan(
   AnalysisPlan plan,
 ) async {
   final existing = await database.fingerprintSegmentsForPodcast(podcastId);
+  final manual = await database.manualSegmentsForPodcast(podcastId);
   final keptForLogMel = {
     for (final template in await database.listSegmentTemplates(podcastId))
       if (template.logMel != null) template.id,
@@ -1121,6 +1122,14 @@ Future<void> applyAnalysisPlan(
       if (pattern.segments.isEmpty || pattern.fingerprint.isEmpty) continue;
       final templateId = await _upsertTemplate(database, podcastId, pattern);
       for (final desired in pattern.segments) {
+        if (overlapsManual(
+          manual,
+          desired.episodeId,
+          desired.startMs,
+          desired.endMs,
+        )) {
+          continue;
+        }
         final prior = _prior(existing, desired, templateId, touched);
         if (prior != null) {
           touched.add(prior.id);
@@ -1157,6 +1166,24 @@ Future<void> applyAnalysisPlan(
     }
     await _recountTemplates(database, podcastId);
   });
+}
+
+/// Vrai si un passage corrigé à la main couvre déjà la moitié de
+/// [startMs]–[endMs] : l’analyse ne le double ni ne le déplace.
+bool overlapsManual(
+  List<SkipSegment> manual,
+  int episodeId,
+  int startMs,
+  int endMs,
+) {
+  final length = endMs - startMs;
+  for (final row in manual) {
+    if (row.episodeId != episodeId) continue;
+    final overlap = math.min(endMs, row.endMs) - math.max(startMs, row.startMs);
+    final shorter = math.min(length, row.endMs - row.startMs);
+    if (overlap > 0 && overlap * 2 >= shorter) return true;
+  }
+  return false;
 }
 
 Future<int> _upsertTemplate(
@@ -1518,8 +1545,14 @@ Future<int?> _upsertLoose(
   required int? templateId,
   List<SkipSegment> existing = const [],
 }) async {
+  final all = await database.listSkipSegments(episodeId);
+  final manual = [
+    for (final row in all)
+      if (row.source == SkipSegmentSource.manual) row,
+  ];
+  if (overlapsManual(manual, episodeId, startMs, endMs)) return null;
   final rows = existing.isEmpty
-      ? await database.listSkipSegments(episodeId)
+      ? all
       : existing.where((row) => row.episodeId == episodeId);
   SkipSegment? prior;
   for (final row in rows) {
