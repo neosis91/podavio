@@ -647,5 +647,11 @@
   "No episodes in this podcast.": "No episodes in this podcast.",
   "Choose an episode": "Choose an episode",
   "Not analysed yet": "Not analysed yet",
-  "Not downloaded": "Not downloaded"
+  "Not downloaded": "Not downloaded",
+  "Passages created by hand": "Passages created by hand",
+  "Prepares each download (fingerprint and waveform) and searches it for the passages created by hand. Nothing is detected on its own. Turn this off if the app stops responding.": "Prepares each download (fingerprint and waveform) and searches it for the passages created by hand. Nothing is detected on its own. Turn this off if the app stops responding.",
+  "No passage created yet. Create one from an episode, the player or the button above: the analysis then searches for it in the other downloaded episodes.": "No passage created yet. Create one from an episode, the player or the button above: the analysis then searches for it in the other downloaded episodes.",
+  "Passages created by hand, searched for in downloaded episodes.": "Passages created by hand, searched for in downloaded episodes.",
+  "No passages created yet": "No passages created yet",
+  "The analysis prepares each downloaded episode (fingerprint and waveform), then searches it for the passages created by hand. Nothing is detected on its own.": "The analysis prepares each downloaded episode (fingerprint and waveform), then searches it for the passages created by hand. Nothing is detected on its own."
 }

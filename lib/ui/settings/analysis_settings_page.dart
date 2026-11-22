@@ -109,6 +109,17 @@ class AnalysisSettingsPage extends ConsumerWidget {
                       .read(globalSkipSettingsProvider.notifier)
                       .setKind(kind, enabled: enabled),
                 ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Text(
+                  context.tr(
+                    'The analysis prepares each downloaded episode (fingerprint and waveform), then searches it for the passages created by hand. Nothing is detected on its own.',
+                  ),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
               if (groups.isEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
@@ -178,7 +189,7 @@ class _AnalysisPodcastTile extends ConsumerWidget {
         '${context.tr('By hand')} ${row.manualSegments}',
     ];
     final detail = counts.isEmpty
-        ? context.tr('No segments yet')
+        ? context.tr('No passages created yet')
         : counts.join(' · ');
     return ListTile(
       leading: PodcastCover(

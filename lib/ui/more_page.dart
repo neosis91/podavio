@@ -372,7 +372,7 @@ class PreferencesPage extends ConsumerWidget {
             title: Text(context.tr('Analysis management')),
             subtitle: Text(
               context.tr(
-                'Ads, stings, sponsors, and outros in downloaded episodes.',
+                'Passages created by hand, searched for in downloaded episodes.',
               ),
             ),
             onTap: () => context.push(AppRoutes.analysisSettings),

@@ -427,6 +427,8 @@ const _fr = <String, String>{
   'No matching language': 'Aucune langue correspondante',
   'No next episode in the queue':
       'Pas d’épisode suivant dans la file d’attente',
+  'No passage created yet. Create one from an episode, the player or the button above: the analysis then searches for it in the other downloaded episodes.': 'Aucune portion créée pour l’instant. Créez-en une depuis un épisode, le lecteur ou le bouton ci-dessus : l’analyse la cherche ensuite dans les autres épisodes téléchargés.',
+  'No passages created yet': 'Aucune portion créée',
   'No segments yet': 'Aucune séquence pour l’instant',
   'No subscribed podcasts': 'Aucun podcast abonné',
   'No subscriptions to export': 'Aucun abonnement à exporter',
@@ -465,6 +467,9 @@ const _fr = <String, String>{
   'Outside the app': 'Hors de l’application',
   'Parallel downloads': 'Téléchargements en parallèle',
   'Parenting': 'Parentalité',
+  'Passages created by hand': 'Portions créées à la main',
+  'Passages created by hand, searched for in downloaded episodes.':
+      'Portions créées à la main, cherchées dans les épisodes téléchargés.',
   'Password': 'Mot de passe',
   'Pause': 'Pause',
   'Pause (Space)': 'Pause (Espace)',
@@ -496,6 +501,7 @@ const _fr = <String, String>{
   'Podcasts to discover': 'Podcasts à découvrir',
   'Politics': 'Politique',
   'Preferred subscriptions': 'Abonnements préférés',
+  'Prepares each download (fingerprint and waveform) and searches it for the passages created by hand. Nothing is detected on its own. Turn this off if the app stops responding.': 'Prépare chaque téléchargement (empreinte et forme d’onde) et y cherche les portions créées à la main. Rien n’est détecté tout seul. Désactivez si l’application ne répond plus.',
   'Preparing Podavio…': 'Préparation de Podavio…',
   'Preparing the episode': 'Préparation de l’épisode',
   'Preparing {title}': 'Préparation de {title}',
@@ -649,6 +655,7 @@ const _fr = <String, String>{
   'Tech News': 'Actualités techno',
   'Technology': 'Technologie',
   'Tennis': 'Tennis',
+  'The analysis prepares each downloaded episode (fingerprint and waveform), then searches it for the passages created by hand. Nothing is detected on its own.': 'L’analyse prépare chaque épisode téléchargé (empreinte et forme d’onde), puis y cherche les portions créées à la main. Rien n’est détecté tout seul.',
   'The camera could not be opened': 'La caméra n’a pas pu être ouverte',
   'The player and the top of the home follow the cover':
       'Le lecteur et le haut de l’accueil suivent la pochette',

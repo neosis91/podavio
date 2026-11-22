@@ -647,5 +647,11 @@
   "No episodes in this podcast.": "Aucun épisode dans ce podcast.",
   "Choose an episode": "Choisir un épisode",
   "Not analysed yet": "Pas encore analysé",
-  "Not downloaded": "Non téléchargé"
+  "Not downloaded": "Non téléchargé",
+  "Passages created by hand": "Portions créées à la main",
+  "Prepares each download (fingerprint and waveform) and searches it for the passages created by hand. Nothing is detected on its own. Turn this off if the app stops responding.": "Prépare chaque téléchargement (empreinte et forme d’onde) et y cherche les portions créées à la main. Rien n’est détecté tout seul. Désactivez si l’application ne répond plus.",
+  "No passage created yet. Create one from an episode, the player or the button above: the analysis then searches for it in the other downloaded episodes.": "Aucune portion créée pour l’instant. Créez-en une depuis un épisode, le lecteur ou le bouton ci-dessus : l’analyse la cherche ensuite dans les autres épisodes téléchargés.",
+  "Passages created by hand, searched for in downloaded episodes.": "Portions créées à la main, cherchées dans les épisodes téléchargés.",
+  "No passages created yet": "Aucune portion créée",
+  "The analysis prepares each downloaded episode (fingerprint and waveform), then searches it for the passages created by hand. Nothing is detected on its own.": "L’analyse prépare chaque épisode téléchargé (empreinte et forme d’onde), puis y cherche les portions créées à la main. Rien n’est détecté tout seul."
 }

@@ -132,12 +132,12 @@ class SkipClassificationPage extends ConsumerWidget {
                       .read(globalSkipSettingsProvider.notifier)
                       .setKind(kind, enabled: enabled),
                 ),
-              _Section(context.tr('Detected segments')),
+              _Section(context.tr('Passages created by hand')),
               SwitchListTile(
                 title: Text(context.tr('Analyze downloads automatically')),
                 subtitle: Text(
                   context.tr(
-                    'Finds repeated ads and jingles in downloaded episodes. Turn this off if the app stops responding.',
+                    'Prepares each download (fingerprint and waveform) and searches it for the passages created by hand. Nothing is detected on its own. Turn this off if the app stops responding.',
                   ),
                 ),
                 value: ref.watch(settingsProvider).automaticAudioAnalysis,
@@ -221,18 +221,7 @@ class SkipClassificationPage extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: Text(
                 context.tr(
-                  'At least two downloaded episodes of the same podcast are needed before repeated ads and jingles can be found.',
-                ),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              child: Text(
-                context.tr(
-                  'A chapter title that looks like an ad is still suggested on its own.',
+                  'No passage created yet. Create one from an episode, the player or the button above: the analysis then searches for it in the other downloaded episodes.',
                 ),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
