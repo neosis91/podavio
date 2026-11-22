@@ -114,6 +114,7 @@ AnalysisPlan planOlafAds({
   }
   final byId = {for (final episode in usable) episode.id: episode};
   final claimed = <int, List<_Range>>{};
+  final known = <int>{};
   final patterns = <PlannedPattern>[];
 
   for (final template in templates) {
@@ -143,6 +144,7 @@ AnalysisPlan planOlafAds({
     final refined = _refinePlanned(segments, byId);
     if (refined.isEmpty) continue;
     for (final segment in refined) {
+      known.add(segment.episodeId);
       (claimed[segment.episodeId] ??= []).add(
         _Range(segment.startMs, segment.endMs),
       );
@@ -173,7 +175,14 @@ AnalysisPlan planOlafAds({
     );
   }
 
-  for (final found in _discover(usable, focusEpisodeId: focusEpisodeId)) {
+  final discover = focusEpisodeId != null && known.contains(focusEpisodeId)
+      ? const <_Found>[]
+      : _discover(
+          usable,
+          focusEpisodeId: focusEpisodeId,
+          skipEpisodeIds: known,
+        );
+  for (final found in discover) {
     final fresh = [
       for (final hit in found.hits)
         if (!_claimed(claimed, hit.episodeId, hit.startMs, hit.endMs)) hit,
@@ -345,18 +354,24 @@ class _Edge {
   final int votes;
 }
 
-List<_Found> _discover(List<_Episode> episodes, {int? focusEpisodeId}) {
+List<_Found> _discover(
+  List<_Episode> episodes, {
+  int? focusEpisodeId,
+  Set<int> skipEpisodeIds = const {},
+}) {
   final edges = <_Edge>[];
   for (var i = 0; i < episodes.length; i++) {
-    for (var j = i + 1; j < episodes.length; j++) {
-      final left = episodes[i];
+    final left = episodes[i];
+    if (skipEpisodeIds.contains(left.id)) continue;
+    if (focusEpisodeId != null && left.id != focusEpisodeId) continue;
+    for (var j = 0; j < episodes.length; j++) {
+      if (j == i) continue;
+      if (focusEpisodeId == null && j <= i) continue;
       final right = episodes[j];
-      if (focusEpisodeId != null &&
-          left.id != focusEpisodeId &&
-          right.id != focusEpisodeId) {
-        continue;
-      }
-      edges.addAll(_align(left, right));
+      final aligned = _align(left, right);
+      if (aligned.isEmpty) continue;
+      edges.addAll(aligned);
+      break;
     }
   }
   if (edges.isEmpty) return const [];

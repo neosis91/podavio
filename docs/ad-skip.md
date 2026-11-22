@@ -32,9 +32,12 @@ landmarks denses des trois premières minutes.
 
 Pour les épisodes téléchargés d’un même podcast, sur les landmarks Olaf :
 
-1. Index du hash. Un hash trop répété dans un épisode ne vote pas.
-2. Histogramme de décalage. Deux épisodes qui partagent une pub ont un
-   écart `tA - tB` constant, à 32 ms près. On compte ces écarts.
+1. Les séquences déjà gardées (gabarits en base) sont essayées d’abord.
+   Si l’épisode en cours en reconnaît une, on ne le compare pas aux
+   autres épisodes.
+2. Sinon, histogramme de décalage contre les épisodes suivants, dans
+   l’ordre. Au premier qui partage un passage, on s’arrête. Un second
+   passage qui n’existe que plus loin n’est pas cherché.
 3. Un pic local d’au moins 12 voix (`olafAdMinVotes`), sur au moins
    10 s (`adMinDurationMs`), est un passage. Au-delà de 60 s, on ne
    garde que la fenêtre d’une minute la plus fournie.

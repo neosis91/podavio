@@ -242,7 +242,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
   }
 
   /// Épisode téléchargé qui contient [templateId], pour l’écoute courte.
-  Future<({int episodeId, int segmentId, int startMs})?>
+  Future<({int episodeId, int segmentId, int startMs, int endMs})?>
   previewTargetForTemplate(int templateId) async {
     final query =
         select(skipSegments).join([
@@ -262,6 +262,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
       episodeId: segment.episodeId,
       segmentId: segment.id,
       startMs: segment.startMs,
+      endMs: segment.endMs,
     );
   }
 

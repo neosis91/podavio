@@ -149,6 +149,84 @@ void main() {
     expect(hit.endMs, inInclusiveRange(11800, 12400));
   });
 
+  test('the same ad still links a third episode through the first match', () {
+    final plan = planOlafAds(
+      episodes: [
+        _episode(1, _span(0, 16000)),
+        _episode(2, _span(30000, 46000)),
+        _episode(3, _span(80000, 96000)),
+      ],
+      templates: const [],
+    );
+    final ids = {
+      for (final pattern in plan.patterns)
+        for (final segment in pattern.segments) segment.episodeId,
+    };
+    expect(ids, {1, 2, 3});
+  });
+
+  test('a second ad that only matches a later episode is left out', () {
+    final plan = planOlafAds(
+      episodes: [
+        _episode(1, _marks([(0, 16000, 4), (80000, 96000, 9)])),
+        _episode(2, _span(20000, 36000, salt: 4)),
+        _episode(3, _span(40000, 56000, salt: 9)),
+      ],
+      templates: const [],
+    );
+    final ids = {
+      for (final pattern in plan.patterns)
+        for (final segment in pattern.segments) segment.episodeId,
+    };
+    expect(ids, {1, 2});
+    expect(ids.contains(3), isFalse);
+  });
+
+  test(
+    'a known sequence is not followed by a search of the other episodes',
+    () {
+      final known = planOlafAds(
+        episodes: [
+          _episode(1, _span(0, 16000, salt: 4)),
+          _episode(2, _span(20000, 36000, salt: 4)),
+        ],
+        templates: const [],
+      );
+      final pattern = known.patterns.single;
+      final again = planOlafAds(
+        episodes: [
+          _episode(1, _marks([(0, 16000, 4), (80000, 96000, 9)])),
+          _episode(2, _span(20000, 36000, salt: 4)),
+          _episode(3, _span(40000, 56000, salt: 9)),
+        ],
+        templates: [
+          OlafAdTemplate(
+            id: 4,
+            kind: SkipSegmentKind.ad,
+            confirmed: null,
+            durationMs: pattern.durationMs,
+            prints: pattern.fingerprintBytes!,
+            confidence: pattern.confidence,
+          ),
+        ],
+        focusEpisodeId: 1,
+      );
+      final ids = {
+        for (final found in again.patterns)
+          for (final segment in found.segments) segment.episodeId,
+      };
+      expect(ids.contains(3), isFalse);
+      expect(
+        again.patterns
+            .expand((item) => item.segments)
+            .any(
+              (segment) => segment.episodeId == 1 && segment.startMs < 20000,
+            ),
+        isTrue,
+      );
+    },
+  );
+
   test('Chromaprint bytes are not an Olaf ad print', () {
     expect(isOlafAdPrint(encodeFingerprint([1, 2, 3, 4])), isFalse);
     expect(isOlafAdPrint(encodeOlafAdPrints(const [])), isTrue);
@@ -259,6 +337,21 @@ OlafAdEpisode _episode(
     durationMs: durationMs,
     envelope: envelope,
   );
+}
+
+Uint8List _marks(List<(int, int, int)> ranges, {int hashes = 80}) {
+  final marks = <OlafLandmark>[];
+  for (final range in ranges) {
+    final start = range.$1 ~/ olafStepMs;
+    final frames = (range.$2 - range.$1) ~/ olafStepMs;
+    final step = frames ~/ (hashes - 1);
+    for (var i = 0; i < hashes; i++) {
+      marks.add(
+        OlafLandmark(hash: range.$3 * 100000 + i, t1: start + i * step),
+      );
+    }
+  }
+  return encodeOlafAdPrints(marks);
 }
 
 Uint8List _span(int startMs, int endMs, {int salt = 7, int hashes = 80}) {
