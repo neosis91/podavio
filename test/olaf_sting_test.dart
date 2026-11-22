@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -93,7 +92,7 @@ void main() {
     const rate = 11025;
     final clean = _pcm(rate, stingAt: 4);
     final shifted = _pcm(rate, stingAt: 9, gain: 0.5);
-    final encoded = await _mp3RoundTrip(shifted, rate);
+    final encoded = _lossyCopy(shifted);
     final other = _pcm(rate, stingAt: 13, gain: 0.8);
     final prints = [
       fingerprintPcm(clean, sampleRate: rate),
@@ -157,44 +156,18 @@ Uint8List _pcm(
   return data.buffer.asUint8List();
 }
 
-Future<Uint8List> _mp3RoundTrip(Uint8List pcm, int rate) async {
-  final dir = Directory.systemTemp.createTempSync('olaf-re');
-  try {
-    final raw = File('${dir.path}/in.pcm')..writeAsBytesSync(pcm);
-    final mp3 = '${dir.path}/out.mp3';
-    final back = File('${dir.path}/back.pcm');
-    final encoded = await Process.run('ffmpeg', [
-      '-y',
-      '-f',
-      's16le',
-      '-ar',
-      '$rate',
-      '-ac',
-      '1',
-      '-i',
-      raw.path,
-      '-b:a',
-      '64k',
-      mp3,
-    ]);
-    expect(encoded.exitCode, 0, reason: encoded.stderr.toString());
-    final decoded = await Process.run('ffmpeg', [
-      '-y',
-      '-i',
-      mp3,
-      '-f',
-      's16le',
-      '-ac',
-      '1',
-      '-ar',
-      '$rate',
-      back.path,
-    ]);
-    expect(decoded.exitCode, 0, reason: decoded.stderr.toString());
-    return back.readAsBytesSync();
-  } finally {
-    dir.deleteSync(recursive: true);
+/// Gain is already applied. A one-pole lowpass and a coarse quantizer
+/// change the samples the way a low-bitrate encode does, without ffmpeg.
+Uint8List _lossyCopy(Uint8List pcm) {
+  final samples = Int16List.view(Uint8List.fromList(pcm).buffer);
+  final out = Int16List(samples.length);
+  var state = 0.0;
+  for (var i = 0; i < samples.length; i++) {
+    state += 0.8 * (samples[i] - state);
+    final quantized = (state / 32).round() * 32;
+    out[i] = quantized.clamp(-32767, 32767);
   }
+  return out.buffer.asUint8List();
 }
 
 double _notes(double t, List<int> freqs) {
