@@ -13,10 +13,7 @@ void main() {
       filesystemPlaybackPath('  file:///podcasts/episode.mp3  '),
       '/podcasts/episode.mp3',
     );
-    expect(
-      filesystemPlaybackPath('content://downloads/episode.mp3'),
-      isNull,
-    );
+    expect(filesystemPlaybackPath('content://downloads/episode.mp3'), isNull);
     expect(filesystemPlaybackPath(null), isNull);
     expect(filesystemPlaybackPath('   '), isNull);
   });
