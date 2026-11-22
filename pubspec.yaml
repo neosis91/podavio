@@ -86,6 +86,8 @@ dependencies:
   # Plantages et ouverture de l'application, comme SimpMusic.
   # Le DSN arrive par --dart-define=SENTRY_DSN, jamais dans le dépôt.
   sentry_flutter: ^10.3.0
+  olaf_ffi:
+    path: packages/olaf_ffi
 
 dev_dependencies:
   flutter_test:

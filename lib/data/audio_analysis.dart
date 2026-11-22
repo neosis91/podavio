@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:olaf_ffi/olaf_ffi.dart';
 
 import 'analysis_pace.dart';
 import 'app_database.dart';
@@ -14,6 +15,7 @@ import 'episode_audio_analyzer.dart';
 import 'log_mel.dart';
 import 'log_mel_match.dart';
 import 'network_stings.dart';
+import 'olaf_sting.dart';
 import 'pcm_decoder.dart';
 import 'providers.dart';
 import '../settings/settings_controller.dart';
@@ -658,6 +660,11 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
           await database.setFingerprintEnvelope(episode.id, analyzed.envelope);
         }
         if (!live()) return;
+        final olaf = analyzed.olaf;
+        if (olaf != null && olaf.isNotEmpty) {
+          await database.setFingerprintOlaf(episode.id, olaf);
+        }
+        if (!live()) return;
         if (analyzed.logMel != null) {
           await database.upsertEpisodeLogMel(
             episodeId: episode.id,
@@ -805,6 +812,7 @@ Future<PcmAnalysis?> _analyzeDecoded(
       fingerprintMs: raw[6]! as int,
       logMelMs: raw[7]! as int,
       speechMs: raw[8]! as int,
+      olaf: raw.length > 10 ? raw[10] as Uint8List? : null,
     );
   } finally {
     await _deleteDecoded(decoded.path);
@@ -831,8 +839,9 @@ Future<Object?> _spawn(
 
 void analyzePcmEntry(List<Object?> args) {
   final send = args[0]! as SendPort;
+  final path = args[1]! as String;
   try {
-    send.send(_pcmMessage(analyzePcmFileSync(args[1]! as String)));
+    send.send(_pcmMessage(analyzePcmFileSync(path), _olafPrints(path)));
   } catch (error, stack) {
     send.send(<Object?>['error', '$error', '$stack']);
   }
@@ -853,7 +862,7 @@ void analyzePcmPacedEntry(List<Object?> args) {
   unawaited(() async {
     try {
       final result = await analyzePcmFilePaced(path, () => mode);
-      send.send(_pcmMessage(result));
+      send.send(_pcmMessage(result, _olafPrints(path)));
     } catch (error, stack) {
       send.send(<Object?>['error', '$error', '$stack']);
     } finally {
@@ -862,7 +871,7 @@ void analyzePcmPacedEntry(List<Object?> args) {
   }());
 }
 
-List<Object?> _pcmMessage(PcmAnalysis result) {
+List<Object?> _pcmMessage(PcmAnalysis result, Uint8List? olaf) {
   return <Object?>[
     result.fingerprint,
     result.logMel,
@@ -874,7 +883,24 @@ List<Object?> _pcmMessage(PcmAnalysis result) {
     result.logMelMs,
     result.speechMs,
     result.envelope,
+    olaf,
   ];
+}
+
+/// Second passage sur le PCM déjà décodé. Un échec de la bibliothèque
+/// native ne doit pas faire échouer Chromaprint ni le log-mel.
+Uint8List? _olafPrints(String path) {
+  try {
+    final prints = fingerprintPcmFile(
+      path,
+      sampleRate: chromaprintSampleRate,
+      maxMs: logMelSearchWindowMs,
+    );
+    if (prints == null || prints.isEmpty) return null;
+    return encodeOlafPrints(prints);
+  } catch (_) {
+    return null;
+  }
 }
 
 void planAnalysisEntry(List<Object?> args) {
@@ -1138,6 +1164,10 @@ Future<void> applyLogMelFindings(
   final bundled = await loadBundledNetworkStings();
   final learnedRows = await database.listLearnedNetworkStings();
   final segments = await database.fingerprintSegmentsForPodcast(podcastId);
+  final olafIds = <int>[
+    for (final row in episodeRows) (row as List)[0]! as int,
+  ];
+  final olaf = await database.olafPrintsForEpisodes(olafIds);
   final boundaries = [...await database.dynamicAdBoundaries()]
     ..sort((a, b) => b.episodeId.compareTo(a.episodeId));
   final message = <String, Object?>{
@@ -1171,6 +1201,10 @@ Future<void> applyLogMelFindings(
     ],
     'learned': [
       for (final sting in learnedRows) <Object?>[sting.id, sting.logMel],
+    ],
+    'olaf': [
+      for (final id in olafIds)
+        if (olaf[id] != null) <Object?>[id, olaf[id]],
     ],
   };
   final watch = Stopwatch()..start();

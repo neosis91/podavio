@@ -2,8 +2,9 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'envelope.dart';
-import 'segment_match.dart';
 import 'log_mel.dart';
+import 'olaf_sting.dart';
+import 'segment_match.dart';
 
 /// Spectrogrammes chargés ensemble pour la recherche des jingles courts.
 /// Au-delà, seuls les épisodes les plus récents sont comparés.
@@ -455,6 +456,7 @@ class ContentSting {
 List<ContentSting> findContentStings({
   required List<EpisodeMel> episodes,
   List<({int episodeId, int startMs, int endMs})> covered = const [],
+  List<({int episodeId, int startMs, int endMs})>? focus,
 }) {
   final usable = [
     for (final episode in episodes.take(logMelCompareEpisodeCap))
@@ -473,6 +475,9 @@ List<ContentSting> findContentStings({
     for (var origin = 0; origin <= last; origin += step) {
       final startMs = origin * logMelHopMs;
       if (startMs > logMelSearchWindowMs) break;
+      if (!_inFocus(focus, anchor.episodeId, startMs, startMs + contentStingMs)) {
+        continue;
+      }
       if (!_voiced(needle, origin, width)) continue;
       if (_mostlyCovered(
         covered,
@@ -493,7 +498,16 @@ List<ContentSting> findContentStings({
       for (final other in usable) {
         if (other.episodeId == anchor.episodeId) continue;
         final hay = units[other.episodeId]!;
-        final found = _bestStingAlign(needle, origin, hay, width);
+        final span = _focusOf(focus, other.episodeId);
+        if (focus != null && span == null) continue;
+        final found = _bestStingAlign(
+          needle,
+          origin,
+          hay,
+          width,
+          fromMs: span?.startMs,
+          toMs: span?.endMs,
+        );
         if (found == null) continue;
         if (found.score < contentStingScore ||
             found.margin < contentStingMargin) {
@@ -645,17 +659,52 @@ bool _voiced(_UnitFrames frames, int start, int width) {
   return seen > 0 && voiced * 2 >= seen;
 }
 
+({int startMs, int endMs})? _focusOf(
+  List<({int episodeId, int startMs, int endMs})>? focus,
+  int episodeId,
+) {
+  if (focus == null) return null;
+  for (final item in focus) {
+    if (item.episodeId != episodeId) continue;
+    return (
+      startMs: item.startMs - adEndExtendMs,
+      endMs: item.endMs + adEndExtendMs,
+    );
+  }
+  return null;
+}
+
+bool _inFocus(
+  List<({int episodeId, int startMs, int endMs})>? focus,
+  int episodeId,
+  int startMs,
+  int endMs,
+) {
+  final span = _focusOf(focus, episodeId);
+  if (focus == null) return true;
+  if (span == null) return false;
+  return endMs > span.startMs && startMs < span.endMs;
+}
+
 ({int frame, double score, double margin})? _bestStingAlign(
   _UnitFrames needle,
   int origin,
   _UnitFrames hay,
-  int width,
-) {
+  int width, {
+  int? fromMs,
+  int? toMs,
+}) {
   if (hay.frames < width) return null;
   final limit = hay.frames - width;
+  final first = fromMs == null ? 0 : (fromMs ~/ logMelHopMs).clamp(0, limit);
+  final last = toMs == null
+      ? limit
+      : ((toMs - contentStingMs) ~/ logMelHopMs).clamp(first, limit);
   const stride = 10;
   final peaks = <({int frame, double score})>[];
-  for (var start = 0; start <= limit; start += stride) {
+  var start = (first ~/ stride) * stride;
+  if (start < first) start += stride;
+  for (; start <= last; start += stride) {
     final coarse = _coarseScore(needle, origin, hay, start, width);
     if (coarse < 0.55) continue;
     var replaced = false;
@@ -959,7 +1008,8 @@ Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
       endMs: endMs,
     ));
   }
-  final postAd = findContentStings(episodes: episodes, covered: covered);
+  final olaf = _olafStings(message, episodes, covered);
+  final postAd = olaf ?? findContentStings(episodes: episodes, covered: covered);
 
   return {
     'jingles': jingles,
@@ -975,6 +1025,59 @@ Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
         },
     ],
   };
+}
+
+/// Olaf remplace la recherche log-mel dès que chaque épisode comparé a
+/// ses landmarks. Une liste vide veut dire qu’Olaf n’a pas trouvé de
+/// virgule : on ne revient pas au log-mel. `null` : pas encore d’empreinte
+/// Olaf, le log-mel reste le détecteur.
+List<ContentSting>? _olafStings(
+  Map<String, Object?> message,
+  List<EpisodeMel> episodes,
+  List<({int episodeId, int startMs, int endMs})> covered,
+) {
+  final raw = message['olaf'];
+  if (raw is! List || episodes.length < 2) return null;
+  final prints = <int, Uint8List>{};
+  for (final item in raw) {
+    if (item is! List || item.length < 2) continue;
+    final bytes = item[1];
+    if (bytes is! Uint8List || bytes.length < 12) continue;
+    prints[item[0]! as int] = bytes;
+  }
+  if (episodes.any((episode) => !prints.containsKey(episode.episodeId))) {
+    return null;
+  }
+  final found = findOlafContentSting(
+    [
+      for (final episode in episodes)
+        OlafEpisodePrints(
+          episodeId: episode.episodeId,
+          prints: decodeOlafPrints(prints[episode.episodeId]!),
+        ),
+    ],
+    covered: covered,
+  );
+  if (found.isEmpty) return const [];
+  // Olaf names the episodes and the rough time. The chapter keeps the
+  // same 3 s log-mel window, so silence snap lands on the same edges.
+  final placed = findContentStings(
+    episodes: episodes,
+    covered: covered,
+    focus: [
+      for (final hit in found)
+        (episodeId: hit.episodeId, startMs: hit.startMs, endMs: hit.endMs),
+    ],
+  );
+  if (placed.isNotEmpty) return placed;
+  return [
+    for (final hit in found)
+      ContentSting(
+        episodeId: hit.episodeId,
+        startMs: hit.startMs,
+        endMs: hit.endMs,
+      ),
+  ];
 }
 
 ({int id, LogMelClip? clip})? _knownTemplate(

@@ -1048,6 +1048,9 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
               endMs: row.endMs,
               kind: row.kind,
               confirmed: row.confirmed,
+              networkSting:
+                  row.kind == SkipSegmentKind.jingle &&
+                  row.source == SkipSegmentSource.network,
             ),
         ];
         _emit(_withSkip(_ui));
