@@ -1,0 +1,1 @@
+- Repeated ads in downloaded episodes are matched with Olaf landmarks instead of Chromaprint, and a match is capped at 60 seconds. The start and end still snap to silence.

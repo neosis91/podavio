@@ -39,6 +39,16 @@ typedef _NewNative = Pointer<Void> Function(Int32 pairs);
 typedef _NewDart = Pointer<Void> Function(int pairs);
 typedef _FreeNative = Void Function(Pointer<Void> extractor);
 typedef _FreeDart = void Function(Pointer<Void> extractor);
+typedef _LimitsNative = Void Function(
+  Pointer<Void> extractor,
+  Int32 maxMs,
+  Int32 keepModulus,
+);
+typedef _LimitsDart = void Function(
+  Pointer<Void> extractor,
+  int maxMs,
+  int keepModulus,
+);
 typedef _PushNative = Int32 Function(
   Pointer<Void> extractor,
   Pointer<Int16> samples,
@@ -68,9 +78,14 @@ typedef _CopyDart = void Function(
 
 class _Bindings {
   _Bindings(DynamicLibrary library)
-    : create = library.lookupFunction<_NewNative, _NewDart>('olaf_extractor_new'),
+    : create = library.lookupFunction<_NewNative, _NewDart>(
+        'olaf_extractor_new',
+      ),
       destroy = library.lookupFunction<_FreeNative, _FreeDart>(
         'olaf_extractor_free',
+      ),
+      limits = library.lookupFunction<_LimitsNative, _LimitsDart>(
+        'olaf_extractor_set_limits',
       ),
       push = library.lookupFunction<_PushNative, _PushDart>(
         'olaf_extractor_push',
@@ -87,6 +102,7 @@ class _Bindings {
 
   final _NewDart create;
   final _FreeDart destroy;
+  final _LimitsDart limits;
   final _PushDart push;
   final _FinishDart finish;
   final _CountDart count;
@@ -112,8 +128,7 @@ DynamicLibrary? _openLibrary() {
     if (Platform.isLinux || Platform.isAndroid) 'libolaf_ffi.so',
     if (Platform.isMacOS || Platform.isIOS) 'olaf_ffi.framework/olaf_ffi',
     if (Platform.isWindows) 'olaf_ffi.dll',
-    if (Platform.isLinux)
-      'packages/olaf_ffi/build/linux/libolaf_ffi.so',
+    if (Platform.isLinux) 'packages/olaf_ffi/build/linux/libolaf_ffi.so',
   ];
   for (final name in names) {
     try {
@@ -200,12 +215,14 @@ List<OlafLandmark>? fingerprintPcmFile(
   String path, {
   required int sampleRate,
   int maxMs = 180000,
+  int keepModulus = 1,
   int eventPointsPerFingerprint = 2,
 }) {
   final bindings = _tryBindings();
   if (bindings == null || sampleRate <= 0) return null;
   final extractor = bindings.create(eventPointsPerFingerprint);
   if (extractor == nullptr) return null;
+  bindings.limits(extractor, maxMs, keepModulus);
   final file = File(path).openSync();
   final raw = Uint8List(8192 * 2);
   final pointer = calloc<Int16>(8192);
