@@ -9,6 +9,35 @@ Les seuils ci-dessous viennent de mesures sur de vrais épisodes :
 *La Réu d'Écran Large*, *TFTC - Le Podcast*, *Petit Vulgaire*.
 Les constantes vivent dans `lib/data/segment_match.dart`.
 
+## Portions créées à la main seulement
+
+Rien n’est plus détecté tout seul. L’analyse d’un épisode téléchargé
+calcule toujours son empreinte Chromaprint et son enveloppe RMS 20 ms
+(nécessaires pour créer une portion et pour la comparaison), puis
+`syncPodcastAnalysis` cherche **seulement** les gabarits rattachés à un
+passage posé à la main (`manualTemplateIds`) dans les épisodes du podcast,
+avec les étapes de précision décrites plus bas (vote d’offset, contrôle
+d’enveloppe, recalage des bornes). Sans portion créée, l’analyse s’arrête
+après l’empreinte.
+
+Ne tournent plus : la découverte de motifs répétés entre épisodes
+(`buildAnalysisPlan(discover: false)`), la couche de contexte, les
+gabarits log-mel et les virgules de réseau (`applyLogMelFindings` n’est
+plus appelée), la comparaison avec les autres podcasts du même hébergeur,
+et la création de passages depuis les titres de chapitres
+(`seedChapterSkipSegments` est retirée ; aucun réglage ne l’activait). Le
+code de découverte reste en place, désactivé, pour ne pas toucher à ses
+tests et pouvoir y revenir.
+
+Les passages détectés avant ce changement restent en base, intacts, mais
+ne sont plus actifs : le saut automatique, la liste des chapitres, la
+liste des passages et « Gestion des analyses » ne lisent que les passages
+`manual` et les occurrences d’un gabarit rattaché à un passage manuel
+(`listActiveSkipSegments`, `watchActiveSkipSegments`). L’analyse ne
+réécrit ni ne supprime ces anciennes lignes (`applyAnalysisPlan` ne revoit
+que les occurrences des gabarits cherchés). Les sections suivantes
+décrivent aussi l’ancien détecteur, désactivé.
+
 ## Empreinte
 
 Tous les types de passages (pubs, sponsors, outros, intros, autopromos,
@@ -389,10 +418,9 @@ restent couvertes par les gabarits.
 
 ## Chapitres
 
-Quand les chapitres d’un épisode sont enregistrés, un titre qui ressemble
-à une pub ou un sponsor (`pub`, `publicité`, `sponsorisé`, et l’équivalent
-dans d’autres langues) crée un `SkipSegment` avec `source = chapter`.
-La fin du passage est le chapitre suivant, ou la durée de l’épisode.
+Les titres de chapitres ne créent plus de passage (auparavant, un titre
+qui ressemblait à une pub créait un `SkipSegment` `source = chapter`).
+Les anciennes lignes `chapter` restent en base mais ne sont plus actives.
 
 L’écran des chapitres couvre tout l’épisode, du début à la fin. Chaque
 passage détecté est un chapitre (Publicité, Virgule réseau, Intro, Outro,
