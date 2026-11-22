@@ -300,6 +300,40 @@ fichier et une copie `Int16` : 318 Mo de RSS. Le chemin par blocs
 finissait en 5,7 s, avec 12 Mo retenus et +36 Mo de RSS. Ce plafond
 n’est pas relevé.
 
+### Index Olaf
+
+Chaque épisode construit une seule fois son index hash → temps
+(`lib/data/olaf_index.dart` : adressage ouvert sur un `Uint64List`, temps
+rangés bout à bout dans un `Uint32List` avec un tableau d’offsets). Les
+gabarits et les paires le réutilisent, au lieu de reconstruire une `Map`
+par appel. Les votes sortent dans le même ordre : les plans ne changent
+pas (`test/olaf_index_test.dart` compare à l’ancien chemin `Map`).
+
+Banc `test/support/olaf_index_bench.dart`, landmarks synthétiques
+(12 épisodes × 60 min, 179 238 landmarks, 20 gabarits, 66 paires, médiane
+de 5 passages), mesuré sur la VM de CI (Xeon virtualisé, 4 cœurs), pas
+sur un Pixel 7 :
+
+| Variante | JIT (`flutter test`) | AOT (`dart compile exe`) |
+| --- | --- | --- |
+| ancien (`Map` reconstruite à chaque appel) | 1017 ms | 718 ms |
+| `Map` construite une fois par épisode | 105 ms | 104 ms |
+| table compacte une fois par épisode | 45 ms | 46 ms |
+
+L’index compact d’un épisode de 15 062 landmarks occupe 631 ko.
+
+```sh
+OLAF_INDEX_BENCH=1 flutter test test/olaf_index_bench_test.dart
+dart compile exe tool/olaf_index_bench.dart -o /tmp/olaf_bench && /tmp/olaf_bench
+```
+
+Sur un Pixel 7 branché en adb (débogage USB actif) :
+`flutter run --release -d <id> -t tool/olaf_index_bench.dart`, le
+rapport s’affiche dans la console et dans `adb logcat`. Le banc est
+synthétique et n’a pas besoin de la bibliothèque native. `OLAF_AD_PCM`
+ne s’applique pas : ce test lit des fichiers PCM de l’hôte sous
+`flutter test`, qui tourne sur l’hôte et non sur le téléphone.
+
 ## Décodage
 
 Branché.

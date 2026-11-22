@@ -5,6 +5,7 @@ import 'package:olaf_ffi/olaf_ffi.dart';
 
 import 'ad_context.dart';
 import 'envelope.dart';
+import 'olaf_index.dart';
 import 'olaf_sting.dart';
 import 'segment_finder.dart';
 import 'segment_match.dart';
@@ -136,7 +137,7 @@ AnalysisPlan planOlafAds({
     for (final episode in usable) {
       final located = _locate(
         needle,
-        episode.table,
+        episode.index,
         durationMs: template.durationMs,
       );
       if (located == null) continue;
@@ -286,6 +287,14 @@ class _Episode {
 
   final OlafAdEpisode source;
   final _Table table;
+
+  /// Built on first use, then shared by every template and every pair.
+  late final OlafHashIndex index = OlafHashIndex.build(
+    table.count,
+    hashAt: table.hashAt,
+    timeAt: table.timeAt,
+    maxHits: olafAdMaxHashHits,
+  );
 
   int get id => source.episodeId;
 
@@ -620,23 +629,19 @@ List<_Found> _discover(
 }
 
 List<_Edge> _align(_Episode left, _Episode right) {
-  final rightCounts = _counts(right.table);
-  final leftCounts = _counts(left.table);
-  final index = <int, List<int>>{};
-  for (var i = 0; i < right.table.count; i++) {
-    final hash = right.table.hashAt(i);
-    if ((rightCounts[hash] ?? 0) > olafAdMaxHashHits) continue;
-    (index[hash] ??= <int>[]).add(right.table.timeAt(i));
-  }
+  final index = right.index;
   if (index.isEmpty) return const [];
+  final own = left.index;
+  final times = index.times;
   final buckets = <int, List<(int, int)>>{};
   for (var i = 0; i < left.table.count; i++) {
-    final hash = left.table.hashAt(i);
-    if ((leftCounts[hash] ?? 0) > olafAdMaxHashHits) continue;
-    final hits = index[hash];
-    if (hits == null) continue;
+    if (own.countOf(own.idOfLandmark(i)) > olafAdMaxHashHits) continue;
+    final id = index.find(left.table.hashAt(i));
+    if (id < 0) continue;
+    final end = index.end(id);
     final query = left.table.timeAt(i);
-    for (final ref in hits) {
+    for (var k = index.start(id); k < end; k++) {
+      final ref = times[k];
       final bucket = (query - ref) >> 2;
       (buckets[bucket] ??= <(int, int)>[]).add((ref, query));
     }
@@ -664,15 +669,6 @@ List<_Edge> _align(_Episode left, _Episode right) {
     }
   }
   return edges;
-}
-
-Map<int, int> _counts(_Table table) {
-  final counts = <int, int>{};
-  for (var i = 0; i < table.count; i++) {
-    final hash = table.hashAt(i);
-    counts[hash] = (counts[hash] ?? 0) + 1;
-  }
-  return counts;
 }
 
 List<List<(int, int)>> _splitGaps(List<(int, int)> votes) {
@@ -1075,20 +1071,20 @@ Uint8List _templateOf(
   return encodeOlafAdPrints(marks);
 }
 
-_Located? _locate(_Table needle, _Table haystack, {required int durationMs}) {
-  final counts = _counts(haystack);
-  final index = <int, List<int>>{};
-  for (var i = 0; i < haystack.count; i++) {
-    final hash = haystack.hashAt(i);
-    if ((counts[hash] ?? 0) > olafAdMaxHashHits) continue;
-    (index[hash] ??= <int>[]).add(haystack.timeAt(i));
-  }
+_Located? _locate(
+  _Table needle,
+  OlafHashIndex index, {
+  required int durationMs,
+}) {
+  final times = index.times;
   final tally = <int, int>{};
   for (var i = 0; i < needle.count; i++) {
-    final hits = index[needle.hashAt(i)];
-    if (hits == null) continue;
+    final id = index.find(needle.hashAt(i));
+    if (id < 0) continue;
+    final end = index.end(id);
     final relative = needle.timeAt(i);
-    for (final time in hits) {
+    for (var k = index.start(id); k < end; k++) {
+      final time = times[k];
       final bucket = (time - relative) >> 2;
       tally[bucket] = (tally[bucket] ?? 0) + 1;
     }
@@ -1179,4 +1175,58 @@ Map<String, Object?> _encodePlan(AnalysisPlan plan) {
         },
     ],
   };
+}
+
+typedef OlafAdEdgeVotes = ({
+  int leftStart,
+  int leftEnd,
+  int rightStart,
+  int rightEnd,
+  int votes,
+});
+
+typedef OlafAdLocation = ({int startFrame, int endFrame, int votes});
+
+/// One parsed Olaf ad print with its cached index. Exposed for the
+/// equivalence tests and the benchmark; [planOlafAds] uses the same code.
+final class OlafAdIndexed {
+  OlafAdIndexed._(this._episode);
+
+  static OlafAdIndexed? parse(Uint8List bytes, {int episodeId = 0}) {
+    final table = _Table.tryParse(bytes);
+    if (table == null) return null;
+    final source = OlafAdEpisode(
+      episodeId: episodeId,
+      prints: bytes,
+      durationMs: 0,
+    );
+    return OlafAdIndexed._(_Episode(source, table));
+  }
+
+  final _Episode _episode;
+
+  OlafHashIndex get index => _episode.index;
+
+  List<OlafAdEdgeVotes> alignWith(OlafAdIndexed right) => [
+    for (final edge in _align(_episode, right._episode))
+      (
+        leftStart: edge.leftStart,
+        leftEnd: edge.leftEnd,
+        rightStart: edge.rightStart,
+        rightEnd: edge.rightEnd,
+        votes: edge.votes,
+      ),
+  ];
+
+  OlafAdLocation? locate(Uint8List needle, {required int durationMs}) {
+    final table = _Table.tryParse(needle);
+    if (table == null) return null;
+    final located = _locate(table, index, durationMs: durationMs);
+    if (located == null) return null;
+    return (
+      startFrame: located.startFrame,
+      endFrame: located.endFrame,
+      votes: located.votes,
+    );
+  }
 }

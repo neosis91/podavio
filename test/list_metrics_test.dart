@@ -45,10 +45,7 @@ void main() {
 
   test('compact density uses smaller type and cover than comfortable', () {
     final comfortable = metrics(width: 400);
-    final compact = metrics(
-      width: 400,
-      density: EpisodeListDensity.compact,
-    );
+    final compact = metrics(width: 400, density: EpisodeListDensity.compact);
 
     expect(
       compact.titleStyle.fontSize!,
@@ -79,11 +76,17 @@ void main() {
   test('progress bar height is 2 on compact/narrow and 3 otherwise', () {
     expect(metrics(width: 320).progressBarHeight, 2);
     expect(
-      metrics(width: 320, density: EpisodeListDensity.compact).progressBarHeight,
+      metrics(
+        width: 320,
+        density: EpisodeListDensity.compact,
+      ).progressBarHeight,
       2,
     );
     expect(
-      metrics(width: 400, density: EpisodeListDensity.compact).progressBarHeight,
+      metrics(
+        width: 400,
+        density: EpisodeListDensity.compact,
+      ).progressBarHeight,
       2,
     );
     expect(metrics(width: 400).progressBarHeight, 3);

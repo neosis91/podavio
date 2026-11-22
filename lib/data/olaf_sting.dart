@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:olaf_ffi/olaf_ffi.dart';
 
 import 'envelope.dart';
+import 'olaf_index.dart';
 
 /// A sting shorter than this is a fragment, not the network motif.
 const olafStingMinMs = 1000;
@@ -12,6 +13,9 @@ const olafStingMaxMs = 6500;
 
 /// Votes under this are chance collisions.
 const olafStingMinVotes = 8;
+
+/// A hash more frequent than this in one episode does not vote.
+const olafStingMaxHashHits = 12;
 
 /// Two episodes alone need a tighter vote, the same idea as a strong score.
 const olafStingStrongVotes = 24;
@@ -93,10 +97,11 @@ List<OlafContentSting> findOlafContentSting(
       if (episode.prints.length >= olafStingMinVotes) episode,
   ];
   if (usable.length < 2) return const [];
+  final indexes = [for (final episode in usable) _index(episode.prints)];
   final edges = <_Edge>[];
   for (var i = 0; i < usable.length; i++) {
     for (var j = i + 1; j < usable.length; j++) {
-      edges.addAll(_align(usable[i], usable[j]));
+      edges.addAll(_align(usable[i], usable[j], indexes[j]));
     }
   }
   if (edges.isEmpty) return const [];
@@ -164,7 +169,11 @@ _Pattern? _uncovered(
     if (span.startMs < earliest) earliest = span.startMs;
     if (span.startMs > latest) latest = span.startMs;
   }
-  return _Pattern(episodes: kept, votes: pattern.votes, spread: latest - earliest);
+  return _Pattern(
+    episodes: kept,
+    votes: pattern.votes,
+    spread: latest - earliest,
+  );
 }
 
 /// A longer passage already found (an ad, an intro) is not reused.
@@ -193,8 +202,7 @@ class _Pattern {
   final int votes;
   final int spread;
 
-  int get rank =>
-      episodes.length * 1000 + spread ~/ 1000 + votes.clamp(0, 999);
+  int get rank => episodes.length * 1000 + spread ~/ 1000 + votes.clamp(0, 999);
 }
 
 _Pattern? _pattern(List<_Edge> edges) {
@@ -202,11 +210,7 @@ _Pattern? _pattern(List<_Edge> edges) {
   var votes = 0;
   for (final edge in edges) {
     votes += edge.votes;
-    _keep(
-      spans,
-      edge.leftId,
-      _Span(edge.leftStart, edge.leftEnd, edge.votes),
-    );
+    _keep(spans, edge.leftId, _Span(edge.leftStart, edge.leftEnd, edge.votes));
     _keep(
       spans,
       edge.rightId,
@@ -220,11 +224,7 @@ _Pattern? _pattern(List<_Edge> edges) {
     if (span.startMs < earliest) earliest = span.startMs;
     if (span.startMs > latest) latest = span.startMs;
   }
-  return _Pattern(
-    episodes: spans,
-    votes: votes,
-    spread: latest - earliest,
-  );
+  return _Pattern(episodes: spans, votes: votes, spread: latest - earliest);
 }
 
 void _keep(Map<int, _Span> spans, int episodeId, _Span incoming) {
@@ -287,14 +287,20 @@ bool _overlap(
   return (end - start) * 2 >= shorter;
 }
 
-List<_Edge> _align(OlafEpisodePrints left, OlafEpisodePrints right) {
-  final reference = _index(right.prints);
+List<_Edge> _align(
+  OlafEpisodePrints left,
+  OlafEpisodePrints right,
+  OlafHashIndex reference,
+) {
   if (reference.isEmpty) return const [];
+  final times = reference.times;
   final buckets = <int, List<(int, int)>>{};
   for (final mark in left.prints) {
-    final hits = reference[mark.hash];
-    if (hits == null) continue;
-    for (final time in hits) {
+    final id = reference.find(mark.hash);
+    if (id < 0) continue;
+    final end = reference.end(id);
+    for (var k = reference.start(id); k < end; k++) {
+      final time = times[k];
       final bucket = (mark.t1 - time) >> 2;
       (buckets[bucket] ??= <(int, int)>[]).add((time, mark.t1));
     }
@@ -339,18 +345,26 @@ bool _fits(List<(int, int)> votes, (int, int) extra) {
   return ref <= olafStingMaxMs && query <= olafStingMaxMs;
 }
 
-Map<int, List<int>> _index(List<OlafLandmark> prints) {
-  final counts = <int, int>{};
-  for (final mark in prints) {
-    counts[mark.hash] = (counts[mark.hash] ?? 0) + 1;
-  }
-  final index = <int, List<int>>{};
-  for (final mark in prints) {
-    if ((counts[mark.hash] ?? 0) > 12) continue;
-    index.putIfAbsent(mark.hash, () => <int>[]).add(mark.t1);
-  }
-  return index;
-}
+OlafHashIndex _index(List<OlafLandmark> prints) => OlafHashIndex.build(
+  prints.length,
+  hashAt: (index) => prints[index].hash,
+  timeAt: (index) => prints[index].t1,
+  maxHits: olafStingMaxHashHits,
+);
+
+/// Edges of one pair, through the same index as [findOlafContentSting].
+/// Exposed for the equivalence tests.
+List<({int leftStart, int leftEnd, int rightStart, int rightEnd, int votes})>
+olafStingEdges(OlafEpisodePrints left, OlafEpisodePrints right) => [
+  for (final edge in _align(left, right, _index(right.prints)))
+    (
+      leftStart: edge.leftStart,
+      leftEnd: edge.leftEnd,
+      rightStart: edge.rightStart,
+      rightEnd: edge.rightEnd,
+      votes: edge.votes,
+    ),
+];
 
 _Edge? _edge(
   OlafEpisodePrints left,
