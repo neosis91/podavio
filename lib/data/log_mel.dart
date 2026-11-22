@@ -22,6 +22,7 @@ class PcmAnalysis {
     required this.logMelMs,
     required this.speechMs,
     this.olaf,
+    this.olafAds,
   });
 
   final List<int> fingerprint;
@@ -40,6 +41,10 @@ class PcmAnalysis {
   /// Landmarks Olaf des trois premières minutes. Null si la bibliothèque
   /// native n’est pas là : la recherche log-mel reste alors le repli.
   final Uint8List? olaf;
+
+  /// Landmarks Olaf de l’épisode entier, sous-échantillonnés, avec le
+  /// magic `Olaf`. Null si la bibliothèque native n’est pas là.
+  final Uint8List? olafAds;
 }
 
 /// Fenêtre d’analyse : 32 ms à 8 kHz, puissance de 2 pour la FFT.
@@ -56,11 +61,12 @@ class LogMelClip {
   bool get isEmpty => frames.isEmpty;
 }
 
-/// Empreinte, log-mel des 180 premières secondes et chronologie parole.
+/// Log-mel des 180 premières secondes et chronologie parole.
 ///
-/// Le fichier est lu par blocs. Chromaprint et la note parole avancent
-/// au fil de l’eau. Le log-mel ne garde que les 180 premières secondes,
-/// déjà rééchantillonnées à 8 kHz.
+/// Le fichier est lu par blocs. La note parole avance au fil de l’eau.
+/// Le log-mel ne garde que les 180 premières secondes, déjà
+/// rééchantillonnées à 8 kHz. L’empreinte des pubs est Olaf, calculée
+/// à côté, pas dans ce lecteur : [fingerprint] reste vide.
 PcmAnalysis analyzePcmFileSync(String path) {
   final reader = _PcmReader(path);
   try {
@@ -124,7 +130,6 @@ class _PcmReader {
 
   final Stopwatch _watch;
   final RandomAccessFile _input;
-  final ChromaprintHasher _hasher = ChromaprintHasher();
   final SpeechTimelineBuilder _speech = SpeechTimelineBuilder();
   final EnergyEnvelopeBuilder _envelope = EnergyEnvelopeBuilder();
   final LogMelResampler _resampler;
@@ -132,7 +137,6 @@ class _PcmReader {
   final Int16List _piece = Int16List(8192);
   var _retained = 0;
   var _peakRss = 0;
-  var _fingerprintUs = 0;
   var _speechUs = 0;
   var _open = true;
 
@@ -151,9 +155,6 @@ class _PcmReader {
     final slice = samples == _piece.length
         ? _piece
         : Int16List.sublistView(_piece, 0, samples);
-    final finger = Stopwatch()..start();
-    _hasher.add(slice);
-    _fingerprintUs += finger.elapsedMicroseconds;
     final spoken = Stopwatch()..start();
     _speech.add(slice);
     _speechUs += spoken.elapsedMicroseconds;
@@ -163,8 +164,7 @@ class _PcmReader {
         _raw.length +
         _speech.retainedBytes +
         _resampler.retainedBytes +
-        _envelope.retainedBytes +
-        _hasher.valueCount * 8;
+        _envelope.retainedBytes;
     if (held > _retained) _retained = held;
     final rss = _rss();
     if (rss > _peakRss) _peakRss = rss;
@@ -172,7 +172,6 @@ class _PcmReader {
   }
 
   PcmAnalysis finish() {
-    final fingerprint = _hasher.finish();
     final melWatch = Stopwatch()..start();
     final clip = computeLogMel(_resampler.output);
     final logMelMs = melWatch.elapsedMilliseconds;
@@ -182,23 +181,19 @@ class _PcmReader {
     final speechBytes = _speech.finish();
     final envelope = _envelope.finish();
     final framesBytes = clip.frames.length * logMelBandCount * 8;
-    final endHeld =
-        fingerprint.length * 8 +
-        (logMel?.length ?? 0) +
-        framesBytes +
-        envelope.length;
+    final endHeld = (logMel?.length ?? 0) + framesBytes + envelope.length;
     if (endHeld > _retained) _retained = endHeld;
     final rss = _rss();
     if (rss > _peakRss) _peakRss = rss;
     return PcmAnalysis(
-      fingerprint: fingerprint,
+      fingerprint: const [],
       logMel: logMel,
       speech: speechBytes,
       envelope: envelope,
       peakRss: _peakRss,
       retainedBytes: _retained,
       elapsedMs: _watch.elapsedMilliseconds,
-      fingerprintMs: _fingerprintUs ~/ 1000,
+      fingerprintMs: 0,
       logMelMs: logMelMs,
       speechMs: _speechUs ~/ 1000,
     );

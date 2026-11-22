@@ -11,53 +11,69 @@ Les constantes vivent dans `lib/data/segment_match.dart`.
 
 ## Empreinte
 
-Chromaprint (MIT ou LGPL) sert aux pubs et aux outros longs.
-Les virgules courtes passent par Olaf (Joren Six,
-<https://github.com/JorenSix/Olaf>, AGPL-3.0), vendu dans
-`packages/olaf_ffi` avec sa licence. Le code natif n’est appelé que
-depuis l’isolate d’analyse.
+Les pubs, les sponsors et les outros passent par Olaf (Joren Six,
+<https://github.com/JorenSix/Olaf>, AGPL-3.0), le même extracteur que
+les virgules courtes, vendu dans `packages/olaf_ffi`. Chromaprint reste
+dans le dépôt, mais le chemin de détection ne l’appelle plus. Le code
+natif n’est appelé que depuis l’isolate d’analyse.
 
-- Environ 8,08 valeurs de 32 bits par seconde. Le pas réel est
-  `1365 / 11025` s, soit 123809 µs (`chromaprintStoredHopMicros`),
-  la valeur écrite dans `hop_micros`. `chromaprintHopMicros` (125000)
-  reste l’approximation du premier jet.
-- Le blob `episode_fingerprints.data` est la suite de ces `uint32` en
-  little-endian (`encodeFingerprint` / `decodeFingerprint`).
+L’épisode entier est empreinté. Un landmark sur seize est conservé
+(`olafAdKeepModulus`), choisi sur les bits de fréquence du hash, pour
+que les deux copies d’une pub gardent les mêmes points et que le blob
+reste petit. Une correspondance est plafonnée à 60 s
+(`olafAdMaxDurationMs`). Les virgules courtes gardent, à part, les
+landmarks denses des trois premières minutes.
+
+- Le blob `episode_fingerprints.data` commence par les quatre octets
+  `Olaf`, puis un landmark par 12 octets (hash 64 bits, trame de 8 ms).
+  La colonne `hop_micros` reste remplie, elle ne sert plus au rapprochement.
 
 ## Repérer un passage répété
 
-Pour les épisodes téléchargés d’un même podcast :
+Pour les épisodes téléchargés d’un même podcast, sur les landmarks Olaf :
 
-1. Index inversé : chaque valeur d’empreinte pointe vers les
-   `(episodeId, offset)` où elle apparaît.
-2. Vote par décalage. Deux épisodes qui partagent une séquence ont un
-   écart d’offsets constant. On compte, pour chaque paire d’épisodes, les
-   deltas `offsetA - offsetB` qui s’alignent.
-3. Deux valeurs se correspondent si leur distance de Hamming est ≤ 6 bits
-   sur 32 (`chromaprintValuesMatch`). Ça absorbe le bruit d’un réencodage.
-   Le popcount se fait par octets.
-4. Une suite peut sauter jusqu’à 2 valeurs (`chromaprintMaxGapPoints`)
-   sans être coupée en deux. Trois valeurs manquantes la coupent.
-5. La suite doit encore compter au moins 55 % de valeurs qui collent
-   (`chromaprintMinAgreement`). Un pont d’une valeur sur trois, assez
-   long pour passer les 10 s, est rejeté. Une fenêtre d’environ 1 s
-   (8 points) avec moins de 3 correspondances coupe la suite
-   (`_splitWeak`).
-6. Le vote retient le premier et le dernier offset de chaque décalage.
-   Si ces ancres sont trop espacées pour le nombre de votes
-   (`écart > votes × 80 + 128`), le décalage est un hasard : on ne
-   parcourt pas le fichier. Sinon la distance de Hamming ne s’étend
-   qu’autour de cette plage.
-7. Une plage retenue comme pub, promo ou lecture sponsor dure au moins
-   10 secondes (`adMinDurationMs`). Mesuré : Squarespace 29 s à 8 positions
-   différentes, lectures sponsor ~70 s, outros de 15 à 47 s, cross-promos.
-8. Le motif devient un `SegmentTemplate` (tranche d’empreinte, durée, type)
-   classé une fois) et un `SkipSegment` par épisode
-   (`source = fingerprint`, `matches` = nombre d’épisodes).
+1. Les séquences déjà gardées (gabarits en base) sont essayées d’abord.
+   Si l’épisode en cours en reconnaît une, on ne le compare pas aux
+   autres épisodes.
+2. Sinon, histogramme de décalage contre les épisodes suivants, dans
+   l’ordre. Au premier qui partage un passage, on s’arrête. Un second
+   passage qui n’existe que plus loin n’est pas cherché.
+3. Un pic local d’au moins 12 voix (`olafAdMinVotes`), sur au moins
+   10 s (`adMinDurationMs`), est un passage. Au-delà de 60 s, on ne
+   garde que la fenêtre d’une minute la plus fournie.
+4. Un trou de plus de 2,5 s coupe deux pubs collées au même décalage.
+5. Le début et la fin repassent par le recalage d’enveloppe et le
+   silence tenu, puis, dans les trois premières minutes, par le log-mel.
+6. Un passage toujours dans la dernière minute est un outro : les bouts
+   séparés d’au plus 5 s sont recollés, et s’il s’arrête à moins de 15 s
+   de la fin du fichier il va jusqu’au bout.
+7. Le motif devient un `SegmentTemplate` (landmarks Olaf, durée, type)
+   et un `SkipSegment` par épisode (`source = fingerprint`).
+
+## Contexte
+
+Après l'empreinte, un score local relit l'enveloppe déjà gardée
+(niveau court, façon LUFS, sur 400 ms), la chronologie parole/musique
+et les chapitres dont le titre annonce une pub ou un sponsor. Rien
+n'est redécodé, et aucun modèle n'est chargé par l'application.
+
+Le score assemble les silences tenus, les sauts de niveau, le
+changement de dynamique, la parole posée sur un lit, la position dans
+l'épisode et le chapitre. Une correspondance d'empreinte reste, sauf
+un ton plat d'environ 15 s sans parole et sans saut de niveau : ce
+faux positif est rejeté. Le contexte peut allonger une lecture au-delà
+de la minute, jusqu'à 120 s, ou proposer seul un passage au-dessus de
+0,78. En dessous, la parole ordinaire ne devient pas un passage.
+
+EfficientAT mn04 (MIT) peut ajouter ses scores parole, musique,
+jingle et musique de fond, plus le saut entre vecteurs de classes.
+Le graphe n'est pas dans l'application : le banc `tool/efficientat_mn04.py`
+le fait tourner hors ligne s'il est présent sur la machine. Sans ces
+mesures, la détection n'en dépend pas.
 
 ## Jingles d’intro courts
 
-Chromaprint ne cherche un jingle que dans les **180 premières secondes**
+Le log-mel cherche un jingle dans les **180 premières secondes**
 (`jingleSearchWindowMs`), à n’importe quel offset : un pré-roll dynamique
 le décale. Exemple mesuré, jingle RTL à 0:00 ou à 27,7 s.
 
@@ -69,8 +85,7 @@ le décale. Exemple mesuré, jingle RTL à 0:00 ou à 27,7 s.
   faux positif d’un podcast à l’autre. À 2 s, un seul : le sting Acast,
   commun au réseau. L’offset « stable » tolère 2 s
   (`stableOffsetSlackMs`). La frontière, elle, est resserrée ensuite
-  (voir plus bas) : le pas Chromaprint reste ~124 ms, le recalage vise
-  le pas de 20 ms.
+  (voir plus bas) : le recalage vise le pas de 20 ms.
 
 Une fois le jingle trouvé, on le stocke comme gabarit **du podcast** :
 tranche Chromaprint (`segment_templates.fingerprint`) et gabarit log-mel

@@ -107,6 +107,7 @@ class PlannedPattern {
     required this.durationMs,
     required this.segments,
     required this.confidence,
+    this.fingerprintBytes,
   });
 
   /// `null` : gabarit à créer.
@@ -114,6 +115,10 @@ class PlannedPattern {
   final SkipSegmentKind kind;
   final bool? confirmed;
   final List<int> fingerprint;
+
+  /// Empreinte Olaf déjà encodée (`Olaf` + landmarks). Prioritaire sur
+  /// [fingerprint] quand le détecteur n’est plus Chromaprint.
+  final Uint8List? fingerprintBytes;
   final int durationMs;
   final List<PlannedSegment> segments;
 
@@ -453,6 +458,7 @@ AnalysisPlan decodeAnalysisPlan(Map<Object?, Object?> message) {
         kind: _kindOf(row['kind']! as String),
         confirmed: row['confirmed'] as bool?,
         fingerprint: (row['fingerprint']! as List).cast<int>(),
+        fingerprintBytes: _bytes(row['fingerprintBytes']),
         durationMs: row['durationMs']! as int,
         segments: segments,
         confidence: row['confidence'] as int? ?? crossEpisodeConfidence,
@@ -476,6 +482,7 @@ Map<String, Object?> _encodePlan(AnalysisPlan plan) {
           'confirmed': pattern.confirmed,
           'durationMs': pattern.durationMs,
           'fingerprint': pattern.fingerprint,
+          'fingerprintBytes': pattern.fingerprintBytes,
           'confidence': pattern.confidence,
           'segments': [
             for (final segment in pattern.segments)
@@ -1304,6 +1311,7 @@ PlannedPattern _withMatches(PlannedPattern pattern) {
     kind: pattern.kind,
     confirmed: pattern.confirmed,
     fingerprint: pattern.fingerprint,
+    fingerprintBytes: pattern.fingerprintBytes,
     durationMs: pattern.durationMs,
     confidence: pattern.confidence,
     segments: [

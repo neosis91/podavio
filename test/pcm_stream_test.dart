@@ -29,7 +29,7 @@ void main() {
     file.writeAsBytesSync(bytes);
 
     final streamed = analyzePcmFileSync(file.path);
-    expect(streamed.fingerprint, chromaprintFingerprint(samples));
+    expect(streamed.fingerprint, isEmpty);
 
     final resampler = LogMelResampler(
       maxSamples:

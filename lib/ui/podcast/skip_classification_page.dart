@@ -424,6 +424,7 @@ class _SegmentTile extends ConsumerWidget {
     final db = ref.read(databaseProvider);
     final int episodeId;
     final int startMs;
+    final int endMs;
     final int segmentId;
     final template = row.template;
     if (template != null) {
@@ -438,6 +439,7 @@ class _SegmentTile extends ConsumerWidget {
       }
       episodeId = target.episodeId;
       startMs = target.startMs;
+      endMs = target.endMs;
       segmentId = target.segmentId;
     } else {
       final loose = row.loose!;
@@ -451,6 +453,7 @@ class _SegmentTile extends ConsumerWidget {
       }
       episodeId = loose.segment.episodeId;
       startMs = loose.segment.startMs;
+      endMs = loose.segment.endMs;
       segmentId = loose.segment.id;
     }
     final entry = await db.getEpisode(episodeId);
@@ -468,6 +471,7 @@ class _SegmentTile extends ConsumerWidget {
         .previewPassage(
           entry,
           position: Duration(milliseconds: startMs),
+          end: Duration(milliseconds: endMs),
           segmentId: segmentId,
         );
   }

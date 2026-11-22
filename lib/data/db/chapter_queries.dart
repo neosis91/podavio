@@ -11,6 +11,30 @@ mixin _ChapterQueries on _$AppDatabase, _SkipSegmentQueries {
     return query.watch();
   }
 
+  /// Titres de chapitres, dans l'ordre, pour poser le contexte des pubs.
+  Future<Map<int, List<({int startMs, String title})>>> chapterMarksForEpisodes(
+    List<int> episodeIds,
+  ) async {
+    if (episodeIds.isEmpty) return {};
+    final rows =
+        await (select(episodeChapters)
+              ..where((row) => row.episodeId.isIn(episodeIds))
+              ..orderBy([
+                (row) => OrderingTerm.asc(row.episodeId),
+                (row) => OrderingTerm.asc(row.startMs),
+                (row) => OrderingTerm.asc(row.sortIndex),
+              ]))
+            .get();
+    final grouped = <int, List<({int startMs, String title})>>{};
+    for (final row in rows) {
+      (grouped[row.episodeId] ??= []).add((
+        startMs: row.startMs,
+        title: row.title,
+      ));
+    }
+    return grouped;
+  }
+
   Future<Episode?> episodeById(int id) {
     return (select(
       episodes,
