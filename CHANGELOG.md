@@ -9,6 +9,11 @@ La fusion de `develop` dans `main` publie cette version.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 
+## 2026.11.20
+
+- Nothing is detected on its own any more: the analysis only prepares each download and searches it for the passages created by hand. Previously detected passages and chapter-based passages are kept in the database but no longer shown or skipped.
+- Create a passage by hand (ad, jingle, intro, outro, self-promo, other, with an optional name) from the episode, the player or analysis management, using the waveform and ±0.5 s controls; it is found in other episodes, skipped automatically, kept by later analyses, and can be deleted.
+
 ## 2026.11.19
 
 - Détection des pubs, virgules, outros, intros, autopromos et jingles de nouveau par Chromaprint, vérifiée par l’enveloppe ; Olaf est retiré et ses empreintes sont migrées. - Bornes d’un passage corrigeables à la main (±0,5 s, écoute autour de la coupe, page forme d’onde) ; la correction devient la référence et n’est plus écrasée par l’analyse.

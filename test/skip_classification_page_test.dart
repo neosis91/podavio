@@ -6,6 +6,7 @@ import 'package:podavio/data/app_database.dart';
 import 'package:podavio/data/audio_analysis.dart';
 import 'package:podavio/data/models.dart';
 import 'package:podavio/data/providers.dart';
+import 'package:podavio/data/segment_edit.dart';
 import 'package:podavio/data/skip_segments.dart';
 import 'package:podavio/ui/podcast/skip_classification_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,7 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('the page explains the two-episode minimum and offers analysis', (
+  testWidgets('the page explains that only hand-made passages are searched', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -61,21 +62,17 @@ void main() {
     if (!texts.contains('Analyser les épisodes téléchargés')) {
       throw StateError('bouton manquant: $texts');
     }
-    if (!texts.contains(
-      'Il faut au moins deux épisodes téléchargés du même podcast pour repérer les pubs et les jingles répétés.',
-    )) {
+    if (!texts.any((text) => text.startsWith('Aucune portion créée'))) {
       throw StateError('explication manquante');
     }
-    if (!texts.contains(
-      'Un titre de chapitre qui ressemble à une pub est quand même proposé.',
-    )) {
-      throw StateError('chapitres manquants');
+    if (texts.any((text) => text.contains('titre de chapitre'))) {
+      throw StateError('les chapitres ne sont plus proposés');
     }
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
 
-  testWidgets('low-confidence intra-episode candidates stay behind show more', (
+  testWidgets('old detected passages are hidden, hand-made ones are listed', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -108,13 +105,11 @@ void main() {
       matches: 3,
       confidence: 90,
     );
-    final templateId = await database.insertSegmentTemplate(
+    final detected = await database.insertSegmentTemplate(
       podcastId: podcastId,
       kind: SkipSegmentKind.other,
       label: 'Refrain',
       durationMs: 18000,
-      occurrences: 1,
-      confidence: 20,
     );
     await database.insertSkipSegment(
       episodeId: episodeId,
@@ -122,10 +117,15 @@ void main() {
       endMs: 28000,
       kind: SkipSegmentKind.other,
       source: SkipSegmentSource.fingerprint,
-      matches: 1,
-      confirmed: false,
-      confidence: 20,
-      templateId: templateId,
+      templateId: detected,
+    );
+    await createManualSegment(
+      database,
+      episodeId: episodeId,
+      startMs: 100000,
+      endMs: 115000,
+      kind: SkipSegmentKind.intro,
+      label: 'Générique',
     );
 
     tester.view.physicalSize = const Size(800, 1600);
@@ -146,16 +146,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('Episode pub'), findsOneWidget);
+    expect(find.text('Générique'), findsOneWidget);
     expect(find.text('Refrain'), findsNothing);
-    expect(find.text('Afficher les passages incertains (1)'), findsOneWidget);
-
-    await tester.tap(find.text('Afficher les passages incertains (1)'));
-    await tester.pump();
-
-    expect(find.text('Refrain'), findsOneWidget);
-    expect(find.text('Masquer les passages incertains'), findsOneWidget);
-    expect(find.text('Episode pub'), findsOneWidget);
+    expect(find.text('Episode pub'), findsNothing);
+    expect(await database.listSkipSegments(episodeId), hasLength(3));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();

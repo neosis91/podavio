@@ -9,6 +9,35 @@ Les seuils ci-dessous viennent de mesures sur de vrais épisodes :
 *La Réu d'Écran Large*, *TFTC - Le Podcast*, *Petit Vulgaire*.
 Les constantes vivent dans `lib/data/segment_match.dart`.
 
+## Portions créées à la main seulement
+
+Rien n’est plus détecté tout seul. L’analyse d’un épisode téléchargé
+calcule toujours son empreinte Chromaprint et son enveloppe RMS 20 ms
+(nécessaires pour créer une portion et pour la comparaison), puis
+`syncPodcastAnalysis` cherche **seulement** les gabarits rattachés à un
+passage posé à la main (`manualTemplateIds`) dans les épisodes du podcast,
+avec les étapes de précision décrites plus bas (vote d’offset, contrôle
+d’enveloppe, recalage des bornes). Sans portion créée, l’analyse s’arrête
+après l’empreinte.
+
+Ne tournent plus : la découverte de motifs répétés entre épisodes
+(`buildAnalysisPlan(discover: false)`), la couche de contexte, les
+gabarits log-mel et les virgules de réseau (`applyLogMelFindings` n’est
+plus appelée), la comparaison avec les autres podcasts du même hébergeur,
+et la création de passages depuis les titres de chapitres
+(`seedChapterSkipSegments` est retirée ; aucun réglage ne l’activait). Le
+code de découverte reste en place, désactivé, pour ne pas toucher à ses
+tests et pouvoir y revenir.
+
+Les passages détectés avant ce changement restent en base, intacts, mais
+ne sont plus actifs : le saut automatique, la liste des chapitres, la
+liste des passages et « Gestion des analyses » ne lisent que les passages
+`manual` et les occurrences d’un gabarit rattaché à un passage manuel
+(`listActiveSkipSegments`, `watchActiveSkipSegments`). L’analyse ne
+réécrit ni ne supprime ces anciennes lignes (`applyAnalysisPlan` ne revoit
+que les occurrences des gabarits cherchés). Les sections suivantes
+décrivent aussi l’ancien détecteur, désactivé.
+
 ## Empreinte
 
 Tous les types de passages (pubs, sponsors, outros, intros, autopromos,
@@ -389,10 +418,9 @@ restent couvertes par les gabarits.
 
 ## Chapitres
 
-Quand les chapitres d’un épisode sont enregistrés, un titre qui ressemble
-à une pub ou un sponsor (`pub`, `publicité`, `sponsorisé`, et l’équivalent
-dans d’autres langues) crée un `SkipSegment` avec `source = chapter`.
-La fin du passage est le chapitre suivant, ou la durée de l’épisode.
+Les titres de chapitres ne créent plus de passage (auparavant, un titre
+qui ressemblait à une pub créait un `SkipSegment` `source = chapter`).
+Les anciennes lignes `chapter` restent en base mais ne sont plus actives.
 
 L’écran des chapitres couvre tout l’épisode, du début à la fin. Chaque
 passage détecté est un chapitre (Publicité, Virgule réseau, Intro, Outro,
@@ -466,6 +494,51 @@ L’enregistrement (`saveSegmentBounds`, `lib/data/segment_edit.dart`) :
    un passage manuel ;
 3. ajoute une ligne à `segment_annotations` (bornes et source détectées,
    bornes corrigées, date), en local, pour régler plus tard les seuils.
+
+## Création à la main
+
+« Créer une portion » ouvre le même éditeur en création
+(`SegmentEditorPage.create`) : type (pub, sponsor, jingle, intro, outro,
+autopromo, autre), nom facultatif, puis début et fin avec les mêmes
+boutons ±0,5 s et la même forme d’onde. Le début part de la position de
+lecture (ou de 0), la fin 30 s plus loin ; un bouton pose chaque borne à
+la position de lecture. Points d’entrée :
+
+- fiche de l’épisode (barre du haut) et feuille d’actions de l’épisode ;
+- lecteur : « Créer une portion ici » ouvre directement la forme d’onde
+  sur l’épisode en cours ; elle n’y règle que les bornes, le type et le
+  nom se choisissent ensuite ;
+- liste des passages du podcast (menu d’un passage, ou barre du haut) et
+  « Gestion des analyses » : choix d’un épisode, les analysés d’abord.
+
+Un épisode non téléchargé ne s’ouvre pas. Sans enveloppe (pas encore
+analysé), l’analyse est proposée ; on peut aussi créer quand même.
+
+L’enregistrement (`createManualSegment`) :
+
+1. coupe l’empreinte Chromaprint de référence dans celle de l’épisode et
+   en fait un nouveau gabarit (avec le nom), cherché ensuite dans les
+   autres épisodes comme un gabarit détecté ; l’analyse du podcast est
+   relancée. Sans empreinte encore, le gabarit est vide et recoupé dans
+   l’empreinte à l’analyse suivante ;
+2. pose le passage en `source = manual`, confirmé, que l’analyse ne
+   réécrit pas ;
+3. ajoute une ligne à `segment_annotations` sans source ni bornes
+   détectées (`NULL`).
+
+Chevauchements : une portion qui recoupe un passage déjà posé à la main
+est refusée (on corrige celui-là). Les passages détectés (empreinte,
+virgule) couverts au moins pour moitié sont retirés : l’analyse ne les
+recrée pas. Les chapitres du flux et les recouvrements plus faibles
+restent ; le saut enchaîne les passages contigus.
+
+Supprimer une portion créée à la main retire aussi son gabarit et les
+occurrences trouvées grâce à lui, sauf si un autre passage manuel s’y
+rattache. La vérité terrain reste. Après création, correction ou
+suppression, le lecteur relit les passages de l’épisode en cours pour
+le saut automatique ; un passage qui couvre déjà la position n’est pas
+sauté aussitôt. « Gestion des analyses » affiche le nombre de passages
+posés à la main par podcast.
 
 ## Reste à faire
 

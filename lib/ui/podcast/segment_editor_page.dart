@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/audio_analysis.dart';
 import '../../data/providers.dart';
 import '../../data/segment_edit.dart';
 import '../../data/skip_segments.dart';
@@ -11,10 +14,32 @@ import 'segment_waveform_page.dart';
 
 /// Corrige le début et la fin d’un passage détecté, par pas de 0,5 s, avec
 /// une écoute autour de chaque coupe. La forme d’onde s’ouvre d’ici.
+///
+/// [SegmentEditorPage.create] pose un nouveau passage, à partir de la
+/// position de lecture, avec son type et un nom facultatif.
 class SegmentEditorPage extends ConsumerStatefulWidget {
-  const SegmentEditorPage({super.key, required this.segmentId});
+  const SegmentEditorPage({super.key, required int this.segmentId})
+    : episodeId = null,
+      positionMs = 0,
+      openWaveform = false;
 
-  final int segmentId;
+  const SegmentEditorPage.create({
+    super.key,
+    required int this.episodeId,
+    required this.positionMs,
+    this.openWaveform = false,
+  }) : segmentId = null;
+
+  final int? segmentId;
+  final int? episodeId;
+
+  /// Début proposé pour un nouveau passage.
+  final int positionMs;
+
+  /// Ouvre la forme d’onde dès le chargement.
+  final bool openWaveform;
+
+  bool get creating => segmentId == null;
 
   @override
   ConsumerState<SegmentEditorPage> createState() => _SegmentEditorPageState();
@@ -25,6 +50,8 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
   var _loaded = false;
   var _start = 0;
   var _end = 0;
+  var _kind = SkipSegmentKind.ad;
+  final _name = TextEditingController();
   final _playhead = ValueNotifier<int?>(null);
 
   @override
@@ -36,34 +63,58 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
   @override
   void dispose() {
     _playhead.dispose();
+    _name.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
-    final target = await loadSegmentEdit(
-      ref.read(databaseProvider),
-      widget.segmentId,
-    );
+    final database = ref.read(databaseProvider);
+    final target = widget.creating
+        ? await loadSegmentCreate(database, widget.episodeId!)
+        : await loadSegmentEdit(database, widget.segmentId!);
     if (!mounted) return;
+    final player = ref.read(playerProvider);
+    if (target != null && player.episodeId == target.entry.episode.id) {
+      _playhead.value = player.position.inMilliseconds;
+    }
     setState(() {
       _target = target;
       _loaded = true;
-      if (target != null) {
-        _start = target.segment.startMs;
-        _end = target.segment.endMs;
+      if (target == null) return;
+      final segment = target.segment;
+      if (segment != null) {
+        _start = segment.startMs;
+        _end = segment.endMs;
+        _kind = segment.kind;
+      } else {
+        final bounds = initialCreatedBounds(
+          widget.positionMs,
+          durationMs: target.durationMs,
+        );
+        _start = bounds.startMs;
+        _end = bounds.endMs;
       }
     });
+    if (target != null && widget.openWaveform) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openWaveform();
+      });
+    }
   }
 
-  void _step({required bool start, required int delta}) {
+  void _setBounds({required bool start, required int ms}) {
     final target = _target!;
     final bounds = start
-        ? clampBounds(_start + delta, _end, durationMs: target.durationMs)
-        : clampBounds(_start, _end + delta, durationMs: target.durationMs);
+        ? clampBounds(ms, _end, durationMs: target.durationMs)
+        : clampBounds(_start, ms, durationMs: target.durationMs);
     setState(() {
       _start = bounds.startMs;
       _end = bounds.endMs;
     });
+  }
+
+  void _step({required bool start, required int delta}) {
+    _setBounds(start: start, ms: (start ? _start : _end) + delta);
   }
 
   Future<void> _listen(int fromMs, int toMs) async {
@@ -82,7 +133,7 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
           target.entry,
           position: Duration(milliseconds: fromMs),
           end: Duration(milliseconds: toMs),
-          segmentId: target.segment.id,
+          segmentId: target.segment?.id,
         );
   }
 
@@ -95,13 +146,77 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
   }
 
   Future<bool> _save(int startMs, int endMs) async {
-    await saveSegmentBounds(
-      ref.read(databaseProvider),
-      segmentId: widget.segmentId,
-      startMs: startMs,
-      endMs: endMs,
-    );
+    final database = ref.read(databaseProvider);
+    final target = _target!;
+    if (widget.creating) {
+      final created = await createManualSegment(
+        database,
+        episodeId: target.entry.episode.id,
+        startMs: startMs,
+        endMs: endMs,
+        kind: _kind,
+        label: _name.text,
+      );
+      if (created.segmentId == null) {
+        if (mounted) {
+          showMessage(
+            context,
+            context.tr(
+              'This passage overlaps one placed by hand. Adjust that one '
+              'instead.',
+            ),
+          );
+        }
+        return false;
+      }
+      unawaited(
+        ref
+            .read(audioAnalysisProvider.notifier)
+            .analyzeDownloaded(target.entry.episode.podcastId),
+      );
+    } else {
+      await saveSegmentBounds(
+        database,
+        segmentId: widget.segmentId!,
+        startMs: startMs,
+        endMs: endMs,
+      );
+    }
+    unawaited(ref.read(playerProvider.notifier).reloadSkipSegments());
     return true;
+  }
+
+  /// En création, la forme d’onde règle les bornes ; le type et le nom
+  /// se choisissent ici avant d’enregistrer.
+  Future<bool> _apply(int startMs, int endMs) async {
+    setState(() {
+      _start = startMs;
+      _end = endMs;
+    });
+    return true;
+  }
+
+  Future<void> _delete() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Delete this passage?')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.tr('Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(context.tr('Delete')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await deleteManualSegment(ref.read(databaseProvider), widget.segmentId!);
+    unawaited(ref.read(playerProvider.notifier).reloadSkipSegments());
+    if (mounted) Navigator.of(context).pop(true);
   }
 
   Future<void> _openWaveform() async {
@@ -114,12 +229,15 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
           startMs: _start,
           endMs: _end,
           onListen: _listen,
-          onSave: _save,
+          onSave: widget.creating ? _apply : _save,
+          saveLabel: widget.creating ? 'Apply' : 'Save',
           playhead: _playhead,
         ),
       ),
     );
-    if (saved == true && mounted) Navigator.of(context).pop(true);
+    if (saved == true && mounted && !widget.creating) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   @override
@@ -127,20 +245,29 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
     final target = _target;
     if (target != null) {
       ref.listen(playerProvider, (_, state) {
-        _playhead.value = state.episodeId == target.segment.episodeId
+        _playhead.value = state.episodeId == target.entry.episode.id
             ? state.position.inMilliseconds
             : null;
       });
     }
+    final manual = target?.segment?.source == SkipSegmentSource.manual;
     return Scaffold(
       appBar: AppBar(
-        title: Text(context.tr('Adjust bounds')),
+        title: Text(
+          context.tr(widget.creating ? 'New passage' : 'Adjust bounds'),
+        ),
         actions: [
+          if (target != null && manual)
+            IconButton(
+              tooltip: context.tr('Delete'),
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _delete,
+            ),
           if (target != null)
             TextButton(
               onPressed: () async {
-                await _save(_start, _end);
-                if (context.mounted) Navigator.of(context).pop(true);
+                final saved = await _save(_start, _end);
+                if (saved && context.mounted) Navigator.of(context).pop(true);
               },
               child: Text(context.tr('Save')),
             ),
@@ -153,24 +280,66 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Text(
-                  context.tr(skipKindLabel(target.segment.kind)),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                if (widget.creating) ...[
+                  Text(
+                    context.tr('Kind'),
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final kind in SkipSegmentKind.values)
+                        ChoiceChip(
+                          key: Key('kind-${kind.name}'),
+                          label: Text(context.tr(skipKindLabel(kind))),
+                          selected: _kind == kind,
+                          onSelected: (_) => setState(() => _kind = kind),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('segment-name'),
+                    controller: _name,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      labelText: context.tr('Name (optional)'),
+                    ),
+                  ),
+                ] else
+                  Text(
+                    context.tr(skipKindLabel(_kind)),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 const SizedBox(height: 8),
-                BoundControls(
-                  id: 'start',
-                  label: context.tr('Start'),
-                  valueMs: _start,
-                  onStep: (delta) => _step(start: true, delta: delta),
-                  onListen: () => _listenAround(_start),
-                ),
-                BoundControls(
-                  id: 'end',
-                  label: context.tr('End'),
-                  valueMs: _end,
-                  onStep: (delta) => _step(start: false, delta: delta),
-                  onListen: () => _listenAround(_end),
+                ValueListenableBuilder<int?>(
+                  valueListenable: _playhead,
+                  builder: (context, playhead, _) => Column(
+                    children: [
+                      BoundControls(
+                        id: 'start',
+                        label: context.tr('Start'),
+                        valueMs: _start,
+                        onStep: (delta) => _step(start: true, delta: delta),
+                        onListen: () => _listenAround(_start),
+                        onHere: playhead == null
+                            ? null
+                            : () => _setBounds(start: true, ms: playhead),
+                      ),
+                      BoundControls(
+                        id: 'end',
+                        label: context.tr('End'),
+                        valueMs: _end,
+                        onStep: (delta) => _step(start: false, delta: delta),
+                        onListen: () => _listenAround(_end),
+                        onHere: playhead == null
+                            ? null
+                            : () => _setBounds(start: false, ms: playhead),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -192,8 +361,12 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
                 const SizedBox(height: 16),
                 Text(
                   context.tr(
-                    'Saved bounds are kept by later analyses and become '
-                    'the reference for this passage.',
+                    widget.creating
+                        ? 'A passage placed by hand is kept by later '
+                              'analyses and searched for in the other '
+                              'episodes.'
+                        : 'Saved bounds are kept by later analyses and '
+                              'become the reference for this passage.',
                   ),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),

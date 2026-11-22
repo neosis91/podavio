@@ -52,6 +52,7 @@ const _fr = <String, String>{
   '7 days after listening': '7 jours après l’écoute',
   'A chapter title that looks like an ad is still suggested on its own.':
       'Un titre de chapitre qui ressemble à une pub est quand même proposé.',
+  'A passage placed by hand is kept by later analyses and searched for in the other episodes.': 'Une portion posée à la main est gardée par les analyses suivantes et recherchée dans les autres épisodes.',
   'About': 'À propos',
   'About {hours} h left': 'Environ {hours} h',
   'About {hours} h {minutes} min left': 'Environ {hours} h {minutes} min',
@@ -85,10 +86,14 @@ const _fr = <String, String>{
   'Alternative Health': 'Médecines alternatives',
   'Always shown': 'Toujours affiché',
   'Amber': 'Ambre',
+  'Analyse': 'Analyser',
+  'Analyse it first to see its waveform. A passage created now gets its fingerprint once the episode is analysed.': 'Analysez-le d’abord pour voir sa forme d’onde. Une portion créée maintenant recevra son empreinte une fois l’épisode analysé.',
   'Analyse the episode to see its waveform.':
       'Analysez l’épisode pour voir sa forme d’onde.',
   'Analysed': 'Analysé',
   'Analysis management': 'Gestion des analyses',
+  'Analysis started. Come back once it is done.':
+      'Analyse lancée. Revenez une fois qu’elle est terminée.',
   'Analyze downloaded episodes': 'Analyser les épisodes téléchargés',
   'Analyze downloads automatically':
       'Analyser automatiquement les téléchargements',
@@ -130,6 +135,7 @@ const _fr = <String, String>{
   'Business': 'Économie',
   'Business News': 'Actualités économiques',
   'Button layout': 'Gestion des boutons',
+  'By hand': 'À la main',
   'Cancel': 'Annuler',
   'Car mode': 'Mode voiture',
   'Careers': 'Carrières',
@@ -142,6 +148,7 @@ const _fr = <String, String>{
   'Choose a .sqlite or .db database file':
       'Choisissez un fichier de base .sqlite ou .db',
   'Choose an .opml or .xml file': 'Choisissez un fichier .opml ou .xml',
+  'Choose an episode': 'Choisir un épisode',
   'Choose synchronization provider':
       'Choisir un fournisseur de synchronisation',
   'Choose the categories on the home screen':
@@ -191,6 +198,9 @@ const _fr = <String, String>{
   'Cover tint': 'Teinte de la pochette',
   'Crafts': 'Artisanat',
   'Create a device': 'Créer un appareil',
+  'Create a passage': 'Créer une portion',
+  'Create a passage here': 'Créer une portion ici',
+  'Create anyway': 'Créer quand même',
   'Cricket': 'Cricket',
   'Cursor': 'Curseur',
   'Cyan': 'Cyan',
@@ -223,6 +233,8 @@ const _fr = <String, String>{
   'Download manager': 'Gestion des téléchargements',
   'Download progress': 'Progression du téléchargement',
   'Download settings': 'Paramètres de téléchargement',
+  'Download the episode to create a passage in it.':
+      'Téléchargez l’épisode pour y créer une portion.',
   'Download the episode to preview this passage.':
       'Téléchargez l’épisode pour écouter ce passage.',
   'Download to listen offline': 'Télécharger pour écouter hors ligne',
@@ -340,6 +352,7 @@ const _fr = <String, String>{
   'Keep at most': 'Conserver au plus',
   'Keep screen on': 'Écran allumé',
   'Kids & Family': 'Enfants et famille',
+  'Kind': 'Type',
   'Kinds to skip': 'Types à sauter',
   'Label': 'Libellé',
   'Language': 'Langue',
@@ -386,12 +399,14 @@ const _fr = <String, String>{
   'Music Commentary': 'Commentaires musicaux',
   'Music History': 'Histoire de la musique',
   'Music Interviews': 'Interviews musicales',
+  'Name (optional)': 'Nom (facultatif)',
   'Natural Sciences': 'Sciences naturelles',
   'Nature': 'Nature',
   'Network': 'Réseau',
   'Network sting': 'Virgule réseau',
   'Never': 'Jamais',
   'New episodes': 'Nouveaux épisodes',
+  'New passage': 'Nouvelle portion',
   'News': 'Actualités',
   'News Commentary': 'Commentaires d’actualité',
   'Next': 'Suivant',
@@ -403,6 +418,7 @@ const _fr = <String, String>{
   'No device on this account yet.':
       'Aucun appareil sur ce compte pour le moment.',
   'No downloaded episodes to analyse.': 'Aucun épisode téléchargé à analyser.',
+  'No episodes in this podcast.': 'Aucun épisode dans ce podcast.',
   'No episodes to play': 'Aucun épisode à écouter',
   'No favorites to export': 'Aucun favori à exporter',
   'No feeds found in this file': 'Aucun flux trouvé dans ce fichier',
@@ -411,12 +427,16 @@ const _fr = <String, String>{
   'No matching language': 'Aucune langue correspondante',
   'No next episode in the queue':
       'Pas d’épisode suivant dans la file d’attente',
+  'No passage created yet. Create one from an episode, the player or the button above: the analysis then searches for it in the other downloaded episodes.': 'Aucune portion créée pour l’instant. Créez-en une depuis un épisode, le lecteur ou le bouton ci-dessus : l’analyse la cherche ensuite dans les autres épisodes téléchargés.',
+  'No passages created yet': 'Aucune portion créée',
   'No segments yet': 'Aucune séquence pour l’instant',
   'No subscribed podcasts': 'Aucun podcast abonné',
   'No subscriptions to export': 'Aucun abonnement à exporter',
   'Non-Profit': 'Associations',
   'None': 'Aucune',
+  'Not analysed yet': 'Pas encore analysé',
   'Not checked yet': 'Aucune vérification',
+  'Not downloaded': 'Non téléchargé',
   'Not in the playlist': 'Hors de la playlist',
   'Not synchronized yet': 'Pas encore synchronisé',
   'Notes': 'Notes',
@@ -447,6 +467,9 @@ const _fr = <String, String>{
   'Outside the app': 'Hors de l’application',
   'Parallel downloads': 'Téléchargements en parallèle',
   'Parenting': 'Parentalité',
+  'Passages created by hand': 'Portions créées à la main',
+  'Passages created by hand, searched for in downloaded episodes.':
+      'Portions créées à la main, cherchées dans les épisodes téléchargés.',
   'Password': 'Mot de passe',
   'Pause': 'Pause',
   'Pause (Space)': 'Pause (Espace)',
@@ -478,6 +501,7 @@ const _fr = <String, String>{
   'Podcasts to discover': 'Podcasts à découvrir',
   'Politics': 'Politique',
   'Preferred subscriptions': 'Abonnements préférés',
+  'Prepares each download (fingerprint and waveform) and searches it for the passages created by hand. Nothing is detected on its own. Turn this off if the app stops responding.': 'Prépare chaque téléchargement (empreinte et forme d’onde) et y cherche les portions créées à la main. Rien n’est détecté tout seul. Désactivez si l’application ne répond plus.',
   'Preparing Podavio…': 'Préparation de Podavio…',
   'Preparing the episode': 'Préparation de l’épisode',
   'Preparing {title}': 'Préparation de {title}',
@@ -547,6 +571,7 @@ const _fr = <String, String>{
   'Self-Improvement': 'Développement personnel',
   'Self-promo': 'Auto-promo',
   'Server address': 'Adresse du serveur',
+  'Set to the playback position': 'Placer à la position de lecture',
   'Set up the app in a few quick steps':
       'Configurez l’application en quelques étapes rapides',
   'Settings': 'Préférences',
@@ -630,6 +655,7 @@ const _fr = <String, String>{
   'Tech News': 'Actualités techno',
   'Technology': 'Technologie',
   'Tennis': 'Tennis',
+  'The analysis prepares each downloaded episode (fingerprint and waveform), then searches it for the passages created by hand. Nothing is detected on its own.': 'L’analyse prépare chaque épisode téléchargé (empreinte et forme d’onde), puis y cherche les portions créées à la main. Rien n’est détecté tout seul.',
   'The camera could not be opened': 'La caméra n’a pas pu être ouverte',
   'The player and the top of the home follow the cover':
       'Le lecteur et le haut de l’accueil suivent la pochette',
@@ -647,10 +673,12 @@ const _fr = <String, String>{
   'This code cannot be used': 'Ce code ne peut pas être utilisé',
   'This download will use mobile data.':
       'Ce téléchargement utilisera les données mobiles.',
+  'This episode is not analysed yet': 'Cet épisode n’est pas encore analysé',
   'This episode is not in your library.':
       'Cet épisode n’est pas dans votre bibliothèque.',
   'This install cannot be shared offline. Download Podavio once from podavio.com while online, then try again.': 'Cette installation ne peut pas être partagée hors ligne. Téléchargez Podavio une fois depuis podavio.com en étant en ligne, puis réessayez.',
   'This passage no longer exists.': 'Ce passage n’existe plus.',
+  'This passage overlaps one placed by hand. Adjust that one instead.': 'Cette portion chevauche une portion posée à la main. Ajustez plutôt celle-ci.',
   'This refresh will use mobile data.':
       'Cette actualisation utilisera les données mobiles.',
   'This replaces your current subscriptions, queue, favorites, and playback progress. Downloaded audio files are not restored. Continue?': 'Cela remplace vos abonnements, file d’attente, favoris et progression d’écoute. Les fichiers audio téléchargés ne sont pas restaurés. Continuer ?',

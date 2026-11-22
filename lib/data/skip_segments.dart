@@ -123,7 +123,8 @@ bool isChromaprintPrint(Uint8List data) {
       data[3] == 0x66);
 }
 
-/// Bornes d’un passage avant et après correction à la main.
+/// Bornes d’un passage avant et après correction à la main. Un passage
+/// créé à la main n’a ni source ni bornes détectées.
 class SegmentAnnotation {
   const SegmentAnnotation({
     required this.segmentId,
@@ -139,9 +140,9 @@ class SegmentAnnotation {
   final int segmentId;
   final int episodeId;
   final String kind;
-  final String detectedSource;
-  final int detectedStartMs;
-  final int detectedEndMs;
+  final String? detectedSource;
+  final int? detectedStartMs;
+  final int? detectedEndMs;
   final int correctedStartMs;
   final int correctedEndMs;
 }
