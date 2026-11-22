@@ -1,1 +1,0 @@
-Olaf ad and sting matching builds each episode's hash index once, in a compact packed table, and reuses it for every template and every pair. Detection results are unchanged, and template location plus pair alignment run 15 to 22 times faster in a synthetic benchmark on a desktop VM.
