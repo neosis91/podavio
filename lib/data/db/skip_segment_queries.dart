@@ -55,7 +55,9 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     );
   }
 
-  Future<Map<int, Uint8List>> olafPrintsForEpisodes(List<int> episodeIds) async {
+  Future<Map<int, Uint8List>> olafPrintsForEpisodes(
+    List<int> episodeIds,
+  ) async {
     if (episodeIds.isEmpty) return const {};
     final rows = await customSelect(
       'SELECT episode_id, olaf FROM episode_fingerprints '
@@ -680,8 +682,122 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     return [for (final row in rows) row.readTable(skipSegments)];
   }
 
-  /// Retire l’empreinte et les passages qui en viennent. Un gabarit sans
-  /// passage restant est effacé. Les chapitres et les passages manuels restent.
+  /// Podcasts suivis, et ceux qui ont encore un fichier, pour la page globale.
+  ///
+  /// Un seul flux : Drift garde un minuteur par requête observée, et la page
+  /// n’en a pas besoin de trois.
+  Stream<AnalysisFacts> watchAnalysisFacts() {
+    return customSelect(
+      'SELECT COUNT(*) AS n FROM episodes',
+      readsFrom: {
+        podcasts,
+        episodes,
+        episodeFingerprints,
+        segmentTemplates,
+        skipSegments,
+      },
+    ).watch().asyncMap((_) async {
+      return AnalysisFacts(
+        catalog: await _analysisCatalog(),
+        downloads: await _analysisDownloads(),
+        segments: await _analysisSegments(),
+      );
+    });
+  }
+
+  Future<List<AnalysisCatalogRow>> _analysisCatalog() async {
+    final rows = await customSelect(
+      'SELECT p.id AS id, p.title AS title, '
+      "COALESCE(p.image_url, '') AS image_url, "
+      "COALESCE(p.image_path, '') AS image_path, "
+      'p.feed_url AS feed_url '
+      'FROM podcasts p '
+      'WHERE p.subscribed = 1 OR EXISTS ('
+      'SELECT 1 FROM episodes e '
+      'WHERE e.podcast_id = p.id '
+      'AND e.download_path IS NOT NULL AND length(e.download_path) > 0)',
+      readsFrom: {podcasts, episodes},
+    ).get();
+    return [
+      for (final row in rows)
+        AnalysisCatalogRow(
+          id: row.read<int>('id'),
+          title: row.read<String>('title'),
+          imageUrl: row.read<String>('image_url'),
+          imagePath: row.read<String>('image_path'),
+          feedUrl: row.read<String>('feed_url'),
+        ),
+    ];
+  }
+
+  Future<List<AnalysisDownloadRow>> _analysisDownloads() async {
+    final rows = await customSelect(
+      'SELECT e.podcast_id AS podcast_id, e.audio_url AS audio_url, '
+      "COALESCE(f.status, '') AS status "
+      'FROM episodes e '
+      'LEFT JOIN episode_fingerprints f ON f.episode_id = e.id '
+      'WHERE e.download_path IS NOT NULL AND length(e.download_path) > 0',
+      readsFrom: {episodes, episodeFingerprints},
+    ).get();
+    return [
+      for (final row in rows)
+        AnalysisDownloadRow(
+          podcastId: row.read<int>('podcast_id'),
+          audioUrl: row.read<String>('audio_url'),
+          status: row.read<String>('status'),
+        ),
+    ];
+  }
+
+  Future<List<AnalysisSegmentRow>> _analysisSegments() async {
+    final rows = await customSelect(
+      'SELECT t.podcast_id AS podcast_id, t.kind AS kind, COUNT(*) AS n '
+      'FROM segment_templates t '
+      'GROUP BY t.podcast_id, t.kind '
+      'UNION ALL '
+      'SELECT e.podcast_id AS podcast_id, s.kind AS kind, COUNT(*) AS n '
+      'FROM skip_segments s '
+      'INNER JOIN episodes e ON e.id = s.episode_id '
+      'WHERE s.template_id IS NULL '
+      'AND e.download_path IS NOT NULL AND length(e.download_path) > 0 '
+      'GROUP BY e.podcast_id, s.kind',
+      readsFrom: {segmentTemplates, skipSegments, episodes},
+    ).get();
+    return [
+      for (final row in rows)
+        AnalysisSegmentRow(
+          podcastId: row.read<int>('podcast_id'),
+          kind: row.read<String>('kind'),
+          count: row.read<int>('n'),
+        ),
+    ];
+  }
+
+  /// URLs des fichiers téléchargés, pour regrouper les empreintes.
+  Future<List<({int podcastId, String audioUrl, String feedUrl})>>
+  downloadedHostingRows() async {
+    final rows = await customSelect(
+      'SELECT e.podcast_id AS podcast_id, e.audio_url AS audio_url, '
+      'p.feed_url AS feed_url '
+      'FROM episodes e '
+      'INNER JOIN podcasts p ON p.id = e.podcast_id '
+      'WHERE e.download_path IS NOT NULL AND length(e.download_path) > 0',
+      readsFrom: {episodes, podcasts},
+    ).get();
+    return [
+      for (final row in rows)
+        (
+          podcastId: row.read<int>('podcast_id'),
+          audioUrl: row.read<String>('audio_url'),
+          feedUrl: row.read<String>('feed_url'),
+        ),
+    ];
+  }
+
+  /// Retire l’empreinte et les passages de cet épisode.
+  ///
+  /// Le gabarit reste, même sans occurrence : un prochain téléchargement
+  /// retrouve la séquence. Les chapitres et les passages manuels restent.
   Future<void> clearDownloadAnalysis(int episodeId) {
     return transaction(() async {
       final rows =
@@ -709,17 +825,63 @@ mixin _SkipSegmentQueries on _$AppDatabase {
       )..where((row) => row.episodeId.equals(episodeId))).go();
       for (final templateId in templateIds) {
         final left = await segmentsForTemplate(templateId);
-        if (left.isEmpty) {
-          await (delete(
-            segmentTemplates,
-          )..where((row) => row.id.equals(templateId))).go();
-          continue;
-        }
         final episodes = left.map((row) => row.episodeId).toSet().length;
         await touchSegmentTemplate(templateId, occurrences: episodes);
       }
     });
   }
+}
+
+class AnalysisFacts {
+  const AnalysisFacts({
+    required this.catalog,
+    required this.downloads,
+    required this.segments,
+  });
+
+  final List<AnalysisCatalogRow> catalog;
+  final List<AnalysisDownloadRow> downloads;
+  final List<AnalysisSegmentRow> segments;
+}
+
+class AnalysisCatalogRow {
+  const AnalysisCatalogRow({
+    required this.id,
+    required this.title,
+    required this.imageUrl,
+    required this.imagePath,
+    required this.feedUrl,
+  });
+
+  final int id;
+  final String title;
+  final String imageUrl;
+  final String imagePath;
+  final String feedUrl;
+}
+
+class AnalysisDownloadRow {
+  const AnalysisDownloadRow({
+    required this.podcastId,
+    required this.audioUrl,
+    required this.status,
+  });
+
+  final int podcastId;
+  final String audioUrl;
+  final String status;
+}
+
+class AnalysisSegmentRow {
+  const AnalysisSegmentRow({
+    required this.podcastId,
+    required this.kind,
+    required this.count,
+  });
+
+  final int podcastId;
+  final String kind;
+  final int count;
 }
 
 bool? _reviewOf(int pending, int yes, int no) {

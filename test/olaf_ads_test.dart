@@ -33,6 +33,18 @@ void main() {
     expect(byId[1]!.endMs - byId[1]!.startMs, inInclusiveRange(10000, 60000));
   });
 
+  test('a portion longer than two minutes is left out of the comparison', () {
+    final plan = planOlafAds(
+      episodes: [
+        _episode(1, _span(0, 150000, hashes: 200)),
+        _episode(2, _span(8000, 158000, hashes: 200)),
+      ],
+      templates: const [],
+      contextLayer: false,
+    );
+    expect(plan.patterns, isEmpty);
+  });
+
   test('a match longer than a minute is capped at 60 s', () {
     final plan = planOlafAds(
       episodes: [

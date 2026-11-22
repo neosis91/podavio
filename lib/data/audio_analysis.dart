@@ -9,6 +9,7 @@ import 'package:olaf_ffi/olaf_ffi.dart';
 
 import 'analysis_pace.dart';
 import 'app_database.dart';
+import 'hosting_source.dart';
 import 'chromaprint.dart';
 import 'envelope.dart';
 import 'episode_audio_analyzer.dart';
@@ -987,12 +988,35 @@ Future<void> syncPodcastAnalysis(
   Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
 }) async {
   final stored = await database.fingerprintedDownloads(podcastId);
+  final cohort = [...stored];
+  if (stored.length >= 2) {
+    final ids = comparisonPodcastIds(
+      focusPodcastId: podcastId,
+      focusDownloadCount: stored.length,
+      hosts: await database.downloadedHostingRows(),
+    );
+    for (final id in ids) {
+      if (id == podcastId) continue;
+      cohort.addAll(await database.fingerprintedDownloads(id));
+    }
+  }
+  final focusEpisodeIds = {for (final row in stored) row.episode.id};
   final envelopes = await database.fingerprintEnvelopes(podcastId);
+  if (cohort.length > stored.length) {
+    final seen = <int>{podcastId};
+    for (final row in cohort) {
+      if (!seen.add(row.episode.podcastId)) continue;
+      if (row.episode.podcastId == podcastId) continue;
+      envelopes.addAll(
+        await database.fingerprintEnvelopes(row.episode.podcastId),
+      );
+    }
+  }
   final marks = await database.chapterMarksForEpisodes([
-    for (final row in stored) row.episode.id,
+    for (final row in cohort) row.episode.id,
   ]);
   final episodes = <Object?>[];
-  for (final row in stored) {
+  for (final row in cohort) {
     final bytes = row.fingerprint.data;
     if (!isOlafAdPrint(bytes)) continue;
     final fromPrint = olafAdLastMs(bytes);
@@ -1024,7 +1048,9 @@ Future<void> syncPodcastAnalysis(
   if (episodes.isNotEmpty) {
     final templates = <Object?>[];
     final reviews = await database.templateReviews(podcastId);
-    for (final template in await database.listSegmentTemplates(podcastId)) {
+    final ownTemplates = await database.listSegmentTemplates(podcastId);
+    final ownTemplateIds = {for (final template in ownTemplates) template.id};
+    for (final template in ownTemplates) {
       if (!isOlafAdPrint(template.fingerprint)) continue;
       templates.add(<Object?>[
         template.id,
@@ -1045,7 +1071,11 @@ Future<void> syncPodcastAnalysis(
         : await offUi(planOlafAnalysisEntry, message);
     if (raw is Map) {
       final plan = decodeAnalysisPlan(Map<Object?, Object?>.from(raw));
-      await applyAnalysisPlan(database, podcastId, plan);
+      await applyAnalysisPlan(
+        database,
+        podcastId,
+        _keepFocusEpisodes(plan, focusEpisodeIds, ownTemplateIds),
+      );
     }
   }
   await applyLogMelFindings(database, podcastId, offUi: offUi);
@@ -1059,6 +1089,42 @@ Future<Object?> _runPlanAnalysis(Map<String, Object?> message) {
 
 Future<Object?> _runPlanLogMel(Map<String, Object?> message) {
   return Isolate.run(() => planLogMelMessage(message));
+}
+
+/// Ne conserve que les passages du podcast en cours.
+///
+/// Les autres épisodes du même hébergeur servent à la comparaison, pas
+/// à écrire leurs lignes ici. Un gabarit d’un autre podcast n’est pas repris.
+AnalysisPlan _keepFocusEpisodes(
+  AnalysisPlan plan,
+  Set<int> episodeIds,
+  Set<int> templateIds,
+) {
+  final patterns = <PlannedPattern>[];
+  for (final pattern in plan.patterns) {
+    final segments = [
+      for (final segment in pattern.segments)
+        if (episodeIds.contains(segment.episodeId)) segment,
+    ];
+    if (segments.isEmpty) continue;
+    final templateId =
+        pattern.templateId != null && templateIds.contains(pattern.templateId)
+        ? pattern.templateId
+        : null;
+    patterns.add(
+      PlannedPattern(
+        templateId: templateId,
+        kind: pattern.kind,
+        confirmed: pattern.confirmed,
+        fingerprint: pattern.fingerprint,
+        fingerprintBytes: pattern.fingerprintBytes,
+        durationMs: pattern.durationMs,
+        confidence: pattern.confidence,
+        segments: segments,
+      ),
+    );
+  }
+  return AnalysisPlan(patterns);
 }
 
 /// Écrit [plan] sans doublon. Un passage déjà revu garde son avis et son type.
@@ -1181,6 +1247,15 @@ Future<void> _recountTemplates(AppDatabase database, int podcastId) async {
   for (final template in templates) {
     final segments = await database.segmentsForTemplate(template.id);
     if (segments.isEmpty) {
+      final hasPrint = template.fingerprint.isNotEmpty;
+      final mel = template.logMel;
+      final hasMel = mel != null && mel.isNotEmpty;
+      if (hasPrint || hasMel) {
+        if (template.occurrences != 0) {
+          await database.touchSegmentTemplate(template.id, occurrences: 0);
+        }
+        continue;
+      }
       await (database.delete(
         database.segmentTemplates,
       )..where((row) => row.id.equals(template.id))).go();

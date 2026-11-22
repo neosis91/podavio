@@ -605,5 +605,13 @@
   "Show uncertain passages ({count})": "Show uncertain passages ({count})",
   "Episode": "Episode",
   "Intro": "Intro",
-  "Outro": "Outro"
+  "Outro": "Outro",
+  "Analysis management": "Analysis management",
+  "Analysed": "Analysed",
+  "Pending": "Pending",
+  "Failed": "Failed",
+  "Applies to every podcast.": "Applies to every podcast.",
+  "No downloaded episodes to analyse.": "No downloaded episodes to analyse.",
+  "No segments yet": "No segments yet",
+  "Ads, stings, sponsors, and outros in downloaded episodes.": "Ads, stings, sponsors, and outros in downloaded episodes."
 }

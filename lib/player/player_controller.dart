@@ -15,6 +15,7 @@ import '../data/http_auth.dart';
 import '../data/online_status.dart';
 import '../data/providers.dart';
 import '../data/skip_segments.dart';
+import '../settings/global_skip.dart';
 import '../settings/settings_controller.dart';
 import '../ui/widgets/mobile_data_prompt.dart';
 import '../sync/sync_hooks.dart';
@@ -252,6 +253,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       }
       _bind();
       ref.onDispose(_dispose);
+      ref.listen(globalSkipSettingsProvider, (previous, next) {
+        _autoSkipAds = next.enabled;
+        _autoSkipKinds = next.kinds.toSet();
+      });
       ref.listen(settingsProvider, (previous, next) {
         final session = playbackHandler;
         if (session != null) {
@@ -976,7 +981,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     _skipIntro = Duration(seconds: podcast.skipIntroSeconds);
     _skipOutro = Duration(seconds: podcast.skipOutroSeconds);
     _outroSkippedEpisodeId = null;
-    _resetSegmentSkip(podcast, fromDownload: downloaded);
+    _resetSegmentSkip(fromDownload: downloaded);
     start = _applyIntroSkip(start, duration);
     final speed = podcast.playbackSpeed ?? settings.speed;
     final preferPodcastCover = settings.preferPodcastCover;
@@ -1380,10 +1385,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     unawaited(_onCompleted());
   }
 
-  void _resetSegmentSkip(Podcast podcast, {required bool fromDownload}) {
+  void _resetSegmentSkip({required bool fromDownload}) {
     _playingFromDownload = fromDownload;
-    _autoSkipAds = podcast.autoSkipAds;
-    _autoSkipKinds = decodeAutoSkipKinds(podcast.autoSkipKinds).toSet();
+    final skip = ref.read(globalSkipSettingsProvider);
+    _autoSkipAds = skip.enabled;
+    _autoSkipKinds = skip.kinds.toSet();
     _skipWindows = const [];
     _heldSegmentIds.clear();
     _ui = _ui.copyWith(setManualSkip: true);

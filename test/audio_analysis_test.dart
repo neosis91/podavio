@@ -182,7 +182,9 @@ void main() {
       expect(templates.single.occurrences, 1);
 
       await database.setDownloadPath(second, null);
-      expect(await database.listSegmentTemplates(podcastId), isEmpty);
+      final kept = await database.listSegmentTemplates(podcastId);
+      expect(kept, hasLength(1));
+      expect(kept.single.occurrences, 0);
       expect(await database.fingerprintSegmentsForPodcast(podcastId), isEmpty);
     },
   );
