@@ -468,5 +468,8 @@
   "{count} waiting": "{count} प्रतीक्षा में",
   "{seconds} seconds": "{seconds} सेकंड",
   "Hide uncertain passages": "अनिश्चित अंश छिपाएँ",
-  "Show uncertain passages ({count})": "अनिश्चित अंश दिखाएँ ({count})"
+  "Show uncertain passages ({count})": "अनिश्चित अंश दिखाएँ ({count})",
+  "Episode": "एपिसोड",
+  "Intro": "इंट्रो",
+  "Outro": "आउट्रो"
 }

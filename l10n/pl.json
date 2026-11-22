@@ -470,5 +470,8 @@
   "{count} waiting": "{count} w kolejce",
   "{seconds} seconds": "{seconds} s",
   "Hide uncertain passages": "Ukryj niepewne fragmenty",
-  "Show uncertain passages ({count})": "Pokaż niepewne fragmenty ({count})"
+  "Show uncertain passages ({count})": "Pokaż niepewne fragmenty ({count})",
+  "Episode": "Odcinek",
+  "Intro": "Intro",
+  "Outro": "Outro"
 }

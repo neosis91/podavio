@@ -470,5 +470,8 @@
   "{count} waiting": "{count} bekliyor",
   "{seconds} seconds": "{seconds} saniye",
   "Hide uncertain passages": "Belirsiz bölümleri gizle",
-  "Show uncertain passages ({count})": "Belirsiz bölümleri göster ({count})"
+  "Show uncertain passages ({count})": "Belirsiz bölümleri göster ({count})",
+  "Episode": "Bölüm",
+  "Intro": "İntro",
+  "Outro": "Outro"
 }

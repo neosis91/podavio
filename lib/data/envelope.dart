@@ -9,6 +9,14 @@ const envelopeHopMs = 20;
 /// Déplacement maximum du recalage autour de la frontière Chromaprint.
 const boundaryRefineSlackMs = 1500;
 
+/// Une pub peut s’arrêter ~3 s trop tôt, sur un creux, alors que le
+/// son continue jusqu’au vrai silence. On ne va pas plus loin que ça.
+const adEndExtendMs = 4000;
+
+/// En dessous, l’octet d’enveloppe est du silence (~−36 dB).
+/// Un creux à −28 dB reste au-dessus et ne coupe pas la pub.
+const envelopeSilenceLevel = 4;
+
 const envelopeHopSamples = chromaprintSampleRate * envelopeHopMs ~/ 1000;
 
 /// Énergie RMS quantifiée, un octet toutes les [envelopeHopMs].
@@ -140,4 +148,97 @@ EnvelopeShift? envelopeEdgeShift({
 double _median(List<double> values) {
   final sorted = [...values]..sort();
   return sorted[sorted.length ~/ 2];
+}
+
+/// Pousse [endMs] jusqu’au prochain silence tenu, sans dépasser
+/// [maxExtendMs].
+///
+/// Un creux bref au point d’arrêt grossier est ignoré : il faut avoir
+/// réentendu du son, puis 200 ms de silence. Si le point d’arrêt est
+/// déjà dans un silence qui dure, on ne bouge pas. Sans silence dans
+/// la fenêtre, la fin reste celle de l’empreinte.
+int extendEndToSilence(
+  Uint8List envelope,
+  int endMs, {
+  int maxExtendMs = adEndExtendMs,
+}) {
+  if (envelope.isEmpty || endMs < 0) return endMs;
+  final lastMs = envelope.length * envelopeHopMs;
+  final stop = endMs + maxExtendMs < lastMs ? endMs + maxExtendMs : lastMs;
+  var quietFor = 0;
+  var quietStart = endMs;
+  var heard = false;
+  for (var t = endMs; t < stop; t += envelopeHopMs) {
+    final index = t ~/ envelopeHopMs;
+    if (index < 0 || index >= envelope.length) break;
+    if (envelope[index] > envelopeSilenceLevel) {
+      heard = true;
+      quietFor = 0;
+      continue;
+    }
+    if (quietFor == 0) quietStart = t;
+    quietFor += envelopeHopMs;
+    if (!heard && quietFor > 400) return endMs;
+    if (heard && quietFor >= 200) return quietStart;
+  }
+  return endMs;
+}
+
+/// Ramène [startMs] au silence tenu d’avant, sans reculer de plus de
+/// [maxExtendMs].
+///
+/// Même règle que [extendEndToSilence] : un creux bref est ignoré, et
+/// un début déjà posé dans un silence qui dure ne bouge pas.
+int extendStartToSilence(
+  Uint8List envelope,
+  int startMs, {
+  int maxExtendMs = adEndExtendMs,
+}) {
+  if (envelope.isEmpty || startMs <= 0) return startMs;
+  final earliest = startMs - maxExtendMs > 0 ? startMs - maxExtendMs : 0;
+  var quietFor = 0;
+  var quietEnd = startMs;
+  var heard = false;
+  for (var t = startMs - envelopeHopMs; t >= earliest; t -= envelopeHopMs) {
+    final index = t ~/ envelopeHopMs;
+    if (index < 0 || index >= envelope.length) break;
+    if (envelope[index] > envelopeSilenceLevel) {
+      heard = true;
+      quietFor = 0;
+      continue;
+    }
+    if (quietFor == 0) quietEnd = t + envelopeHopMs;
+    quietFor += envelopeHopMs;
+    if (!heard && quietFor > 400) return startMs;
+    if (heard && quietFor >= 200) return quietEnd < 0 ? 0 : quietEnd;
+  }
+  return startMs;
+}
+
+/// Pose le début et la fin d’une portion sur un vrai silence.
+///
+/// On ne fait que sortir : un bord déjà dans un silence reste en place,
+/// et une fin déjà au bout du fichier n’est pas ramenée en arrière.
+({int startMs, int endMs}) snapPortionToSilence(
+  Uint8List envelope,
+  int startMs,
+  int endMs, {
+  int durationMs = 0,
+}) {
+  if (envelope.isEmpty || endMs <= startMs) {
+    return (startMs: startMs, endMs: endMs);
+  }
+  var start = extendStartToSilence(envelope, startMs);
+  var end = endMs;
+  final lastMs = envelope.length * envelopeHopMs;
+  final atFileEnd =
+      (durationMs > 0 && durationMs - endMs <= 500) ||
+      (lastMs - endMs <= 500 && endMs <= lastMs);
+  if (!atFileEnd) {
+    end = extendEndToSilence(envelope, endMs);
+    if (durationMs > 0 && end > durationMs) end = durationMs;
+  }
+  if (start < 0) start = 0;
+  if (start >= end) return (startMs: startMs, endMs: endMs);
+  return (startMs: start, endMs: end);
 }

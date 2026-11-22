@@ -48,6 +48,29 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     );
   }
 
+  Future<void> setFingerprintOlaf(int episodeId, Uint8List prints) {
+    return customStatement(
+      'UPDATE episode_fingerprints SET olaf = ? WHERE episode_id = ?',
+      [prints, episodeId],
+    );
+  }
+
+  Future<Map<int, Uint8List>> olafPrintsForEpisodes(List<int> episodeIds) async {
+    if (episodeIds.isEmpty) return const {};
+    final rows = await customSelect(
+      'SELECT episode_id, olaf FROM episode_fingerprints '
+      'WHERE olaf IS NOT NULL AND episode_id IN (${episodeIds.join(',')})',
+      readsFrom: {episodeFingerprints},
+    ).get();
+    final found = <int, Uint8List>{};
+    for (final row in rows) {
+      final bytes = row.read<Uint8List?>('olaf');
+      if (bytes == null || bytes.length < 12) continue;
+      found[row.read<int>('episode_id')] = bytes;
+    }
+    return found;
+  }
+
   Future<void> setFingerprintEnvelope(int episodeId, Uint8List envelope) {
     return customStatement(
       'UPDATE episode_fingerprints SET envelope = ? WHERE episode_id = ?',

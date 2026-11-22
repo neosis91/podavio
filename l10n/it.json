@@ -470,5 +470,8 @@
   "{count} waiting": "{count} in attesa",
   "{seconds} seconds": "{seconds} secondi",
   "Hide uncertain passages": "Nascondi i passaggi incerti",
-  "Show uncertain passages ({count})": "Mostra i passaggi incerti ({count})"
+  "Show uncertain passages ({count})": "Mostra i passaggi incerti ({count})",
+  "Episode": "Episodio",
+  "Intro": "Intro",
+  "Outro": "Outro"
 }

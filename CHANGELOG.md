@@ -9,6 +9,16 @@ La fusion de `develop` dans `main` publie cette version.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 
+## 2026.11.17
+
+- Ad ends extend to the next short silence, a repeated sting just after an ad is its own chapter, and an outro runs through to the end of the file. Content between detected segments keeps the podcaster's chapter titles, or is named Episode when the feed has none.
+
+- Detected portions snap to a held silence on both the start and the end. A repeated sting of about three seconds anywhere in the first three minutes is its own chapter, even when each episode places it at a different time.
+
+- Short network stings in the first three minutes are located with Olaf landmarks. The chapter keeps the log-mel window, so the start and the end stay the same, in about a second instead of about sixteen.
+
+
+
 ## 2026.11.16
 
 - Analysis of downloaded episodes is faster and still runs off the main thread. Similar passages get a tighter start and end, and analysis slows down while audio is playing.

@@ -164,9 +164,7 @@ class PlayerNowPlaying extends ConsumerWidget {
                         activeChapter != null &&
                         activeChapter.title.isNotEmpty)
                       Text(
-                        activeChapter.fromSegment
-                            ? context.tr(activeChapter.title)
-                            : activeChapter.title,
+                        localizedChapterTitle(activeChapter, context.tr),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(

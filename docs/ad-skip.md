@@ -11,8 +11,11 @@ Les constantes vivent dans `lib/data/segment_match.dart`.
 
 ## Empreinte
 
-Chromaprint, licence MIT ou LGPL. Ne pas prendre de bibliothèque AGPL
-(Olaf, par exemple).
+Chromaprint (MIT ou LGPL) sert aux pubs et aux outros longs.
+Les virgules courtes passent par Olaf (Joren Six,
+<https://github.com/JorenSix/Olaf>, AGPL-3.0), vendu dans
+`packages/olaf_ffi` avec sa licence. Le code natif n’est appelé que
+depuis l’isolate d’analyse.
 
 - Environ 8,08 valeurs de 32 bits par seconde. Le pas réel est
   `1365 / 11025` s, soit 123809 µs (`chromaprintStoredHopMicros`),
@@ -353,10 +356,46 @@ Quand les chapitres d’un épisode sont enregistrés, un titre qui ressemble
 dans d’autres langues) crée un `SkipSegment` avec `source = chapter`.
 La fin du passage est le chapitre suivant, ou la durée de l’épisode.
 
+L’écran des chapitres couvre tout l’épisode, du début à la fin. Chaque
+passage détecté est un chapitre (Publicité, Virgule réseau, Intro, Outro,
+et les autres libellés). Deux pubs qui se suivent restent deux chapitres.
+Entre ces passages, le titre vient du podcast s’il en a donné un pour cet
+intervalle. Sinon le chapitre s’appelle « Épisode ». La pub et la virgule
+collée juste après sont deux chapitres, mais un seul saut à la lecture.
+
+## Frontières
+
+La fin d’une pub peut s’arrêter sur un creux alors que le son continue.
+Si l’enveloppe retrouve du niveau puis un silence tenu dans les 4 secondes,
+le bord avance jusqu’à ce silence. Le début recule de la même façon : une
+portion démarre et finit sur un vrai silence, pas sur un creux bref. Une
+virgule d’environ 3 secondes répétée n’importe où dans les trois premières
+minutes, même à une heure différente d’un épisode à l’autre, devient un
+passage `jingle` de source `network` (chapitre « Virgule réseau »).
+Olaf pose des landmarks (pics spectraux, paires, hash 64 bits, vote par
+décalage) sur ces trois minutes et désigne les épisodes. La fenêtre de
+3 s, et donc le début et la fin du chapitre après le silence, restent
+ceux du log-mel : sur les neuf épisodes RTL du 21 novembre 2026, les
+heures sont les mêmes, et Dreyfus, Lesseps et de Gaulle n’en ont pas.
+L’extraction, le vote et ce calage local prennent environ 1,2 s, contre
+environ 16 s pour parcourir toutes les fenêtres, et les landmarks tiennent
+dans 0,5 Mo au lieu d’environ 50 Mo de trames. Tant qu’un épisode comparé
+n’a pas encore ces landmarks, la recherche log-mel reste le détecteur :
+trames centrées, deux épisodes si la copie est franche (score ≥ 0,90),
+trois sinon (0,85). Un motif plus long déjà repéré n’est pas réutilisé.
+La virgule se saute avec les pubs, même quand un silence la sépare de
+la pub. Un outro
+découpé en plusieurs bouts dans la dernière minute est recollé (trou d’au
+plus 5 secondes) et, s’il s’arrête à moins de 15 secondes de la fin de
+*ce* fichier, va jusqu’au bout. La durée totale peut changer avec le
+pré-roll : l’outro se mesure depuis la fin.
+
 ## Lecture
 
 `_maybeSkipSegment` (à côté de `_maybeSkipOutro`) avance à la fin du
-passage. La liste des passages est lue une fois au démarrage de la
+passage, ou à la fin de la virgule collée juste après une pub. Une virgule
+de réseau se saute aussi seule, avec les pubs, quand un silence la sépare
+de la pub. La liste des passages est lue une fois au démarrage de la
 lecture d’un fichier téléchargé (`listSkipSegments` vers `_skipWindows`)
 et le test de position ne refait pas de requête. Le saut a lieu si :
 

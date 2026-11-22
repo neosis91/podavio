@@ -1,8 +1,10 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'envelope.dart';
-import 'segment_match.dart';
 import 'log_mel.dart';
+import 'olaf_sting.dart';
+import 'segment_match.dart';
 
 /// Spectrogrammes chargés ensemble pour la recherche des jingles courts.
 /// Au-delà, seuls les épisodes les plus récents sont comparés.
@@ -415,6 +417,400 @@ bool _acceptShort(List<SegmentOccurrence> hits) {
   return comparableJinglePositions(hits);
 }
 
+/// Durée de la virgule cherchée avant le contenu, dans les 2 à 4 s.
+const contentStingMs = 3000;
+
+/// Pas des fenêtres essayées dans les trois premières minutes.
+const contentStingStepMs = 2000;
+
+/// Score d’une copie nette. En dessous, ce n’est pas la même virgule.
+const contentStingScore = 0.85;
+
+/// Deux épisodes suffisent seulement si la copie est franche.
+const contentStingStrongScore = 0.90;
+
+/// Le pic doit dépasser le niveau de fond, sinon tout se ressemble.
+const contentStingMargin = 0.35;
+
+const contentStingMinEpisodes = 2;
+
+/// Virgule répétée avant le contenu, à un instant qui peut changer.
+class ContentSting {
+  const ContentSting({
+    required this.episodeId,
+    required this.startMs,
+    required this.endMs,
+  });
+
+  final int episodeId;
+  final int startMs;
+  final int endMs;
+}
+
+/// Cherche le même extrait de ~3 s n’importe où dans les 180 premières
+/// secondes. L’heure n’a pas à coïncider, et aucune pub n’est exigée à côté.
+///
+/// La cosinus brute du log-mel vaut ~1 sur la parole : chaque trame est
+/// presque plate. On compare des trames centrées. Un passage déjà couvert
+/// par un motif plus long (la pub, l’intro) n’est pas repris comme virgule.
+List<ContentSting> findContentStings({
+  required List<EpisodeMel> episodes,
+  List<({int episodeId, int startMs, int endMs})> covered = const [],
+  List<({int episodeId, int startMs, int endMs})>? focus,
+}) {
+  final usable = [
+    for (final episode in episodes.take(logMelCompareEpisodeCap))
+      if (episode.clip.frames.length >= contentStingMs ~/ logMelHopMs) episode,
+  ];
+  if (usable.length < contentStingMinEpisodes) return const [];
+  final units = <int, _UnitFrames>{
+    for (final episode in usable) episode.episodeId: _UnitFrames(episode.clip),
+  };
+  final width = contentStingMs ~/ logMelHopMs;
+  final step = contentStingStepMs ~/ logMelHopMs;
+  _StingPattern? best;
+  for (final anchor in usable) {
+    final needle = units[anchor.episodeId]!;
+    final last = needle.frames - width;
+    for (var origin = 0; origin <= last; origin += step) {
+      final startMs = origin * logMelHopMs;
+      if (startMs > logMelSearchWindowMs) break;
+      if (!_inFocus(focus, anchor.episodeId, startMs, startMs + contentStingMs)) {
+        continue;
+      }
+      if (!_voiced(needle, origin, width)) continue;
+      if (_mostlyCovered(
+        covered,
+        anchor.episodeId,
+        startMs,
+        startMs + contentStingMs,
+      )) {
+        continue;
+      }
+      final hits = <ContentSting>[
+        ContentSting(
+          episodeId: anchor.episodeId,
+          startMs: startMs,
+          endMs: startMs + contentStingMs,
+        ),
+      ];
+      var weakest = 1.0;
+      for (final other in usable) {
+        if (other.episodeId == anchor.episodeId) continue;
+        final hay = units[other.episodeId]!;
+        final span = _focusOf(focus, other.episodeId);
+        if (focus != null && span == null) continue;
+        final found = _bestStingAlign(
+          needle,
+          origin,
+          hay,
+          width,
+          fromMs: span?.startMs,
+          toMs: span?.endMs,
+        );
+        if (found == null) continue;
+        if (found.score < contentStingScore ||
+            found.margin < contentStingMargin) {
+          continue;
+        }
+        final hitStart = found.frame * logMelHopMs;
+        final hitEnd = hitStart + contentStingMs;
+        if (_mostlyCovered(covered, other.episodeId, hitStart, hitEnd)) {
+          continue;
+        }
+        hits.add(
+          ContentSting(
+            episodeId: other.episodeId,
+            startMs: hitStart,
+            endMs: hitEnd,
+          ),
+        );
+        if (found.score < weakest) weakest = found.score;
+      }
+      if (hits.length < contentStingMinEpisodes) continue;
+      if (hits.length < 3 && weakest < contentStingStrongScore) continue;
+      final pattern = _StingPattern(hits);
+      if (best == null || pattern.rank > best.rank) best = pattern;
+    }
+  }
+  return best?.hits ?? const [];
+}
+
+bool _mostlyCovered(
+  List<({int episodeId, int startMs, int endMs})> covered,
+  int episodeId,
+  int startMs,
+  int endMs,
+) {
+  final length = endMs - startMs;
+  if (length <= 0) return false;
+  for (final span in covered) {
+    if (span.episodeId != episodeId) continue;
+    if (span.endMs - span.startMs < length + 1000) continue;
+    final overlap =
+        math.min(endMs, span.endMs) - math.max(startMs, span.startMs);
+    if (overlap >= length / 2) return true;
+  }
+  return false;
+}
+
+class _StingPattern {
+  _StingPattern(this.hits);
+
+  final List<ContentSting> hits;
+
+  int get spread {
+    var low = hits.first.startMs;
+    var high = low;
+    for (final hit in hits) {
+      if (hit.startMs < low) low = hit.startMs;
+      if (hit.startMs > high) high = hit.startMs;
+    }
+    return high - low;
+  }
+
+  /// Une virgule dont l’heure change bat une intro toujours au même instant.
+  int get rank {
+    final variable = spread >= 2000 ? 1 : 0;
+    return variable * 100000 + hits.length * 1000 + spread ~/ 1000;
+  }
+}
+
+class _UnitFrames {
+  _UnitFrames(LogMelClip clip)
+    : frames = clip.frames.length,
+      data = Float32List(clip.frames.length * logMelBandCount),
+      coarse = Float32List(clip.frames.length * _coarseBands) {
+    for (var frame = 0; frame < frames; frame++) {
+      final row = clip.frames[frame];
+      final n = row.length < logMelBandCount ? row.length : logMelBandCount;
+      var mean = 0.0;
+      for (var band = 0; band < n; band++) {
+        mean += row[band];
+      }
+      mean /= logMelBandCount;
+      var energy = 0.0;
+      final base = frame * logMelBandCount;
+      for (var band = 0; band < logMelBandCount; band++) {
+        final value = (band < n ? row[band] : 0.0) - mean;
+        data[base + band] = value;
+        energy += value * value;
+      }
+      final norm = math.sqrt(energy);
+      if (norm > 1e-8) {
+        for (var band = 0; band < logMelBandCount; band++) {
+          data[base + band] /= norm;
+        }
+      } else {
+        for (var band = 0; band < logMelBandCount; band++) {
+          data[base + band] = 0;
+        }
+      }
+      final coarseBase = frame * _coarseBands;
+      var coarseMean = 0.0;
+      for (var band = 0; band < _coarseBands; band++) {
+        var sum = 0.0;
+        final from = band * (logMelBandCount ~/ _coarseBands);
+        final to = from + logMelBandCount ~/ _coarseBands;
+        for (var i = from; i < to; i++) {
+          sum += data[base + i];
+        }
+        coarse[coarseBase + band] = sum;
+        coarseMean += sum;
+      }
+      coarseMean /= _coarseBands;
+      var coarseEnergy = 0.0;
+      for (var band = 0; band < _coarseBands; band++) {
+        final value = coarse[coarseBase + band] - coarseMean;
+        coarse[coarseBase + band] = value;
+        coarseEnergy += value * value;
+      }
+      final coarseNorm = math.sqrt(coarseEnergy);
+      if (coarseNorm > 1e-8) {
+        for (var band = 0; band < _coarseBands; band++) {
+          coarse[coarseBase + band] /= coarseNorm;
+        }
+      }
+    }
+  }
+
+  static const _coarseBands = 8;
+
+  final int frames;
+  final Float32List data;
+  final Float32List coarse;
+
+  int get bands => logMelBandCount;
+}
+
+bool _voiced(_UnitFrames frames, int start, int width) {
+  var voiced = 0;
+  var seen = 0;
+  for (var frame = 0; frame < width; frame += 4) {
+    final base = (start + frame) * frames.bands;
+    var energy = 0.0;
+    for (var band = 0; band < frames.bands; band += 4) {
+      final value = frames.data[base + band];
+      energy += value * value;
+    }
+    seen++;
+    if (energy > 1e-6) voiced++;
+  }
+  return seen > 0 && voiced * 2 >= seen;
+}
+
+({int startMs, int endMs})? _focusOf(
+  List<({int episodeId, int startMs, int endMs})>? focus,
+  int episodeId,
+) {
+  if (focus == null) return null;
+  for (final item in focus) {
+    if (item.episodeId != episodeId) continue;
+    return (
+      startMs: item.startMs - adEndExtendMs,
+      endMs: item.endMs + adEndExtendMs,
+    );
+  }
+  return null;
+}
+
+bool _inFocus(
+  List<({int episodeId, int startMs, int endMs})>? focus,
+  int episodeId,
+  int startMs,
+  int endMs,
+) {
+  final span = _focusOf(focus, episodeId);
+  if (focus == null) return true;
+  if (span == null) return false;
+  return endMs > span.startMs && startMs < span.endMs;
+}
+
+({int frame, double score, double margin})? _bestStingAlign(
+  _UnitFrames needle,
+  int origin,
+  _UnitFrames hay,
+  int width, {
+  int? fromMs,
+  int? toMs,
+}) {
+  if (hay.frames < width) return null;
+  final limit = hay.frames - width;
+  final first = fromMs == null ? 0 : (fromMs ~/ logMelHopMs).clamp(0, limit);
+  final last = toMs == null
+      ? limit
+      : ((toMs - contentStingMs) ~/ logMelHopMs).clamp(first, limit);
+  const stride = 10;
+  final peaks = <({int frame, double score})>[];
+  var start = (first ~/ stride) * stride;
+  if (start < first) start += stride;
+  for (; start <= last; start += stride) {
+    final coarse = _coarseScore(needle, origin, hay, start, width);
+    if (coarse < 0.55) continue;
+    var replaced = false;
+    for (var i = 0; i < peaks.length; i++) {
+      final delta = peaks[i].frame - start;
+      if (delta >= width || delta <= -width) continue;
+      replaced = true;
+      if (coarse > peaks[i].score) {
+        peaks[i] = (frame: start, score: coarse);
+      }
+      break;
+    }
+    if (replaced) continue;
+    peaks.add((frame: start, score: coarse));
+    if (peaks.length > 3) {
+      peaks.sort((a, b) => b.score.compareTo(a.score));
+      peaks.removeLast();
+    }
+  }
+  if (peaks.isEmpty) return null;
+  var bestFrame = -1;
+  var best = 0.0;
+  for (final peak in peaks) {
+    final from = peak.frame - stride < 0 ? 0 : peak.frame - stride;
+    final to = peak.frame + stride > limit ? limit : peak.frame + stride;
+    for (var frame = from; frame <= to; frame++) {
+      final score = _frameScore(needle, origin, hay, frame, width);
+      if (score <= best) continue;
+      best = score;
+      bestFrame = frame;
+    }
+  }
+  if (bestFrame < 0 || best < contentStingScore) return null;
+  final samples = <double>[];
+  final probe = limit <= 0 ? 1 : limit ~/ 8;
+  for (var i = 0; i < 8; i++) {
+    final at = i * probe;
+    if (at > limit) break;
+    samples.add(_frameScore(needle, origin, hay, at, width, background: true));
+  }
+  samples.add(best);
+  samples.sort();
+  final margin = best - samples[samples.length ~/ 2];
+  return (frame: bestFrame, score: best, margin: margin);
+}
+
+double _coarseScore(
+  _UnitFrames needle,
+  int origin,
+  _UnitFrames hay,
+  int start,
+  int width,
+) {
+  const bands = _UnitFrames._coarseBands;
+  var dot = 0.0;
+  var used = 0;
+  for (var frame = 0; frame < width; frame += 2) {
+    final left = (origin + frame) * bands;
+    final right = (start + frame) * bands;
+    var local = 0.0;
+    for (var band = 0; band < bands; band++) {
+      local += needle.coarse[left + band] * hay.coarse[right + band];
+    }
+    dot += local;
+    used++;
+    if ((used & 7) == 0) {
+      final remaining = (width - frame) ~/ 2;
+      if ((dot + remaining) / (used + remaining) < 0.55) return 0;
+    }
+  }
+  if (used == 0) return 0;
+  return dot / used;
+}
+
+double _frameScore(
+  _UnitFrames needle,
+  int origin,
+  _UnitFrames hay,
+  int start,
+  int width, {
+  bool background = false,
+}) {
+  final bands = needle.bands;
+  final stride = background ? 4 : 1;
+  var dot = 0.0;
+  var used = 0;
+  for (var frame = 0; frame < width; frame += stride) {
+    final left = (origin + frame) * bands;
+    final right = (start + frame) * bands;
+    var local = 0.0;
+    for (var band = 0; band < bands; band++) {
+      local += needle.data[left + band] * hay.data[right + band];
+    }
+    dot += local;
+    used++;
+    if (!background && (used & 15) == 0) {
+      final remaining = (width - frame - 1) ~/ stride;
+      if ((dot + remaining) / (used + remaining) < contentStingScore) {
+        return 0;
+      }
+    }
+  }
+  if (used == 0) return 0;
+  return dot / used;
+}
+
 /// Recherche log-mel hors de l’isolate d’interface.
 ///
 /// Le message ne contient que des octets. Le décodage en trames se fait ici.
@@ -516,6 +912,8 @@ Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
     }
     final refined = paired ?? self;
     if (refined == null) continue;
+    // La fin déjà poussée jusqu’au silence ne doit pas être raccourcie
+    // par un recalage qui s’arrête au dernier hash partagé.
     final templateId = segment[5] as int?;
     Uint8List? templateBytes;
     if (templateId != null) {
@@ -529,11 +927,13 @@ Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
         }
       }
     }
-    refinedEnds[segment[0]! as int] = refined.endMs;
+    final keptEnd = refined.endMs > endMs ? refined.endMs : endMs;
+    refinedEnds[segment[0]! as int] = keptEnd;
     refinements.add({
       'segmentId': segment[0],
+      'episodeId': segment[1],
       'startMs': refined.startMs,
-      'endMs': refined.endMs,
+      'endMs': keptEnd,
       'matches': segment[4],
       'templateId': templateId,
       'templateBytes': templateBytes,
@@ -596,12 +996,88 @@ Map<String, Object?> planLogMelMessage(Map<String, Object?> message) {
     });
   }
 
+  final covered = <({int episodeId, int startMs, int endMs})>[];
+  for (final segment in segments) {
+    final id = segment[0]! as int;
+    final startMs = segment[2]! as int;
+    final endMs = refinedEnds[id] ?? segment[3]! as int;
+    if (endMs <= startMs) continue;
+    covered.add((
+      episodeId: segment[1]! as int,
+      startMs: startMs,
+      endMs: endMs,
+    ));
+  }
+  final olaf = _olafStings(message, episodes, covered);
+  final postAd = olaf ?? findContentStings(episodes: episodes, covered: covered);
+
   return {
     'jingles': jingles,
     'refinements': refinements,
     'spans': spans,
     'learned': learned,
+    'postAd': [
+      for (final hit in postAd)
+        <String, Object?>{
+          'episodeId': hit.episodeId,
+          'startMs': hit.startMs,
+          'endMs': hit.endMs,
+        },
+    ],
   };
+}
+
+/// Olaf remplace la recherche log-mel dès que chaque épisode comparé a
+/// ses landmarks. Une liste vide veut dire qu’Olaf n’a pas trouvé de
+/// virgule : on ne revient pas au log-mel. `null` : pas encore d’empreinte
+/// Olaf, le log-mel reste le détecteur.
+List<ContentSting>? _olafStings(
+  Map<String, Object?> message,
+  List<EpisodeMel> episodes,
+  List<({int episodeId, int startMs, int endMs})> covered,
+) {
+  final raw = message['olaf'];
+  if (raw is! List || episodes.length < 2) return null;
+  final prints = <int, Uint8List>{};
+  for (final item in raw) {
+    if (item is! List || item.length < 2) continue;
+    final bytes = item[1];
+    if (bytes is! Uint8List || bytes.length < 12) continue;
+    prints[item[0]! as int] = bytes;
+  }
+  if (episodes.any((episode) => !prints.containsKey(episode.episodeId))) {
+    return null;
+  }
+  final found = findOlafContentSting(
+    [
+      for (final episode in episodes)
+        OlafEpisodePrints(
+          episodeId: episode.episodeId,
+          prints: decodeOlafPrints(prints[episode.episodeId]!),
+        ),
+    ],
+    covered: covered,
+  );
+  if (found.isEmpty) return const [];
+  // Olaf names the episodes and the rough time. The chapter keeps the
+  // same 3 s log-mel window, so silence snap lands on the same edges.
+  final placed = findContentStings(
+    episodes: episodes,
+    covered: covered,
+    focus: [
+      for (final hit in found)
+        (episodeId: hit.episodeId, startMs: hit.startMs, endMs: hit.endMs),
+    ],
+  );
+  if (placed.isNotEmpty) return placed;
+  return [
+    for (final hit in found)
+      ContentSting(
+        episodeId: hit.episodeId,
+        startMs: hit.startMs,
+        endMs: hit.endMs,
+      ),
+  ];
 }
 
 ({int id, LogMelClip? clip})? _knownTemplate(

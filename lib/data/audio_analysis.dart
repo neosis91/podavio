@@ -5,14 +5,17 @@ import 'dart:isolate';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:olaf_ffi/olaf_ffi.dart';
 
 import 'analysis_pace.dart';
 import 'app_database.dart';
 import 'chromaprint.dart';
+import 'envelope.dart';
 import 'episode_audio_analyzer.dart';
 import 'log_mel.dart';
 import 'log_mel_match.dart';
 import 'network_stings.dart';
+import 'olaf_sting.dart';
 import 'pcm_decoder.dart';
 import 'providers.dart';
 import '../settings/settings_controller.dart';
@@ -657,6 +660,11 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
           await database.setFingerprintEnvelope(episode.id, analyzed.envelope);
         }
         if (!live()) return;
+        final olaf = analyzed.olaf;
+        if (olaf != null && olaf.isNotEmpty) {
+          await database.setFingerprintOlaf(episode.id, olaf);
+        }
+        if (!live()) return;
         if (analyzed.logMel != null) {
           await database.upsertEpisodeLogMel(
             episodeId: episode.id,
@@ -804,6 +812,7 @@ Future<PcmAnalysis?> _analyzeDecoded(
       fingerprintMs: raw[6]! as int,
       logMelMs: raw[7]! as int,
       speechMs: raw[8]! as int,
+      olaf: raw.length > 10 ? raw[10] as Uint8List? : null,
     );
   } finally {
     await _deleteDecoded(decoded.path);
@@ -830,8 +839,9 @@ Future<Object?> _spawn(
 
 void analyzePcmEntry(List<Object?> args) {
   final send = args[0]! as SendPort;
+  final path = args[1]! as String;
   try {
-    send.send(_pcmMessage(analyzePcmFileSync(args[1]! as String)));
+    send.send(_pcmMessage(analyzePcmFileSync(path), _olafPrints(path)));
   } catch (error, stack) {
     send.send(<Object?>['error', '$error', '$stack']);
   }
@@ -852,7 +862,7 @@ void analyzePcmPacedEntry(List<Object?> args) {
   unawaited(() async {
     try {
       final result = await analyzePcmFilePaced(path, () => mode);
-      send.send(_pcmMessage(result));
+      send.send(_pcmMessage(result, _olafPrints(path)));
     } catch (error, stack) {
       send.send(<Object?>['error', '$error', '$stack']);
     } finally {
@@ -861,7 +871,7 @@ void analyzePcmPacedEntry(List<Object?> args) {
   }());
 }
 
-List<Object?> _pcmMessage(PcmAnalysis result) {
+List<Object?> _pcmMessage(PcmAnalysis result, Uint8List? olaf) {
   return <Object?>[
     result.fingerprint,
     result.logMel,
@@ -873,7 +883,24 @@ List<Object?> _pcmMessage(PcmAnalysis result) {
     result.logMelMs,
     result.speechMs,
     result.envelope,
+    olaf,
   ];
+}
+
+/// Second passage sur le PCM déjà décodé. Un échec de la bibliothèque
+/// native ne doit pas faire échouer Chromaprint ni le log-mel.
+Uint8List? _olafPrints(String path) {
+  try {
+    final prints = fingerprintPcmFile(
+      path,
+      sampleRate: chromaprintSampleRate,
+      maxMs: logMelSearchWindowMs,
+    );
+    if (prints == null || prints.isEmpty) return null;
+    return encodeOlafPrints(prints);
+  } catch (_) {
+    return null;
+  }
 }
 
 void planAnalysisEntry(List<Object?> args) {
@@ -1137,6 +1164,10 @@ Future<void> applyLogMelFindings(
   final bundled = await loadBundledNetworkStings();
   final learnedRows = await database.listLearnedNetworkStings();
   final segments = await database.fingerprintSegmentsForPodcast(podcastId);
+  final olafIds = <int>[
+    for (final row in episodeRows) (row as List)[0]! as int,
+  ];
+  final olaf = await database.olafPrintsForEpisodes(olafIds);
   final boundaries = [...await database.dynamicAdBoundaries()]
     ..sort((a, b) => b.episodeId.compareTo(a.episodeId));
   final message = <String, Object?>{
@@ -1171,6 +1202,10 @@ Future<void> applyLogMelFindings(
     'learned': [
       for (final sting in learnedRows) <Object?>[sting.id, sting.logMel],
     ],
+    'olaf': [
+      for (final id in olafIds)
+        if (olaf[id] != null) <Object?>[id, olaf[id]],
+    ],
   };
   final watch = Stopwatch()..start();
   final raw = offUi == null
@@ -1196,6 +1231,15 @@ Future<void> _applyLogMelPlan(
   Map<int, bool?> reviews,
   bool? adReview,
 ) async {
+  final envelopes = await database.fingerprintEnvelopes(podcastId);
+  ({int startMs, int endMs}) edges(int episodeId, int startMs, int endMs) {
+    final envelope = envelopes[episodeId];
+    if (envelope == null || envelope.isEmpty) {
+      return (startMs: startMs, endMs: endMs);
+    }
+    return snapPortionToSilence(envelope, startMs, endMs);
+  }
+
   for (final raw in plan['jingles'] as List? ?? const []) {
     final jingle = Map<Object?, Object?>.from(raw as Map);
     final bytes = _asBytes(jingle['bytes']);
@@ -1217,11 +1261,16 @@ Future<void> _applyLogMelPlan(
     final confirmed = reviews[templateId];
     for (final rawHit in hits) {
       final hit = Map<Object?, Object?>.from(rawHit as Map);
+      final snapped = edges(
+        hit['episodeId']! as int,
+        hit['startMs']! as int,
+        hit['endMs']! as int,
+      );
       await _upsertLoose(
         database,
         episodeId: hit['episodeId']! as int,
-        startMs: hit['startMs']! as int,
-        endMs: hit['endMs']! as int,
+        startMs: snapped.startMs,
+        endMs: snapped.endMs,
         kind: SkipSegmentKind.jingle,
         source: SkipSegmentSource.fingerprint,
         matches: hits.length,
@@ -1234,10 +1283,14 @@ Future<void> _applyLogMelPlan(
   for (final raw in plan['refinements'] as List? ?? const []) {
     final item = Map<Object?, Object?>.from(raw as Map);
     final templateId = item['templateId'] as int?;
+    final episodeId = item['episodeId'] as int?;
+    final snapped = episodeId == null
+        ? (startMs: item['startMs']! as int, endMs: item['endMs']! as int)
+        : edges(episodeId, item['startMs']! as int, item['endMs']! as int);
     await database.updateFingerprintSegment(
       id: item['segmentId']! as int,
-      startMs: item['startMs']! as int,
-      endMs: item['endMs']! as int,
+      startMs: snapped.startMs,
+      endMs: snapped.endMs,
       matches: item['matches']! as int,
       templateId: templateId,
     );
@@ -1251,11 +1304,16 @@ Future<void> _applyLogMelPlan(
   final touched = <int>{};
   for (final raw in plan['spans'] as List? ?? const []) {
     final span = Map<Object?, Object?>.from(raw as Map);
+    final snapped = edges(
+      span['episodeId']! as int,
+      span['startMs']! as int,
+      span['endMs']! as int,
+    );
     final id = await _upsertLoose(
       database,
       episodeId: span['episodeId']! as int,
-      startMs: span['startMs']! as int,
-      endMs: span['endMs']! as int,
+      startMs: snapped.startMs,
+      endMs: snapped.endMs,
       kind: SkipSegmentKind.ad,
       source: SkipSegmentSource.network,
       matches: 1,
@@ -1268,6 +1326,26 @@ Future<void> _applyLogMelPlan(
   for (final row in network) {
     if (touched.contains(row.id) || row.confirmed == true) continue;
     await database.deleteSkipSegment(row.id);
+  }
+
+  for (final raw in plan['postAd'] as List? ?? const []) {
+    final hit = Map<Object?, Object?>.from(raw as Map);
+    final snapped = edges(
+      hit['episodeId']! as int,
+      hit['startMs']! as int,
+      hit['endMs']! as int,
+    );
+    await _upsertLoose(
+      database,
+      episodeId: hit['episodeId']! as int,
+      startMs: snapped.startMs,
+      endMs: snapped.endMs,
+      kind: SkipSegmentKind.jingle,
+      source: SkipSegmentSource.network,
+      matches: (plan['postAd'] as List).length,
+      confirmed: null,
+      templateId: null,
+    );
   }
 
   for (final raw in plan['learned'] as List? ?? const []) {

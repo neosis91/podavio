@@ -354,6 +354,75 @@ void main() {
     expect(found.single.classification.kind, SkipSegmentKind.ad);
     expect(found.single.classification.autoSkip, isTrue);
   });
+
+  test('split outro pieces join and run to the end of the file', () {
+    const gap = 32;
+    final first = _motif(40, 21);
+    final second = _motif(50, 22);
+    final third = _motif(40, 23);
+    const start = 719;
+    final secondAt = start + first.length + gap;
+    final thirdAt = secondAt + second.length + gap;
+    final endIndex = thirdAt + third.length;
+    final durationMs = _ms(endIndex) + 4000;
+    expect(durationMs - _ms(start), lessThanOrEqualTo(60000));
+
+    FingerprintEpisode episode(int id) {
+      final values = _noise(endIndex + 80, id * 19);
+      _write(values, start, first);
+      _write(values, secondAt, second);
+      _write(values, thirdAt, third);
+      return FingerprintEpisode(
+        episodeId: id,
+        values: values,
+        hopMicros: hop,
+        durationMs: durationMs,
+      );
+    }
+
+    final found = discoverPatterns([episode(1), episode(2)]);
+    final outros = found.where(
+      (pattern) => pattern.classification.kind == SkipSegmentKind.outro,
+    );
+    expect(outros, hasLength(1));
+    for (final hit in outros.single.occurrences) {
+      expect((hit.startMs - _ms(start)).abs(), lessThanOrEqualTo(500));
+      expect(hit.endMs, durationMs);
+    }
+  });
+
+  test('an outro ends at each file, not at one shared clock time', () {
+    final motif = _motif(100, 31);
+    FingerprintEpisode build(int id, int durationMs) {
+      final at =
+          ((durationMs - 4000) * 1000) ~/ chromaprintStoredHopMicros -
+          motif.length;
+      final values = _noise(at + motif.length + 40, id);
+      _write(values, at, motif);
+      return FingerprintEpisode(
+        episodeId: id,
+        values: values,
+        hopMicros: hop,
+        durationMs: durationMs,
+      );
+    }
+
+    const short = 200000;
+    const long = 260000;
+    final found = discoverPatterns([build(1, short), build(2, long)]);
+    final outros = found.where(
+      (pattern) => pattern.classification.kind == SkipSegmentKind.outro,
+    );
+    expect(outros, hasLength(1));
+    final byId = {
+      for (final hit in outros.single.occurrences) hit.episodeId: hit,
+    };
+    expect(byId[1]!.endMs, short);
+    expect(byId[2]!.endMs, long);
+    expect(short - byId[1]!.startMs, lessThanOrEqualTo(60000));
+    expect(long - byId[2]!.startMs, lessThanOrEqualTo(60000));
+    expect((byId[2]!.startMs - byId[1]!.startMs).abs(), greaterThan(30000));
+  });
 }
 
 int _ms(int index) => index * chromaprintStoredHopMicros ~/ 1000;

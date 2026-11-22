@@ -941,6 +941,77 @@ class _Clusters {
     }
     spans.add(_Span(episodeId, start, end, cluster, hopMicros));
   }
+
+  /// Colle les bouts d’outro séparés par un trou court, puis va jusqu’au
+  /// fichier si le dernier bout en est proche.
+  ///
+  /// Un même générique de fin revient souvent en plusieurs suites : un
+  /// trou de quelques secondes les sépare, et chacune s’arrête avant la
+  /// fin. On ne touche pas un motif qui existe aussi au milieu d’un épisode.
+  void bridgeOutros(Map<int, FingerprintEpisode> byId) {
+    const bridgeMs = 5000;
+    const tailSlackMs = 15000;
+    bool outroCluster(int cluster) {
+      final root = find(cluster);
+      var any = false;
+      for (final span in spans) {
+        if (find(span.cluster) != root) continue;
+        any = true;
+        final episode = byId[span.episodeId];
+        if (episode == null || episode.durationMs <= 0) return false;
+        final fromEnd =
+            episode.durationMs - _indexMs(span.start, span.hopMicros);
+        if (fromEnd <= 0 || fromEnd > outroWindowMs) return false;
+      }
+      return any;
+    }
+
+    final byEpisode = <int, List<_Span>>{};
+    for (final span in spans) {
+      if (!outroCluster(span.cluster)) continue;
+      (byEpisode[span.episodeId] ??= []).add(span);
+    }
+    final drop = <_Span>{};
+    final extra = <_Span>[];
+    for (final entry in byEpisode.entries) {
+      final episode = byId[entry.key];
+      if (episode == null || episode.durationMs <= 0) continue;
+      final list = [...entry.value]..sort((a, b) => a.start.compareTo(b.start));
+      var i = 0;
+      while (i < list.length) {
+        var end = list[i].end;
+        var hop = list[i].hopMicros;
+        var cluster = list[i].cluster;
+        final group = <_Span>[list[i]];
+        var j = i + 1;
+        while (j < list.length) {
+          final gapMs =
+              _indexMs(list[j].start, list[j].hopMicros) - _indexMs(end, hop);
+          if (gapMs > bridgeMs) break;
+          if (list[j].end > end) end = list[j].end;
+          hop = list[j].hopMicros;
+          _union(cluster, list[j].cluster);
+          cluster = find(cluster);
+          group.add(list[j]);
+          j++;
+        }
+        final endMs = _indexMs(end, hop);
+        final nearEnd = episode.durationMs - endMs <= tailSlackMs;
+        final endIndex = nearEnd ? (episode.durationMs * 1000) ~/ hop : end;
+        final finalEnd = endIndex > end ? endIndex : end;
+        if (group.length > 1 || finalEnd != group.first.end) {
+          drop.addAll(group);
+          extra.add(
+            _Span(entry.key, group.first.start, finalEnd, find(cluster), hop),
+          );
+        }
+        i = j;
+      }
+    }
+    if (drop.isEmpty) return;
+    spans.removeWhere(drop.contains);
+    spans.addAll(extra);
+  }
 }
 
 bool _indexOverlap(int a0, int a1, int b0, int b1) {
@@ -960,6 +1031,7 @@ List<DiscoveredPattern> _materialize(
   _Clusters clusters,
   Map<int, FingerprintEpisode> byId,
 ) {
+  clusters.bridgeOutros(byId);
   final groups = <int, List<_Span>>{};
   for (final span in clusters.spans) {
     (groups[clusters.find(span.cluster)] ??= []).add(span);
@@ -972,7 +1044,12 @@ List<DiscoveredPattern> _materialize(
       final episode = byId[span.episodeId];
       if (episode == null) continue;
       final startMs = _indexMs(span.start, span.hopMicros);
-      final endMs = _indexMs(span.end, span.hopMicros);
+      var endMs = _indexMs(span.end, span.hopMicros);
+      if (episode.durationMs > endMs &&
+          episode.durationMs - endMs <= 500 &&
+          episode.durationMs - startMs <= outroWindowMs) {
+        endMs = episode.durationMs;
+      }
       if (endMs <= startMs) continue;
       occurrences.add(
         SegmentOccurrence(
@@ -1066,6 +1143,14 @@ List<SegmentOccurrence> _refineOccurrences(
   List<SegmentOccurrence> hits,
   Map<int, FingerprintEpisode> byId,
 ) {
+  final snapped = _snapOccurrences(hits, byId);
+  return [for (final hit in snapped) _extendAdEnd(hit, byId)];
+}
+
+List<SegmentOccurrence> _snapOccurrences(
+  List<SegmentOccurrence> hits,
+  Map<int, FingerprintEpisode> byId,
+) {
   if (hits.length < 2) return hits;
   final anchor = hits.firstWhere(
     (hit) => byId[hit.episodeId]?.envelope?.isNotEmpty == true,
@@ -1092,6 +1177,30 @@ List<SegmentOccurrence> _refineOccurrences(
   final startShift = _medianShift([for (final shift in shifts) shift.startMs]);
   final endShift = _medianShift([for (final shift in shifts) shift.endMs]);
   return [for (final hit in hits) _shiftOccurrence(hit, startShift, endShift)];
+}
+
+SegmentOccurrence _extendAdEnd(
+  SegmentOccurrence hit,
+  Map<int, FingerprintEpisode> byId,
+) {
+  final envelope = byId[hit.episodeId]?.envelope;
+  if (envelope == null || envelope.isEmpty) return hit;
+  final snapped = snapPortionToSilence(
+    envelope,
+    hit.startMs,
+    hit.endMs,
+    durationMs: hit.episodeDurationMs,
+  );
+  if (snapped.startMs == hit.startMs && snapped.endMs == hit.endMs) {
+    return hit;
+  }
+  return SegmentOccurrence(
+    episodeId: hit.episodeId,
+    startMs: snapped.startMs,
+    endMs: snapped.endMs,
+    episodeDurationMs: hit.episodeDurationMs,
+    preRollEndMs: hit.preRollEndMs,
+  );
 }
 
 int _medianShift(List<int> values) {

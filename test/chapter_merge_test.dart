@@ -47,12 +47,20 @@ void main() {
           kind: SkipSegmentKind.sponsor,
         ),
       ],
+      durationMs: 90000,
     );
 
-    expect(merged, hasLength(1));
-    expect(merged.single.title, 'Sponsor');
-    expect(merged.single.endMs, 30000);
-    expect(currentDisplayChapter(merged, const Duration(seconds: 40)), isNull);
+    expect(merged.map((chapter) => chapter.title), [
+      'Episode',
+      'Sponsor',
+      'Episode',
+    ]);
+    expect(merged.map((chapter) => chapter.startMs), [0, 10000, 30000]);
+    expect(merged.map((chapter) => chapter.endMs), [10000, 30000, 90000]);
+    expect(
+      currentDisplayChapter(merged, const Duration(seconds: 40))?.title,
+      'Episode',
+    );
   });
 
   test('a rejected passage and a chapter-sourced one stay out', () {
@@ -93,9 +101,97 @@ void main() {
       ],
     );
 
-    expect(merged.map((chapter) => chapter.title), ['Ad', 'Sponsor', 'Ad']);
-    expect(merged.map((chapter) => chapter.startMs), [10000, 20000, 30000]);
+    expect(merged.map((chapter) => chapter.title), [
+      'Episode',
+      'Ad',
+      'Sponsor',
+      'Ad',
+      'Episode',
+    ]);
+    expect(merged.map((chapter) => chapter.startMs), [
+      0,
+      10000,
+      20000,
+      30000,
+      40000,
+    ]);
   });
+
+  test(
+    'podcaster titles stay on the content, detected labels on the skips',
+    () {
+      final merged = mergeChaptersWithSegments(
+        chapters: [
+          _chapter(id: 1, startMs: 40000, title: 'Le récit'),
+          _chapter(id: 2, startMs: 70000, title: 'La suite'),
+        ],
+        segments: [
+          _segment(id: 1, startMs: 0, endMs: 30000, kind: SkipSegmentKind.ad),
+          _segment(
+            id: 2,
+            startMs: 30000,
+            endMs: 33000,
+            kind: SkipSegmentKind.jingle,
+            source: SkipSegmentSource.network,
+          ),
+          _segment(
+            id: 3,
+            startMs: 33000,
+            endMs: 40000,
+            kind: SkipSegmentKind.intro,
+          ),
+          _segment(
+            id: 4,
+            startMs: 50000,
+            endMs: 55000,
+            kind: SkipSegmentKind.ad,
+          ),
+          _segment(
+            id: 5,
+            startMs: 55000,
+            endMs: 62000,
+            kind: SkipSegmentKind.ad,
+          ),
+          _segment(
+            id: 6,
+            startMs: 90000,
+            endMs: 100000,
+            kind: SkipSegmentKind.outro,
+          ),
+        ],
+        durationMs: 100000,
+      );
+
+      expect(merged.map((chapter) => chapter.title), [
+        'Ad',
+        'Network sting',
+        'Intro',
+        'Le récit',
+        'Ad',
+        'Ad',
+        'Le récit',
+        'La suite',
+        'Outro',
+      ]);
+      expect(merged.map((chapter) => chapter.startMs), [
+        0,
+        30000,
+        33000,
+        40000,
+        50000,
+        55000,
+        62000,
+        70000,
+        90000,
+      ]);
+      expect(merged.last.endMs, 100000);
+      expect(merged.first.endMs, 30000);
+      expect(
+        merged.where((chapter) => chapter.title == 'Ad').map((c) => c.endMs),
+        [30000, 55000, 62000],
+      );
+    },
+  );
 
   test('the button is offered only when automatic skip is off', () {
     final ad = SkipCandidate(
