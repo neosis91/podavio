@@ -55,6 +55,9 @@ app.*.map.json
 # Binaires de compilation locale
 /dist/
 
+# Poids ONNX d'EfficientAT, téléchargés pour l'évaluation locale.
+tool/models/*.onnx
+
 # Podavio Web
 companion/**/node_modules/
 companion/**/dist/

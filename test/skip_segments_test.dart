@@ -140,6 +140,7 @@ void main() {
     expect(preview?.episodeId, episodeId);
     expect(preview?.segmentId, segmentId);
     expect(preview?.startMs, 5000);
+    expect(preview?.endMs, 25000);
 
     var classification = await database
         .watchSkipClassification(podcastId)

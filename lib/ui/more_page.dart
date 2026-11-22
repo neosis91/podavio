@@ -368,6 +368,16 @@ class PreferencesPage extends ConsumerWidget {
             onTap: () => context.push(AppRoutes.downloadSettings),
           ),
           ListTile(
+            leading: const Icon(Icons.graphic_eq),
+            title: Text(context.tr('Analysis management')),
+            subtitle: Text(
+              context.tr(
+                'Ads, stings, sponsors, and outros in downloaded episodes.',
+              ),
+            ),
+            onTap: () => context.push(AppRoutes.analysisSettings),
+          ),
+          ListTile(
             leading: const Icon(Icons.wifi),
             title: Text(context.tr('Network')),
             trailing: const Icon(Icons.chevron_right),

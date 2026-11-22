@@ -15,10 +15,9 @@ void main() {
   });
 
   test('podcastRequestHeaders adds Authorization only when needed', () {
-    expect(
-      podcastRequestHeaders(userAgent: 'Podavio'),
-      {'User-Agent': 'Podavio'},
-    );
+    expect(podcastRequestHeaders(userAgent: 'Podavio'), {
+      'User-Agent': 'Podavio',
+    });
     expect(
       podcastRequestHeaders(
         userAgent: 'Podavio',

@@ -605,5 +605,13 @@
   "Show uncertain passages ({count})": "Afficher les passages incertains ({count})",
   "Episode": "Épisode",
   "Intro": "Intro",
-  "Outro": "Outro"
+  "Outro": "Outro",
+  "Analysis management": "Gestion des analyses",
+  "Analysed": "Analysé",
+  "Pending": "En attente",
+  "Failed": "Échec",
+  "Applies to every podcast.": "S’applique à tous les podcasts.",
+  "No downloaded episodes to analyse.": "Aucun épisode téléchargé à analyser.",
+  "No segments yet": "Aucune séquence pour l’instant",
+  "Ads, stings, sponsors, and outros in downloaded episodes.": "Pubs, virgules, sponsors et outros des épisodes téléchargés."
 }

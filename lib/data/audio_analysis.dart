@@ -9,12 +9,14 @@ import 'package:olaf_ffi/olaf_ffi.dart';
 
 import 'analysis_pace.dart';
 import 'app_database.dart';
+import 'hosting_source.dart';
 import 'chromaprint.dart';
 import 'envelope.dart';
 import 'episode_audio_analyzer.dart';
 import 'log_mel.dart';
 import 'log_mel_match.dart';
 import 'network_stings.dart';
+import 'olaf_ads.dart';
 import 'olaf_sting.dart';
 import 'pcm_decoder.dart';
 import 'providers.dart';
@@ -27,7 +29,7 @@ final pcmDecoderProvider = Provider<PcmDecoder>((ref) {
   return const PlatformPcmDecoder();
 });
 
-/// Vrai moteur : décodage natif, empreinte Chromaprint, motifs du podcast.
+/// Vrai moteur : décodage natif, landmarks Olaf, motifs du podcast.
 final episodeAudioAnalyzerProvider = Provider<EpisodeAudioAnalyzer>((ref) {
   return ChromaprintEpisodeAudioAnalyzer(
     database: ref.watch(databaseProvider),
@@ -410,7 +412,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         final mel = await database.logMelForEpisode(episode.id);
         final status = await database.fingerprintStatus(episode.id);
         if (stored == null ||
-            stored.data.isEmpty ||
+            !isOlafAdPrint(stored.data) ||
             stored.speech == null ||
             mel == null ||
             status == 'failed' ||
@@ -614,7 +616,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
           ? null
           : await database.logMelForEpisode(episode.id);
       if (!live()) return;
-      final needPrint = existing == null || existing.data.isEmpty;
+      final needPrint = existing == null || !isOlafAdPrint(existing.data);
       final needSpeech = existing == null || existing.speech == null;
       final watch = Stopwatch()..start();
       if (needPrint || mel == null || needSpeech) {
@@ -650,7 +652,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
           _step(AnalysisStep.saving);
           await database.upsertEpisodeFingerprint(
             episodeId: episode.id,
-            data: encodeFingerprint(analyzed.fingerprint),
+            data: analyzed.olafAds ?? Uint8List(0),
             hopMicros: chromaprintStoredHopMicros,
             speech: analyzed.speech,
           );
@@ -769,8 +771,9 @@ class ChromaprintEpisodeAudioAnalyzer implements EpisodeAudioAnalyzer {
   @override
   Future<Uint8List?> computeFingerprint(File file) async {
     final analyzed = await _analyzeDecoded(decoder, file.path);
-    if (analyzed == null || analyzed.fingerprint.isEmpty) return null;
-    return encodeFingerprint(analyzed.fingerprint);
+    final ads = analyzed?.olafAds;
+    if (ads == null || ads.length <= 4) return null;
+    return ads;
   }
 
   @override
@@ -813,6 +816,7 @@ Future<PcmAnalysis?> _analyzeDecoded(
       logMelMs: raw[7]! as int,
       speechMs: raw[8]! as int,
       olaf: raw.length > 10 ? raw[10] as Uint8List? : null,
+      olafAds: raw.length > 11 ? raw[11] as Uint8List? : null,
     );
   } finally {
     await _deleteDecoded(decoded.path);
@@ -841,7 +845,13 @@ void analyzePcmEntry(List<Object?> args) {
   final send = args[0]! as SendPort;
   final path = args[1]! as String;
   try {
-    send.send(_pcmMessage(analyzePcmFileSync(path), _olafPrints(path)));
+    send.send(
+      _pcmMessage(
+        analyzePcmFileSync(path),
+        _olafPrints(path),
+        _olafAdPrints(path),
+      ),
+    );
   } catch (error, stack) {
     send.send(<Object?>['error', '$error', '$stack']);
   }
@@ -862,7 +872,7 @@ void analyzePcmPacedEntry(List<Object?> args) {
   unawaited(() async {
     try {
       final result = await analyzePcmFilePaced(path, () => mode);
-      send.send(_pcmMessage(result, _olafPrints(path)));
+      send.send(_pcmMessage(result, _olafPrints(path), _olafAdPrints(path)));
     } catch (error, stack) {
       send.send(<Object?>['error', '$error', '$stack']);
     } finally {
@@ -871,7 +881,11 @@ void analyzePcmPacedEntry(List<Object?> args) {
   }());
 }
 
-List<Object?> _pcmMessage(PcmAnalysis result, Uint8List? olaf) {
+List<Object?> _pcmMessage(
+  PcmAnalysis result,
+  Uint8List? olaf,
+  Uint8List? olafAds,
+) {
   return <Object?>[
     result.fingerprint,
     result.logMel,
@@ -884,11 +898,12 @@ List<Object?> _pcmMessage(PcmAnalysis result, Uint8List? olaf) {
     result.speechMs,
     result.envelope,
     olaf,
+    olafAds,
   ];
 }
 
 /// Second passage sur le PCM déjà décodé. Un échec de la bibliothèque
-/// native ne doit pas faire échouer Chromaprint ni le log-mel.
+/// native laisse l’épisode sans empreinte : le log-mel, lui, est déjà fait.
 Uint8List? _olafPrints(String path) {
   try {
     final prints = fingerprintPcmFile(
@@ -900,6 +915,34 @@ Uint8List? _olafPrints(String path) {
     return encodeOlafPrints(prints);
   } catch (_) {
     return null;
+  }
+}
+
+/// Landmarks de tout le fichier, sous-échantillonnés, pour les pubs et
+/// les outros. Le passage des virgules courtes reste [_olafPrints].
+Uint8List? _olafAdPrints(String path) {
+  try {
+    final prints = fingerprintPcmFile(
+      path,
+      sampleRate: chromaprintSampleRate,
+      maxMs: 0,
+      keepModulus: olafAdKeepModulus,
+    );
+    if (prints == null) return null;
+    return encodeOlafAdPrints(prints);
+  } catch (_) {
+    return null;
+  }
+}
+
+void planOlafAnalysisEntry(List<Object?> args) {
+  final send = args[0]! as SendPort;
+  try {
+    send.send(
+      planOlafAnalysisMessage(Map<String, Object?>.from(args[1]! as Map)),
+    );
+  } catch (error, stack) {
+    send.send(<Object?>['error', '$error', '$stack']);
   }
 }
 
@@ -945,68 +988,143 @@ Future<void> syncPodcastAnalysis(
   Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
 }) async {
   final stored = await database.fingerprintedDownloads(podcastId);
+  final cohort = [...stored];
+  if (stored.length >= 2) {
+    final ids = comparisonPodcastIds(
+      focusPodcastId: podcastId,
+      focusDownloadCount: stored.length,
+      hosts: await database.downloadedHostingRows(),
+    );
+    for (final id in ids) {
+      if (id == podcastId) continue;
+      cohort.addAll(await database.fingerprintedDownloads(id));
+    }
+  }
+  final focusEpisodeIds = {for (final row in stored) row.episode.id};
   final envelopes = await database.fingerprintEnvelopes(podcastId);
+  if (cohort.length > stored.length) {
+    final seen = <int>{podcastId};
+    for (final row in cohort) {
+      if (!seen.add(row.episode.podcastId)) continue;
+      if (row.episode.podcastId == podcastId) continue;
+      envelopes.addAll(
+        await database.fingerprintEnvelopes(row.episode.podcastId),
+      );
+    }
+  }
+  final marks = await database.chapterMarksForEpisodes([
+    for (final row in cohort) row.episode.id,
+  ]);
   final episodes = <Object?>[];
-  for (final row in stored) {
+  for (final row in cohort) {
     final bytes = row.fingerprint.data;
-    if (bytes.length < 32) continue;
-    final count = bytes.lengthInBytes ~/ 4;
-    final fromFingerprint = _indexMs(count, row.fingerprint.hopMicros);
+    if (!isOlafAdPrint(bytes)) continue;
+    final fromPrint = olafAdLastMs(bytes);
     final fromRss = (row.episode.durationSeconds ?? 0) * 1000;
-    final durationMs = fromFingerprint > fromRss ? fromFingerprint : fromRss;
+    final durationMs = fromPrint > fromRss ? fromPrint : fromRss;
     final preRoll = approximateInsertedAdMs(
       rssDurationMs: fromRss > 0 ? fromRss : null,
-      fileDurationMs: fromFingerprint,
+      fileDurationMs: fromPrint > 0 ? fromPrint : fromRss,
     );
+    final chapters = marks[row.episode.id] ?? const [];
+    final encoded = <Object?>[];
+    for (var i = 0; i < chapters.length; i++) {
+      final end = i + 1 < chapters.length
+          ? chapters[i + 1].startMs
+          : durationMs;
+      if (end <= chapters[i].startMs) continue;
+      encoded.add(<Object?>[chapters[i].startMs, end, chapters[i].title]);
+    }
     episodes.add(<Object?>[
       row.episode.id,
-      row.fingerprint.hopMicros,
       durationMs,
       preRoll,
       bytes,
-      row.fingerprint.speech,
       envelopes[row.episode.id],
+      row.fingerprint.speech,
+      encoded,
     ]);
   }
-  final templates = <Object?>[];
-  final reviews = await database.templateReviews(podcastId);
-  for (final template in await database.listSegmentTemplates(podcastId)) {
-    templates.add(<Object?>[
-      template.id,
-      template.kind.name,
-      reviews[template.id],
-      template.durationMs,
-      template.fingerprint,
-      template.confidence,
-    ]);
+  if (episodes.isNotEmpty) {
+    final templates = <Object?>[];
+    final reviews = await database.templateReviews(podcastId);
+    final ownTemplates = await database.listSegmentTemplates(podcastId);
+    final ownTemplateIds = {for (final template in ownTemplates) template.id};
+    for (final template in ownTemplates) {
+      if (!isOlafAdPrint(template.fingerprint)) continue;
+      templates.add(<Object?>[
+        template.id,
+        template.kind.name,
+        reviews[template.id],
+        template.durationMs,
+        template.fingerprint,
+        template.confidence,
+      ]);
+    }
+    final message = <String, Object?>{
+      'episodes': episodes,
+      'templates': templates,
+      'focus': focusEpisodeId,
+    };
+    final raw = offUi == null
+        ? await _runPlanAnalysis(message)
+        : await offUi(planOlafAnalysisEntry, message);
+    if (raw is Map) {
+      final plan = decodeAnalysisPlan(Map<Object?, Object?>.from(raw));
+      await applyAnalysisPlan(
+        database,
+        podcastId,
+        _keepFocusEpisodes(plan, focusEpisodeIds, ownTemplateIds),
+      );
+    }
   }
-  final message = <String, Object?>{
-    'episodes': episodes,
-    'templates': templates,
-    'focus': focusEpisodeId,
-  };
-  final raw = offUi == null
-      ? await _runPlanAnalysis(message)
-      : await offUi(planAnalysisEntry, message);
-  if (raw is! Map) return;
-  final plan = decodeAnalysisPlan(Map<Object?, Object?>.from(raw));
-  await applyAnalysisPlan(database, podcastId, plan);
   await applyLogMelFindings(database, podcastId, offUi: offUi);
 }
 
 /// Isolate.run ne doit pas fermer sur la base : le contexte capturerait
 /// la connexion SQLite, qui ne traverse pas un isolate.
 Future<Object?> _runPlanAnalysis(Map<String, Object?> message) {
-  return Isolate.run(() => planAnalysisMessage(message));
+  return Isolate.run(() => planOlafAnalysisMessage(message));
 }
 
 Future<Object?> _runPlanLogMel(Map<String, Object?> message) {
   return Isolate.run(() => planLogMelMessage(message));
 }
 
-int _indexMs(int index, int hopMicros) {
-  if (index <= 0 || hopMicros <= 0) return 0;
-  return index * hopMicros ~/ 1000;
+/// Ne conserve que les passages du podcast en cours.
+///
+/// Les autres épisodes du même hébergeur servent à la comparaison, pas
+/// à écrire leurs lignes ici. Un gabarit d’un autre podcast n’est pas repris.
+AnalysisPlan _keepFocusEpisodes(
+  AnalysisPlan plan,
+  Set<int> episodeIds,
+  Set<int> templateIds,
+) {
+  final patterns = <PlannedPattern>[];
+  for (final pattern in plan.patterns) {
+    final segments = [
+      for (final segment in pattern.segments)
+        if (episodeIds.contains(segment.episodeId)) segment,
+    ];
+    if (segments.isEmpty) continue;
+    final templateId =
+        pattern.templateId != null && templateIds.contains(pattern.templateId)
+        ? pattern.templateId
+        : null;
+    patterns.add(
+      PlannedPattern(
+        templateId: templateId,
+        kind: pattern.kind,
+        confirmed: pattern.confirmed,
+        fingerprint: pattern.fingerprint,
+        fingerprintBytes: pattern.fingerprintBytes,
+        durationMs: pattern.durationMs,
+        confidence: pattern.confidence,
+        segments: segments,
+      ),
+    );
+  }
+  return AnalysisPlan(patterns);
 }
 
 /// Écrit [plan] sans doublon. Un passage déjà revu garde son avis et son type.
@@ -1023,7 +1141,12 @@ Future<void> applyAnalysisPlan(
   final touched = <int>{};
   await database.transaction(() async {
     for (final pattern in plan.patterns) {
-      if (pattern.segments.isEmpty || pattern.fingerprint.isEmpty) continue;
+      if (pattern.segments.isEmpty) continue;
+      if (pattern.fingerprint.isEmpty &&
+          (pattern.fingerprintBytes == null ||
+              pattern.fingerprintBytes!.isEmpty)) {
+        continue;
+      }
       final templateId = await _upsertTemplate(database, podcastId, pattern);
       for (final desired in pattern.segments) {
         final prior = _prior(existing, desired, templateId, touched);
@@ -1074,7 +1197,8 @@ Future<int> _upsertTemplate(
   return database.insertSegmentTemplate(
     podcastId: podcastId,
     kind: pattern.kind,
-    fingerprint: encodeFingerprint(pattern.fingerprint),
+    fingerprint:
+        pattern.fingerprintBytes ?? encodeFingerprint(pattern.fingerprint),
     durationMs: pattern.durationMs,
     occurrences: pattern.occurrences,
     confidence: pattern.confidence,
@@ -1123,6 +1247,15 @@ Future<void> _recountTemplates(AppDatabase database, int podcastId) async {
   for (final template in templates) {
     final segments = await database.segmentsForTemplate(template.id);
     if (segments.isEmpty) {
+      final hasPrint = template.fingerprint.isNotEmpty;
+      final mel = template.logMel;
+      final hasMel = mel != null && mel.isNotEmpty;
+      if (hasPrint || hasMel) {
+        if (template.occurrences != 0) {
+          await database.touchSegmentTemplate(template.id, occurrences: 0);
+        }
+        continue;
+      }
       await (database.delete(
         database.segmentTemplates,
       )..where((row) => row.id.equals(template.id))).go();

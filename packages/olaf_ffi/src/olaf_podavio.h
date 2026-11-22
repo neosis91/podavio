@@ -35,9 +35,21 @@ typedef struct OlafPrint {
  * [event_points_per_fingerprint] is 2 (Olaf's setting for a re-encoded
  * query) or 3 (Olaf's default for a clean recording). Any other value
  * selects 2. Audio stays at Olaf's 16 kHz, 1024-point FFT and 128-sample
- * hop. At most the first 180 s are fingerprinted.
+ * hop. Unless [olaf_extractor_set_limits] says otherwise, at most the
+ * first 180 s are fingerprinted.
  */
 OLAF_EXPORT OlafExtractor *olaf_extractor_new(int event_points_per_fingerprint);
+
+/**
+ * Limit how much audio is fingerprinted, and how many landmarks are kept.
+ *
+ * [max_ms] <= 0 keeps up to four hours. [keep_modulus] <= 1 keeps every
+ * landmark. A larger modulus keeps about one in N, chosen from the high
+ * bits of the hash, so the same landmark is kept on both copies of an ad.
+ * Call this before push. The default stays 180 s and every landmark.
+ */
+OLAF_EXPORT void olaf_extractor_set_limits(
+    OlafExtractor *extractor, int max_ms, int keep_modulus);
 
 OLAF_EXPORT void olaf_extractor_free(OlafExtractor *extractor);
 

@@ -208,6 +208,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const DownloadSettingsPage(),
           ),
           GoRoute(
+            path: AppRoutes.analysisSettings,
+            builder: (context, state) => const AnalysisSettingsPage(),
+          ),
+          GoRoute(
             path: AppRoutes.automaticDownloads,
             builder: (context, state) => const AutomaticDownloadsPage(),
           ),

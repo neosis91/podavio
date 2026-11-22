@@ -15,6 +15,7 @@ import '../data/http_auth.dart';
 import '../data/online_status.dart';
 import '../data/providers.dart';
 import '../data/skip_segments.dart';
+import '../settings/global_skip.dart';
 import '../settings/settings_controller.dart';
 import '../ui/widgets/mobile_data_prompt.dart';
 import '../sync/sync_hooks.dart';
@@ -211,6 +212,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   DateTime? _skipInFlightSince;
   int? _previewHoldId;
   Duration? _previewSeek;
+  Duration? _previewFrom;
+  Duration? _previewUntil;
+  var _previewInside = false;
+  var _previewArmed = false;
   AndroidLoudnessEnhancer? _loudness;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration?>? _durationSub;
@@ -248,6 +253,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       }
       _bind();
       ref.onDispose(_dispose);
+      ref.listen(globalSkipSettingsProvider, (previous, next) {
+        _autoSkipAds = next.enabled;
+        _autoSkipKinds = next.kinds.toSet();
+      });
       ref.listen(settingsProvider, (previous, next) {
         final session = playbackHandler;
         if (session != null) {
@@ -363,6 +372,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     PlaybackSource? source,
     bool autoplay = true,
   }) async {
+    if (!_previewArmed) _clearPreview();
     if (_remote) {
       final positionMs = entry.episode.positionMs;
       WebRemoteHooks.command({
@@ -385,21 +395,65 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     return _play(entry.episode, entry.podcast, autoplay: autoplay);
   }
 
-  /// Lit un passage précis (aperçu d’une pub). Le segment est tenu pour
-  /// ne pas être sauté tout de suite.
+  /// Lit un passage précis (aperçu d’une pub). La lecture part de
+  /// [position] et s’arrête à [end]. Le segment est tenu pour ne pas
+  /// être sauté tout de suite.
   Future<void> previewPassage(
     EpisodeEntry entry, {
     required Duration position,
+    required Duration end,
     int? segmentId,
   }) async {
     _previewHoldId = segmentId;
     _previewSeek = position;
+    _previewFrom = position;
+    _previewUntil = end;
+    _previewInside = false;
+    _previewArmed = true;
     try {
       await playEntry(entry);
     } finally {
       _previewHoldId = null;
       _previewSeek = null;
+      _previewArmed = false;
     }
+  }
+
+  void _clearPreview() {
+    _previewFrom = null;
+    _previewUntil = null;
+    _previewInside = false;
+  }
+
+  void _maybeStopPreview(Duration position) {
+    final until = _previewUntil;
+    final from = _previewFrom;
+    if (until == null || from == null) return;
+    if (position + const Duration(milliseconds: 500) < from) return;
+    if (position < until) {
+      _previewInside = true;
+      return;
+    }
+    if (!_previewInside && position > until + const Duration(seconds: 2)) {
+      return;
+    }
+    _clearPreview();
+    unawaited(_pausePreview());
+  }
+
+  Future<void> _pausePreview() async {
+    if (_disposed || _remote) return;
+    try {
+      if (_cast.active) {
+        _cast.pause();
+      } else {
+        await _player.pause();
+      }
+    } catch (error, stack) {
+      debugPrint('Fin d’aperçu impossible: $error\n$stack');
+    }
+    if (_disposed || !ref.mounted) return;
+    _emit(_ui.copyWith(playing: false));
   }
 
   /// La playlist n’est plus remplie par la lecture. Le lecteur conserve l’appel
@@ -927,7 +981,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     _skipIntro = Duration(seconds: podcast.skipIntroSeconds);
     _skipOutro = Duration(seconds: podcast.skipOutroSeconds);
     _outroSkippedEpisodeId = null;
-    _resetSegmentSkip(podcast, fromDownload: downloaded);
+    _resetSegmentSkip(fromDownload: downloaded);
     start = _applyIntroSkip(start, duration);
     final speed = podcast.playbackSpeed ?? settings.speed;
     final preferPodcastCover = settings.preferPodcastCover;
@@ -1283,6 +1337,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       if (id == null) return;
       _maybeSkipOutro(position);
       _maybeSkipSegment(position);
+      _maybeStopPreview(position);
       _maybeSleepAtChapter(position);
       if (now.difference(_lastPersist) < const Duration(seconds: 5)) return;
       _lastPersist = now;
@@ -1330,10 +1385,11 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     unawaited(_onCompleted());
   }
 
-  void _resetSegmentSkip(Podcast podcast, {required bool fromDownload}) {
+  void _resetSegmentSkip({required bool fromDownload}) {
     _playingFromDownload = fromDownload;
-    _autoSkipAds = podcast.autoSkipAds;
-    _autoSkipKinds = decodeAutoSkipKinds(podcast.autoSkipKinds).toSet();
+    final skip = ref.read(globalSkipSettingsProvider);
+    _autoSkipAds = skip.enabled;
+    _autoSkipKinds = skip.kinds.toSet();
     _skipWindows = const [];
     _heldSegmentIds.clear();
     _ui = _ui.copyWith(setManualSkip: true);

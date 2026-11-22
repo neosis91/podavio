@@ -65,6 +65,8 @@ const _fr = <String, String>{
   'Adjusts the displayed position and duration to the playback speed':
       'Ajuste la position et la durée affichées selon la vitesse de lecture',
   'Ads and jingles': 'Pubs et jingles',
+  'Ads, stings, sponsors, and outros in downloaded episodes.':
+      'Pubs, virgules, sponsors et outros des épisodes téléchargés.',
   'Advanced': 'Avancé',
   'After Shows': 'Après-émissions',
   'After listening': 'Après l’écoute',
@@ -80,6 +82,8 @@ const _fr = <String, String>{
   'Alternative Health': 'Médecines alternatives',
   'Always shown': 'Toujours affiché',
   'Amber': 'Ambre',
+  'Analysed': 'Analysé',
+  'Analysis management': 'Gestion des analyses',
   'Analyze downloaded episodes': 'Analyser les épisodes téléchargés',
   'Analyze downloads automatically':
       'Analyser automatiquement les téléchargements',
@@ -87,6 +91,7 @@ const _fr = <String, String>{
   'Animation & Manga': 'Animation et manga',
   'Appearance': 'Apparence',
   'Apple opens at most 8 stores. Further languages do not change those results.': 'Apple n’ouvre que 8 boutiques. Les langues au-delà ne changent pas ces résultats.',
+  'Applies to every podcast.': 'S’applique à tous les podcasts.',
   'Apply': 'Appliquer',
   'Arts': 'Arts',
   'Astronomy': 'Astronomie',
@@ -252,6 +257,7 @@ const _fr = <String, String>{
   'Export favorites (HTML)': 'Exporter les favoris (HTML)',
   'Export subscriptions': 'Exporter les abonnements',
   'Export subscriptions (HTML)': 'Exporter les abonnements (HTML)',
+  'Failed': 'Échec',
   'Fantasy Sports': 'Sports virtuels',
   'Fashion & Beauty': 'Mode et beauté',
   'Fast forward': 'Avance rapide',
@@ -388,6 +394,7 @@ const _fr = <String, String>{
   'No counter': 'Aucun compteur',
   'No device on this account yet.':
       'Aucun appareil sur ce compte pour le moment.',
+  'No downloaded episodes to analyse.': 'Aucun épisode téléchargé à analyser.',
   'No episodes to play': 'Aucun épisode à écouter',
   'No favorites to export': 'Aucun favori à exporter',
   'No feeds found in this file': 'Aucun flux trouvé dans ce fichier',
@@ -396,6 +403,7 @@ const _fr = <String, String>{
   'No matching language': 'Aucune langue correspondante',
   'No next episode in the queue':
       'Pas d’épisode suivant dans la file d’attente',
+  'No segments yet': 'Aucune séquence pour l’instant',
   'No subscribed podcasts': 'Aucun podcast abonné',
   'No subscriptions to export': 'Aucun abonnement à exporter',
   'Non-Profit': 'Associations',
@@ -434,6 +442,7 @@ const _fr = <String, String>{
   'Password': 'Mot de passe',
   'Pause': 'Pause',
   'Pause (Space)': 'Pause (Espace)',
+  'Pending': 'En attente',
   'Performing Arts': 'Arts du spectacle',
   'Personal Journals': 'Journaux personnels',
   'Pets & Animals': 'Animaux de compagnie',

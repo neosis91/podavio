@@ -7,6 +7,7 @@ import '../../core/format.dart';
 import '../../data/app_database.dart';
 import '../../data/audio_analysis.dart';
 import '../../data/providers.dart';
+import '../../settings/global_skip.dart';
 import '../../settings/settings_controller.dart';
 import '../../data/segment_match.dart';
 import '../../data/skip_segments.dart';
@@ -95,10 +96,13 @@ class SkipClassificationPage extends ConsumerWidget {
               SwitchListTile(
                 title: Text(context.tr('Skip automatically')),
                 subtitle: Text(
-                  context.tr('Skips confirmed passages in downloaded episodes'),
+                  '${context.tr('Skips confirmed passages in downloaded episodes')}\n'
+                  '${context.tr('Applies to every podcast.')}',
                 ),
-                value: item.autoSkipAds,
-                onChanged: (enabled) => _setAutoSkip(ref, item, enabled),
+                value: ref.watch(globalSkipSettingsProvider).enabled,
+                onChanged: (enabled) => ref
+                    .read(globalSkipSettingsProvider.notifier)
+                    .setEnabled(enabled),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -110,9 +114,13 @@ class SkipClassificationPage extends ConsumerWidget {
               for (final kind in SkipSegmentKind.values)
                 SwitchListTile(
                   title: Text(context.tr(skipKindLabel(kind))),
-                  value: decodeAutoSkipKinds(item.autoSkipKinds).contains(kind),
-                  onChanged: (enabled) =>
-                      _toggleKind(ref, item, kind, enabled: enabled),
+                  value: ref
+                      .watch(globalSkipSettingsProvider)
+                      .kinds
+                      .contains(kind),
+                  onChanged: (enabled) => ref
+                      .read(globalSkipSettingsProvider.notifier)
+                      .setKind(kind, enabled: enabled),
                 ),
               _Section(context.tr('Detected segments')),
               SwitchListTile(
@@ -424,6 +432,7 @@ class _SegmentTile extends ConsumerWidget {
     final db = ref.read(databaseProvider);
     final int episodeId;
     final int startMs;
+    final int endMs;
     final int segmentId;
     final template = row.template;
     if (template != null) {
@@ -438,6 +447,7 @@ class _SegmentTile extends ConsumerWidget {
       }
       episodeId = target.episodeId;
       startMs = target.startMs;
+      endMs = target.endMs;
       segmentId = target.segmentId;
     } else {
       final loose = row.loose!;
@@ -451,6 +461,7 @@ class _SegmentTile extends ConsumerWidget {
       }
       episodeId = loose.segment.episodeId;
       startMs = loose.segment.startMs;
+      endMs = loose.segment.endMs;
       segmentId = loose.segment.id;
     }
     final entry = await db.getEpisode(episodeId);
@@ -468,6 +479,7 @@ class _SegmentTile extends ConsumerWidget {
         .previewPassage(
           entry,
           position: Duration(milliseconds: startMs),
+          end: Duration(milliseconds: endMs),
           segmentId: segmentId,
         );
   }
@@ -543,40 +555,6 @@ class _SegmentTile extends ConsumerWidget {
 }
 
 enum _SegmentAction { kind, confirm, ignore, rename, delete }
-
-Future<void> _setAutoSkip(WidgetRef ref, Podcast item, bool enabled) async {
-  final db = ref.read(databaseProvider);
-  await db.setPodcastAutoSkip(item.id, autoSkipAds: enabled);
-  if (enabled && decodeAutoSkipKinds(item.autoSkipKinds).isEmpty) {
-    await db.setPodcastAutoSkip(
-      item.id,
-      autoSkipKinds: const [SkipSegmentKind.ad, SkipSegmentKind.sponsor],
-    );
-  }
-}
-
-Future<void> _toggleKind(
-  WidgetRef ref,
-  Podcast item,
-  SkipSegmentKind kind, {
-  required bool enabled,
-}) async {
-  final selected = decodeAutoSkipKinds(item.autoSkipKinds).toSet();
-  if (enabled) {
-    selected.add(kind);
-  } else {
-    selected.remove(kind);
-  }
-  await ref
-      .read(databaseProvider)
-      .setPodcastAutoSkip(
-        item.id,
-        autoSkipKinds: [
-          for (final value in SkipSegmentKind.values)
-            if (selected.contains(value)) value,
-        ],
-      );
-}
 
 String _templateTitle(BuildContext context, SegmentTemplate template) {
   final label = template.label?.trim() ?? '';

@@ -52,6 +52,8 @@ struct OlafExtractor {
   OlafPrint *prints;
   int print_count;
   int print_cap;
+  int64_t max_samples;
+  int keep_modulus;
 };
 
 static void store_prints(OlafExtractor *ex, struct extracted_fingerprints *fps) {
@@ -59,6 +61,13 @@ static void store_prints(OlafExtractor *ex, struct extracted_fingerprints *fps) 
   for (size_t i = 0; i < fps->fingerprintIndex; i++) {
     struct fingerprint fp = fps->fingerprints[i];
     if (fp.timeIndex1 < 0) continue;
+    uint64_t hash = olaf_fp_extractor_hash(fp);
+    /* Low bits are a time delta, so they would drop whole families.
+     * Bits 22 and up mix the frequency bins. */
+    if (ex->keep_modulus > 1 &&
+        (hash >> 22) % (uint64_t)ex->keep_modulus != 0) {
+      continue;
+    }
     if (ex->print_count >= kMaxPrints) return;
     if (ex->print_count == ex->print_cap) {
       int cap = ex->print_cap == 0 ? 256 : ex->print_cap * 2;
@@ -68,7 +77,7 @@ static void store_prints(OlafExtractor *ex, struct extracted_fingerprints *fps) 
       ex->prints = grown;
       ex->print_cap = cap;
     }
-    ex->prints[ex->print_count].hash = olaf_fp_extractor_hash(fp);
+    ex->prints[ex->print_count].hash = hash;
     ex->prints[ex->print_count].t1 = (uint32_t)fp.timeIndex1;
     ex->print_count++;
   }
@@ -102,7 +111,7 @@ static void consume_step(OlafExtractor *ex) {
 }
 
 static void emit_sample(OlafExtractor *ex, float sample) {
-  if (ex->produced >= kMaxOutputSamples) return;
+  if (ex->produced >= ex->max_samples) return;
   ex->step[ex->step_fill++] = sample;
   ex->produced++;
   if (ex->step_fill == kStep) consume_step(ex);
@@ -120,7 +129,7 @@ static void feed_slice(OlafExtractor *ex, const int16_t *samples, int count) {
   }
   const double step = (double)ex->from_rate / 16000.0;
   const int64_t src_base = ex->src_base;
-  while (ex->produced < kMaxOutputSamples) {
+  while (ex->produced < ex->max_samples) {
     const double pos = (double)ex->produced * step;
     const int64_t i0 = (int64_t)pos;
     if (i0 + 1 >= src_base + count) break;
@@ -162,6 +171,8 @@ OlafExtractor *olaf_extractor_new(int event_points_per_fingerprint) {
   /* The batch cap only drops fingerprints. Keep the ones Olaf would emit. */
   ex->config->maxFingerprints = 4096;
   ex->config->verbose = false;
+  ex->max_samples = kMaxOutputSamples;
+  ex->keep_modulus = 1;
   ex->fft = olaf_fft_new(ex->config);
   ex->events = olaf_ep_extractor_new(ex->config);
   ex->fingerprints = olaf_fp_extractor_new(ex->config);
@@ -170,6 +181,18 @@ OlafExtractor *olaf_extractor_new(int event_points_per_fingerprint) {
     return NULL;
   }
   return ex;
+}
+
+void olaf_extractor_set_limits(
+    OlafExtractor *extractor, int max_ms, int keep_modulus) {
+  if (extractor == NULL || extractor->finished) return;
+  if (max_ms <= 0) {
+    extractor->max_samples = (int64_t)4 * 3600 * 16000;
+  } else {
+    extractor->max_samples = (int64_t)max_ms * 16000 / 1000;
+    if (extractor->max_samples < 1) extractor->max_samples = 1;
+  }
+  extractor->keep_modulus = keep_modulus < 1 ? 1 : keep_modulus;
 }
 
 void olaf_extractor_free(OlafExtractor *extractor) {
@@ -200,7 +223,7 @@ int olaf_extractor_push(
     int n = count - offset;
     if (n > kSlice) n = kSlice;
     feed_slice(extractor, samples + offset, n);
-    if (extractor->produced >= kMaxOutputSamples) break;
+    if (extractor->produced >= extractor->max_samples) break;
   }
   return 0;
 }
