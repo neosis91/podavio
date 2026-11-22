@@ -1,0 +1,2 @@
+- Détection des pubs, virgules, outros, intros, autopromos et jingles de nouveau par Chromaprint, vérifiée par l’enveloppe ; Olaf est retiré et ses empreintes sont migrées.
+- Bornes d’un passage corrigeables à la main (±0,5 s, écoute autour de la coupe, page forme d’onde) ; la correction devient la référence et n’est plus écrasée par l’analyse.
