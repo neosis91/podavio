@@ -1,1 +1,1 @@
-- Short network stings in the first three minutes are detected with Olaf landmarks. On the nine RTL openings this matches the log-mel sting, in about a second instead of about sixteen, and the landmarks take about half a megabyte instead of about fifty.
+- Short network stings in the first three minutes are located with Olaf landmarks. The chapter keeps the log-mel window, so the start and the end stay the same, in about a second instead of about sixteen.

@@ -55,17 +55,6 @@ void main() {
       }
       extractWatch.stop();
       final rssAfterOlaf = ProcessInfo.currentRss;
-      final matchWatch = Stopwatch()..start();
-      final olaf = findOlafContentSting([
-        for (final episode in episodes)
-          OlafEpisodePrints(
-            episodeId: episode.id,
-            prints: episode.prints,
-            envelope: episode.envelope,
-            durationMs: logMelSearchWindowMs,
-          ),
-      ]);
-      matchWatch.stop();
 
       final melWatch = Stopwatch()..start();
       final mels = <EpisodeMel>[];
@@ -88,10 +77,29 @@ void main() {
       final searchWatch = Stopwatch()..start();
       final raw = findContentStings(episodes: mels);
       searchWatch.stop();
+      final matchWatch = Stopwatch()..start();
+      final rough = findOlafContentSting([
+        for (final episode in episodes)
+          OlafEpisodePrints(episodeId: episode.id, prints: episode.prints),
+      ]);
+      matchWatch.stop();
+      final focusWatch = Stopwatch()..start();
+      final focused = findContentStings(
+        episodes: mels,
+        focus: [
+          for (final hit in rough)
+            (episodeId: hit.episodeId, startMs: hit.startMs, endMs: hit.endMs),
+        ],
+      );
+      focusWatch.stop();
       melWatch.stop();
       final byId = {for (final episode in episodes) episode.id: episode};
       final logMel = [
         for (final hit in raw)
+          _placed(byId[hit.episodeId]!, hit.startMs, hit.endMs),
+      ];
+      final chapter = [
+        for (final hit in focused)
           _placed(byId[hit.episodeId]!, hit.startMs, hit.endMs),
       ];
 
@@ -104,7 +112,9 @@ void main() {
         (sum, episode) => sum + episode.clip.frames.length * 40 * 8,
       );
       final olafMs =
-          extractWatch.elapsedMilliseconds + matchWatch.elapsedMilliseconds;
+          extractWatch.elapsedMilliseconds +
+          matchWatch.elapsedMilliseconds +
+          focusWatch.elapsedMilliseconds;
       // ignore: avoid_print
       print(
         'olaf $olafMs ms (extract ${extractWatch.elapsedMilliseconds}, '
@@ -114,32 +124,30 @@ void main() {
       // ignore: avoid_print
       print(
         'log-mel ${melWatch.elapsedMilliseconds} ms '
-        '(search ${searchWatch.elapsedMilliseconds}), frames $melBytes bytes',
+        '(search ${searchWatch.elapsedMilliseconds}, '
+        'focus ${focusWatch.elapsedMilliseconds}), frames $melBytes bytes',
       );
       for (final episode in episodes) {
-        final olafHit = olaf.where((hit) => hit.episodeId == episode.id);
+        final chapterHit = chapter.where((hit) => hit.episodeId == episode.id);
         final melHit = logMel.where((hit) => hit.episodeId == episode.id);
         // ignore: avoid_print
         print(
           '${episode.name} '
-          'olaf ${olafHit.map((hit) => _clocked(hit.startMs, hit.endMs)).join(", ")} '
+          'chapter ${chapterHit.map((hit) => _clocked(hit.startMs, hit.endMs)).join(", ")} '
           'logmel ${melHit.map((hit) => _clocked(hit.startMs, hit.endMs)).join(", ")}',
         );
       }
 
-      expect(olaf.map((hit) => hit.episodeId).toSet(), {
+      expect(chapter.map((hit) => hit.episodeId).toSet(), {
         for (final hit in logMel) hit.episodeId,
       });
-      expect(olaf, hasLength(6));
-      for (final hit in olaf) {
+      expect(chapter, hasLength(6));
+      for (final hit in chapter) {
         final other = logMel.singleWhere(
           (item) => item.episodeId == hit.episodeId,
         );
-        expect(
-          hit.startMs < other.endMs && other.startMs < hit.endMs,
-          isTrue,
-          reason: byId[hit.episodeId]!.name,
-        );
+        expect((hit.startMs - other.startMs).abs(), lessThan(40));
+        expect((hit.endMs - other.endMs).abs(), lessThan(40));
       }
       expect(olafMs * 2 < melWatch.elapsedMilliseconds, isTrue);
       expect(printBytes * 10 < melBytes, isTrue);

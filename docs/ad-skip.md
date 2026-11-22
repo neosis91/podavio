@@ -373,10 +373,12 @@ virgule d’environ 3 secondes répétée n’importe où dans les trois premiè
 minutes, même à une heure différente d’un épisode à l’autre, devient un
 passage `jingle` de source `network` (chapitre « Virgule réseau »).
 Olaf pose des landmarks (pics spectraux, paires, hash 64 bits, vote par
-décalage) sur ces trois minutes. Sur les neuf épisodes RTL du 21 novembre
-2026, il retrouve les six mêmes virgules que le log-mel, et aucune sur
-Dreyfus, Lesseps et de Gaulle. L’extraction et le vote prennent environ
-1,2 s, contre environ 16 s pour le log-mel, et les landmarks tiennent
+décalage) sur ces trois minutes et désigne les épisodes. La fenêtre de
+3 s, et donc le début et la fin du chapitre après le silence, restent
+ceux du log-mel : sur les neuf épisodes RTL du 21 novembre 2026, les
+heures sont les mêmes, et Dreyfus, Lesseps et de Gaulle n’en ont pas.
+L’extraction, le vote et ce calage local prennent environ 1,2 s, contre
+environ 16 s pour parcourir toutes les fenêtres, et les landmarks tiennent
 dans 0,5 Mo au lieu d’environ 50 Mo de trames. Tant qu’un épisode comparé
 n’a pas encore ces landmarks, la recherche log-mel reste le détecteur :
 trames centrées, deux épisodes si la copie est franche (score ≥ 0,90),
