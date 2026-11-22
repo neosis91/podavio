@@ -467,6 +467,51 @@ L’enregistrement (`saveSegmentBounds`, `lib/data/segment_edit.dart`) :
 3. ajoute une ligne à `segment_annotations` (bornes et source détectées,
    bornes corrigées, date), en local, pour régler plus tard les seuils.
 
+## Création à la main
+
+« Créer une portion » ouvre le même éditeur en création
+(`SegmentEditorPage.create`) : type (pub, sponsor, jingle, intro, outro,
+autopromo, autre), nom facultatif, puis début et fin avec les mêmes
+boutons ±0,5 s et la même forme d’onde. Le début part de la position de
+lecture (ou de 0), la fin 30 s plus loin ; un bouton pose chaque borne à
+la position de lecture. Points d’entrée :
+
+- fiche de l’épisode (barre du haut) et feuille d’actions de l’épisode ;
+- lecteur : « Créer une portion ici » ouvre directement la forme d’onde
+  sur l’épisode en cours ; elle n’y règle que les bornes, le type et le
+  nom se choisissent ensuite ;
+- liste des passages du podcast (menu d’un passage, ou barre du haut) et
+  « Gestion des analyses » : choix d’un épisode, les analysés d’abord.
+
+Un épisode non téléchargé ne s’ouvre pas. Sans enveloppe (pas encore
+analysé), l’analyse est proposée ; on peut aussi créer quand même.
+
+L’enregistrement (`createManualSegment`) :
+
+1. coupe l’empreinte Chromaprint de référence dans celle de l’épisode et
+   en fait un nouveau gabarit (avec le nom), cherché ensuite dans les
+   autres épisodes comme un gabarit détecté ; l’analyse du podcast est
+   relancée. Sans empreinte encore, le gabarit est vide et recoupé dans
+   l’empreinte à l’analyse suivante ;
+2. pose le passage en `source = manual`, confirmé, que l’analyse ne
+   réécrit pas ;
+3. ajoute une ligne à `segment_annotations` sans source ni bornes
+   détectées (`NULL`).
+
+Chevauchements : une portion qui recoupe un passage déjà posé à la main
+est refusée (on corrige celui-là). Les passages détectés (empreinte,
+virgule) couverts au moins pour moitié sont retirés : l’analyse ne les
+recrée pas. Les chapitres du flux et les recouvrements plus faibles
+restent ; le saut enchaîne les passages contigus.
+
+Supprimer une portion créée à la main retire aussi son gabarit et les
+occurrences trouvées grâce à lui, sauf si un autre passage manuel s’y
+rattache. La vérité terrain reste. Après création, correction ou
+suppression, le lecteur relit les passages de l’épisode en cours pour
+le saut automatique ; un passage qui couvre déjà la position n’est pas
+sauté aussitôt. « Gestion des analyses » affiche le nombre de passages
+posés à la main par podcast.
+
 ## Reste à faire
 
 Déposer le vrai gabarit Acast (ou Ausha, Audiomeans) dans
