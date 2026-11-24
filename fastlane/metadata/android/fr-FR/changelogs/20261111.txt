@@ -1,0 +1,4 @@
+• Le titre du podcast et celui de l’épisode sont sous la pochette.
+• Un téléchargement conserve l’audio déjà reçu et peut reprendre après un échec.
+• Le compteur garde tout le lot, y compris les épisodes encore en attente.
+• Les téléchargements échoués restent dans les notifications et peuvent être relancés.
