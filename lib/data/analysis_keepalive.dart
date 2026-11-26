@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../settings/settings_controller.dart';
@@ -20,12 +21,12 @@ Future<void> syncAnalysisKeepAlive({
       return;
     }
     await _channel.invokeMethod<void>('start', {
-      'title': notificationText(
-        settings,
-        'Analyzing episodes ({count} left)',
-        {'count': '$count'},
-      ),
+      'title': notificationText(settings, 'Analyzing episodes ({count} left)', {
+        'count': '$count',
+      }),
       'channel': notificationText(settings, 'Analysis management'),
     });
-  } catch (_) {}
+  } catch (error, stack) {
+    debugPrint('Maintien de l’analyse : $error\n$stack');
+  }
 }
