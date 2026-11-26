@@ -236,6 +236,7 @@ void main() {
     Future<List<(int, int)>> pump(
       WidgetTester tester, {
       List<(int, int)>? listened,
+      ValueNotifier<int?>? playhead,
     }) async {
       final saved = <(int, int)>[];
       final envelope = Uint8List(60000 ~/ 20);
@@ -246,6 +247,7 @@ void main() {
         MaterialApp(
           home: _WaveHost(
             envelope: envelope,
+            playhead: playhead,
             onListen: (from, to) async => listened?.add((from, to)),
             onSave: (start, end) {
               saved.add((start, end));
@@ -311,6 +313,40 @@ void main() {
       await tester.tap(find.text('Lire depuis le curseur'));
       expect(listened, [(18000, 22000), (20000, 30000)]);
     });
+
+    testWidgets('zoom, cursor and playhead keep working', (tester) async {
+      final listened = <(int, int)>[];
+      final playhead = ValueNotifier<int?>(12000);
+      addTearDown(playhead.dispose);
+      final saved = await pump(tester, listened: listened, playhead: playhead);
+      // Durée du passage et début de vue : les deux affichent 0:10.0.
+      expect(find.text('0:10.0'), findsNWidgets(2));
+
+      playhead.value = 25000;
+      await tester.pump();
+      playhead.value = 26000;
+      await tester.pump();
+      await tester.tap(find.text('Lire depuis le curseur'));
+      expect(listened, [(20000, 30000)]);
+
+      await tester.tap(find.byTooltip('Zoomer'));
+      await tester.pump();
+      // La vue s’est resserrée : seul le libellé de durée reste à 0:10.0.
+      expect(find.text('0:10.0'), findsOneWidget);
+
+      final wave = find.byKey(const Key('waveform'));
+      final box = tester.getRect(wave);
+      // Après zoom, la vue 17,5–32,5 s place le début (20 s) au sixième.
+      await tester.dragFrom(
+        Offset(box.left + box.width / 6, box.center.dy),
+        Offset(box.width / 30, 0),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Enregistrer'));
+      await tester.pump();
+      expect(saved.single.$1, greaterThan(20000));
+      expect(saved.single.$2, 30000);
+    });
   });
 }
 
@@ -319,9 +355,11 @@ class _WaveHost extends StatefulWidget {
     required this.envelope,
     required this.onListen,
     required this.onSave,
+    this.playhead,
   });
 
   final Uint8List envelope;
+  final ValueNotifier<int?>? playhead;
   final Future<void> Function(int from, int to) onListen;
   final void Function(int start, int end) onSave;
 
@@ -368,6 +406,7 @@ class _WaveHostState extends State<_WaveHost> {
             durationMs: 60000,
             startMs: _start,
             endMs: _end,
+            playhead: widget.playhead,
             onBounds: (start, end) => setState(() {
               _start = start;
               _end = end;
