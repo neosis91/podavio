@@ -311,6 +311,44 @@ void main() {
       await tester.tap(find.text('Lire depuis le curseur'));
       expect(listened, [(18000, 22000), (20000, 30000)]);
     });
+
+    testWidgets('zoom, curseur et tête de lecture restent utilisables', (
+      tester,
+    ) async {
+      final listened = <(int, int)>[];
+      final playhead = ValueNotifier<int?>(12000);
+      addTearDown(playhead.dispose);
+      final envelope = Uint8List(60000 ~/ 20);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SegmentWaveform(
+              envelope: envelope,
+              durationMs: 60000,
+              startMs: 20000,
+              endMs: 30000,
+              playhead: playhead,
+              onBounds: (_, _) {},
+              onListen: (from, to) async => listened.add((from, to)),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      playhead.value = 24000;
+      await tester.pump();
+      playhead.value = null;
+      await tester.pump();
+      final wave = find.byKey(const Key('waveform'));
+      final box = tester.getRect(wave);
+      await tester.tapAt(Offset(box.left + box.width / 2, box.center.dy));
+      await tester.pump();
+      await tester.tap(find.text('Lire depuis le curseur'));
+      await tester.pump();
+      expect(listened, hasLength(1));
+      expect(listened.single.$2 - listened.single.$1, cursorPlayMs);
+    });
   });
 }
 

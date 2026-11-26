@@ -90,6 +90,35 @@ class _SegmentWaveformState extends State<SegmentWaveform> {
   final _pointers = <int, Offset>{};
 
   var _settled = false;
+  List<WaveColumn> _columns = const [];
+  var _columnViewStart = 0;
+  var _columnViewEnd = 0;
+  var _columnCount = -1;
+  Uint8List? _columnEnvelope;
+
+  /// Colonnes de l’onde pour la vue et la largeur courantes.
+  /// Recalculées seulement quand l’un des deux change.
+  List<WaveColumn> _columnsFor(double width) {
+    final envelope = widget.envelope;
+    if (envelope == null) return const [];
+    final count = math.max(1, width ~/ 3);
+    if (identical(_columnEnvelope, envelope) &&
+        _columnViewStart == _viewStart &&
+        _columnViewEnd == _viewEnd &&
+        _columnCount == count) {
+      return _columns;
+    }
+    _columnEnvelope = envelope;
+    _columnViewStart = _viewStart;
+    _columnViewEnd = _viewEnd;
+    _columnCount = count;
+    return _columns = waveformColumns(
+      envelope,
+      startMs: _viewStart,
+      endMs: _viewEnd,
+      columns: count,
+    );
+  }
 
   @override
   void initState() {
@@ -343,34 +372,42 @@ class _SegmentWaveformState extends State<SegmentWaveform> {
                       _dragMs = null;
                       _pinchBase = null;
                     },
-                    child: ValueListenableBuilder<int?>(
-                      valueListenable: widget.playhead ?? _noPlayhead,
-                      builder: (context, playhead, _) => CustomPaint(
-                        size: Size(width, 220),
-                        painter: _WaveformPainter(
-                          columns: widget.envelope == null
-                              ? const []
-                              : waveformColumns(
-                                  widget.envelope!,
-                                  startMs: _viewStart,
-                                  endMs: _viewEnd,
-                                  columns: math.max(1, width ~/ 3),
-                                ),
-                          viewStartMs: _viewStart,
-                          viewEndMs: _viewEnd,
-                          startMs: widget.startMs,
-                          endMs: widget.endMs,
-                          cursorMs: _cursor,
-                          playheadMs: playhead,
-                          wave: scheme.onSurface,
-                          accent: accent,
-                          ink: scheme.onSurface,
-                          cursor: scheme.tertiary,
-                          playheadColor: scheme.error,
-                          active: _dragging,
-                          others: widget.others,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: RepaintBoundary(
+                            child: CustomPaint(
+                              painter: _WaveformPainter(
+                                columns: _columnsFor(width),
+                                viewStartMs: _viewStart,
+                                viewEndMs: _viewEnd,
+                                startMs: widget.startMs,
+                                endMs: widget.endMs,
+                                wave: scheme.onSurface,
+                                accent: accent,
+                                ink: scheme.onSurface,
+                                active: _dragging,
+                                others: widget.others,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        Positioned.fill(
+                          child: ValueListenableBuilder<int?>(
+                            valueListenable: widget.playhead ?? _noPlayhead,
+                            builder: (context, playhead, _) => CustomPaint(
+                              painter: _PlayheadPainter(
+                                viewStartMs: _viewStart,
+                                viewEndMs: _viewEnd,
+                                cursorMs: _cursor,
+                                playheadMs: playhead,
+                                cursor: scheme.tertiary,
+                                playhead: scheme.error,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 },
@@ -504,13 +541,9 @@ class _WaveformPainter extends CustomPainter {
     required this.viewEndMs,
     required this.startMs,
     required this.endMs,
-    required this.cursorMs,
-    required this.playheadMs,
     required this.wave,
     required this.accent,
     required this.ink,
-    required this.cursor,
-    required this.playheadColor,
     required this.active,
     required this.others,
   });
@@ -520,18 +553,14 @@ class _WaveformPainter extends CustomPainter {
   final int viewEndMs;
   final int startMs;
   final int endMs;
-  final int cursorMs;
-  final int? playheadMs;
   final Color wave;
   final Color accent;
   final Color ink;
-  final Color cursor;
-  final Color playheadColor;
   final _Handle? active;
   final List<WaveformSpan> others;
 
   double _x(int ms, Size size) {
-    return (ms - viewStartMs) / (viewEndMs - viewStartMs) * size.width;
+    return _msToX(ms, viewStartMs, viewEndMs, size.width);
   }
 
   @override
@@ -592,9 +621,6 @@ class _WaveformPainter extends CustomPainter {
         );
       }
     }
-    _line(canvas, size, cursorMs, cursor, 1.5, triangle: true);
-    final play = playheadMs;
-    if (play != null) _line(canvas, size, play, playheadColor, 2);
     _handle(canvas, size, startMs, active == _Handle.start);
     _handle(canvas, size, endMs, active == _Handle.end);
   }
@@ -627,32 +653,6 @@ class _WaveformPainter extends CustomPainter {
     );
   }
 
-  void _line(
-    Canvas canvas,
-    Size size,
-    int ms,
-    Color color,
-    double width, {
-    bool triangle = false,
-  }) {
-    final x = _x(ms, size);
-    if (x < 0 || x > size.width) return;
-    canvas.drawLine(
-      Offset(x, 0),
-      Offset(x, size.height),
-      Paint()
-        ..color = color
-        ..strokeWidth = width,
-    );
-    if (!triangle) return;
-    final head = Path()
-      ..moveTo(x - 6, 0)
-      ..lineTo(x + 6, 0)
-      ..lineTo(x, 9)
-      ..close();
-    canvas.drawPath(head, Paint()..color = color);
-  }
-
   @override
   bool shouldRepaint(_WaveformPainter old) {
     return old.columns != columns ||
@@ -660,12 +660,93 @@ class _WaveformPainter extends CustomPainter {
         old.viewEndMs != viewEndMs ||
         old.startMs != startMs ||
         old.endMs != endMs ||
-        old.cursorMs != cursorMs ||
-        old.playheadMs != playheadMs ||
         old.accent != accent ||
+        old.wave != wave ||
+        old.ink != ink ||
         old.active != active ||
         !_sameWaveSpans(old.others, others);
   }
+}
+
+/// Curseur et tête de lecture, au-dessus de l’onde déjà peinte.
+class _PlayheadPainter extends CustomPainter {
+  const _PlayheadPainter({
+    required this.viewStartMs,
+    required this.viewEndMs,
+    required this.cursorMs,
+    required this.playheadMs,
+    required this.cursor,
+    required this.playhead,
+  });
+
+  final int viewStartMs;
+  final int viewEndMs;
+  final int cursorMs;
+  final int? playheadMs;
+  final Color cursor;
+  final Color playhead;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    _paintMarker(
+      canvas,
+      size,
+      _msToX(cursorMs, viewStartMs, viewEndMs, size.width),
+      cursor,
+      1.5,
+      triangle: true,
+    );
+    final play = playheadMs;
+    if (play == null) return;
+    _paintMarker(
+      canvas,
+      size,
+      _msToX(play, viewStartMs, viewEndMs, size.width),
+      playhead,
+      2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PlayheadPainter old) {
+    return old.viewStartMs != viewStartMs ||
+        old.viewEndMs != viewEndMs ||
+        old.cursorMs != cursorMs ||
+        old.playheadMs != playheadMs ||
+        old.cursor != cursor ||
+        old.playhead != playhead;
+  }
+}
+
+double _msToX(int ms, int viewStartMs, int viewEndMs, double width) {
+  final span = viewEndMs - viewStartMs;
+  if (span <= 0) return 0;
+  return (ms - viewStartMs) / span * width;
+}
+
+void _paintMarker(
+  Canvas canvas,
+  Size size,
+  double x,
+  Color color,
+  double width, {
+  bool triangle = false,
+}) {
+  if (x < 0 || x > size.width) return;
+  canvas.drawLine(
+    Offset(x, 0),
+    Offset(x, size.height),
+    Paint()
+      ..color = color
+      ..strokeWidth = width,
+  );
+  if (!triangle) return;
+  final head = Path()
+    ..moveTo(x - 6, 0)
+    ..lineTo(x + 6, 0)
+    ..lineTo(x, 9)
+    ..close();
+  canvas.drawPath(head, Paint()..color = color);
 }
 
 bool _sameWaveSpans(List<WaveformSpan> a, List<WaveformSpan> b) {
