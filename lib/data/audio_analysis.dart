@@ -250,6 +250,71 @@ class _Job {
   var again = false;
 }
 
+/// Une passe de comparaison à la fois.
+///
+/// Les demandes arrivées pendant une passe sont fusionnées : une seule
+/// passe suivante les couvre, avec l’union des podcasts demandés.
+class ComparisonPassQueue {
+  Future<void>? _active;
+  Future<void>? _follow;
+  int? _followExcept;
+  var _hasFollow = false;
+  var _followAll = false;
+
+  Future<void> schedule(
+    Future<void> Function(int? exceptPodcastId) run, {
+    int? exceptPodcastId,
+  }) {
+    if (_active != null) {
+      _remember(exceptPodcastId);
+      return _follow ??= _chainFollow(run);
+    }
+    final gate = Completer<void>();
+    _active = gate.future;
+    final Future<void> done;
+    try {
+      done = run(exceptPodcastId);
+    } catch (error, stack) {
+      _active = null;
+      gate.complete();
+      return Future<void>.error(error, stack);
+    }
+    done.whenComplete(() {
+      if (identical(_active, gate.future)) _active = null;
+      if (!gate.isCompleted) gate.complete();
+    });
+    return done;
+  }
+
+  Future<void> _chainFollow(Future<void> Function(int? exceptPodcastId) run) {
+    return _active!.then<void>((_) {}, onError: (Object _) {}).then((_) {
+      final except = _followAll ? null : _followExcept;
+      _clearFollow();
+      return schedule(run, exceptPodcastId: except);
+    });
+  }
+
+  void _remember(int? except) {
+    if (!_hasFollow) {
+      _hasFollow = true;
+      _followExcept = except;
+      _followAll = except == null;
+      return;
+    }
+    if (_followAll || except == null || _followExcept != except) {
+      _followAll = true;
+      _followExcept = null;
+    }
+  }
+
+  void _clearFollow() {
+    _follow = null;
+    _hasFollow = false;
+    _followAll = false;
+    _followExcept = null;
+  }
+}
+
 class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   final _wait = <_Job>[];
   final _reserved = <int>{};
@@ -265,6 +330,8 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   int? _decodeSampleRate;
   DateTime? _decodeStarted;
   Future<void>? _pumpFuture;
+  final _comparisons = ComparisonPassQueue();
+  Future<void> _comparisonTurn = Future<void>.value();
   Isolate? _worker;
   Timer? _budgetTimer;
   var _epoch = 0;
@@ -486,7 +553,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         }
       }
       if (ref.mounted) {
-        await syncPodcastAnalysis(database, podcastId);
+        await _alone(() => syncPodcastAnalysis(database, podcastId));
         await spreadSharedAds(exceptPodcastId: podcastId);
       }
       for (final episodeId in pending) {
@@ -502,7 +569,17 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   }
 
   /// Cherche les publicités déjà posées dans les autres podcasts.
-  Future<void> spreadSharedAds({int? exceptPodcastId}) async {
+  ///
+  /// Une seule passe à la fois. Celles qui arrivent pendant une passe
+  /// sont fusionnées en une seule passe suivante.
+  Future<void> spreadSharedAds({int? exceptPodcastId}) {
+    return _comparisons.schedule(
+      (except) => _alone(() => _spreadSharedAds(exceptPodcastId: except)),
+      exceptPodcastId: exceptPodcastId,
+    );
+  }
+
+  Future<void> _spreadSharedAds({int? exceptPodcastId}) async {
     try {
       if (!ref.mounted) return;
       final database = ref.read(databaseProvider);
@@ -514,6 +591,14 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     } catch (error, stack) {
       debugPrint('Analyse audio: $error\n$stack');
     }
+  }
+
+  /// Les rapprochements ne s’écrivent pas en parallèle : deux passes
+  /// lisaient les mêmes lignes puis inséraient chacune la sienne.
+  Future<void> _alone(Future<void> Function() action) {
+    final result = _comparisonTurn.then((_) => action());
+    _comparisonTurn = result.then((_) {}, onError: (Object _) {});
+    return result;
   }
 
   /// L’écran de classement de [podcastId] passe devant le reste de la file.
@@ -798,11 +883,13 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       if (!live()) return;
       _step(AnalysisStep.matching);
       final match = Stopwatch()..start();
-      await syncPodcastAnalysis(
-        database,
-        episode.podcastId,
-        focusEpisodeId: episode.id,
-        offUi: _offUi,
+      await _alone(
+        () => syncPodcastAnalysis(
+          database,
+          episode.podcastId,
+          focusEpisodeId: episode.id,
+          offUi: _offUi,
+        ),
       );
       debugPrint(
         'Analyse audio: podcast ${episode.podcastId}, '
