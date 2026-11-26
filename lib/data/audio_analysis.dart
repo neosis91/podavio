@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'analysis_keepalive.dart';
 import 'analysis_pace.dart';
 import 'app_database.dart';
+import 'comparison_pass_queue.dart';
 import 'chromaprint.dart';
 import 'envelope.dart';
 import 'episode_audio_analyzer.dart';
@@ -79,6 +80,9 @@ const audioAnalysisTraceFromEnvironment = bool.fromEnvironment(
 );
 
 bool audioAnalysisTrace = audioAnalysisTraceFromEnvironment;
+
+/// Rapprochements : un passage à la fois, demandes redondantes fusionnées.
+final _comparisonPasses = ComparisonPassQueue();
 
 /// File d’analyse. Une empreinte à la fois, hors de l’isolate d’interface.
 final audioAnalysisProvider =
@@ -486,7 +490,9 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         }
       }
       if (ref.mounted) {
-        await syncPodcastAnalysis(database, podcastId);
+        await _comparisonPasses.run(
+          () => syncPodcastAnalysis(database, podcastId),
+        );
         await spreadSharedAds(exceptPodcastId: podcastId);
       }
       for (final episodeId in pending) {
@@ -502,7 +508,14 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   }
 
   /// Cherche les publicités déjà posées dans les autres podcasts.
-  Future<void> spreadSharedAds({int? exceptPodcastId}) async {
+  ///
+  /// Deux appels en parallèle n’exécutent pas deux passages : le second
+  /// attend, et s’il arrive pendant le premier il ne provoque qu’une reprise.
+  Future<void> spreadSharedAds({int? exceptPodcastId}) {
+    return _comparisonPasses.spread(exceptPodcastId, _spreadOnce);
+  }
+
+  Future<void> _spreadOnce(int? exceptPodcastId) async {
     try {
       if (!ref.mounted) return;
       final database = ref.read(databaseProvider);
@@ -798,11 +811,13 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       if (!live()) return;
       _step(AnalysisStep.matching);
       final match = Stopwatch()..start();
-      await syncPodcastAnalysis(
-        database,
-        episode.podcastId,
-        focusEpisodeId: episode.id,
-        offUi: _offUi,
+      await _comparisonPasses.run(
+        () => syncPodcastAnalysis(
+          database,
+          episode.podcastId,
+          focusEpisodeId: episode.id,
+          offUi: _offUi,
+        ),
       );
       debugPrint(
         'Analyse audio: podcast ${episode.podcastId}, '
@@ -896,7 +911,9 @@ class ChromaprintEpisodeAudioAnalyzer implements EpisodeAudioAnalyzer {
 
   @override
   Future<void> findSegments(int podcastId) {
-    return syncPodcastAnalysis(database, podcastId);
+    return _comparisonPasses.run(
+      () => syncPodcastAnalysis(database, podcastId),
+    );
   }
 }
 

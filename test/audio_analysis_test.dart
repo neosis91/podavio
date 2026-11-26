@@ -99,7 +99,6 @@ void main() {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
     final ad = _motif(100, 11);
-    final promo = _motif(100, 12);
     final firstId = (await database.saveFeed(
       _draft([_episodeDraft('a', 'Un')], url: 'https://a.example/feed.xml'),
     )).podcastId;
