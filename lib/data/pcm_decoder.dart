@@ -88,7 +88,7 @@ class PlatformPcmDecoder extends PcmDecoder {
       return _invoke(stored, sampleRate, limit, onProgress);
     }
     if (Platform.isLinux || Platform.isWindows) {
-      return _ffmpeg(stored, sampleRate, limit);
+      return _ffmpeg(stored, sampleRate, limit, onProgress);
     }
     debugPrint('Décodage audio non pris en charge sur cette plateforme.');
     return null;
@@ -127,6 +127,7 @@ class PlatformPcmDecoder extends PcmDecoder {
     String path,
     int sampleRate,
     Duration budget,
+    void Function(int samples, int expected, int sampleRate)? onProgress,
   ) async {
     if (path.startsWith('content:')) return null;
     final file = File(path);
@@ -146,10 +147,18 @@ class PlatformPcmDecoder extends PcmDecoder {
     final out = File(
       '${Directory.systemTemp.path}${Platform.pathSeparator}podavio-pcm-${DateTime.now().microsecondsSinceEpoch}.pcm',
     );
+    // Le PCM va dans le fichier. La progression passe par la sortie
+    // standard (`-progress pipe:1`), l’en-tête (durée) par l’erreur
+    // standard. Rien de tout ça ne passe dans le flux PCM.
     final process = await Process.start(binary, [
       '-y',
+      '-nostdin',
+      '-hide_banner',
+      '-nostats',
       '-v',
-      'error',
+      'info',
+      '-progress',
+      'pipe:1',
       '-i',
       path,
       '-ac',
@@ -162,16 +171,99 @@ class PlatformPcmDecoder extends PcmDecoder {
       'pcm_s16le',
       out.path,
     ]);
-    unawaited(process.stdout.drain());
-    final stderr = process.stderr.transform(utf8.decoder).join();
+    final reader = FfmpegProgressReader();
+    final stderrText = StringBuffer();
+    int? durationUs;
+    var lastReport = DateTime.fromMillisecondsSinceEpoch(0);
+    final malformed = const Utf8Decoder(allowMalformed: true);
+
+    void report(int outTimeUs) {
+      if (onProgress == null || outTimeUs <= 0) return;
+      final samples = outTimeUs * sampleRate ~/ 1000000;
+      if (samples <= 0) return;
+      final now = DateTime.now();
+      if (now.difference(lastReport) < ffmpegProgressGap) return;
+      lastReport = now;
+      final known = durationUs;
+      final expected = known == null || known <= 0
+          ? 0
+          : known * sampleRate ~/ 1000000;
+      try {
+        onProgress(samples, expected, sampleRate);
+      } catch (error, stack) {
+        debugPrint('Décodage audio: $error\n$stack');
+      }
+    }
+
+    final stdoutDone = Completer<void>();
+    final stderrDone = Completer<void>();
+    void finish(Completer<void> done) {
+      if (!done.isCompleted) done.complete();
+    }
+
+    final stdoutRaw = process.stdout
+        .transform(malformed)
+        .listen(
+          (chunk) {
+            for (final us in reader.add(chunk)) {
+              report(us);
+            }
+          },
+          onError: (Object error) {
+            debugPrint('Décodage audio: $error');
+            finish(stdoutDone);
+          },
+          onDone: () {
+            for (final us in reader.flush()) {
+              report(us);
+            }
+            finish(stdoutDone);
+          },
+          cancelOnError: false,
+        );
+    final stderrRaw = process.stderr
+        .transform(malformed)
+        .listen(
+          (chunk) {
+            stderrText.write(chunk);
+            durationUs ??= ffmpegHeaderDurationUs(stderrText.toString());
+          },
+          onError: (Object error) {
+            debugPrint('Décodage audio: $error');
+            finish(stderrDone);
+          },
+          onDone: () => finish(stderrDone),
+          cancelOnError: false,
+        );
     final timer = Timer(budget, () => process.kill(ProcessSignal.sigkill));
-    final exitCode = await process.exitCode;
-    timer.cancel();
-    final message = (await stderr).trim();
+    late final int exitCode;
+    try {
+      exitCode = await process.exitCode;
+      timer.cancel();
+      await stdoutDone.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+      await stderrDone.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+    } finally {
+      timer.cancel();
+      await stdoutRaw.cancel();
+      await stderrRaw.cancel();
+    }
+    for (final us in reader.flush()) {
+      report(us);
+    }
+    final message = stderrText.toString().trim();
     if (exitCode != 0 || !await out.exists()) {
       if (await out.exists()) await out.delete();
+      final shown = message.length > 500
+          ? message.substring(message.length - 500)
+          : message;
       debugPrint(
-        'Décodage audio: ffmpeg a échoué${message.isEmpty ? '' : ' ($message)'}.',
+        'Décodage audio: ffmpeg a échoué${shown.isEmpty ? '' : ' ($shown)'}.',
       );
       return null;
     }
@@ -205,6 +297,129 @@ DecodedPcm? _fromMap(Object? raw) {
     samples: samples.toInt(),
     durationMs: duration.toInt(),
   );
+}
+
+/// Même écart que le décodage Android, pour ne pas réveiller l’interface
+/// à chaque ligne de ffmpeg.
+const ffmpegProgressGap = Duration(milliseconds: 400);
+
+/// Temps de sortie, en microsecondes, lu dans un bloc `-progress`.
+///
+/// `out_time_us` est en microsecondes. `out_time_ms` l’est aussi :
+/// le nom est trompeur, y compris quand `out_time_us` est présent.
+/// On préfère `out_time_us`, puis l’horloge `out_time`, puis `out_time_ms`.
+class FfmpegProgressReader {
+  String _rest = '';
+  int? _us;
+  int? _ms;
+  int? _clock;
+
+  /// Consomme [chunk], éventuellement coupé au milieu d’une ligne,
+  /// avec des fins `\n` ou `\r\n`. Un temps par bloc `progress=`.
+  List<int> add(String chunk) {
+    if (chunk.isEmpty) return const [];
+    final text = _rest + chunk;
+    final lines = text.split('\n');
+    _rest = lines.removeLast();
+    return _times(lines);
+  }
+
+  /// Traite la dernière ligne si ffmpeg l’a écrite sans saut de ligne.
+  List<int> flush() {
+    if (_rest.isEmpty) return const [];
+    final pending = _rest;
+    _rest = '';
+    return _times([pending]);
+  }
+
+  List<int> _times(List<String> lines) {
+    final times = <int>[];
+    for (final raw in lines) {
+      final line = raw.endsWith('\r') ? raw.substring(0, raw.length - 1) : raw;
+      final time = _take(line);
+      if (time != null) times.add(time);
+    }
+    return times;
+  }
+
+  int? _take(String line) {
+    if (line.isEmpty) return null;
+    final split = line.indexOf('=');
+    if (split <= 0) return null;
+    final key = line.substring(0, split);
+    final value = line.substring(split + 1).trim();
+    switch (key) {
+      case 'out_time_us':
+        _us = int.tryParse(value);
+      case 'out_time_ms':
+        _ms = int.tryParse(value);
+      case 'out_time':
+        _clock = ffmpegClockUs(value);
+      case 'progress':
+        final time = _resolved();
+        _us = null;
+        _ms = null;
+        _clock = null;
+        return time;
+    }
+    return null;
+  }
+
+  int? _resolved() {
+    final us = _us;
+    if (us != null && us >= 0) return us;
+    final clock = _clock;
+    if (clock != null && clock >= 0) return clock;
+    final ms = _ms;
+    if (ms == null || ms < 0) return null;
+    return ms;
+  }
+}
+
+/// `HH:MM:SS` ou `HH:MM:SS.fraction`, en microsecondes. `N/A` donne null.
+int? ffmpegClockUs(String value) {
+  final match = RegExp(r'^(\d+):(\d+):(\d+)(?:\.(\d+))?$')
+      .firstMatch(value.trim());
+  if (match == null) return null;
+  final hours = int.parse(match.group(1)!);
+  final minutes = int.parse(match.group(2)!);
+  final seconds = int.parse(match.group(3)!);
+  var micros = ((hours * 60 + minutes) * 60 + seconds) * 1000000;
+  final fraction = match.group(4);
+  if (fraction != null && fraction.isNotEmpty) {
+    final digits = fraction.length >= 6
+        ? fraction.substring(0, 6)
+        : fraction.padRight(6, '0');
+    micros += int.parse(digits);
+  }
+  return micros;
+}
+
+final _headerDuration = RegExp(
+  r'Duration:\s*(?:N/A|(\d+):(\d+):(\d+(?:\.\d+)?))',
+);
+
+/// Durée de l’en-tête ffmpeg, en microsecondes. `Duration: N/A` ou
+/// un texte sans durée donne null.
+int? ffmpegHeaderDurationUs(String text) {
+  final match = _headerDuration.firstMatch(text);
+  if (match == null || match.group(1) == null) return null;
+  final hours = int.parse(match.group(1)!);
+  final minutes = int.parse(match.group(2)!);
+  final seconds = match.group(3)!;
+  final dot = seconds.indexOf('.');
+  final whole = int.parse(dot < 0 ? seconds : seconds.substring(0, dot));
+  var micros = ((hours * 60 + minutes) * 60 + whole) * 1000000;
+  if (dot >= 0) {
+    final fraction = seconds.substring(dot + 1);
+    if (fraction.isNotEmpty) {
+      final digits = fraction.length >= 6
+          ? fraction.substring(0, 6)
+          : fraction.padRight(6, '0');
+      micros += int.parse(digits);
+    }
+  }
+  return micros;
 }
 
 Future<String?> _executable(String command, List<String> args) async {
