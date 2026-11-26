@@ -49,6 +49,24 @@ void main() {
     expect(skipKindForChapterTitle('Adaptation'), isNull);
   });
 
+  test('each kind keeps a SponsorBlock color', () {
+    expect(skipKindArgb(SkipSegmentKind.sponsor), 0xFF00D400);
+    expect(skipKindArgb(SkipSegmentKind.ad), 0xFF00D400);
+    expect(shownSkipKind(SkipSegmentKind.sponsor), SkipSegmentKind.ad);
+    expect(shownSkipKind(SkipSegmentKind.intro), SkipSegmentKind.intro);
+    expect(skipKindArgb(SkipSegmentKind.selfPromo), 0xFFFFFF00);
+    expect(skipKindArgb(SkipSegmentKind.intro), 0xFF00FFFF);
+    expect(skipKindArgb(SkipSegmentKind.outro), 0xFF0202ED);
+    expect(skipKindArgb(SkipSegmentKind.jingle), 0xFFFF9900);
+    expect(skipKindArgb(SkipSegmentKind.sting), 0xFFCC00FF);
+    expect(sharesAcrossPodcasts(SkipSegmentKind.sting), isTrue);
+    expect(skipKindArgb(SkipSegmentKind.other), 0xFF7300FF);
+    expect(skipKindForStoredLabel('Network sting'), SkipSegmentKind.jingle);
+    expect(skipKindForStoredLabel('Intro'), SkipSegmentKind.intro);
+    expect(skipKindForStoredLabel('Sponsor'), SkipSegmentKind.sponsor);
+    expect(skipKindForStoredLabel('Interview'), isNull);
+  });
+
   test('auto-skip kinds and fingerprints round-trip', () {
     expect(decodeAutoSkipKinds('[]'), isEmpty);
     expect(decodeAutoSkipKinds('nope'), isEmpty);

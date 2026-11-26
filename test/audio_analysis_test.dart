@@ -18,6 +18,27 @@ import 'package:podavio/settings/settings_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('a long episode is given more than six minutes to decode', () {
+    expect(analysisBudgetFor(25 * 60), const Duration(minutes: 8, seconds: 15));
+    expect(
+      analysisBudgetFor(51 * 60 + 6),
+      const Duration(seconds: (51 * 60 + 6) ~/ 4 + 120),
+    );
+    expect(
+      analysisBudgetFor(95 * 60),
+      greaterThan(const Duration(minutes: 20)),
+    );
+    expect(analysisBudgetFor(5 * 3600), audioAnalysisBudgetCeiling);
+    expect(
+      nativeDecodeBudgetFor(analysisBudgetFor(62 * 60)),
+      greaterThan(const Duration(minutes: 12)),
+    );
+    expect(
+      nativeDecodeBudgetFor(const Duration(milliseconds: 30)),
+      const Duration(milliseconds: 30),
+    );
+  });
+
   test('remaining time follows the length of the audio', () {
     final now = DateTime.utc(2026, 11, 21, 16);
     final left = estimateAnalysisRemaining(
@@ -72,6 +93,52 @@ void main() {
     ];
     expect(rows.map((row) => row.id), [old]);
     expect(await database.listActiveSkipSegments(ids.a), isEmpty);
+  });
+
+  test('a publicité is searched in every podcast', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final ad = _motif(100, 11);
+    final promo = _motif(100, 12);
+    final firstId = (await database.saveFeed(
+      _draft([_episodeDraft('a', 'Un')], url: 'https://a.example/feed.xml'),
+    )).podcastId;
+    final secondId = (await database.saveFeed(
+      _draft([_episodeDraft('b', 'Deux')], url: 'https://b.example/feed.xml'),
+    )).podcastId;
+    final origin = (await database.watchEpisodes(podcastId: firstId).first)
+        .single
+        .episode
+        .id;
+    final elsewhere = (await database.watchEpisodes(podcastId: secondId).first)
+        .single
+        .episode
+        .id;
+    await _ready(database, origin, _placed(1500, 1, 80, ad));
+    await _ready(database, elsewhere, _placed(1500, 2, 400, ad));
+    await createManualSegment(
+      database,
+      episodeId: origin,
+      startMs: _msAt(80, ceil: true),
+      endMs: _msAt(180),
+      kind: SkipSegmentKind.ad,
+    );
+    await createManualSegment(
+      database,
+      episodeId: origin,
+      startMs: _msAt(300, ceil: true),
+      endMs: _msAt(400),
+      kind: SkipSegmentKind.selfPromo,
+    );
+
+    await syncPodcastAnalysis(database, secondId);
+
+    final found = await database.listActiveSkipSegments(elsewhere);
+    expect(found, hasLength(1));
+    expect(found.single.kind, SkipSegmentKind.ad);
+    expect(found.single.source, SkipSegmentSource.fingerprint);
+    expect(found.single.startMs, closeTo(_msAt(400), 1500));
+    expect(await database.listSegmentTemplates(secondId), isEmpty);
   });
 
   test(
@@ -437,6 +504,10 @@ void main() {
     addTearDown(container.dispose);
     final notifier = container.read(audioAnalysisProvider.notifier);
     expect(container.read(settingsProvider).automaticAudioAnalysis, isFalse);
+    expect(
+      () => container.read(audioAnalysisBootstrapProvider),
+      returnsNormally,
+    );
     await notifier.enqueueMissing();
     expect(decoder.calls, 0);
   });
@@ -597,6 +668,7 @@ class _CountingDecoder extends PcmDecoder {
     String path, {
     int sampleRate = chromaprintSampleRate,
     Duration? budget,
+    void Function(int samples, int expected, int sampleRate)? onProgress,
   }) async {
     calls++;
     order.add(path);
@@ -620,6 +692,7 @@ class _MapDecoder extends PcmDecoder {
     String path, {
     int sampleRate = chromaprintSampleRate,
     Duration? budget,
+    void Function(int samples, int expected, int sampleRate)? onProgress,
   }) async {
     final samples = files[path];
     if (samples == null) return null;

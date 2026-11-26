@@ -91,6 +91,7 @@ const _fr = <String, String>{
   'Analyse the episode to see its waveform.':
       'Analysez l’épisode pour voir sa forme d’onde.',
   'Analysed': 'Analysé',
+  'Analysis details': 'Détail des analyses',
   'Analysis management': 'Gestion des analyses',
   'Analysis started. Come back once it is done.':
       'Analyse lancée. Revenez une fois qu’elle est terminée.',
@@ -625,6 +626,7 @@ const _fr = <String, String>{
   'Start a session': 'Ouvrir une session',
   'Started and not finished': 'Commencés et non terminés',
   'Statistics': 'Statistiques',
+  'Sting': 'Virgule',
   'Stop sharing': 'Arrêter le partage',
   'Stories for Kids': 'Histoires pour enfants',
   'Streaming': 'Streaming',
@@ -756,6 +758,8 @@ const _fr = <String, String>{
   '{count} people are listening.': '{count} personnes écoutent.',
   '{count} podcasts to refresh': '{count} podcasts à actualiser',
   '{count} waiting': '{count} en attente',
+  '{minutes} min {seconds} s': '{minutes} min {seconds} s',
+  '{percent} %': '{percent} %',
   '{seconds} seconds': '{seconds} secondes',
 };
 

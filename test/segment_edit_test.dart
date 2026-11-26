@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:drift/native.dart';
@@ -243,15 +244,11 @@ void main() {
       }
       await tester.pumpWidget(
         MaterialApp(
-          home: SegmentWaveformPage(
+          home: _WaveHost(
             envelope: envelope,
-            durationMs: 60000,
-            startMs: 20000,
-            endMs: 30000,
             onListen: (from, to) async => listened?.add((from, to)),
-            onSave: (start, end) async {
+            onSave: (start, end) {
               saved.add((start, end));
-              return true;
             },
           ),
         ),
@@ -273,6 +270,21 @@ void main() {
       await tester.tap(find.text('Enregistrer'));
       await tester.pump();
       expect(saved, [(19500, 31000)]);
+    });
+
+    testWidgets('glisser hors des poignées déplace la vue', (tester) async {
+      final saved = await pump(tester);
+      final wave = find.byKey(const Key('waveform'));
+      final box = tester.getRect(wave);
+      await tester.dragFrom(
+        Offset(box.left + box.width / 2, box.center.dy),
+        Offset(box.width / 10, 0),
+      );
+      await tester.pump();
+      expect(find.text('0:10.0'), findsOneWidget);
+      await tester.tap(find.text('Enregistrer'));
+      await tester.pump();
+      expect(saved, [(20000, 30000)]);
     });
 
     testWidgets('glisser une poignée la déplace', (tester) async {
@@ -300,4 +312,84 @@ void main() {
       expect(listened, [(18000, 22000), (20000, 30000)]);
     });
   });
+}
+
+class _WaveHost extends StatefulWidget {
+  const _WaveHost({
+    required this.envelope,
+    required this.onListen,
+    required this.onSave,
+  });
+
+  final Uint8List envelope;
+  final Future<void> Function(int from, int to) onListen;
+  final void Function(int start, int end) onSave;
+
+  @override
+  State<_WaveHost> createState() => _WaveHostState();
+}
+
+class _WaveHostState extends State<_WaveHost> {
+  var _start = 20000;
+  var _end = 30000;
+
+  void _move({required bool start, required int ms}) {
+    final bounds = start
+        ? clampBounds(ms, _end, durationMs: 60000)
+        : clampBounds(_start, ms, durationMs: 60000);
+    setState(() {
+      _start = bounds.startMs;
+      _end = bounds.endMs;
+    });
+  }
+
+  Future<void> _around(int cutMs) {
+    return widget.onListen(
+      math.max(0, cutMs - cutPreviewMs),
+      math.min(60000, cutMs + cutPreviewMs),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        actions: [
+          TextButton(
+            onPressed: () => widget.onSave(_start, _end),
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      ),
+      body: ListView(
+        children: [
+          SegmentWaveform(
+            envelope: widget.envelope,
+            durationMs: 60000,
+            startMs: _start,
+            endMs: _end,
+            onBounds: (start, end) => setState(() {
+              _start = start;
+              _end = end;
+            }),
+            onListen: widget.onListen,
+          ),
+          BoundControls(
+            id: 'start',
+            label: 'Début',
+            valueMs: _start,
+            onStep: (delta) => _move(start: true, ms: _start + delta),
+            onListen: () => _around(_start),
+          ),
+          BoundControls(
+            id: 'end',
+            label: 'Fin',
+            valueMs: _end,
+            onStep: (delta) => _move(start: false, ms: _end + delta),
+            onListen: () => _around(_end),
+          ),
+        ],
+      ),
+    );
+  }
 }

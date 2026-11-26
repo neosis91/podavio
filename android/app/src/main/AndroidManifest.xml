@@ -56,6 +56,13 @@
             android:exported="false"
             android:foregroundServiceType="dataSync"/>
 
+        <!-- Garde le décodage en vie quand l’activité est fermée. -->
+        <service
+            android:name=".AnalysisService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="dataSync"/>
+
         <!-- flutter_media_session : notification / Media3, sans browse Auto
              (un seul MediaBrowserService = PodavioMediaBrowserService). -->
         <service

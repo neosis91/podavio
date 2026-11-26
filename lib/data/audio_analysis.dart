@@ -7,6 +7,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'analysis_keepalive.dart';
 import 'analysis_pace.dart';
 import 'app_database.dart';
 import 'chromaprint.dart';
@@ -34,11 +35,39 @@ final episodeAudioAnalyzerProvider = Provider<EpisodeAudioAnalyzer>((ref) {
   );
 });
 
-/// Durée max d’un épisode. Au-delà, il est marqué en échec et la file avance.
+/// Durée max d’un épisode court. Au-delà, il est marqué en échec et la file avance.
 const audioAnalysisBudget = Duration(minutes: 8);
 
 /// Le décodeur natif s’arrête avant le délai Dart, pour rendre la main.
 const nativeDecodeBudget = Duration(minutes: 6);
+
+/// Plafond pour un épisode très long, afin qu’un fichier bloqué ne tienne
+/// pas la file indéfiniment.
+const audioAnalysisBudgetCeiling = Duration(minutes: 30);
+
+/// Délai accordé à un épisode.
+///
+/// Un épisode de 25 min a été décodé en 3 min 40 sur le téléphone, soit
+/// environ 7 fois le temps réel. Le délai natif de 6 min coupe donc vers
+/// 40 min d’audio. Un quart de la durée, plus 2 minutes, laisse finir
+/// les épisodes d’une heure et demie. Le plancher reste [floor].
+Duration analysisBudgetFor(int? durationSeconds, {Duration? floor}) {
+  final base = floor ?? audioAnalysisBudget;
+  if (durationSeconds == null || durationSeconds <= 0) return base;
+  final scaled = Duration(seconds: durationSeconds ~/ 4 + 120);
+  if (scaled < base) return base;
+  if (scaled > audioAnalysisBudgetCeiling) return audioAnalysisBudgetCeiling;
+  return scaled;
+}
+
+/// Décodage natif : deux minutes de moins que le délai Dart, sans passer
+/// sous [nativeDecodeBudget] tant que le délai total le permet.
+Duration nativeDecodeBudgetFor(Duration total) {
+  if (total <= nativeDecodeBudget) return total;
+  final native = total - const Duration(minutes: 2);
+  if (native < nativeDecodeBudget) return nativeDecodeBudget;
+  return native;
+}
 
 final audioAnalysisBudgetProvider = Provider<Duration>(
   (ref) => audioAnalysisBudget,
@@ -61,16 +90,24 @@ final audioAnalysisProvider =
 /// les épisodes jamais empreintés sont mis en file si l’automatisme est actif.
 final audioAnalysisBootstrapProvider = Provider<void>((ref) {
   if (ref.watch(databasePhaseProvider) != DatabasePhase.open) return;
-  final notifier = ref.read(audioAnalysisProvider.notifier);
-  unawaited(notifier.recoverInterrupted());
   final automatic = ref.watch(
     settingsProvider.select((settings) => settings.automaticAudioAnalysis),
   );
-  if (!automatic) {
-    notifier.cancelAutomatic();
-    return;
-  }
-  unawaited(notifier.enqueueMissing());
+  final notifier = ref.read(audioAnalysisProvider.notifier);
+  // Après le cadre en cours. Modifier le notifier ici, pendant
+  // l’initialisation, fait échouer tout l’écran.
+  unawaited(
+    Future<void>(() async {
+      if (!ref.mounted) return;
+      await notifier.recoverInterrupted();
+      if (!ref.mounted) return;
+      if (!automatic) {
+        notifier.cancelAutomatic();
+        return;
+      }
+      await notifier.enqueueMissing();
+    }),
+  );
 });
 
 /// À l’ouverture de l’écran de classement, pour ce podcast.
@@ -145,6 +182,10 @@ class AudioAnalysisProgress {
     this.measuredMs = 0,
     this.measuredAudioSeconds = 0,
     this.pending = const [],
+    this.decodeSamples,
+    this.decodeExpected,
+    this.decodeSampleRate,
+    this.decodeStarted,
   });
 
   final int? runningEpisodeId;
@@ -156,6 +197,12 @@ class AudioAnalysisProgress {
   final int measuredMs;
   final int measuredAudioSeconds;
   final List<({int episodeId, int podcastId, int? durationSeconds})> pending;
+
+  /// Audio déjà décodé de l’épisode en cours, pour le temps restant.
+  final int? decodeSamples;
+  final int? decodeExpected;
+  final int? decodeSampleRate;
+  final DateTime? decodeStarted;
 
   Duration? remainingFor(int podcastId, DateTime now) {
     return estimateAnalysisRemaining(
@@ -213,10 +260,15 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   DateTime? _runningSince;
   var _measuredMs = 0;
   var _measuredAudioSeconds = 0;
+  int? _decodeSamples;
+  int? _decodeExpected;
+  int? _decodeSampleRate;
+  DateTime? _decodeStarted;
   Future<void>? _pumpFuture;
   Isolate? _worker;
   Timer? _budgetTimer;
   var _epoch = 0;
+  var _keepAliveCount = -1;
 
   @override
   AudioAnalysisProgress build() {
@@ -238,6 +290,10 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     }
     _wait.clear();
     _reserved.clear();
+    if (_keepAliveCount > 0) {
+      _keepAliveCount = -1;
+      unawaited(syncAnalysisKeepAlive(count: 0));
+    }
   }
 
   bool get _automaticAllowed {
@@ -256,6 +312,13 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     }
   }
 
+  /// Un délai de test plus court que le plancher est respecté tel quel.
+  Duration _budgetFor(int? durationSeconds) {
+    final configured = _budget;
+    if (configured < audioAnalysisBudget) return configured;
+    return analysisBudgetFor(durationSeconds, floor: configured);
+  }
+
   /// Les analyses tuées au milieu (force-stop) ne sont pas relancées.
   Future<void> recoverInterrupted() async {
     try {
@@ -267,8 +330,12 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   }
 
   /// Vide la file automatique et abandonne l’épisode en cours s’il l’est.
+  ///
+  /// Rien à annuler : on ne touche pas à l’état. Sinon l’appel au démarrage,
+  /// pendant la construction de l’écran, ferait échouer le provider.
   void cancelAutomatic() {
-    if (_running?.automatic == true) {
+    final running = _running?.automatic == true;
+    if (running) {
       _running!.again = false;
       _epoch++;
       _worker?.kill(priority: Isolate.immediate);
@@ -277,6 +344,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       for (final job in _wait)
         if (job.automatic) job,
     ];
+    if (!running && dropped.isEmpty) return;
     _wait.removeWhere((job) => job.automatic);
     for (final job in dropped) {
       _reserved.remove(job.episodeId);
@@ -401,7 +469,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       if (!ref.mounted) return;
       final database = ref.read(databaseProvider);
       final episodes = await database.episodesForPodcast(podcastId);
-      var queued = false;
+      final pending = <int>[];
       for (final episode in episodes) {
         final path = episode.downloadPath?.trim() ?? '';
         if (path.isEmpty) continue;
@@ -414,12 +482,34 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
             mel == null ||
             status == 'failed' ||
             status == 'running') {
-          queued = true;
-          await enqueueEpisode(episode.id);
+          pending.add(episode.id);
         }
       }
-      if (!queued && ref.mounted) {
+      if (ref.mounted) {
         await syncPodcastAnalysis(database, podcastId);
+        await spreadSharedAds(exceptPodcastId: podcastId);
+      }
+      for (final episodeId in pending) {
+        if (!ref.mounted) return;
+        await enqueueEpisode(episodeId);
+      }
+      if (pending.isNotEmpty && ref.mounted) {
+        await spreadSharedAds(exceptPodcastId: podcastId);
+      }
+    } catch (error, stack) {
+      debugPrint('Analyse audio: $error\n$stack');
+    }
+  }
+
+  /// Cherche les publicités déjà posées dans les autres podcasts.
+  Future<void> spreadSharedAds({int? exceptPodcastId}) async {
+    try {
+      if (!ref.mounted) return;
+      final database = ref.read(databaseProvider);
+      final ids = await database.podcastIdsWithFingerprints();
+      for (final id in ids) {
+        if (!ref.mounted || id == exceptPodcastId) continue;
+        await syncPodcastAnalysis(database, id, offUi: _offUi);
       }
     } catch (error, stack) {
       debugPrint('Analyse audio: $error\n$stack');
@@ -461,7 +551,24 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
 
   void _publish() {
     if (!ref.mounted) return;
-    state = _view(step: state.step, stepAt: state.stepAt);
+    _emit(_view(step: state.step, stepAt: state.stepAt));
+  }
+
+  void _emit(AudioAnalysisProgress next) {
+    state = next;
+    final count = next.pending.length + (next.runningEpisodeId == null ? 0 : 1);
+    if (count == _keepAliveCount) return;
+    _keepAliveCount = count;
+    AppSettings? settings;
+    if (count > 0) {
+      try {
+        settings = ref.read(settingsProvider);
+      } catch (_) {
+        _keepAliveCount = -1;
+        return;
+      }
+    }
+    unawaited(syncAnalysisKeepAlive(settings: settings, count: count));
   }
 
   AudioAnalysisProgress _view({AnalysisStep? step, DateTime? stepAt}) {
@@ -475,6 +582,10 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       stepAt: job == null ? null : stepAt,
       measuredMs: _measuredMs,
       measuredAudioSeconds: _measuredAudioSeconds,
+      decodeSamples: _decodeSamples,
+      decodeExpected: _decodeExpected,
+      decodeSampleRate: _decodeSampleRate,
+      decodeStarted: _decodeStarted,
       pending: [
         for (final waiting in _wait)
           (
@@ -506,7 +617,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     if (!ref.mounted || state.runningEpisodeId == null || state.step == step) {
       return;
     }
-    state = _view(step: step, stepAt: DateTime.now());
+    _emit(_view(step: step, stepAt: DateTime.now()));
   }
 
   Future<void> _ensurePump() {
@@ -524,7 +635,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         }
         _running = job;
         _runningSince = DateTime.now();
-        state = _view(step: AnalysisStep.preparing, stepAt: _runningSince);
+        _emit(_view(step: AnalysisStep.preparing, stepAt: _runningSince));
         try {
           await _analyze(job);
         } catch (error, stack) {
@@ -554,7 +665,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     } finally {
       _pumpFuture = null;
       if (ref.mounted) {
-        state = _view();
+        _emit(_view());
       }
       if (_wait.isNotEmpty && ref.mounted) {
         unawaited(_ensurePump());
@@ -574,7 +685,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     }());
     var timedOut = false;
     _budgetTimer?.cancel();
-    _budgetTimer = Timer(_budget, () {
+    _budgetTimer = Timer(_budgetFor(job.durationSeconds), () {
       if (done.isCompleted) return;
       timedOut = true;
       _epoch++;
@@ -625,7 +736,23 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
           path,
           paced: true,
           offUi: _offUiPaced,
+          budget: nativeDecodeBudgetFor(_budgetFor(episode.durationSeconds)),
+          onProgress: (samples, expected, sampleRate) {
+            if (!live() || _running?.episodeId != episode.id) return;
+            final total = expected > 0
+                ? expected
+                : (episode.durationSeconds ?? 0) * sampleRate;
+            _decodeSamples = samples;
+            _decodeExpected = total > 0 ? total : null;
+            _decodeSampleRate = sampleRate;
+            _decodeStarted ??= DateTime.now();
+            _emit(_view(step: state.step, stepAt: state.stepAt));
+          },
         );
+        _decodeSamples = null;
+        _decodeExpected = null;
+        _decodeSampleRate = null;
+        _decodeStarted = null;
         if (!live()) return;
         if (analyzed == null) {
           await database.markFingerprintFailed(episode.id);
@@ -777,9 +904,15 @@ Future<PcmAnalysis?> _analyzeDecoded(
   PcmDecoder decoder,
   String path, {
   bool paced = false,
+  Duration budget = nativeDecodeBudget,
   Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
+  void Function(int samples, int expected, int sampleRate)? onProgress,
 }) async {
-  final decoded = await decoder.decode(path, budget: nativeDecodeBudget);
+  final decoded = await decoder.decode(
+    path,
+    budget: budget,
+    onProgress: onProgress,
+  );
   if (decoded == null) return null;
   try {
     if (decoded.sampleRate != chromaprintSampleRate) {
@@ -914,16 +1047,22 @@ Future<void> _deleteDecoded(String path) async {
 ///
 /// Rien n’est détecté tout seul : seuls les gabarits rattachés à un passage
 /// manuel sont cherchés (Chromaprint, vote d’offset, enveloppe, bornes).
-/// Sans portion, l’analyse s’arrête à l’empreinte et à l’enveloppe déjà
-/// enregistrées. Un second appel ne duplique pas les lignes et ne revient
-/// pas sur un avis déjà posé.
+/// Une publicité posée sur n’importe quel podcast est cherchée ici aussi.
+/// Les autres types restent dans leur émission. Sans portion, l’analyse
+/// s’arrête à l’empreinte et à l’enveloppe déjà enregistrées. Un second
+/// appel ne duplique pas les lignes et ne revient pas sur un avis déjà posé.
 Future<void> syncPodcastAnalysis(
   AppDatabase database,
   int podcastId, {
   int? focusEpisodeId,
   Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
 }) async {
-  final searched = await database.manualTemplateIds(podcastId);
+  final ownSearched = await database.manualTemplateIds(podcastId);
+  final shared = [
+    for (final template in await database.sharedAdTemplates())
+      if (template.podcastId != podcastId) template,
+  ];
+  final searched = {...ownSearched, for (final template in shared) template.id};
   if (searched.isEmpty) return;
   final stored = await database.fingerprintedDownloads(podcastId);
   final cohort = [...stored];
@@ -971,9 +1110,12 @@ Future<void> syncPodcastAnalysis(
     final reviews = await database.templateReviews(podcastId);
     final ownTemplates = [
       for (final template in await database.listSegmentTemplates(podcastId))
-        if (searched.contains(template.id)) template,
+        if (ownSearched.contains(template.id)) template,
     ];
     final ownTemplateIds = {for (final template in ownTemplates) template.id};
+    final sharedReviews = await database.reviewsForTemplates([
+      for (final template in shared) template.id,
+    ]);
     final stale = [
       for (final template in ownTemplates)
         if (!isChromaprintPrint(template.fingerprint)) template.id,
@@ -981,7 +1123,7 @@ Future<void> syncPodcastAnalysis(
     final recut = stale.isEmpty
         ? const <int, Uint8List>{}
         : await _recutTemplates(database, podcastId, stale, printsById);
-    for (final template in ownTemplates) {
+    for (final template in [...ownTemplates, ...shared]) {
       final print = isChromaprintPrint(template.fingerprint)
           ? template.fingerprint
           : recut[template.id];
@@ -989,7 +1131,7 @@ Future<void> syncPodcastAnalysis(
       templates.add(<Object?>[
         template.id,
         template.kind.name,
-        reviews[template.id],
+        reviews[template.id] ?? sharedReviews[template.id],
         template.durationMs,
         print,
         template.confidence,
@@ -1009,10 +1151,28 @@ Future<void> syncPodcastAnalysis(
       await applyAnalysisPlan(
         database,
         podcastId,
-        _keepFocusEpisodes(plan, focusEpisodeIds, ownTemplateIds),
+        _keepFocusEpisodes(plan, focusEpisodeIds, {
+          ...ownTemplateIds,
+          for (final template in shared) template.id,
+        }),
         searchedTemplates: searched,
       );
+      await _recountSharedTemplates(database, [
+        for (final template in shared) template.id,
+      ]);
     }
+  }
+}
+
+/// Occurrences d’une publicité partagée, y compris les autres podcasts.
+Future<void> _recountSharedTemplates(
+  AppDatabase database,
+  List<int> templateIds,
+) async {
+  for (final id in templateIds) {
+    final segments = await database.segmentsForTemplate(id);
+    final episodes = segments.map((row) => row.episodeId).toSet().length;
+    await database.touchSegmentTemplate(id, occurrences: episodes);
   }
 }
 

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../data/providers.dart';
+import '../../data/skip_segments.dart';
 import '../../l10n/l10n.dart';
 import '../../player/chapter_merge.dart';
 import '../../player/player_controller.dart';
+import '../skip_kind_mark.dart';
 import '../widgets/app_bottom_sheet.dart';
 
 Future<void> showChaptersSheet({
@@ -146,6 +148,9 @@ class _ChaptersSheetState extends ConsumerState<_ChaptersSheet> {
     required bool selected,
   }) {
     final start = Duration(milliseconds: chapter.startMs);
+    final kind = chapter.fromSegment
+        ? skipKindForStoredLabel(chapter.title)
+        : null;
     return ListTile(
       key: _keyFor(chapter.id),
       selected: selected,
@@ -158,10 +163,22 @@ class _ChaptersSheetState extends ConsumerState<_ChaptersSheet> {
           fontWeight: FontWeight.w600,
         ),
       ),
-      title: Text(
-        chapter.title.isEmpty
-            ? 'Chapitre ${index + 1}'
-            : localizedChapterTitle(chapter, context.tr),
+      title: Row(
+        children: [
+          if (kind != null) ...[
+            SkipKindMark(kind, size: 10),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Text(
+              chapter.title.isEmpty
+                  ? 'Chapitre ${index + 1}'
+                  : localizedChapterTitle(chapter, context.tr),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
       onTap: () {
         Navigator.pop(context);

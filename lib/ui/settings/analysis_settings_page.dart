@@ -10,8 +10,10 @@ import '../../l10n/l10n.dart';
 import '../../settings/global_skip.dart';
 import '../podcast/passage_creation.dart';
 import '../router.dart';
+import '../skip_kind_mark.dart';
 import '../widgets/cover.dart';
 import '../widgets/empty_state.dart';
+import 'analysis_status_mark.dart';
 import 'settings_section_title.dart';
 
 final analysisOverviewProvider = StreamProvider<List<AnalysisOverviewPodcast>>((
@@ -102,13 +104,7 @@ class AnalysisSettingsPage extends ConsumerWidget {
               ),
               SettingsSectionTitle(context.tr('Kinds to skip')),
               for (final kind in SkipSegmentKind.values)
-                SwitchListTile(
-                  title: Text(context.tr(skipKindLabel(kind))),
-                  value: skip.kinds.contains(kind),
-                  onChanged: (enabled) => ref
-                      .read(globalSkipSettingsProvider.notifier)
-                      .setKind(kind, enabled: enabled),
-                ),
+                if (kind != SkipSegmentKind.sponsor) SkipKindSwitch(kind),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                 child: Text(
@@ -181,17 +177,17 @@ class _AnalysisPodcastTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final detailStyle = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
     final counts = [
       for (final kind in analysisCountKinds)
-        if (row.countOf(kind) > 0)
-          '${context.tr(skipKindLabel(kind))} ${row.countOf(kind)}',
-      if (row.manualSegments > 0)
-        '${context.tr('By hand')} ${row.manualSegments}',
+        if (kind != SkipSegmentKind.sponsor)
+          if (_countOf(row, kind) > 0)
+            SkipKindCount(kind: kind, count: _countOf(row, kind)),
     ];
-    final detail = counts.isEmpty
-        ? context.tr('No passages created yet')
-        : counts.join(' · ');
     return ListTile(
+      titleAlignment: ListTileTitleAlignment.center,
       leading: PodcastCover(
         localPath: row.imagePath,
         label: row.title,
@@ -199,12 +195,23 @@ class _AnalysisPodcastTile extends ConsumerWidget {
       ),
       title: Text(row.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       isThreeLine: true,
-      subtitle: Text(
-        '${_downloadLabel(context, row.downloadedEpisodes)} · '
-        '${context.tr(_statusLabel(row.status))}\n$detail',
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-        ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _downloadLabel(context, row.downloadedEpisodes),
+            style: detailStyle,
+          ),
+          if (counts.isEmpty)
+            Text(context.tr('No passages created yet'), style: detailStyle)
+          else
+            Wrap(
+              spacing: 10,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: counts,
+            ),
+        ],
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -214,12 +221,23 @@ class _AnalysisPodcastTile extends ConsumerWidget {
             icon: const Icon(Icons.content_cut),
             onPressed: () => pickEpisodeForPassage(context, ref, row.id),
           ),
-          const Icon(Icons.chevron_right),
+          AnalysisStatusMark(
+            status: row.status,
+            label: context.tr(_statusLabel(row.status)),
+          ),
         ],
       ),
       onTap: () => context.push(AppRoutes.podcastSkipSegments(row.id)),
     );
   }
+}
+
+int _countOf(AnalysisOverviewPodcast row, SkipSegmentKind kind) {
+  if (kind == SkipSegmentKind.ad) {
+    return row.countOf(SkipSegmentKind.ad) +
+        row.countOf(SkipSegmentKind.sponsor);
+  }
+  return row.countOf(kind);
 }
 
 String _downloadLabel(BuildContext context, int count) {

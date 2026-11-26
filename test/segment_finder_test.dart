@@ -187,6 +187,39 @@ void main() {
     );
   });
 
+  test('the same ad can occur twice in one episode', () {
+    final motif = _motif(100, 15);
+    final values = _noise(2000, 3);
+    _write(values, 80, motif);
+    _write(values, 900, motif);
+    final plan = buildAnalysisPlan(
+      episodes: [
+        FingerprintEpisode(
+          episodeId: 1,
+          values: values,
+          hopMicros: hop,
+          durationMs: 400000,
+        ),
+      ],
+      templates: [
+        KnownTemplate(
+          id: 7,
+          kind: SkipSegmentKind.ad,
+          fingerprint: motif,
+          durationMs: _ms(100),
+          confirmed: true,
+        ),
+      ],
+      discover: false,
+    );
+    final starts =
+        plan.patterns.single.segments.map((hit) => hit.startMs).toList()
+          ..sort();
+    expect(starts, hasLength(2));
+    expect(starts[0], closeTo(_ms(80), 1500));
+    expect(starts[1], closeTo(_ms(900), 1500));
+  });
+
   test('known templates are matched before a new pattern is created', () {
     final motif = _motif(100, 15);
     final episodes = [

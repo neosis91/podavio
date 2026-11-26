@@ -46,6 +46,9 @@ class AppRoutes {
   static String podcastSkipSegments(int id) =>
       '/podcasts/$id/settings/segments';
 
+  static String podcastEpisodeAnalyses(int id) =>
+      '/podcasts/$id/settings/segments/analyses';
+
   static String episode(int id) => '/episode/$id';
 
   static String playlist(int id) => '/playlists/$id';

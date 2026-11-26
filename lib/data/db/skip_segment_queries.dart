@@ -166,8 +166,33 @@ mixin _SkipSegmentQueries on _$AppDatabase {
       ..orderBy([(row) => OrderingTerm.asc(row.startMs)]);
   }
 
+  /// Publicités et virgules posées à la main, quel que soit le podcast.
+  Future<List<SegmentTemplate>> sharedAdTemplates() async {
+    final kinds = [
+      for (final kind in SkipSegmentKind.values)
+        if (sharesAcrossPodcasts(kind)) "'${kind.name}'",
+    ].join(', ');
+    final rows = await customSelect(
+      'SELECT DISTINCT t.* FROM segment_templates t '
+      'WHERE t.kind IN ($kinds) AND $_manualTemplateSql',
+      readsFrom: {segmentTemplates, skipSegments},
+    ).get();
+    return [for (final row in rows) segmentTemplates.map(row.data)];
+  }
+
+  /// Podcasts qui ont au moins une empreinte, pour y chercher une pub.
+  Future<List<int>> podcastIdsWithFingerprints() async {
+    final rows = await customSelect(
+      'SELECT DISTINCT e.podcast_id AS podcast_id '
+      'FROM episode_fingerprints f '
+      'INNER JOIN episodes e ON e.id = f.episode_id',
+      readsFrom: {episodeFingerprints, episodes},
+    ).get();
+    return [for (final row in rows) row.read<int>('podcast_id')];
+  }
+
   /// Gabarits du podcast rattachés à au moins un passage posé à la main :
-  /// les seuls que l’analyse cherche.
+  /// les seuls que l’analyse cherche, avec les publicités des autres.
   Future<Set<int>> manualTemplateIds(int podcastId) async {
     final rows = await customSelect(
       'SELECT DISTINCT s.template_id AS template_id '
@@ -300,11 +325,34 @@ mixin _SkipSegmentQueries on _$AppDatabase {
 
   Future<void> setTemplateKind(int id, SkipSegmentKind kind) {
     return transaction(() async {
+      final current = await (select(
+        segmentTemplates,
+      )..where((row) => row.id.equals(id))).getSingleOrNull();
+      if (current == null) return;
       await (update(segmentTemplates)..where((row) => row.id.equals(id))).write(
         SegmentTemplatesCompanion(kind: Value(kind)),
       );
       await (update(skipSegments)..where((row) => row.templateId.equals(id)))
           .write(SkipSegmentsCompanion(kind: Value(kind)));
+      if (sharesAcrossPodcasts(current.kind) && !sharesAcrossPodcasts(kind)) {
+        final foreign =
+            await (select(skipSegments).join([
+                  innerJoin(
+                    episodes,
+                    episodes.id.equalsExp(skipSegments.episodeId),
+                  ),
+                ])..where(
+                  skipSegments.templateId.equals(id) &
+                      episodes.podcastId.equals(current.podcastId).not() &
+                      skipSegments.source
+                          .equalsValue(SkipSegmentSource.manual)
+                          .not(),
+                ))
+                .get();
+        for (final row in foreign) {
+          await deleteSkipSegment(row.readTable(skipSegments).id);
+        }
+      }
     });
   }
 
@@ -335,6 +383,31 @@ mixin _SkipSegmentQueries on _$AppDatabase {
           ..where((row) => row.podcastId.equals(podcastId))
           ..orderBy([(row) => OrderingTerm.asc(row.id)]))
         .get();
+  }
+
+  /// Avis de ces gabarits, tous podcasts confondus.
+  Future<Map<int, bool?>> reviewsForTemplates(Iterable<int> templateIds) async {
+    final ids = templateIds.toSet().toList();
+    if (ids.isEmpty) return const {};
+    final rows = await customSelect(
+      'SELECT s.template_id AS template_id, '
+      'SUM(CASE WHEN s.confirmed IS NULL THEN 1 ELSE 0 END) AS pending, '
+      'SUM(CASE WHEN s.confirmed = 1 THEN 1 ELSE 0 END) AS yes, '
+      'SUM(CASE WHEN s.confirmed = 0 THEN 1 ELSE 0 END) AS no '
+      'FROM skip_segments s '
+      'WHERE s.template_id IN (${List.filled(ids.length, '?').join(', ')}) '
+      'GROUP BY s.template_id',
+      variables: [for (final id in ids) Variable.withInt(id)],
+      readsFrom: {skipSegments},
+    ).get();
+    return {
+      for (final row in rows)
+        row.read<int>('template_id'): _reviewOf(
+          row.read<int>('pending'),
+          row.read<int>('yes'),
+          row.read<int>('no'),
+        ),
+    };
   }
 
   Future<Map<int, bool?>> templateReviews(int podcastId) async {
@@ -403,6 +476,44 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     return [
       for (final row in rows)
         (id: row.read<int>('id'), podcastId: row.read<int>('podcast_id')),
+    ];
+  }
+
+  /// Épisodes téléchargés du podcast, du plus récent au plus ancien,
+  /// avec l’état d’empreinte déjà écrit.
+  Future<
+    List<
+      ({
+        int episodeId,
+        String title,
+        String? fingerprintStatus,
+        bool chromaprint,
+      })
+    >
+  >
+  episodeAnalysisFacts(int podcastId) async {
+    final rows = await customSelect(
+      'SELECT e.id AS id, e.title AS title, f.status AS status, '
+      'CASE WHEN f.data IS NOT NULL '
+      'AND length(f.data) >= 32 AND length(f.data) % 4 = 0 '
+      "AND NOT (substr(f.data, 1, 4) = X'4F6C6166') "
+      'THEN 1 ELSE 0 END AS chromaprint '
+      'FROM episodes e '
+      'LEFT JOIN episode_fingerprints f ON f.episode_id = e.id '
+      'WHERE e.podcast_id = ? '
+      'AND e.download_path IS NOT NULL AND length(trim(e.download_path)) > 0 '
+      'ORDER BY e.published_at DESC, e.id DESC',
+      variables: [Variable.withInt(podcastId)],
+      readsFrom: {episodes, episodeFingerprints},
+    ).get();
+    return [
+      for (final row in rows)
+        (
+          episodeId: row.read<int>('id'),
+          title: row.read<String>('title'),
+          fingerprintStatus: row.read<String?>('status'),
+          chromaprint: row.read<int>('chromaprint') == 1,
+        ),
     ];
   }
 

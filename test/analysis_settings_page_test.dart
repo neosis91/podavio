@@ -4,11 +4,14 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:podavio/data/analysis_overview.dart';
 import 'package:podavio/data/app_database.dart';
 import 'package:podavio/data/models.dart';
 import 'package:podavio/data/providers.dart';
 import 'package:podavio/data/skip_segments.dart';
 import 'package:podavio/ui/settings/analysis_settings_page.dart';
+import 'package:podavio/ui/widgets/cover.dart';
+import 'package:podavio/ui/settings/analysis_status_mark.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -133,11 +136,29 @@ void main() {
     expect(texts, contains('Même hébergeur'));
     expect(texts.any((text) => text.contains('Suivi sans fichier')), isFalse);
     expect(texts.where((text) => text == 'Audiomeans'), hasLength(1));
-    expect(texts.any((text) => text.contains('En attente')), isTrue);
-    expect(texts.any((text) => text.contains('Analysé')), isTrue);
-    expect(texts.any((text) => text.contains('Publicité 1')), isTrue);
-    expect(texts.any((text) => text.contains('À la main 1')), isTrue);
+    expect(texts.any((text) => text.contains('En attente')), isFalse);
+    expect(texts.any((text) => text.contains('Analysé')), isFalse);
+    expect(texts.any((text) => text.contains('Publicité')), isTrue);
+    expect(texts.any((text) => text.contains('À la main')), isFalse);
+    expect(find.text('1'), findsOneWidget);
     expect(texts.any((text) => text.contains('Rien n’est détecté')), isTrue);
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
+    final covers = tester.widgetList<ListTile>(find.byType(ListTile)).where(
+      (tile) => tile.leading is PodcastCover,
+    );
+    expect(covers, isNotEmpty);
+    expect(
+      covers.every(
+        (tile) => tile.titleAlignment == ListTileTitleAlignment.center,
+      ),
+      isTrue,
+    );
+    final marks = tester
+        .widgetList<AnalysisStatusMark>(find.byType(AnalysisStatusMark))
+        .map((mark) => mark.status)
+        .toList();
+    expect(marks, contains(AnalysisOverviewStatus.pending));
+    expect(marks, contains(AnalysisOverviewStatus.analysed));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

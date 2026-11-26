@@ -33,10 +33,37 @@ abstract class PcmDecoder {
     String path, {
     int sampleRate = chromaprintSampleRate,
     Duration? budget,
+    void Function(int samples, int expected, int sampleRate)? onProgress,
   });
 }
 
 const _channel = MethodChannel('fr.podavio.podavio/audio_decode');
+const _progressEvents = EventChannel(
+  'fr.podavio.podavio/audio_decode/progress',
+);
+
+void Function(int samples, int expected, int sampleRate)? _decodeProgress;
+StreamSubscription<dynamic>? _decodeProgressSub;
+
+int? _asInt(Object? value) {
+  if (value is int) return value;
+  if (value is double) return value.round();
+  return null;
+}
+
+void _listenDecodeProgress() {
+  if (!Platform.isAndroid) return;
+  _decodeProgressSub ??= _progressEvents.receiveBroadcastStream().listen((
+    event,
+  ) {
+    final notify = _decodeProgress;
+    if (notify == null || event is! Map) return;
+    final samples = _asInt(event['samples']);
+    final rate = _asInt(event['sampleRate']);
+    if (samples == null || rate == null || samples <= 0 || rate <= 0) return;
+    notify(samples, _asInt(event['expected']) ?? 0, rate);
+  }, onError: (_) {});
+}
 
 /// Android (MediaCodec), iOS et macOS (AVFoundation). Ailleurs, ffmpeg
 /// s’il est installé, sinon un refus journalisé.
@@ -48,6 +75,7 @@ class PlatformPcmDecoder extends PcmDecoder {
     String path, {
     int sampleRate = chromaprintSampleRate,
     Duration? budget,
+    void Function(int samples, int expected, int sampleRate)? onProgress,
   }) async {
     final stored = path.trim();
     if (stored.isEmpty) return null;
@@ -57,7 +85,7 @@ class PlatformPcmDecoder extends PcmDecoder {
     }
     final limit = budget ?? const Duration(minutes: 6);
     if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
-      return _invoke(stored, sampleRate, limit);
+      return _invoke(stored, sampleRate, limit, onProgress);
     }
     if (Platform.isLinux || Platform.isWindows) {
       return _ffmpeg(stored, sampleRate, limit);
@@ -70,7 +98,10 @@ class PlatformPcmDecoder extends PcmDecoder {
     String path,
     int sampleRate,
     Duration budget,
+    void Function(int samples, int expected, int sampleRate)? onProgress,
   ) async {
+    _listenDecodeProgress();
+    _decodeProgress = onProgress;
     try {
       final raw = await _channel
           .invokeMethod<Object?>('decodeToPcm', {
@@ -86,6 +117,8 @@ class PlatformPcmDecoder extends PcmDecoder {
       debugPrint('Décodage audio: ${error.message}');
     } on TimeoutException {
       debugPrint('Décodage audio: délai dépassé.');
+    } finally {
+      if (_decodeProgress == onProgress) _decodeProgress = null;
     }
     return null;
   }
