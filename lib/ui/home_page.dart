@@ -23,6 +23,7 @@ import 'widgets/episode_tile.dart';
 import 'podcasts/podcasts_tiles.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/list_metrics.dart';
+import 'player/segment_bar.dart';
 import 'widgets/marquee_text.dart';
 import 'widgets/selection_chip.dart';
 
@@ -735,11 +736,14 @@ class _ContinueRow extends ConsumerWidget {
                     ),
                     if (fraction != null) ...[
                       const SizedBox(height: 6),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: fraction,
-                          minHeight: 2,
+                      SegmentProgressBar(
+                        fraction: fraction,
+                        durationMs: duration! * 1000,
+                        spans: spansForSegments(
+                          ref
+                                  .watch(activeSkipSegmentsProvider(episode.id))
+                                  .value ??
+                              const [],
                         ),
                       ),
                     ],

@@ -146,6 +146,129 @@ class SkipSegmentTrackShape extends RoundedRectSliderTrackShape {
   }
 }
 
+/// Barre de lecture des listes.
+///
+/// Thème clair : lu sombre, reste gris, pour rester lisible sur un fond clair.
+/// Thème sombre : lu blanc, reste noir, contour blanc sur toute la barre.
+/// Les portions colorées sont peintes par-dessus.
+class SegmentProgressBar extends StatelessWidget {
+  const SegmentProgressBar({
+    super.key,
+    required this.fraction,
+    required this.durationMs,
+    this.spans = const [],
+    this.height = 4,
+  });
+
+  final double fraction;
+  final int durationMs;
+  final List<ColoredBarSpan> spans;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: CustomPaint(
+        painter: _SegmentProgressPainter(
+          fraction: fraction.clamp(0.0, 1.0),
+          durationMs: durationMs,
+          spans: spans,
+          textDirection: Directionality.of(context),
+          played: dark ? Colors.white : const Color(0xFF1A1A1A),
+          unread: dark ? Colors.black : const Color(0xFFE4E4E4),
+          border: dark ? Colors.white : null,
+        ),
+      ),
+    );
+  }
+}
+
+class _SegmentProgressPainter extends CustomPainter {
+  const _SegmentProgressPainter({
+    required this.fraction,
+    required this.durationMs,
+    required this.spans,
+    required this.textDirection,
+    required this.played,
+    required this.unread,
+    required this.border,
+  });
+
+  final double fraction;
+  final int durationMs;
+  final List<ColoredBarSpan> spans;
+  final TextDirection textDirection;
+  final Color played;
+  final Color unread;
+  final Color? border;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+    final track = Offset.zero & size;
+    final radius = Radius.circular(track.height / 2);
+    final isLTR = textDirection == TextDirection.ltr;
+    final playedEdge = isLTR
+        ? track.left + track.width * fraction
+        : track.right - track.width * fraction;
+    final shape = RRect.fromRectAndRadius(track, radius);
+    canvas.drawRRect(shape, Paint()..color = unread);
+    if (fraction > 0) {
+      final playedRect = isLTR
+          ? Rect.fromLTRB(track.left, track.top, playedEdge, track.bottom)
+          : Rect.fromLTRB(playedEdge, track.top, track.right, track.bottom);
+      canvas
+        ..save()
+        ..clipRRect(shape)
+        ..drawRect(playedRect, Paint()..color = played)
+        ..restore();
+    }
+    if (durationMs > 0 && spans.isNotEmpty) {
+      canvas
+        ..save()
+        ..clipRRect(shape);
+      for (final span in spans) {
+        final rect = segmentBarRect(
+          track: track,
+          durationMs: durationMs,
+          startMs: span.startMs,
+          endMs: span.endMs,
+          textDirection: textDirection,
+        );
+        if (rect == null) continue;
+        canvas.drawRect(rect, Paint()..color = span.color);
+      }
+      canvas.restore();
+    }
+    final outline = border;
+    if (outline != null) {
+      const stroke = 1.0;
+      final inset = track.deflate(stroke / 2);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(inset, Radius.circular(inset.height / 2)),
+        Paint()
+          ..color = outline
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SegmentProgressPainter old) {
+    return fraction != old.fraction ||
+        durationMs != old.durationMs ||
+        textDirection != old.textDirection ||
+        played != old.played ||
+        unread != old.unread ||
+        border != old.border ||
+        spans != old.spans;
+  }
+}
+
 /// Contour blanc de la partie non lue. Le remplissage noir est déjà peint
 /// par la piste ; sur le fond noir du lecteur, seul ce trait la montre.
 void _paintUnreadBorder(

@@ -9,6 +9,7 @@ import 'package:podavio/data/download_controller.dart';
 import 'package:podavio/data/providers.dart';
 import 'package:podavio/player/player_controller.dart';
 import 'package:podavio/settings/settings_controller.dart';
+import 'package:podavio/ui/player/segment_bar.dart';
 import 'package:podavio/ui/widgets/episode_tile.dart';
 import 'package:podavio/ui/widgets/list_metrics.dart';
 import 'package:podavio/ui/widgets/playing_cover.dart';
@@ -53,7 +54,7 @@ void main() {
           expect(tester.takeException(), isNull);
           expect(find.textContaining('Un titre assez long'), findsWidgets);
           expect(
-            find.byType(LinearProgressIndicator),
+            find.byType(SegmentProgressBar),
             density == EpisodeListDensity.comfortable
                 ? findsOneWidget
                 : findsNothing,
@@ -206,7 +207,7 @@ void main() {
       final podcast = tester.getTopLeft(find.text('Nom du podcast'));
       final elapsed = tester.getRect(find.text('1:00'));
       final remaining = tester.getRect(find.text('−9:00'));
-      final bar = tester.getRect(find.byType(LinearProgressIndicator));
+      final bar = tester.getRect(find.byType(SegmentProgressBar));
 
       expect(cover.width, 48);
       expect(cover.height, 48);
@@ -228,10 +229,8 @@ void main() {
       expect((bar.center.dy - elapsed.center.dy).abs(), lessThan(4));
       expect(
         tester
-            .widget<LinearProgressIndicator>(
-              find.byType(LinearProgressIndicator),
-            )
-            .value,
+            .widget<SegmentProgressBar>(find.byType(SegmentProgressBar))
+            .fraction,
         closeTo(0.1, 0.001),
       );
       expect(find.text('1:00'), findsOneWidget);
@@ -257,8 +256,8 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
       tester
-          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
-          .value,
+          .widget<SegmentProgressBar>(find.byType(SegmentProgressBar))
+          .fraction,
       0,
     );
     expect(find.text('0:00'), findsOneWidget);
@@ -283,7 +282,7 @@ void main() {
 
     expect(find.text('Ne doit pas apparaître'), findsNothing);
     expect(find.textContaining('reste'), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.byType(SegmentProgressBar), findsOneWidget);
 
     await harness.close(tester);
   });
