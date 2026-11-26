@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -37,6 +38,70 @@ void main() {
       nativeDecodeBudgetFor(const Duration(milliseconds: 30)),
       const Duration(milliseconds: 30),
     );
+  });
+
+  test('comparison passes never overlap and coalesce', () async {
+    final queue = ComparisonPassQueue();
+    var current = 0;
+    var maxInFlight = 0;
+    var runs = 0;
+    final exceptions = <int?>[];
+
+    Future<void> run(int? except) async {
+      runs++;
+      exceptions.add(except);
+      current++;
+      if (current > maxInFlight) maxInFlight = current;
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      current--;
+    }
+
+    final first = queue.schedule(run, exceptPodcastId: 1);
+    final second = queue.schedule(run, exceptPodcastId: 1);
+    final third = queue.schedule(run, exceptPodcastId: 2);
+    await Future.wait([first, second, third]);
+
+    expect(maxInFlight, 1);
+    expect(runs, 2);
+    expect(exceptions, [1, null]);
+  });
+
+  test('a coalesced request waits for the follow-up pass', () async {
+    final queue = ComparisonPassQueue();
+    final gate = Completer<void>();
+    var runs = 0;
+
+    Future<void> run(int? except) {
+      runs++;
+      if (runs == 1) return gate.future;
+      return Future<void>.value();
+    }
+
+    final first = queue.schedule(run, exceptPodcastId: 7);
+    final second = queue.schedule(run, exceptPodcastId: 7);
+    final third = queue.schedule(run, exceptPodcastId: 7);
+    await Future<void>.delayed(Duration.zero);
+    expect(runs, 1);
+    var followed = false;
+    unawaited(second.then((_) => followed = true));
+    await Future<void>.delayed(Duration.zero);
+    expect(followed, isFalse);
+    gate.complete();
+    await Future.wait([first, second, third]);
+    expect(runs, 2);
+    expect(followed, isTrue);
+  });
+
+  test('a pass started after the previous one still runs', () async {
+    final queue = ComparisonPassQueue();
+    final seen = <int?>[];
+    Future<void> run(int? except) async {
+      seen.add(except);
+    }
+
+    await queue.schedule(run, exceptPodcastId: 4);
+    await queue.schedule(run, exceptPodcastId: 4);
+    expect(seen, [4, 4]);
   });
 
   test('remaining time follows the length of the audio', () {
@@ -138,6 +203,49 @@ void main() {
     expect(found.single.source, SkipSegmentSource.fingerprint);
     expect(found.single.startMs, closeTo(_msAt(400), 1500));
     expect(await database.listSegmentTemplates(secondId), isEmpty);
+  });
+
+  test('two overlapping searches still leave a single ad', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final ad = _motif(100, 11);
+    final firstId = (await database.saveFeed(
+      _draft([_episodeDraft('a', 'Un')], url: 'https://a.example/feed.xml'),
+    )).podcastId;
+    final secondId = (await database.saveFeed(
+      _draft([_episodeDraft('b', 'Deux')], url: 'https://b.example/feed.xml'),
+    )).podcastId;
+    final origin = (await database.watchEpisodes(podcastId: firstId).first)
+        .single
+        .episode
+        .id;
+    final elsewhere = (await database.watchEpisodes(podcastId: secondId).first)
+        .single
+        .episode
+        .id;
+    await _ready(database, origin, _placed(1500, 1, 80, ad));
+    await _ready(database, elsewhere, _placed(1500, 2, 400, ad));
+    await createManualSegment(
+      database,
+      episodeId: origin,
+      startMs: _msAt(80, ceil: true),
+      endMs: _msAt(180),
+      kind: SkipSegmentKind.ad,
+    );
+    final container = ProviderContainer(
+      overrides: [databaseProvider.overrideWithValue(database)],
+    );
+    addTearDown(container.dispose);
+    final notifier = container.read(audioAnalysisProvider.notifier);
+
+    await Future.wait([
+      notifier.spreadSharedAds(exceptPodcastId: firstId),
+      notifier.spreadSharedAds(exceptPodcastId: firstId),
+      notifier.spreadSharedAds(exceptPodcastId: secondId),
+    ]);
+
+    expect(await database.listActiveSkipSegments(elsewhere), hasLength(1));
+    expect(await database.listActiveSkipSegments(origin), hasLength(1));
   });
 
   test(

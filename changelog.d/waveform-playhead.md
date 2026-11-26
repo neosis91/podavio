@@ -1,1 +1,1 @@
-The waveform playhead is drawn on its own layer, so playback no longer repaints the whole wave.
+The waveform playhead moves on its own layer, so playback no longer redraws the whole wave.

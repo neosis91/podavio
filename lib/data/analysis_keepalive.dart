@@ -27,6 +27,6 @@ Future<void> syncAnalysisKeepAlive({
       'channel': notificationText(settings, 'Analysis management'),
     });
   } catch (error, stack) {
-    debugPrint('Maintien de l’analyse : $error\n$stack');
+    debugPrint('Maintien de l’analyse: $error\n$stack');
   }
 }

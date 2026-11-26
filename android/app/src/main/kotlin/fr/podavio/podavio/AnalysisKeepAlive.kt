@@ -30,13 +30,6 @@ object AnalysisKeepAlive {
     @Volatile
     var activityCount: Int = 0
 
-    /// Vrai après un `startForeground` réussi, jusqu’à l’arrêt demandé
-    /// ou la destruction du service. Sert à mettre la notification à jour
-    /// sans rappeler `startForegroundService` (refusé en arrière-plan
-    /// à partir d’Android 12).
-    @Volatile
-    var serviceRunning: Boolean = false
-
     /// L’activité est déjà partie et plus rien ne tourne : le moteur gardé
     /// pour l’analyse n’a plus de raison de rester.
     fun releaseIfIdle() {
@@ -50,35 +43,34 @@ object AnalysisKeepAlive {
 
 object AnalysisPlugin {
     const val CHANNEL = "fr.podavio.podavio/analysis_keepalive"
+    private const val TAG = "AnalysisKeepAlive"
 
     fun attach(engine: FlutterEngine, context: Context) {
         MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "start" -> {
-                    val title = call.argument<String>("title") ?: "Podavio"
-                    val channel = call.argument<String>("channel") ?: "Podavio"
                     AnalysisKeepAlive.active = true
+                    val title = call.argument<String>("title") ?: "Podavio"
+                    val channelName = call.argument<String>("channel") ?: "Podavio"
                     try {
-                        if (AnalysisKeepAlive.serviceRunning) {
-                            AnalysisService.updateNotification(context, title, channel)
+                        if (AnalysisService.running) {
+                            AnalysisService.update(context, title, channelName)
                         } else {
                             val intent = Intent(context, AnalysisService::class.java)
                                 .putExtra(AnalysisService.EXTRA_TITLE, title)
-                                .putExtra(AnalysisService.EXTRA_CHANNEL, channel)
+                                .putExtra(AnalysisService.EXTRA_CHANNEL, channelName)
                             ContextCompat.startForegroundService(context, intent)
                         }
                         result.success(null)
                     } catch (error: Exception) {
-                        Log.e(TAG, "Maintien de l’analyse refusé", error)
-                        if (!AnalysisKeepAlive.serviceRunning) {
-                            AnalysisKeepAlive.active = false
-                        }
-                        result.error("foreground", error.message, null)
+                        Log.w(TAG, "Notification d’analyse", error)
+                        if (!AnalysisService.running) AnalysisKeepAlive.active = false
+                        result.error("start_failed", error.message, null)
                     }
                 }
                 "stop" -> {
                     AnalysisKeepAlive.active = false
-                    AnalysisKeepAlive.serviceRunning = false
+                    AnalysisService.running = false
                     context.stopService(Intent(context, AnalysisService::class.java))
                     result.success(null)
                     Handler(Looper.getMainLooper()).post {
@@ -89,8 +81,6 @@ object AnalysisPlugin {
             }
         }
     }
-
-    private const val TAG = "AnalysisKeepAlive"
 }
 
 class AnalysisService : Service() {
@@ -101,45 +91,27 @@ class AnalysisService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Podavio"
         val channelName = intent?.getStringExtra(EXTRA_CHANNEL) ?: "Podavio"
-        // Tout démarrage via startForegroundService doit appeler startForeground
-        // tout de suite (Android 8–11 tue l’appli sinon). Pas de stopSelf avant :
-        // le système considère alors que le service n’est jamais passé au premier plan.
+        // Android 8 à 11 plante si le service s’arrête sans startForeground.
+        // On promeut avant toute sortie, y compris si la notification riche échoue.
         val notification = try {
             buildNotification(this, title, channelName)
         } catch (error: Exception) {
-            Log.e(TAG, "Notification d’analyse indisponible", error)
-            try {
-                buildNotification(this, "Podavio", "Podavio")
-            } catch (again: Exception) {
-                Log.e(TAG, "Notification de repli indisponible", again)
-                AnalysisKeepAlive.active = false
-                AnalysisKeepAlive.serviceRunning = false
-                return START_NOT_STICKY
-            }
+            Log.w(TAG, "Notification d’analyse", error)
+            fallbackNotification(this)
         }
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= 29) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-                )
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
-        } catch (error: Exception) {
-            Log.e(TAG, "startForeground a échoué", error)
+        if (!promote(notification)) {
             AnalysisKeepAlive.active = false
-            AnalysisKeepAlive.serviceRunning = false
+            running = false
+            // startForeground n’a pas abouti : stopSelf ferait planter Android 8–11.
             return START_NOT_STICKY
         }
-        AnalysisKeepAlive.serviceRunning = true
+        running = true
         acquireWakeLock()
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
-        AnalysisKeepAlive.serviceRunning = false
+        running = false
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         super.onDestroy()
@@ -154,22 +126,54 @@ class AnalysisService : Service() {
         }
     }
 
+    /// Vrai si le service est au premier plan. Sinon, un second essai avec
+    /// une notification minimale a aussi échoué. On ne s’arrête pas tout seul :
+    /// stopSelf sans startForeground réussi plante Android 8–11.
+    private fun promote(notification: Notification): Boolean {
+        try {
+            enterForeground(notification)
+            return true
+        } catch (error: Exception) {
+            Log.w(TAG, "startForeground", error)
+        }
+        return try {
+            enterForeground(fallbackNotification(this))
+            true
+        } catch (error: Exception) {
+            Log.w(TAG, "startForeground de repli", error)
+            false
+        }
+    }
+
+    private fun enterForeground(notification: Notification) {
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
     companion object {
         const val EXTRA_TITLE = "title"
         const val EXTRA_CHANNEL = "channel"
-        private const val TAG = "AnalysisService"
-        private const val CHANNEL_ID = "podavio_analysis"
-        private const val NOTIFICATION_ID = 43
+        internal const val TAG = "AnalysisService"
+        internal const val CHANNEL_ID = "podavio_analysis"
+        internal const val NOTIFICATION_ID = 43
 
-        /// Même identifiant que le service au premier plan : Android remplace
-        /// la notification sans relancer le service.
-        fun updateNotification(context: Context, title: String, channelName: String) {
-            val notification = buildNotification(context, title, channelName)
+        @Volatile
+        var running: Boolean = false
+
+        /// Met à jour la notification déjà affichée, sans relancer le service.
+        fun update(context: Context, title: String, channelName: String) {
             val manager = context.getSystemService(NotificationManager::class.java)
-            manager.notify(NOTIFICATION_ID, notification)
+            manager.notify(NOTIFICATION_ID, buildNotification(context, title, channelName))
         }
 
-        private fun buildNotification(
+        internal fun buildNotification(
             context: Context,
             title: String,
             channelName: String,
@@ -196,6 +200,23 @@ class AnalysisService : Service() {
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setContentIntent(open)
+                .build()
+        }
+
+        internal fun fallbackNotification(context: Context): Notification {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "Podavio",
+                    NotificationManager.IMPORTANCE_LOW,
+                ),
+            )
+            return NotificationCompat.Builder(context, CHANNEL_ID)
+                .setContentTitle("Podavio")
+                .setSmallIcon(R.drawable.ic_notification)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
                 .build()
         }
     }
