@@ -53,11 +53,28 @@ SkipSegmentKind shownSkipKind(SkipSegmentKind kind) {
   return kind;
 }
 
-/// Une publicité ou une virgule sert à tous les podcasts. Les autres
-/// types restent dans l’émission où le passage a été posé.
-bool sharesAcrossPodcasts(SkipSegmentKind kind) {
+/// Pub, sponsor et « autre » : tous les podcasts, quel que soit l’hébergeur.
+bool spreadsToEveryPodcast(SkipSegmentKind kind) {
   final shown = shownSkipKind(kind);
-  return shown == SkipSegmentKind.ad || shown == SkipSegmentKind.sting;
+  return shown == SkipSegmentKind.ad || shown == SkipSegmentKind.other;
+}
+
+/// Virgule et jingle : plusieurs fois, mais seulement le même hébergeur.
+bool spreadsWithinNetwork(SkipSegmentKind kind) {
+  return kind == SkipSegmentKind.sting || kind == SkipSegmentKind.jingle;
+}
+
+/// Intro et outro : une seule occurrence par épisode, dans le podcast.
+bool oncePerEpisode(SkipSegmentKind kind) {
+  return kind == SkipSegmentKind.intro || kind == SkipSegmentKind.outro;
+}
+
+/// Le gabarit se cherche aussi hors de son podcast.
+///
+/// L’autopromo, l’intro et l’outro restent dans l’émission. La virgule
+/// et le jingle ne sortent pas de l’hébergeur ; la pub et « autre » si.
+bool sharesAcrossPodcasts(SkipSegmentKind kind) {
+  return spreadsToEveryPodcast(kind) || spreadsWithinNetwork(kind);
 }
 
 /// Type d’un titre stocké pour un passage détecté (clé anglaise).

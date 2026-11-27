@@ -1,0 +1,1 @@
+- A hand-placed sting or jingle is found at every non-overlapping spot in its podcast and on the other podcasts of the same host. An intro or outro is kept once per episode and stays in its podcast. Ads and the other kind are searched in every podcast, and a new passage only rechecks that template.

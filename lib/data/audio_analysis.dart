@@ -12,6 +12,7 @@ import 'analysis_pace.dart';
 import 'app_database.dart';
 import 'chromaprint.dart';
 import 'envelope.dart';
+import 'hosting_source.dart';
 import 'episode_audio_analyzer.dart';
 import 'log_mel.dart';
 import 'log_mel_match.dart';
@@ -254,21 +255,29 @@ class _Job {
 ///
 /// Les demandes arrivées pendant une passe sont fusionnées : une seule
 /// passe suivante les couvre, avec l’union des podcasts demandés.
+/// `templateIds` null veut dire tous les gabarits ; sinon l’union.
 class ComparisonPassQueue {
   Future<void>? _active;
   Future<void>? _follow;
   int? _followExcept;
   var _hasFollow = false;
   var _followAll = false;
+  Set<int>? _followTemplates;
+  var _followAllTemplates = false;
+
+  /// Gabarits de la passe en cours. `null` : tout le périmètre.
+  Set<int>? onlyTemplates;
 
   Future<void> schedule(
     Future<void> Function(int? exceptPodcastId) run, {
     int? exceptPodcastId,
+    Set<int>? templateIds,
   }) {
     if (_active != null) {
-      _remember(exceptPodcastId);
+      _remember(exceptPodcastId, templateIds);
       return _follow ??= _chainFollow(run);
     }
+    onlyTemplates = templateIds == null ? null : {...templateIds};
     final gate = Completer<void>();
     _active = gate.future;
     final Future<void> done;
@@ -289,21 +298,30 @@ class ComparisonPassQueue {
   Future<void> _chainFollow(Future<void> Function(int? exceptPodcastId) run) {
     return _active!.then<void>((_) {}, onError: (Object _) {}).then((_) {
       final except = _followAll ? null : _followExcept;
+      final templates = _followAllTemplates ? null : _followTemplates;
       _clearFollow();
-      return schedule(run, exceptPodcastId: except);
+      return schedule(run, exceptPodcastId: except, templateIds: templates);
     });
   }
 
-  void _remember(int? except) {
+  void _remember(int? except, Set<int>? templateIds) {
     if (!_hasFollow) {
       _hasFollow = true;
       _followExcept = except;
       _followAll = except == null;
+      _followAllTemplates = templateIds == null;
+      _followTemplates = templateIds == null ? null : {...templateIds};
       return;
     }
     if (_followAll || except == null || _followExcept != except) {
       _followAll = true;
       _followExcept = null;
+    }
+    if (_followAllTemplates || templateIds == null) {
+      _followAllTemplates = true;
+      _followTemplates = null;
+    } else {
+      (_followTemplates ??= <int>{}).addAll(templateIds);
     }
   }
 
@@ -312,6 +330,8 @@ class ComparisonPassQueue {
     _hasFollow = false;
     _followAll = false;
     _followExcept = null;
+    _followTemplates = null;
+    _followAllTemplates = false;
   }
 }
 
@@ -531,7 +551,10 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
 
   /// Bouton de l’écran de classement. Recalcule les empreintes manquantes,
   /// puis les motifs, même si tout est déjà empreinté.
-  Future<void> analyzeDownloaded(int podcastId) async {
+  Future<void> analyzeDownloaded(
+    int podcastId, {
+    Set<int>? spreadTemplateIds,
+  }) async {
     try {
       if (!ref.mounted) return;
       final database = ref.read(databaseProvider);
@@ -554,39 +577,61 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       }
       if (ref.mounted) {
         await _alone(() => syncPodcastAnalysis(database, podcastId));
-        await spreadSharedAds(exceptPodcastId: podcastId);
+        if (spreadTemplateIds == null || spreadTemplateIds.isNotEmpty) {
+          await spreadSharedAds(
+            exceptPodcastId: podcastId,
+            templateIds: spreadTemplateIds,
+          );
+        }
       }
       for (final episodeId in pending) {
         if (!ref.mounted) return;
         await enqueueEpisode(episodeId);
       }
-      if (pending.isNotEmpty && ref.mounted) {
-        await spreadSharedAds(exceptPodcastId: podcastId);
+      if (pending.isNotEmpty &&
+          ref.mounted &&
+          (spreadTemplateIds == null || spreadTemplateIds.isNotEmpty)) {
+        await spreadSharedAds(
+          exceptPodcastId: podcastId,
+          templateIds: spreadTemplateIds,
+        );
       }
     } catch (error, stack) {
       debugPrint('Analyse audio: $error\n$stack');
     }
   }
 
-  /// Cherche les publicités déjà posées dans les autres podcasts.
+  /// Cherche les gabarits partagés dans les autres podcasts.
   ///
   /// Une seule passe à la fois. Celles qui arrivent pendant une passe
-  /// sont fusionnées en une seule passe suivante.
-  Future<void> spreadSharedAds({int? exceptPodcastId}) {
+  /// sont fusionnées en une seule passe suivante. [templateIds] limite
+  /// la passe à ces gabarits ; sans liste, tout le périmètre est relu.
+  Future<void> spreadSharedAds({
+    int? exceptPodcastId,
+    Set<int>? templateIds,
+  }) {
     return _comparisons.schedule(
       (except) => _alone(() => _spreadSharedAds(exceptPodcastId: except)),
       exceptPodcastId: exceptPodcastId,
+      templateIds: templateIds,
     );
   }
 
   Future<void> _spreadSharedAds({int? exceptPodcastId}) async {
+    final only = _comparisons.onlyTemplates;
+    final templateIds = only == null ? null : Set<int>.of(only);
     try {
       if (!ref.mounted) return;
       final database = ref.read(databaseProvider);
       final ids = await database.podcastIdsWithFingerprints();
       for (final id in ids) {
         if (!ref.mounted || id == exceptPodcastId) continue;
-        await syncPodcastAnalysis(database, id, offUi: _offUi);
+        await syncPodcastAnalysis(
+          database,
+          id,
+          offUi: _offUi,
+          onlyTemplateIds: templateIds,
+        );
       }
     } catch (error, stack) {
       debugPrint('Analyse audio: $error\n$stack');
@@ -1134,21 +1179,41 @@ Future<void> _deleteDecoded(String path) async {
 ///
 /// Rien n’est détecté tout seul : seuls les gabarits rattachés à un passage
 /// manuel sont cherchés (Chromaprint, vote d’offset, enveloppe, bornes).
-/// Une publicité posée sur n’importe quel podcast est cherchée ici aussi.
-/// Les autres types restent dans leur émission. Sans portion, l’analyse
+/// Une publicité ou un « autre » posé n’importe où est cherché ici.
+/// Une virgule ou un jingle seulement si l’hébergeur est le même.
+/// L’intro et l’outro ne gardent que la meilleure occurrence, dans
+/// leur podcast. L’autopromo n’en sort pas. Sans portion, l’analyse
 /// s’arrête à l’empreinte et à l’enveloppe déjà enregistrées. Un second
 /// appel ne duplique pas les lignes et ne revient pas sur un avis déjà posé.
+///
+/// [onlyTemplateIds] borne la passe à ces gabarits, pour ne pas
+/// recomparer tout le catalogue quand un seul passage vient d’être posé.
 Future<void> syncPodcastAnalysis(
   AppDatabase database,
   int podcastId, {
   int? focusEpisodeId,
   Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
+  Set<int>? onlyTemplateIds,
 }) async {
-  final ownSearched = await database.manualTemplateIds(podcastId);
-  final shared = [
+  var ownSearched = await database.manualTemplateIds(podcastId);
+  final hosts = await database.downloadedHostingRows();
+  final here = podcastHostingKey(hosts, podcastId);
+  final networkIds = <int>[
+    for (final id in {for (final row in hosts) row.podcastId})
+      if (stingSharesNetwork(podcastHostingKey(hosts, id), here)) id,
+  ];
+  if (!networkIds.contains(podcastId)) networkIds.add(podcastId);
+  await database.deleteNetworkHitsOutside(podcastId, networkIds);
+  final shared = <SegmentTemplate>[
     for (final template in await database.sharedAdTemplates())
       if (template.podcastId != podcastId) template,
+    for (final template in await database.sharedNetworkTemplates(networkIds))
+      if (template.podcastId != podcastId) template,
   ];
+  if (onlyTemplateIds != null) {
+    ownSearched = ownSearched.intersection(onlyTemplateIds);
+    shared.retainWhere((template) => onlyTemplateIds.contains(template.id));
+  }
   final searched = {...ownSearched, for (final template in shared) template.id};
   if (searched.isEmpty) return;
   final stored = await database.fingerprintedDownloads(podcastId);
@@ -1371,6 +1436,14 @@ Future<void> applyAnalysisPlan(
         )) {
           continue;
         }
+        if (oncePerEpisode(desired.kind) &&
+            manual.any(
+              (row) =>
+                  row.episodeId == desired.episodeId &&
+                  row.kind == desired.kind,
+            )) {
+          continue;
+        }
         final prior = _prior(existing, desired, templateId, touched);
         if (prior != null) {
           touched.add(prior.id);
@@ -1464,7 +1537,10 @@ SkipSegment? _prior(
       desired.startMs,
       desired.endMs,
     );
-    final near = (row.startMs - desired.startMs).abs() <= 2000;
+    // Une virgule ou un jingle proches ne sont pas le même passage.
+    final near =
+        !spreadsWithinNetwork(desired.kind) &&
+        (row.startMs - desired.startMs).abs() <= 2000;
     if (!overlap && !near) continue;
     var score = overlap ? 2 : 1;
     if (row.templateId == templateId) score += 2;

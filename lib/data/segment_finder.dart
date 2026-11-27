@@ -176,6 +176,7 @@ AnalysisPlan buildAnalysisPlan({
         episode.values,
         requireTemplateShape: true,
         index: indexes[episode.episodeId],
+        bestOnly: oncePerEpisode(template.kind),
       );
       for (final range in ranges) {
         final startMs = _indexMs(range.start, episode.hopMicros);
@@ -1136,6 +1137,7 @@ List<_Range> _matchNeedle(
   List<int> haystack, {
   required bool requireTemplateShape,
   _Index? index,
+  bool bestOnly = false,
 }) {
   if (needle.length < 8 || haystack.isEmpty) return const [];
   final built = index ?? _Index(haystack);
@@ -1156,7 +1158,10 @@ List<_Range> _matchNeedle(
       ? candidates.sublist(0, _maxCandidateDeltas)
       : candidates;
   final found = <_Range>[];
+  _Range? best;
+  var bestVotes = -1;
   for (final candidate in limited) {
+    if (bestOnly && best != null && candidate.value.count < bestVotes) break;
     final (low, high, count) = candidate.value.densest();
     final span = high - low + 1;
     if (span > count * 80 + 128) continue;
@@ -1177,10 +1182,24 @@ List<_Range> _matchNeedle(
           shaped &&
           chromaprintAgreementOk(run.matches, run.end - run.start) &&
           _distinctive(haystack, run.start, run.end)) {
-        found.add(run);
+        if (!bestOnly) {
+          found.add(run);
+          continue;
+        }
+        final better =
+            best == null ||
+            candidate.value.count > bestVotes ||
+            (candidate.value.count == bestVotes &&
+                (run.matches > best.matches ||
+                    (run.matches == best.matches && run.start < best.start)));
+        if (better) {
+          best = run;
+          bestVotes = candidate.value.count;
+        }
       }
     }
   }
+  if (bestOnly) return best == null ? const [] : [best];
   return _mergeRanges(found);
 }
 

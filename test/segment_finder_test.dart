@@ -187,6 +187,124 @@ void main() {
     );
   });
 
+  test('a sting is found at every non-overlapping place, even close', () {
+    final motif = _motif(24, 9);
+    final values = _noise(800, 3);
+    _write(values, 40, motif);
+    _write(values, 80, motif);
+    _write(values, 400, motif);
+    final elsewhere = _noise(800, 8);
+    _write(elsewhere, 220, motif);
+    final plan = buildAnalysisPlan(
+      episodes: [
+        FingerprintEpisode(
+          episodeId: 1,
+          values: values,
+          hopMicros: hop,
+          durationMs: 400000,
+        ),
+        FingerprintEpisode(
+          episodeId: 2,
+          values: elsewhere,
+          hopMicros: hop,
+          durationMs: 400000,
+        ),
+      ],
+      templates: [
+        KnownTemplate(
+          id: 4,
+          kind: SkipSegmentKind.sting,
+          fingerprint: motif,
+          durationMs: _ms(24),
+          confirmed: true,
+        ),
+      ],
+      discover: false,
+    );
+    final own =
+        plan.patterns.single.segments
+            .where((hit) => hit.episodeId == 1)
+            .map((hit) => hit.startMs)
+            .toList()
+          ..sort();
+    expect(own, hasLength(3));
+    expect(own[0], closeTo(_ms(40), 800));
+    expect(own[1], closeTo(_ms(80), 800));
+    expect(own[2], closeTo(_ms(400), 800));
+    expect(own[1] - own[0], greaterThan(_ms(24) ~/ 2));
+    final other = plan.patterns.single.segments
+        .where((hit) => hit.episodeId == 2)
+        .toList();
+    expect(other, hasLength(1));
+    expect(other.single.startMs, closeTo(_ms(220), 800));
+  });
+
+  test('a template shorter than eight values is not searched', () {
+    final motif = _motif(6, 2);
+    final values = _noise(400, 1);
+    _write(values, 30, motif);
+    _write(values, 120, motif);
+    final plan = buildAnalysisPlan(
+      episodes: [
+        FingerprintEpisode(
+          episodeId: 1,
+          values: values,
+          hopMicros: hop,
+          durationMs: 200000,
+        ),
+      ],
+      templates: [
+        KnownTemplate(
+          id: 1,
+          kind: SkipSegmentKind.sting,
+          fingerprint: motif,
+          durationMs: _ms(6),
+          confirmed: true,
+        ),
+      ],
+      discover: false,
+    );
+    expect(plan.patterns, isEmpty);
+  });
+
+  test('intro and outro keep a single best match per episode', () {
+    for (final kind in [SkipSegmentKind.intro, SkipSegmentKind.outro]) {
+      final motif = _motif(24, kind.index + 3);
+      final values = _noise(900, 5);
+      _write(values, 40, motif);
+      for (var i = 0; i < 12; i++) {
+        values[40 + i * 2] ^= 0x00FFFFFF;
+      }
+      _write(values, 500, motif);
+      final plan = buildAnalysisPlan(
+        episodes: [
+          FingerprintEpisode(
+            episodeId: 1,
+            values: values,
+            hopMicros: hop,
+            durationMs: 400000,
+          ),
+        ],
+        templates: [
+          KnownTemplate(
+            id: 8,
+            kind: kind,
+            fingerprint: motif,
+            durationMs: _ms(24),
+            confirmed: true,
+          ),
+        ],
+        discover: false,
+      );
+      expect(plan.patterns, hasLength(1), reason: kind.name);
+      expect(plan.patterns.single.segments, hasLength(1));
+      expect(
+        plan.patterns.single.segments.single.startMs,
+        closeTo(_ms(500), 800),
+      );
+    }
+  });
+
   test('the same ad can occur twice in one episode', () {
     final motif = _motif(100, 15);
     final values = _noise(2000, 3);

@@ -166,15 +166,64 @@ mixin _SkipSegmentQueries on _$AppDatabase {
       ..orderBy([(row) => OrderingTerm.asc(row.startMs)]);
   }
 
-  /// Publicités et virgules posées à la main, quel que soit le podcast.
-  Future<List<SegmentTemplate>> sharedAdTemplates() async {
+  /// Pub, sponsor et « autre » posés à la main, quel que soit le podcast.
+  Future<List<SegmentTemplate>> sharedAdTemplates() {
+    return _sharedManualTemplates([
+      for (final kind in SkipSegmentKind.values)
+        if (spreadsToEveryPodcast(kind)) kind,
+    ]);
+  }
+
+  /// Virgules et jingles posés à la main sur [podcastIds] (même hébergeur).
+  Future<List<SegmentTemplate>> sharedNetworkTemplates(List<int> podcastIds) {
+    return _sharedManualTemplates(
+      [
+        for (final kind in SkipSegmentKind.values)
+          if (spreadsWithinNetwork(kind)) kind,
+      ],
+      podcastIds: podcastIds,
+    );
+  }
+
+  /// Retire les virgules et jingles d’un autre hébergeur sur [podcastId].
+  /// Les passages posés à la main restent.
+  Future<void> deleteNetworkHitsOutside(
+    int podcastId,
+    List<int> allowedPodcastIds,
+  ) async {
     final kinds = [
       for (final kind in SkipSegmentKind.values)
-        if (sharesAcrossPodcasts(kind)) "'${kind.name}'",
+        if (spreadsWithinNetwork(kind)) "'${kind.name}'",
     ].join(', ');
+    if (kinds.isEmpty) return;
+    final allowed = {...allowedPodcastIds, podcastId}.join(', ');
+    final rows = await customSelect(
+      'SELECT s.id AS id FROM skip_segments s '
+      'INNER JOIN episodes e ON e.id = s.episode_id '
+      'INNER JOIN segment_templates t ON t.id = s.template_id '
+      'WHERE e.podcast_id = ? AND s.source != \'manual\' '
+      'AND t.kind IN ($kinds) AND t.podcast_id NOT IN ($allowed)',
+      variables: [Variable.withInt(podcastId)],
+      readsFrom: {skipSegments, episodes, segmentTemplates},
+    ).get();
+    for (final row in rows) {
+      await deleteSkipSegment(row.read<int>('id'));
+    }
+  }
+
+  Future<List<SegmentTemplate>> _sharedManualTemplates(
+    List<SkipSegmentKind> kinds, {
+    List<int>? podcastIds,
+  }) async {
+    if (kinds.isEmpty) return const [];
+    if (podcastIds != null && podcastIds.isEmpty) return const [];
+    final kindSql = [for (final kind in kinds) "'${kind.name}'"].join(', ');
+    final podcastSql = podcastIds == null
+        ? ''
+        : ' AND t.podcast_id IN (${podcastIds.join(', ')})';
     final rows = await customSelect(
       'SELECT DISTINCT t.* FROM segment_templates t '
-      'WHERE t.kind IN ($kinds) AND $_manualTemplateSql',
+      'WHERE t.kind IN ($kindSql) AND $_manualTemplateSql$podcastSql',
       readsFrom: {segmentTemplates, skipSegments},
     ).get();
     return [for (final row in rows) segmentTemplates.map(row.data)];
@@ -334,7 +383,10 @@ mixin _SkipSegmentQueries on _$AppDatabase {
       );
       await (update(skipSegments)..where((row) => row.templateId.equals(id)))
           .write(SkipSegmentsCompanion(kind: Value(kind)));
-      if (sharesAcrossPodcasts(current.kind) && !sharesAcrossPodcasts(kind)) {
+      final narrowed =
+          (sharesAcrossPodcasts(current.kind) && !sharesAcrossPodcasts(kind)) ||
+          (spreadsToEveryPodcast(current.kind) && spreadsWithinNetwork(kind));
+      if (narrowed) {
         final foreign =
             await (select(skipSegments).join([
                   innerJoin(

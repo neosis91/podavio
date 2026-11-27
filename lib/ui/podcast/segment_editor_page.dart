@@ -137,14 +137,18 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
     );
   }
 
+  Future<int?> _templateId(AppDatabase database, int segmentId) async {
+    final segment = await database.skipSegmentById(segmentId);
+    return segment?.templateId;
+  }
+
   Future<void> _searchPassage({
     required int podcastId,
-    required bool shared,
+    required Set<int> templateIds,
   }) async {
-    final analysis = ref.read(audioAnalysisProvider.notifier);
-    await analysis.analyzeDownloaded(podcastId);
-    if (!shared) return;
-    await analysis.spreadSharedAds(exceptPodcastId: podcastId);
+    await ref
+        .read(audioAnalysisProvider.notifier)
+        .analyzeDownloaded(podcastId, spreadTemplateIds: templateIds);
   }
 
   Future<bool> _save(int startMs, int endMs) async {
@@ -171,10 +175,13 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
         }
         return false;
       }
+      final templateId = await _templateId(database, created.segmentId!);
       unawaited(
         _searchPassage(
           podcastId: target.entry.episode.podcastId,
-          shared: sharesAcrossPodcasts(_kind),
+          templateIds: sharesAcrossPodcasts(_kind) && templateId != null
+              ? {templateId}
+              : const {},
         ),
       );
     } else {
@@ -194,12 +201,17 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
         }
       }
       if (sharesAcrossPodcasts(_kind)) {
-        unawaited(
-          _searchPassage(
-            podcastId: target.entry.episode.podcastId,
-            shared: true,
-          ),
-        );
+        final id = segment.templateId;
+        if (id != null) {
+          unawaited(
+            ref
+                .read(audioAnalysisProvider.notifier)
+                .spreadSharedAds(
+                  exceptPodcastId: target.entry.episode.podcastId,
+                  templateIds: {id},
+                ),
+          );
+        }
       }
     }
     unawaited(ref.read(playerProvider.notifier).reloadSkipSegments());

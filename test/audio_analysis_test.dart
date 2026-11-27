@@ -92,6 +92,30 @@ void main() {
     expect(followed, isTrue);
   });
 
+  test('a coalesced spread searches the union of the new templates', () async {
+    final queue = ComparisonPassQueue();
+    final gate = Completer<void>();
+    final seen = <Set<int>?>[];
+
+    Future<void> run(int? except) {
+      final only = queue.onlyTemplates;
+      seen.add(only == null ? null : {...only});
+      if (seen.length == 1) return gate.future;
+      return Future<void>.value();
+    }
+
+    final first = queue.schedule(run, templateIds: {1});
+    await Future<void>.delayed(Duration.zero);
+    final second = queue.schedule(run, templateIds: {2});
+    final third = queue.schedule(run, templateIds: {3});
+    gate.complete();
+    await Future.wait([first, second, third]);
+    expect(seen, [
+      {1},
+      {2, 3},
+    ]);
+  });
+
   test('a pass started after the previous one still runs', () async {
     final queue = ComparisonPassQueue();
     final seen = <int?>[];
@@ -203,6 +227,297 @@ void main() {
     expect(found.single.source, SkipSegmentSource.fingerprint);
     expect(found.single.startMs, closeTo(_msAt(400), 1500));
     expect(await database.listSegmentTemplates(secondId), isEmpty);
+  });
+
+  test('an ad and autre are found on a podcast of another network', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final ad = _motif(80, 31);
+    final other = _motif(80, 32);
+    final home = await _hosted(database, 'audiomeans.fr', 'home');
+    final away = await _hosted(database, 'acast.com', 'away');
+    final local = _placed(1200, 1, 80, ad);
+    for (var i = 0; i < other.length; i++) {
+      local[200 + i] = other[i];
+    }
+    final awayPrint = _placed(1200, 2, 400, ad);
+    for (var i = 0; i < other.length; i++) {
+      awayPrint[700 + i] = other[i];
+    }
+    await _ready(database, home.episodeId, local);
+    await _ready(database, away.episodeId, awayPrint);
+    await createManualSegment(
+      database,
+      episodeId: home.episodeId,
+      startMs: _msAt(80, ceil: true),
+      endMs: _msAt(160),
+      kind: SkipSegmentKind.ad,
+    );
+    await createManualSegment(
+      database,
+      episodeId: home.episodeId,
+      startMs: _msAt(200, ceil: true),
+      endMs: _msAt(280),
+      kind: SkipSegmentKind.other,
+    );
+
+    await syncPodcastAnalysis(database, away.podcastId);
+
+    final found = await database.listActiveSkipSegments(away.episodeId);
+    expect(found.map((row) => row.kind).toSet(), {
+      SkipSegmentKind.ad,
+      SkipSegmentKind.other,
+    });
+    expect(
+      found.map((row) => row.source).toSet(),
+      {SkipSegmentSource.fingerprint},
+    );
+  });
+
+  test(
+    'a sting and a jingle repeat inside the network and stop at its edge',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final sting = _motif(24, 41);
+      final jingle = _motif(24, 42);
+      final home = await _hosted(
+        database,
+        'audiomeans.fr',
+        'home',
+        guids: ['a', 'b'],
+      );
+      final sibling = await _hosted(database, 'audiomeans.fr', 'sibling');
+      final away = await _hosted(database, 'acast.com', 'away');
+      List<int> paint(int seed) {
+        final values = _placed(1200, seed, 40, sting);
+        for (var i = 0; i < sting.length; i++) {
+          values[80 + i] = sting[i];
+          values[400 + i] = sting[i];
+        }
+        for (var i = 0; i < jingle.length; i++) {
+          values[200 + i] = jingle[i];
+          values[260 + i] = jingle[i];
+        }
+        return values;
+      }
+
+      await _ready(database, home.episodes['a']!, paint(1));
+      await _ready(database, home.episodes['b']!, paint(2));
+      await _ready(database, sibling.episodeId, paint(3));
+      await _ready(database, away.episodeId, paint(4));
+      await createManualSegment(
+        database,
+        episodeId: home.episodes['a']!,
+        startMs: _msAt(40, ceil: true),
+        endMs: _msAt(64),
+        kind: SkipSegmentKind.sting,
+      );
+      await createManualSegment(
+        database,
+        episodeId: home.episodes['a']!,
+        startMs: _msAt(200, ceil: true),
+        endMs: _msAt(224),
+        kind: SkipSegmentKind.jingle,
+      );
+      await createManualSegment(
+        database,
+        episodeId: home.episodes['a']!,
+        startMs: _msAt(700, ceil: true),
+        endMs: _msAt(780),
+        kind: SkipSegmentKind.selfPromo,
+      );
+
+      await syncPodcastAnalysis(database, home.podcastId);
+      await syncPodcastAnalysis(database, sibling.podcastId);
+      await syncPodcastAnalysis(database, away.podcastId);
+
+      final source = await database.listActiveSkipSegments(home.episodes['a']!);
+      final stingHits = source.where((row) => row.kind == SkipSegmentKind.sting);
+      final jingleHits = source.where(
+        (row) => row.kind == SkipSegmentKind.jingle,
+      );
+      expect(stingHits.map((row) => row.source), [
+        SkipSegmentSource.manual,
+        SkipSegmentSource.fingerprint,
+        SkipSegmentSource.fingerprint,
+      ]);
+      expect(jingleHits, hasLength(2));
+      expect(
+        source.where((row) => row.kind == SkipSegmentKind.selfPromo),
+        hasLength(1),
+      );
+      expect(
+        (await database.listActiveSkipSegments(home.episodes['b']!))
+            .map((row) => row.kind)
+            .toList(),
+        containsAll([SkipSegmentKind.sting, SkipSegmentKind.jingle]),
+      );
+      expect(
+        (await database.listActiveSkipSegments(home.episodes['b']!)).where(
+          (row) => row.kind == SkipSegmentKind.selfPromo,
+        ),
+        isEmpty,
+      );
+      final siblingHits = await database.listActiveSkipSegments(
+        sibling.episodeId,
+      );
+      expect(siblingHits.map((row) => row.kind).toSet(), {
+        SkipSegmentKind.sting,
+        SkipSegmentKind.jingle,
+      });
+      expect(
+        siblingHits.where((row) => row.kind == SkipSegmentKind.sting).length,
+        greaterThan(1),
+      );
+      expect(await database.listActiveSkipSegments(away.episodeId), isEmpty);
+    },
+  );
+
+  test(
+    'intro and outro stay once in their podcast and off the network',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final intro = _motif(24, 51);
+      final outro = _motif(24, 52);
+      final home = await _hosted(
+        database,
+        'audiomeans.fr',
+        'home',
+        guids: ['a', 'b'],
+      );
+      final sibling = await _hosted(database, 'audiomeans.fr', 'sibling');
+      List<int> paint(int seed) {
+        final values = _placed(1200, seed, 30, intro);
+        for (var i = 0; i < intro.length; i++) {
+          values[300 + i] = intro[i];
+        }
+        for (var i = 0; i < outro.length; i++) {
+          values[500 + i] = outro[i];
+          values[800 + i] = outro[i];
+        }
+        return values;
+      }
+
+      await _ready(database, home.episodes['a']!, paint(1));
+      await _ready(database, home.episodes['b']!, paint(2));
+      await _ready(database, sibling.episodeId, paint(3));
+      await createManualSegment(
+        database,
+        episodeId: home.episodes['a']!,
+        startMs: _msAt(30, ceil: true),
+        endMs: _msAt(54),
+        kind: SkipSegmentKind.intro,
+      );
+      await createManualSegment(
+        database,
+        episodeId: home.episodes['a']!,
+        startMs: _msAt(800, ceil: true),
+        endMs: _msAt(824),
+        kind: SkipSegmentKind.outro,
+      );
+
+      await syncPodcastAnalysis(database, home.podcastId);
+      await syncPodcastAnalysis(database, sibling.podcastId);
+
+      final source = await database.listActiveSkipSegments(home.episodes['a']!);
+      expect(
+        source.where((row) => row.kind == SkipSegmentKind.intro),
+        hasLength(1),
+      );
+      expect(
+        source.where((row) => row.kind == SkipSegmentKind.outro),
+        hasLength(1),
+      );
+      final other = await database.listActiveSkipSegments(home.episodes['b']!);
+      expect(
+        other.where((row) => row.kind == SkipSegmentKind.intro),
+        hasLength(1),
+      );
+      expect(
+        other.where((row) => row.kind == SkipSegmentKind.outro),
+        hasLength(1),
+      );
+      expect(other.every((row) => row.source == SkipSegmentSource.fingerprint), isTrue);
+      expect(await database.listActiveSkipSegments(sibling.episodeId), isEmpty);
+    },
+  );
+
+  test('a targeted spread checks only the new template', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final first = _motif(80, 71);
+    final second = _motif(80, 72);
+    final home = await _hosted(database, 'audiomeans.fr', 'home');
+    final away = await _hosted(database, 'acast.com', 'away');
+    final local = _placed(1000, 1, 40, first);
+    for (var i = 0; i < second.length; i++) {
+      local[200 + i] = second[i];
+    }
+    final remote = _placed(1000, 2, 300, first);
+    for (var i = 0; i < second.length; i++) {
+      remote[600 + i] = second[i];
+    }
+    await _ready(database, home.episodeId, local);
+    await _ready(database, away.episodeId, remote);
+    await createManualSegment(
+      database,
+      episodeId: home.episodeId,
+      startMs: _msAt(40, ceil: true),
+      endMs: _msAt(120),
+      kind: SkipSegmentKind.ad,
+    );
+    await createManualSegment(
+      database,
+      episodeId: home.episodeId,
+      startMs: _msAt(200, ceil: true),
+      endMs: _msAt(280),
+      kind: SkipSegmentKind.ad,
+    );
+    final keptId = (await database.listSkipSegments(home.episodeId))
+        .first
+        .templateId!;
+
+    await syncPodcastAnalysis(
+      database,
+      away.podcastId,
+      onlyTemplateIds: {keptId},
+    );
+
+    final found = await database.listActiveSkipSegments(away.episodeId);
+    expect(found, hasLength(1));
+    expect(found.single.templateId, keptId);
+    expect(found.single.startMs, closeTo(_msAt(300), 1500));
+  });
+
+  test('two close stings in one episode stay two segments', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final sting = _motif(8, 61);
+    final home = await _hosted(database, 'audiomeans.fr', 'home');
+    final values = _placed(400, 1, 40, sting);
+    for (var i = 0; i < sting.length; i++) {
+      values[50 + i] = sting[i];
+    }
+    await _ready(database, home.episodeId, values);
+    await createManualSegment(
+      database,
+      episodeId: home.episodeId,
+      startMs: _msAt(40, ceil: true),
+      endMs: _msAt(48),
+      kind: SkipSegmentKind.sting,
+    );
+
+    await syncPodcastAnalysis(database, home.podcastId);
+
+    final hits = (await database.listActiveSkipSegments(home.episodeId))
+        .where((row) => row.kind == SkipSegmentKind.sting)
+        .toList();
+    expect(hits, hasLength(2));
+    expect(hits.first.source, SkipSegmentSource.manual);
+    expect(hits.last.source, SkipSegmentSource.fingerprint);
+    expect(hits.last.startMs - hits.first.startMs, greaterThan(500));
   });
 
   test('two overlapping searches still leave a single ad', () async {
@@ -708,14 +1023,49 @@ FeedDraft _draft(
   );
 }
 
-EpisodeDraft _episodeDraft(String guid, String title) {
+EpisodeDraft _episodeDraft(String guid, String title, {String? audioUrl}) {
   return EpisodeDraft(
     guid: guid,
     title: title,
     description: 'Notes',
-    audioUrl: 'https://example.com/$guid.mp3',
+    audioUrl: audioUrl ?? 'https://example.com/$guid.mp3',
     durationSeconds: 400,
   );
+}
+
+class _Hosted {
+  _Hosted(this.podcastId, this.episodes);
+
+  final int podcastId;
+  final Map<String, int> episodes;
+
+  int get episodeId => episodes.values.first;
+}
+
+Future<_Hosted> _hosted(
+  AppDatabase database,
+  String host,
+  String name, {
+  List<String> guids = const ['a'],
+}) async {
+  final podcastId = (await database.saveFeed(
+    _draft([
+      for (final guid in guids)
+        _episodeDraft(
+          '$name-$guid',
+          guid,
+          audioUrl: 'https://audio.$host/$name-$guid.mp3',
+        ),
+    ], url: 'https://$host/$name.xml'),
+  )).podcastId;
+  final rows = await database.watchEpisodes(podcastId: podcastId).first;
+  return _Hosted(podcastId, {
+    for (final guid in guids)
+      guid: rows
+          .singleWhere((row) => row.episode.guid == '$name-$guid')
+          .episode
+          .id,
+  });
 }
 
 Int16List _bed(int seconds, double freq) {

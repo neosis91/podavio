@@ -547,7 +547,10 @@ class _SegmentTile extends ConsumerWidget {
             unawaited(
               ref
                   .read(audioAnalysisProvider.notifier)
-                  .spreadSharedAds(exceptPodcastId: podcastId),
+                  .spreadSharedAds(
+                    exceptPodcastId: podcastId,
+                    templateIds: {template.id},
+                  ),
             );
           }
         } else {
