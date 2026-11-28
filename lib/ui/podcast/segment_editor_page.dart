@@ -251,7 +251,8 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
             : null;
       });
     }
-    final manual = target?.segment?.source == SkipSegmentSource.manual;
+    final segment = target?.segment;
+    final manual = segment != null && sourceIsProtected(segment.source);
     return Scaffold(
       appBar: AppBar(
         title: Text(

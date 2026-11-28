@@ -239,4 +239,75 @@ void main() {
     expect(row.kind, SkipSegmentKind.sting);
     expect(await _userVersion(reopened), reopened.schemaVersion);
   });
+
+  test('creates the pending drops from schema 26', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-migration-v26');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    await created.customSelect('SELECT 1').get();
+    await created.customStatement('DROP TABLE pending_segment_drops');
+    await created.customStatement('PRAGMA user_version = 26');
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    await reopened
+        .customSelect('SELECT segment_id FROM pending_segment_drops')
+        .get();
+    expect(await _userVersion(reopened), reopened.schemaVersion);
+  });
+
+  test('finishes pending drops on the next open', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-pending-drops');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    final podcastId = (await created.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a',
+            title: 'Un',
+            description: 'Notes',
+            audioUrl: 'https://example.com/a.mp3',
+          ),
+        ],
+      ),
+    )).podcastId;
+    final episodeId = (await created.watchEpisodes(podcastId: podcastId).first)
+        .single
+        .episode
+        .id;
+    final detected = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 1000,
+      endMs: 4000,
+      kind: SkipSegmentKind.ad,
+      source: SkipSegmentSource.fingerprint,
+    );
+    final kept = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 8000,
+      endMs: 12000,
+      kind: SkipSegmentKind.sting,
+      source: SkipSegmentSource.network,
+    );
+    await created.setSkipSegmentKind(kept, SkipSegmentKind.jingle);
+    await created.rememberPendingDrops([detected, kept]);
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    expect(await reopened.skipSegmentById(detected), isNull);
+    final row = await reopened.skipSegmentById(kept);
+    expect(row?.source, SkipSegmentSource.networkEdited);
+    expect(await reopened.select(reopened.pendingSegmentDrops).get(), isEmpty);
+  });
 }

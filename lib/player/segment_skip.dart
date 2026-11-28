@@ -86,22 +86,16 @@ bool _skipsWithAds(SkipCandidate segment, Set<SkipSegmentKind> kinds) {
   return segment.networkSting && kinds.contains(SkipSegmentKind.ad);
 }
 
-/// Virgule ou jingle qui saute avec les pubs.
+/// Virgule ou jingle de réseau qui saute avec les pubs.
 ///
-/// Un changement de type passe la ligne en `manual`. Elle reste une
-/// virgule de réseau pour le lecteur : sinon elle n’est plus sautée
-/// quand seules les pubs le sont. Une détection encore `fingerprint`
-/// ne l’est pas.
+/// Une détection de réseau dont le type a été choisi le reste. Un
+/// passage posé à la main dès le départ, ou une empreinte, ne saute
+/// pas quand seules les pubs sont activées.
 bool stingSkipsWithAds(SkipSegmentKind kind, SkipSegmentSource source) {
   final sting = kind == SkipSegmentKind.jingle || kind == SkipSegmentKind.sting;
   if (!sting) return false;
   return source == SkipSegmentSource.network ||
-      source == SkipSegmentSource.manual;
-}
-
-/// Jingle ou virgule posée à la main, collée à une pub.
-bool _gluedSting(SkipSegmentKind kind) {
-  return kind == SkipSegmentKind.jingle || kind == SkipSegmentKind.sting;
+      source == SkipSegmentSource.networkEdited;
 }
 
 /// Une pub et la virgule collée juste après forment un seul saut.
@@ -119,7 +113,7 @@ int _contiguousSkipEnd(
       if (segment.endMs <= end) continue;
       if (segment.startMs > end + 500) continue;
       final enabled = kinds.contains(segment.kind);
-      final stingAfterAd = glueSting && _gluedSting(segment.kind);
+      final stingAfterAd = glueSting && segment.networkSting;
       if (!enabled && !stingAfterAd) continue;
       if (next == null || segment.endMs > next.endMs) next = segment;
     }

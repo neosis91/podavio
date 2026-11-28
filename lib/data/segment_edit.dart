@@ -121,7 +121,7 @@ SkipSegment? manualOverlap(
   int? exceptId,
 }) {
   for (final row in rows) {
-    if (row.source != SkipSegmentSource.manual || row.id == exceptId) continue;
+    if (!sourceIsProtected(row.source) || row.id == exceptId) continue;
     if (math.min(endMs, row.endMs) > math.max(startMs, row.startMs)) {
       return row;
     }
@@ -231,7 +231,7 @@ Future<void> deleteManualSegment(AppDatabase database, int segmentId) async {
     final templateId = segment.templateId;
     if (!created || templateId == null) return;
     final left = await database.segmentsForTemplate(templateId);
-    if (left.any((row) => row.source == SkipSegmentSource.manual)) return;
+    if (left.any((row) => sourceIsProtected(row.source))) return;
     await database.deleteSegmentTemplate(templateId);
   });
 }

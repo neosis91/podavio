@@ -391,6 +391,7 @@ void main() {
           startMs: 30000,
           endMs: 33000,
           kind: SkipSegmentKind.jingle,
+          networkSting: true,
         ),
         const SkipCandidate(
           id: 3,
@@ -422,16 +423,46 @@ void main() {
           startMs: 30000,
           endMs: 33000,
           kind: SkipSegmentKind.sting,
+          networkSting: true,
         ),
       ],
       heldIds: <int>{},
     );
     expect(rejected?.seekToMs, 33000);
+
+    final hand = decideSkipSegment(
+      positionMs: 1000,
+      previousMs: 0,
+      playing: true,
+      fromDownload: true,
+      autoSkipAds: true,
+      autoSkipKinds: const {SkipSegmentKind.ad},
+      segments: [
+        const SkipCandidate(
+          id: 1,
+          startMs: 0,
+          endMs: 30000,
+          kind: SkipSegmentKind.ad,
+        ),
+        const SkipCandidate(
+          id: 2,
+          startMs: 30000,
+          endMs: 33000,
+          kind: SkipSegmentKind.sting,
+        ),
+      ],
+      heldIds: <int>{},
+    );
+    expect(hand?.seekToMs, 30000);
   });
 
-  test('a sting kept after a kind change still skips with the ads', () {
+  test('a hand-placed sting does not skip with the ads', () {
     expect(
       stingSkipsWithAds(SkipSegmentKind.sting, SkipSegmentSource.manual),
+      isFalse,
+    );
+    expect(
+      stingSkipsWithAds(SkipSegmentKind.sting, SkipSegmentSource.networkEdited),
       isTrue,
     );
     expect(
@@ -467,7 +498,7 @@ void main() {
           kind: SkipSegmentKind.sting,
           networkSting: stingSkipsWithAds(
             SkipSegmentKind.sting,
-            SkipSegmentSource.manual,
+            SkipSegmentSource.networkEdited,
           ),
         ),
       ],

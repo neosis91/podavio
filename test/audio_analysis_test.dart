@@ -28,41 +28,48 @@ void main() {
   test('a killed analysis isolate finishes the wait', () async {
     final tracked = await trackAnalysisIsolate(_hangIsolate, null);
     addTearDown(() {
-      tracked.isolate.kill(priority: Isolate.immediate);
+      tracked.kill();
       tracked.close();
     });
-    tracked.isolate.kill(priority: Isolate.immediate);
-    expect(await tracked.result.timeout(const Duration(seconds: 4)), isNull);
+    final started = DateTime.now();
+    tracked.kill();
+    expect(await tracked.result, isNull);
+    expect(
+      DateTime.now().difference(started),
+      lessThan(const Duration(milliseconds: 500)),
+    );
   });
 
   test('killing one analysis isolate leaves the other running', () async {
     final stuck = await trackAnalysisIsolate(_hangIsolate, null);
     final live = await trackAnalysisIsolate((args) {
-      (args[0]! as SendPort).send('ok');
+      Isolate.exit(args[0]! as SendPort, 'ok');
     }, null);
     addTearDown(() {
-      stuck.isolate.kill(priority: Isolate.immediate);
-      live.isolate.kill(priority: Isolate.immediate);
+      stuck.kill();
+      live.kill();
       stuck.close();
       live.close();
     });
-    stuck.isolate.kill(priority: Isolate.immediate);
+    stuck.kill();
     expect(await live.result.timeout(const Duration(seconds: 2)), 'ok');
-    expect(await stuck.result.timeout(const Duration(seconds: 4)), isNull);
+    expect(await stuck.result, isNull);
   });
 
-  test('a result that arrives after the isolate exit is kept', () async {
-    final message = Completer<Object?>();
-    final exit = Completer<void>();
-    final result = waitForIsolateResult(
-      message: message.future,
-      exit: exit.future,
-      grace: const Duration(milliseconds: 200),
-    );
-    exit.complete();
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    message.complete('kept');
-    expect(await result, 'kept');
+  test('a result sent as the isolate exits is kept', () async {
+    final tracked = await trackAnalysisIsolate((args) {
+      final send = args[0]! as SendPort;
+      final keep = ReceivePort();
+      Timer(const Duration(milliseconds: 80), () {
+        keep.close();
+        Isolate.exit(send, 'kept');
+      });
+    }, null);
+    addTearDown(() {
+      tracked.kill();
+      tracked.close();
+    });
+    expect(await tracked.result.timeout(const Duration(seconds: 2)), 'kept');
   });
 
   test(

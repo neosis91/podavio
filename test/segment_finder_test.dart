@@ -257,7 +257,49 @@ void main() {
       isFalse,
     );
     expect(
-      spanWasDismissed(dismissed, episodeId: 1, startMs: 200, endMs: 1800),
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 200,
+        endMs: 1800,
+        templateId: 4,
+      ),
+      isTrue,
+    );
+  });
+
+  test('a short new passage inside a long dismissal is not blocked', () {
+    const dismissed = [
+      DismissedSpan(episodeId: 1, startMs: 0, endMs: 30000, templateId: 4),
+    ];
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 1000,
+        endMs: 3000,
+        templateId: 4,
+      ),
+      isFalse,
+    );
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 500,
+        endMs: 10500,
+        templateId: 9,
+      ),
+      isFalse,
+    );
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 500,
+        endMs: 29500,
+        templateId: 4,
+      ),
       isTrue,
     );
   });

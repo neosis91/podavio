@@ -2,7 +2,16 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 /// Passage qu’on peut sauter dans un épisode.
-enum SkipSegmentKind { intro, outro, sponsor, ad, jingle, sting, selfPromo, other }
+enum SkipSegmentKind {
+  intro,
+  outro,
+  sponsor,
+  ad,
+  jingle,
+  sting,
+  selfPromo,
+  other,
+}
 
 /// D’où vient le passage.
 enum SkipSegmentSource {
@@ -12,11 +21,32 @@ enum SkipSegmentSource {
   /// Titre de chapitre qui ressemble à une pub ou un sponsor.
   chapter,
 
-  /// Posé à la main.
+  /// Posé à la main dès le départ.
   manual,
 
   /// Virgule de réseau (pré-roll ou post-roll délimité par un sting).
   network,
+
+  /// Détection de réseau dont le type ou les bornes ont été choisis.
+  /// Elle saute encore avec les pubs, contrairement à un passage posé
+  /// à la main dès le départ.
+  networkEdited,
+}
+
+/// Une détection de réseau corrigée le reste. Tout autre passage choisi
+/// à la main devient [SkipSegmentSource.manual].
+SkipSegmentSource sourceAfterEdit(SkipSegmentSource source) {
+  if (source == SkipSegmentSource.network ||
+      source == SkipSegmentSource.networkEdited) {
+    return SkipSegmentSource.networkEdited;
+  }
+  return SkipSegmentSource.manual;
+}
+
+/// L’analyse ne réécrit ni ne retire ces passages.
+bool sourceIsProtected(SkipSegmentSource source) {
+  return source == SkipSegmentSource.manual ||
+      source == SkipSegmentSource.networkEdited;
 }
 
 /// Chapitre de contenu quand le podcast n’a pas donné de titre.

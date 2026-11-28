@@ -5913,6 +5913,151 @@ class DismissedSkipSpansCompanion extends UpdateCompanion<DismissedSkipSpan> {
   }
 }
 
+class $PendingSegmentDropsTable extends PendingSegmentDrops
+    with TableInfo<$PendingSegmentDropsTable, PendingSegmentDrop> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingSegmentDropsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _segmentIdMeta = const VerificationMeta(
+    'segmentId',
+  );
+  @override
+  late final GeneratedColumn<int> segmentId = GeneratedColumn<int>(
+    'segment_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [segmentId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_segment_drops';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PendingSegmentDrop> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('segment_id')) {
+      context.handle(
+        _segmentIdMeta,
+        segmentId.isAcceptableOrUnknown(data['segment_id']!, _segmentIdMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {segmentId};
+  @override
+  PendingSegmentDrop map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PendingSegmentDrop(
+      segmentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}segment_id'],
+      )!,
+    );
+  }
+
+  @override
+  $PendingSegmentDropsTable createAlias(String alias) {
+    return $PendingSegmentDropsTable(attachedDatabase, alias);
+  }
+}
+
+class PendingSegmentDrop extends DataClass
+    implements Insertable<PendingSegmentDrop> {
+  final int segmentId;
+  const PendingSegmentDrop({required this.segmentId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['segment_id'] = Variable<int>(segmentId);
+    return map;
+  }
+
+  PendingSegmentDropsCompanion toCompanion(bool nullToAbsent) {
+    return PendingSegmentDropsCompanion(segmentId: Value(segmentId));
+  }
+
+  factory PendingSegmentDrop.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PendingSegmentDrop(
+      segmentId: serializer.fromJson<int>(json['segmentId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{'segmentId': serializer.toJson<int>(segmentId)};
+  }
+
+  PendingSegmentDrop copyWith({int? segmentId}) =>
+      PendingSegmentDrop(segmentId: segmentId ?? this.segmentId);
+  PendingSegmentDrop copyWithCompanion(PendingSegmentDropsCompanion data) {
+    return PendingSegmentDrop(
+      segmentId: data.segmentId.present ? data.segmentId.value : this.segmentId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingSegmentDrop(')
+          ..write('segmentId: $segmentId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => segmentId.hashCode;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PendingSegmentDrop && other.segmentId == this.segmentId);
+}
+
+class PendingSegmentDropsCompanion extends UpdateCompanion<PendingSegmentDrop> {
+  final Value<int> segmentId;
+  const PendingSegmentDropsCompanion({this.segmentId = const Value.absent()});
+  PendingSegmentDropsCompanion.insert({this.segmentId = const Value.absent()});
+  static Insertable<PendingSegmentDrop> custom({Expression<int>? segmentId}) {
+    return RawValuesInsertable({
+      if (segmentId != null) 'segment_id': segmentId,
+    });
+  }
+
+  PendingSegmentDropsCompanion copyWith({Value<int>? segmentId}) {
+    return PendingSegmentDropsCompanion(segmentId: segmentId ?? this.segmentId);
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (segmentId.present) {
+      map['segment_id'] = Variable<int>(segmentId.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingSegmentDropsCompanion(')
+          ..write('segmentId: $segmentId')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $EpisodeLogMelsTable extends EpisodeLogMels
     with TableInfo<$EpisodeLogMelsTable, EpisodeLogMel> {
   @override
@@ -6697,6 +6842,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SkipSegmentsTable skipSegments = $SkipSegmentsTable(this);
   late final $DismissedSkipSpansTable dismissedSkipSpans =
       $DismissedSkipSpansTable(this);
+  late final $PendingSegmentDropsTable pendingSegmentDrops =
+      $PendingSegmentDropsTable(this);
   late final $EpisodeLogMelsTable episodeLogMels = $EpisodeLogMelsTable(this);
   late final $LearnedNetworkStingsTable learnedNetworkStings =
       $LearnedNetworkStingsTable(this);
@@ -6763,6 +6910,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     segmentTemplates,
     skipSegments,
     dismissedSkipSpans,
+    pendingSegmentDrops,
     episodeLogMels,
     learnedNetworkStings,
     episodesPodcastId,
@@ -11935,6 +12083,141 @@ typedef $$DismissedSkipSpansTableProcessedTableManager =
       DismissedSkipSpan,
       PrefetchHooks Function({bool episodeId})
     >;
+typedef $$PendingSegmentDropsTableCreateCompanionBuilder =
+    PendingSegmentDropsCompanion Function({Value<int> segmentId});
+typedef $$PendingSegmentDropsTableUpdateCompanionBuilder =
+    PendingSegmentDropsCompanion Function({Value<int> segmentId});
+
+class $$PendingSegmentDropsTableFilterComposer
+    extends Composer<_$AppDatabase, $PendingSegmentDropsTable> {
+  $$PendingSegmentDropsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get segmentId => $composableBuilder(
+    column: $table.segmentId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PendingSegmentDropsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PendingSegmentDropsTable> {
+  $$PendingSegmentDropsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get segmentId => $composableBuilder(
+    column: $table.segmentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PendingSegmentDropsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PendingSegmentDropsTable> {
+  $$PendingSegmentDropsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get segmentId =>
+      $composableBuilder(column: $table.segmentId, builder: (column) => column);
+}
+
+class $$PendingSegmentDropsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PendingSegmentDropsTable,
+          PendingSegmentDrop,
+          $$PendingSegmentDropsTableFilterComposer,
+          $$PendingSegmentDropsTableOrderingComposer,
+          $$PendingSegmentDropsTableAnnotationComposer,
+          $$PendingSegmentDropsTableCreateCompanionBuilder,
+          $$PendingSegmentDropsTableUpdateCompanionBuilder,
+          (
+            PendingSegmentDrop,
+            BaseReferences<
+              _$AppDatabase,
+              $PendingSegmentDropsTable,
+              PendingSegmentDrop
+            >,
+          ),
+          PendingSegmentDrop,
+          PrefetchHooks Function()
+        > {
+  $$PendingSegmentDropsTableTableManager(
+    _$AppDatabase db,
+    $PendingSegmentDropsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingSegmentDropsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PendingSegmentDropsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PendingSegmentDropsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback: ({
+            Value<int> segmentId = const Value.absent(),
+          }) => PendingSegmentDropsCompanion(segmentId: segmentId),
+          createCompanionCallback: ({
+            Value<int> segmentId = const Value.absent(),
+          }) => PendingSegmentDropsCompanion.insert(segmentId: segmentId),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$PendingSegmentDropsTable, PendingSegmentDrop>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $PendingSegmentDropsTable,
+                    PendingSegmentDrop
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PendingSegmentDropsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PendingSegmentDropsTable,
+      PendingSegmentDrop,
+      $$PendingSegmentDropsTableFilterComposer,
+      $$PendingSegmentDropsTableOrderingComposer,
+      $$PendingSegmentDropsTableAnnotationComposer,
+      $$PendingSegmentDropsTableCreateCompanionBuilder,
+      $$PendingSegmentDropsTableUpdateCompanionBuilder,
+      (
+        PendingSegmentDrop,
+        BaseReferences<
+          _$AppDatabase,
+          $PendingSegmentDropsTable,
+          PendingSegmentDrop
+        >,
+      ),
+      PendingSegmentDrop,
+      PrefetchHooks Function()
+    >;
 typedef $$EpisodeLogMelsTableCreateCompanionBuilder =
     EpisodeLogMelsCompanion Function({
       Value<int> episodeId,
@@ -12520,6 +12803,8 @@ class $AppDatabaseManager {
       $$SkipSegmentsTableTableManager(_db, _db.skipSegments);
   $$DismissedSkipSpansTableTableManager get dismissedSkipSpans =>
       $$DismissedSkipSpansTableTableManager(_db, _db.dismissedSkipSpans);
+  $$PendingSegmentDropsTableTableManager get pendingSegmentDrops =>
+      $$PendingSegmentDropsTableTableManager(_db, _db.pendingSegmentDrops);
   $$EpisodeLogMelsTableTableManager get episodeLogMels =>
       $$EpisodeLogMelsTableTableManager(_db, _db.episodeLogMels);
   $$LearnedNetworkStingsTableTableManager get learnedNetworkStings =>

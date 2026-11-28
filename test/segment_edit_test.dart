@@ -406,6 +406,62 @@ void main() {
       expect(await database.skipSegmentById(detectedId), isNull);
     });
 
+    test(
+      'une virgule de réseau modifiée n’est pas un passage manuel',
+      () async {
+        final id = await database.insertSkipSegment(
+          episodeId: episodeId,
+          startMs: 1000,
+          endMs: 4000,
+          kind: SkipSegmentKind.jingle,
+          source: SkipSegmentSource.network,
+        );
+        await database.setSkipSegmentKind(id, SkipSegmentKind.sting);
+        final row = await database.skipSegmentById(id);
+        expect(row?.source, SkipSegmentSource.networkEdited);
+        await database.deleteDetectedSkipSegment(id);
+        expect(
+          (await database.skipSegmentById(id))?.kind,
+          SkipSegmentKind.sting,
+        );
+        await database.setManualSegmentBounds(id, startMs: 1200, endMs: 3800);
+        expect(
+          (await database.skipSegmentById(id))?.source,
+          SkipSegmentSource.networkEdited,
+        );
+      },
+    );
+
+    test('un court passage dans un long retrait est reposé', () async {
+      final templateId = await database.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.ad,
+        fingerprint: encodeFingerprint(values.sublist(80, 240)),
+        durationMs: 30000,
+      );
+      await database.dismissSkipSegment(
+        await database.insertSkipSegment(
+          episodeId: episodeId,
+          startMs: 0,
+          endMs: 30000,
+          kind: SkipSegmentKind.ad,
+          source: SkipSegmentSource.fingerprint,
+          templateId: templateId,
+        ),
+      );
+      await applyAnalysisPlan(
+        database,
+        podcastId,
+        _plan(episodeId, templateId, [(1000, 3000)]),
+        searchedTemplates: {templateId},
+      );
+      final rows = await database.listSkipSegments(episodeId);
+      expect(rows, hasLength(1));
+      expect((rows.single.startMs, rows.single.endMs), (1000, 3000));
+      final pending = await database.select(database.pendingSegmentDrops).get();
+      expect(pending, isEmpty);
+    });
+
     test('un court retrait ne fait pas effacer un passage plus long', () async {
       final templateId = await database.insertSegmentTemplate(
         podcastId: podcastId,

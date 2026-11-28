@@ -355,12 +355,12 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
 
   /// Décodage de l’épisode en cours. Le rapprochement a son propre isolate :
   /// un délai dépassé ne tue pas une diffusion lancée à côté.
-  Isolate? _decodeWorker;
+  TrackedAnalysis? _decodeWorker;
 
   /// Rapprochement de l’épisode en cours. L’annulation le tue avec
   /// le décodage, pas seulement l’empreinte.
-  Isolate? _matchWorker;
-  final _isolates = <Isolate>{};
+  TrackedAnalysis? _matchWorker;
+  final _tracked = <TrackedAnalysis>{};
   Timer? _budgetTimer;
   var _epoch = 0;
   var _keepAliveCount = -1;
@@ -377,8 +377,8 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     _budgetTimer?.cancel();
     _budgetTimer = null;
     _epoch++;
-    for (final isolate in _isolates.toList()) {
-      isolate.kill(priority: Isolate.immediate);
+    for (final tracked in _tracked.toList()) {
+      tracked.kill();
     }
     final running = _running;
     if (running != null) _complete(running);
@@ -435,8 +435,8 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     if (running) {
       _running!.again = false;
       _epoch++;
-      _decodeWorker?.kill(priority: Isolate.immediate);
-      _matchWorker?.kill(priority: Isolate.immediate);
+      _decodeWorker?.kill();
+      _matchWorker?.kill();
     }
     final dropped = [
       for (final job in _wait)
@@ -859,7 +859,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       if (done.isCompleted) return;
       timedOut = true;
       _epoch++;
-      _decodeWorker?.kill(priority: Isolate.immediate);
+      _decodeWorker?.kill();
       _decodeSamples = null;
       _decodeExpected = null;
       _decodeSampleRate = null;
@@ -1010,9 +1010,9 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     bool match = false,
   }) async {
     final tracked = await trackAnalysisIsolate(entry, message, paced: paced);
-    _isolates.add(tracked.isolate);
-    if (paced) _decodeWorker = tracked.isolate;
-    if (match) _matchWorker = tracked.isolate;
+    _tracked.add(tracked);
+    if (paced) _decodeWorker = tracked;
+    if (match) _matchWorker = tracked;
     try {
       final value = await tracked.result;
       if (value is List && value.isNotEmpty && value.first == 'error') {
@@ -1021,21 +1021,20 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       return value;
     } finally {
       tracked.pace?.cancel();
-      _isolates.remove(tracked.isolate);
-      if (paced && identical(_decodeWorker, tracked.isolate)) {
-        _decodeWorker = null;
-      }
-      if (match && identical(_matchWorker, tracked.isolate)) {
-        _matchWorker = null;
-      }
-      tracked.isolate.kill(priority: Isolate.immediate);
+      _tracked.remove(tracked);
+      if (paced && identical(_decodeWorker, tracked)) _decodeWorker = null;
+      if (match && identical(_matchWorker, tracked)) _matchWorker = null;
+      tracked.kill();
       tracked.close();
     }
   }
 }
 
-/// Un isolate et son attente. onExit et onError terminent [result]
-/// même si l’isolate est tué avant d’avoir répondu.
+/// Un isolate et son attente.
+///
+/// [kill] libère [result] tout de suite. Une fin normale ne le fait
+/// pas : le message est envoyé avant la sortie, et il peut arriver
+/// après le signal onExit.
 class TrackedAnalysis {
   TrackedAnalysis({
     required this.isolate,
@@ -1047,6 +1046,13 @@ class TrackedAnalysis {
   final Future<Object?> result;
   final void Function() close;
   Timer? pace;
+  var killed = false;
+
+  /// Tue l’isolate et termine l’attente par `null` dès sa sortie.
+  void kill() {
+    killed = true;
+    isolate.kill(priority: Isolate.immediate);
+  }
 }
 
 Future<TrackedAnalysis> trackAnalysisIsolate(
@@ -1058,7 +1064,6 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
   final errors = ReceivePort();
   final exits = ReceivePort();
   final incoming = Completer<Object?>();
-  final exited = Completer<void>();
   final tracked = TrackedAnalysis(
     isolate: await Isolate.spawn(
       entry,
@@ -1067,7 +1072,7 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
       onExit: exits.sendPort,
       debugName: 'podavio-analysis',
     ),
-    result: waitForIsolateResult(message: incoming.future, exit: exited.future),
+    result: incoming.future,
     close: () {
       port.close();
       errors.close();
@@ -1081,7 +1086,7 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
     if (!incoming.isCompleted) incoming.completeError(StateError(text));
   });
   exits.listen((_) {
-    if (!exited.isCompleted) exited.complete();
+    if (tracked.killed && !incoming.isCompleted) incoming.complete(null);
   });
   port.listen((event) {
     if (paced && event is SendPort) {
@@ -1095,38 +1100,6 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
     if (!incoming.isCompleted) incoming.complete(event);
   });
   return tracked;
-}
-
-/// Le résultat et la fin d’isolate n’ont pas d’ordre. Un gros message
-/// peut arriver après la fin : on l’accepte encore pendant [grace],
-/// au lieu de conclure `null` au bout de 20 ms.
-Future<Object?> waitForIsolateResult({
-  required Future<Object?> message,
-  required Future<void> exit,
-  Duration grace = const Duration(seconds: 1),
-}) {
-  final done = Completer<Object?>();
-  var gotMessage = false;
-  unawaited(
-    message.then(
-      (value) {
-        gotMessage = true;
-        if (!done.isCompleted) done.complete(value);
-      },
-      onError: (Object error, StackTrace stack) {
-        gotMessage = true;
-        if (!done.isCompleted) done.completeError(error, stack);
-      },
-    ),
-  );
-  unawaited(
-    exit.then((_) {
-      Future<void>.delayed(grace, () {
-        if (!gotMessage && !done.isCompleted) done.complete(null);
-      });
-    }),
-  );
-  return done.future;
 }
 
 class ChromaprintEpisodeAudioAnalyzer implements EpisodeAudioAnalyzer {
@@ -1218,9 +1191,9 @@ void analyzePcmEntry(List<Object?> args) {
   final send = args[0]! as SendPort;
   final path = args[1]! as String;
   try {
-    send.send(_pcmMessage(analyzePcmFileSync(path)));
+    Isolate.exit(send, _pcmMessage(analyzePcmFileSync(path)));
   } catch (error, stack) {
-    send.send(<Object?>['error', '$error', '$stack']);
+    Isolate.exit(send, <Object?>['error', '$error', '$stack']);
   }
 }
 
@@ -1239,11 +1212,9 @@ void analyzePcmPacedEntry(List<Object?> args) {
   unawaited(() async {
     try {
       final result = await analyzePcmFilePaced(path, () => mode);
-      send.send(_pcmMessage(result));
+      Isolate.exit(send, _pcmMessage(result));
     } catch (error, stack) {
-      send.send(<Object?>['error', '$error', '$stack']);
-    } finally {
-      inbox.close();
+      Isolate.exit(send, <Object?>['error', '$error', '$stack']);
     }
   }());
 }
@@ -1266,18 +1237,24 @@ List<Object?> _pcmMessage(PcmAnalysis result) {
 void planAnalysisEntry(List<Object?> args) {
   final send = args[0]! as SendPort;
   try {
-    send.send(planAnalysisMessage(Map<String, Object?>.from(args[1]! as Map)));
+    Isolate.exit(
+      send,
+      planAnalysisMessage(Map<String, Object?>.from(args[1]! as Map)),
+    );
   } catch (error, stack) {
-    send.send(<Object?>['error', '$error', '$stack']);
+    Isolate.exit(send, <Object?>['error', '$error', '$stack']);
   }
 }
 
 void planLogMelEntry(List<Object?> args) {
   final send = args[0]! as SendPort;
   try {
-    send.send(planLogMelMessage(Map<String, Object?>.from(args[1]! as Map)));
+    Isolate.exit(
+      send,
+      planLogMelMessage(Map<String, Object?>.from(args[1]! as Map)),
+    );
   } catch (error, stack) {
-    send.send(<Object?>['error', '$error', '$stack']);
+    Isolate.exit(send, <Object?>['error', '$error', '$stack']);
   }
 }
 
@@ -1572,6 +1549,7 @@ Future<void> applyAnalysisPlan(
           episodeId: desired.episodeId,
           startMs: desired.startMs,
           endMs: desired.endMs,
+          templateId: templateId,
         )) {
           continue;
         }
@@ -1620,10 +1598,9 @@ Future<void> applyAnalysisPlan(
       }
       dropped.add(row.id);
     }
+    await database.rememberPendingDrops(dropped);
   });
-  for (final id in dropped) {
-    await database.deleteDetectedSkipSegment(id);
-  }
+  await database.finishPendingSegmentDrops();
   await _recountTemplates(database, podcastId);
 }
 
@@ -1995,7 +1972,7 @@ Future<int?> _upsertLoose(
   final all = await database.listSkipSegments(episodeId);
   final manual = [
     for (final row in all)
-      if (row.source == SkipSegmentSource.manual) row,
+      if (sourceIsProtected(row.source)) row,
   ];
   if (overlapsManual(manual, episodeId, startMs, endMs)) return null;
   if (spanWasDismissed(
@@ -2003,6 +1980,7 @@ Future<int?> _upsertLoose(
     episodeId: episodeId,
     startMs: startMs,
     endMs: endMs,
+    templateId: templateId,
   )) {
     return null;
   }

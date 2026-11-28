@@ -251,6 +251,18 @@ class DismissedSkipSpans extends Table {
   IntColumn get endMs => integer()();
 }
 
+/// Détections à retirer une fois le plan écrit.
+///
+/// Les identifiants sont enregistrés dans la même transaction que le
+/// plan. L’effacement suit, et un redémarrage termine ce qui reste :
+/// une modification déjà passée en passage protégé n’est pas touchée.
+class PendingSegmentDrops extends Table {
+  IntColumn get segmentId => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {segmentId};
+}
+
 /// Log-mel des 180 premières secondes, pour ne pas redécoder le fichier.
 class EpisodeLogMels extends Table {
   IntColumn get episodeId =>
@@ -326,6 +338,7 @@ class EpisodeEntry {
     SegmentTemplates,
     SkipSegments,
     DismissedSkipSpans,
+    PendingSegmentDrops,
     EpisodeLogMels,
     LearnedNetworkStings,
   ],
@@ -343,7 +356,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -473,6 +486,9 @@ class AppDatabase extends _$AppDatabase
       if (from < 26) {
         await _createTableIfMissing(migrator, dismissedSkipSpans);
       }
+      if (from < 27) {
+        await _createTableIfMissing(migrator, pendingSegmentDrops);
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -483,6 +499,7 @@ class AppDatabase extends _$AppDatabase
       // Idempotent : v8 a pu être appliqué avant l’ajout des indexes.
       await _createEpisodeIndexes();
       await _ensureDefaultPlaylist();
+      await finishPendingSegmentDrops();
     },
   );
 

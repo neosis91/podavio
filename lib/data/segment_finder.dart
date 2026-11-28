@@ -148,24 +148,35 @@ bool spansOverlap(int startMs, int endMs, int otherStart, int otherEnd) {
   return shorter > 0 && overlap * 2 >= shorter;
 }
 
-/// Vrai si le passage proposé recouvre au moins à moitié un retrait
-/// du même épisode.
+/// Vrai si le passage proposé est la réapparition d’un retrait.
 ///
-/// On mesure le passage proposé, pas la plus courte des deux plages :
-/// un court retrait ne bloque pas un passage plus long et différent, et
-/// le même gabarit tout près mais sans recouvrement reste en place.
+/// Un gabarit différent, ou une durée au moins deux fois plus courte
+/// ou plus longue, n’est pas le même passage. Le recouvrement doit
+/// couvrir la moitié du plus court des deux. Un même gabarit tout près
+/// mais sans recouvrement reste en place.
 bool spanWasDismissed(
   List<DismissedSpan> dismissed, {
   required int episodeId,
   required int startMs,
   required int endMs,
+  int? templateId,
 }) {
   final length = endMs - startMs;
   if (length <= 0) return false;
   for (final row in dismissed) {
     if (row.episodeId != episodeId) continue;
+    final other = row.endMs - row.startMs;
+    if (other <= 0) continue;
+    if (templateId != null &&
+        row.templateId != null &&
+        templateId != row.templateId) {
+      continue;
+    }
+    final shorter = math.min(length, other);
+    final longer = math.max(length, other);
+    if (shorter * 2 < longer) continue;
     final overlap = math.min(endMs, row.endMs) - math.max(startMs, row.startMs);
-    if (overlap * 2 >= length) return true;
+    if (overlap * 2 >= shorter) return true;
   }
   return false;
 }
@@ -185,6 +196,7 @@ AnalysisPlan dropDismissedSpans(
           episodeId: segment.episodeId,
           startMs: segment.startMs,
           endMs: segment.endMs,
+          templateId: pattern.templateId,
         ))
           segment,
     ];
