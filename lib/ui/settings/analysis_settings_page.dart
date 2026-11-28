@@ -86,7 +86,7 @@ class AnalysisSettingsPage extends ConsumerWidget {
               SwitchListTile(
                 title: Text(context.tr('Skip automatically')),
                 subtitle: Text(
-                  context.tr('Skips confirmed passages in downloaded episodes'),
+                  context.tr('Skips the chosen kinds in downloaded episodes'),
                 ),
                 value: skip.enabled,
                 onChanged: (enabled) => ref

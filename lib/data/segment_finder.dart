@@ -66,7 +66,6 @@ class KnownTemplate {
     required this.kind,
     required this.fingerprint,
     required this.durationMs,
-    required this.confirmed,
     this.confidence,
   });
 
@@ -74,9 +73,6 @@ class KnownTemplate {
   final SkipSegmentKind kind;
   final List<int> fingerprint;
   final int durationMs;
-
-  /// Avis agrégé des passages : `false` = ignoré, on le propage.
-  final bool? confirmed;
 
   /// 0–100. `null` : gabarit posé avant le score.
   final int? confidence;
@@ -89,7 +85,6 @@ class PlannedSegment {
     required this.startMs,
     required this.endMs,
     required this.kind,
-    required this.confirmed,
     required this.matches,
     required this.confidence,
   });
@@ -98,7 +93,6 @@ class PlannedSegment {
   final int startMs;
   final int endMs;
   final SkipSegmentKind kind;
-  final bool? confirmed;
   final int matches;
 
   /// 0–100. Le saut n’en dépend pas.
@@ -110,7 +104,6 @@ class PlannedPattern {
   const PlannedPattern({
     required this.templateId,
     required this.kind,
-    required this.confirmed,
     required this.fingerprint,
     required this.durationMs,
     required this.segments,
@@ -120,7 +113,6 @@ class PlannedPattern {
   /// `null` : gabarit à créer.
   final int? templateId;
   final SkipSegmentKind kind;
-  final bool? confirmed;
   final List<int> fingerprint;
   final int durationMs;
   final List<PlannedSegment> segments;
@@ -188,7 +180,6 @@ AnalysisPlan buildAnalysisPlan({
             startMs: startMs,
             endMs: endMs,
             kind: template.kind,
-            confirmed: template.confirmed,
             matches: 0,
             confidence: _templateConfidence(template),
           ),
@@ -208,7 +199,6 @@ AnalysisPlan buildAnalysisPlan({
         PlannedPattern(
           templateId: template.id,
           kind: template.kind,
-          confirmed: template.confirmed,
           fingerprint: template.fingerprint,
           durationMs: template.durationMs,
           segments: refinedSegments,
@@ -247,7 +237,6 @@ AnalysisPlan buildAnalysisPlan({
             startMs: hit.startMs,
             endMs: hit.endMs,
             kind: similar.kind,
-            confirmed: similar.confirmed,
             matches: 0,
             confidence: _templateConfidence(similar),
           ),
@@ -257,7 +246,6 @@ AnalysisPlan buildAnalysisPlan({
           PlannedPattern(
             templateId: similar.id,
             kind: similar.kind,
-            confirmed: similar.confirmed,
             fingerprint: patterns[host].fingerprint,
             durationMs: patterns[host].durationMs,
             segments: [...patterns[host].segments, ...extraSegments],
@@ -270,7 +258,6 @@ AnalysisPlan buildAnalysisPlan({
             PlannedPattern(
               templateId: similar.id,
               kind: similar.kind,
-              confirmed: similar.confirmed,
               fingerprint: found.fingerprint,
               durationMs: found.durationMs,
               segments: extraSegments,
@@ -295,13 +282,11 @@ AnalysisPlan buildAnalysisPlan({
         : _keep(fresh, byId);
     if (decision == null) continue;
     final kind = decision.kind ?? SkipSegmentKind.other;
-    final confirmed = decision.autoSkip ? null : false;
     patterns.add(
       _withMatches(
         PlannedPattern(
           templateId: null,
           kind: kind,
-          confirmed: confirmed,
           fingerprint: found.fingerprint,
           durationMs: found.durationMs,
           confidence: decision.confidence,
@@ -312,7 +297,6 @@ AnalysisPlan buildAnalysisPlan({
                 startMs: hit.startMs,
                 endMs: hit.endMs,
                 kind: kind,
-                confirmed: confirmed,
                 matches: 0,
                 confidence: decision.confidence,
               ),
@@ -374,7 +358,6 @@ AnalysisPlan _withContext(
       PlannedPattern(
         templateId: pattern.templateId,
         kind: pattern.kind,
-        confirmed: pattern.confirmed,
         fingerprint: pattern.fingerprint,
         durationMs: duration,
         confidence: pattern.confidence,
@@ -385,7 +368,6 @@ AnalysisPlan _withContext(
               startMs: hit.startMs,
               endMs: hit.endMs,
               kind: pattern.kind,
-              confirmed: pattern.confirmed,
               matches: ids.length,
               confidence:
                   byStart[(hit.episodeId, hit.startMs)]?.confidence ??
@@ -423,7 +405,6 @@ AnalysisPlan _withContext(
       PlannedPattern(
         templateId: null,
         kind: kind,
-        confirmed: false,
         fingerprint: episode.values.sublist(from, to),
         durationMs: length,
         confidence: confidence,
@@ -433,7 +414,6 @@ AnalysisPlan _withContext(
             startMs: hit.startMs,
             endMs: hit.endMs,
             kind: kind,
-            confirmed: false,
             matches: 1,
             confidence: confidence,
           ),
@@ -548,7 +528,6 @@ Map<String, Object?> encodeAnalysisInput({
         <Object?>[
           template.id,
           template.kind.name,
-          template.confirmed,
           template.durationMs,
           encodeFingerprint(template.fingerprint),
           template.confidence,
@@ -583,10 +562,9 @@ Map<String, Object?> planAnalysisMessage(Map<String, Object?> message) {
       KnownTemplate(
         id: row[0]! as int,
         kind: _kindOf(row[1]! as String),
-        confirmed: row[2] as bool?,
-        durationMs: row[3]! as int,
-        fingerprint: decodeFingerprint(_bytes(row[4]) ?? Uint8List(0)),
-        confidence: row.length > 5 ? row[5] as int? : null,
+        durationMs: row[2]! as int,
+        fingerprint: decodeFingerprint(_bytes(row[3]) ?? Uint8List(0)),
+        confidence: row.length > 4 ? row[4] as int? : null,
       ),
     );
   }
@@ -662,7 +640,6 @@ AnalysisPlan decodeAnalysisPlan(Map<Object?, Object?> message) {
           startMs: segment['startMs']! as int,
           endMs: segment['endMs']! as int,
           kind: _kindOf(segment['kind']! as String),
-          confirmed: segment['confirmed'] as bool?,
           matches: segment['matches']! as int,
           confidence: segment['confidence'] as int? ?? crossEpisodeConfidence,
         ),
@@ -672,7 +649,6 @@ AnalysisPlan decodeAnalysisPlan(Map<Object?, Object?> message) {
       PlannedPattern(
         templateId: row['templateId'] as int?,
         kind: _kindOf(row['kind']! as String),
-        confirmed: row['confirmed'] as bool?,
         fingerprint: (row['fingerprint']! as List).cast<int>(),
         durationMs: row['durationMs']! as int,
         segments: segments,
@@ -694,7 +670,6 @@ Map<String, Object?> _encodePlan(AnalysisPlan plan) {
         <String, Object?>{
           'templateId': pattern.templateId,
           'kind': pattern.kind.name,
-          'confirmed': pattern.confirmed,
           'durationMs': pattern.durationMs,
           'fingerprint': pattern.fingerprint,
           'confidence': pattern.confidence,
@@ -705,7 +680,6 @@ Map<String, Object?> _encodePlan(AnalysisPlan plan) {
                 'startMs': segment.startMs,
                 'endMs': segment.endMs,
                 'kind': segment.kind.name,
-                'confirmed': segment.confirmed,
                 'matches': segment.matches,
                 'confidence': segment.confidence,
               },
@@ -1507,7 +1481,6 @@ List<PlannedSegment> _refinePlanned(
         startMs: refined[i].startMs,
         endMs: refined[i].endMs,
         kind: segments[i].kind,
-        confirmed: segments[i].confirmed,
         matches: segments[i].matches,
         confidence: segments[i].confidence,
       ),
@@ -1677,7 +1650,6 @@ PlannedPattern _withMatches(PlannedPattern pattern) {
   return PlannedPattern(
     templateId: pattern.templateId,
     kind: pattern.kind,
-    confirmed: pattern.confirmed,
     fingerprint: pattern.fingerprint,
     durationMs: pattern.durationMs,
     confidence: pattern.confidence,
@@ -1688,7 +1660,6 @@ PlannedPattern _withMatches(PlannedPattern pattern) {
           startMs: segment.startMs,
           endMs: segment.endMs,
           kind: segment.kind,
-          confirmed: segment.confirmed,
           matches: matches,
           confidence: segment.confidence,
         ),

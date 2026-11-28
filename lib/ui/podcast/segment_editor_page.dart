@@ -299,7 +299,6 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
                                   .value ??
                               const <SkipSegment>[])
                         if (segment.id != widget.segmentId &&
-                            segment.confirmed != false &&
                             segment.endMs > segment.startMs)
                           WaveformSpan(
                             startMs: segment.startMs,

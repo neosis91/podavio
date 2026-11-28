@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -18,7 +19,41 @@ import 'package:podavio/data/skip_segments.dart';
 import 'package:podavio/settings/settings_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+void _hangIsolate(List<Object?> args) {
+  final port = ReceivePort();
+  port.listen((_) {});
+}
+
 void main() {
+  test('a killed analysis isolate finishes the wait', () async {
+    final tracked = await trackAnalysisIsolate(_hangIsolate, null);
+    addTearDown(() {
+      tracked.isolate.kill(priority: Isolate.immediate);
+      tracked.close();
+    });
+    tracked.isolate.kill(priority: Isolate.immediate);
+    expect(
+      await tracked.result.timeout(const Duration(seconds: 2)),
+      isNull,
+    );
+  });
+
+  test('killing one analysis isolate leaves the other running', () async {
+    final stuck = await trackAnalysisIsolate(_hangIsolate, null);
+    final live = await trackAnalysisIsolate((args) {
+      (args[0]! as SendPort).send('ok');
+    }, null);
+    addTearDown(() {
+      stuck.isolate.kill(priority: Isolate.immediate);
+      live.isolate.kill(priority: Isolate.immediate);
+      stuck.close();
+      live.close();
+    });
+    stuck.isolate.kill(priority: Isolate.immediate);
+    expect(await live.result.timeout(const Duration(seconds: 2)), 'ok');
+    expect(await stuck.result.timeout(const Duration(seconds: 2)), isNull);
+  });
+
   test('a long episode is given more than six minutes to decode', () {
     expect(analysisBudgetFor(25 * 60), const Duration(minutes: 8, seconds: 15));
     expect(
@@ -371,6 +406,14 @@ void main() {
         greaterThan(1),
       );
       expect(await database.listActiveSkipSegments(away.episodeId), isEmpty);
+
+      await database.setDownloadPath(home.episodes['a']!, null);
+      await database.setDownloadPath(home.episodes['b']!, null);
+      await syncPodcastAnalysis(database, sibling.podcastId);
+      expect(
+        await database.listActiveSkipSegments(sibling.episodeId),
+        isNotEmpty,
+      );
     },
   );
 
@@ -595,7 +638,6 @@ void main() {
       expect(found.single.templateId, template.id);
       expect(found.single.source, SkipSegmentSource.fingerprint);
       expect(found.single.kind, SkipSegmentKind.selfPromo);
-      expect(found.single.confirmed, isTrue);
       expect(found.single.startMs, closeTo(_msAt(640), 1500));
 
       final thirdId = await _addEpisode(database, podcastId, 'c', 'Trois');

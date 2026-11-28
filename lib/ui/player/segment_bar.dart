@@ -23,7 +23,7 @@ class ColoredBarSpan {
 List<ColoredBarSpan> spansForSegments(List<SkipSegment> segments) {
   final spans = <ColoredBarSpan>[
     for (final segment in segments)
-      if (segment.confirmed != false && segment.endMs > segment.startMs)
+      if (segment.endMs > segment.startMs)
         ColoredBarSpan(
           startMs: segment.startMs,
           endMs: segment.endMs,

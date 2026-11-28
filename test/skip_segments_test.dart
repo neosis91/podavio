@@ -180,24 +180,15 @@ void main() {
     expect(classification.templates.single.label, 'Acme');
     expect(classification.templates.single.occurrences, 4);
     expect(classification.segments, isEmpty);
-    expect(classification.templateConfirmed[templateId], isNull);
 
     await database.setTemplateKind(templateId, SkipSegmentKind.sponsor);
     await database.setTemplateLabel(templateId, '  Squarespace  ');
-    await database.setTemplateReview(templateId, confirmed: true);
     final segments = await database.listSkipSegments(episodeId);
     expect(segments.single.kind, SkipSegmentKind.sponsor);
-    expect(segments.single.confirmed, isTrue);
     classification = await database.watchSkipClassification(podcastId).first;
     expect(classification.templates.single.label, 'Squarespace');
     expect(classification.templates.single.kind, SkipSegmentKind.sponsor);
-    expect(classification.templateConfirmed[templateId], isTrue);
 
-    await database.setTemplateReview(templateId, confirmed: false);
-    classification = await database.watchSkipClassification(podcastId).first;
-    expect(classification.templateConfirmed[templateId], isFalse);
-
-    await database.setSkipSegmentReview(segmentId, confirmed: null);
     await database.deleteSegmentTemplate(templateId);
     expect(await database.listSkipSegments(episodeId), isEmpty);
     expect((await database.watchSegmentTemplates(podcastId).first), isEmpty);
@@ -233,27 +224,18 @@ void main() {
     expect(loose.segments, isEmpty);
   });
 
-  test('skip decision respects download, kinds, review and seek-back', () {
+  test('skip decision respects download, kinds and seek-back', () {
     final ad = SkipCandidate(
       id: 1,
       startMs: 10000,
       endMs: 30000,
       kind: SkipSegmentKind.ad,
-      confirmed: null,
     );
     final sponsor = SkipCandidate(
       id: 2,
       startMs: 12000,
       endMs: 40000,
       kind: SkipSegmentKind.sponsor,
-      confirmed: true,
-    );
-    final ignored = SkipCandidate(
-      id: 3,
-      startMs: 10000,
-      endMs: 50000,
-      kind: SkipSegmentKind.ad,
-      confirmed: false,
     );
     const kinds = {SkipSegmentKind.ad, SkipSegmentKind.sponsor};
     final held = <int>{};
@@ -318,7 +300,7 @@ void main() {
         fromDownload: true,
         autoSkipAds: true,
         autoSkipKinds: kinds,
-        segments: [ignored],
+        segments: const [],
         heldIds: held,
       ),
       isNull,
@@ -344,7 +326,7 @@ void main() {
       fromDownload: true,
       autoSkipAds: true,
       autoSkipKinds: kinds,
-      segments: [ad, sponsor, ignored],
+      segments: [ad, sponsor],
       heldIds: held,
     );
     expect(chosen?.segmentId, sponsor.id);
@@ -403,21 +385,18 @@ void main() {
           startMs: 0,
           endMs: 30000,
           kind: SkipSegmentKind.ad,
-          confirmed: null,
         ),
         const SkipCandidate(
           id: 2,
           startMs: 30000,
           endMs: 33000,
           kind: SkipSegmentKind.jingle,
-          confirmed: null,
         ),
         const SkipCandidate(
           id: 3,
           startMs: 33000,
           endMs: 40000,
           kind: SkipSegmentKind.intro,
-          confirmed: null,
         ),
       ],
       heldIds: <int>{},
@@ -437,19 +416,17 @@ void main() {
           startMs: 0,
           endMs: 30000,
           kind: SkipSegmentKind.ad,
-          confirmed: null,
         ),
         const SkipCandidate(
           id: 2,
           startMs: 30000,
           endMs: 33000,
-          kind: SkipSegmentKind.jingle,
-          confirmed: false,
+          kind: SkipSegmentKind.sting,
         ),
       ],
       heldIds: <int>{},
     );
-    expect(rejected?.seekToMs, 30000);
+    expect(rejected?.seekToMs, 33000);
   });
 
   test('a network sting skips with the ads even across a silence', () {
@@ -466,14 +443,12 @@ void main() {
           startMs: 0,
           endMs: 60000,
           kind: SkipSegmentKind.ad,
-          confirmed: null,
         ),
         const SkipCandidate(
           id: 2,
           startMs: 68000,
           endMs: 71000,
           kind: SkipSegmentKind.jingle,
-          confirmed: null,
           networkSting: true,
         ),
       ],
@@ -494,7 +469,6 @@ void main() {
           startMs: 68000,
           endMs: 71000,
           kind: SkipSegmentKind.jingle,
-          confirmed: null,
         ),
       ],
       heldIds: <int>{},

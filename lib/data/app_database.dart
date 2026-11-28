@@ -224,9 +224,6 @@ class SkipSegments extends Table {
   /// Nombre d’épisodes du podcast qui partagent ce passage.
   IntColumn get matches => integer().withDefault(const Constant(1))();
 
-  /// `null` : pas revu. `true` : confirmé. `false` : ignoré.
-  BoolColumn get confirmed => boolean().nullable()();
-
   /// 0–100. `null` : pas calculé (chapitre, ou passage ancien).
   /// Sert au tri. Un candidat intra-épisode bas est replié dans l’écran.
   IntColumn get confidence => integer().nullable()();
@@ -328,7 +325,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -454,6 +451,7 @@ class AppDatabase extends _$AppDatabase
       }
       if (from < 23) await _ensureFingerprintStatus();
       if (from < 24) await _ensureFingerprintEnvelope();
+      if (from < 25) await _dropSkipReview();
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -508,6 +506,14 @@ class AppDatabase extends _$AppDatabase
         createdAt: DateTime.now(),
       ),
     );
+  }
+
+  /// L’avis confirmé / ignoré ne sert plus. La colonne part, le reste reste.
+  Future<void> _dropSkipReview() async {
+    final rows = await customSelect('PRAGMA table_info(skip_segments)').get();
+    if (rows.isEmpty) return;
+    if (!rows.any((row) => row.read<String>('name') == 'confirmed')) return;
+    await customStatement('ALTER TABLE skip_segments DROP COLUMN confirmed');
   }
 
   /// Enveloppe d’énergie (uint8, 20 ms). Hors schéma Drift, comme `status` :

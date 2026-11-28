@@ -174,8 +174,6 @@ const _fr = <String, String>{
   'Comparing episodes': 'Comparaison des épisodes',
   'Comparing {title} with the other episodes':
       'Comparaison de {title} avec les autres épisodes',
-  'Confirm': 'Confirmer',
-  'Confirmed': 'Confirmé',
   'Connect a device': 'Connecter un appareil',
   'Connect a synchronization service to enable this.':
       'Reliez un service de synchronisation pour l’activer.',
@@ -325,8 +323,6 @@ const _fr = <String, String>{
   'I am new to Podavio': 'Je découvre Podavio',
   'If you do not recognize this browser, disconnect it.':
       'Si vous ne reconnaissez pas ce navigateur, dissociez-le.',
-  'Ignore': 'Ignorer',
-  'Ignored': 'Ignoré',
   'Import': 'Importer',
   'Import an OPML file': 'Importer un fichier OPML',
   'Import an OPML file exported from another podcast app.': 'Importez un fichier OPML exporté depuis une autre application de podcasts.',
@@ -604,8 +600,8 @@ const _fr = <String, String>{
   'Skip ads and jingles': 'Sauter pubs et jingles',
   'Skip automatically': 'Saut automatique',
   'Skip this passage': 'Sauter ce passage',
-  'Skips confirmed passages in downloaded episodes':
-      'Saute les passages confirmés des épisodes téléchargés',
+  'Skips the chosen kinds in downloaded episodes':
+      'Saute les types choisis dans les épisodes téléchargés',
   'Sky blue': 'Bleu ciel',
   'Slate': 'Ardoise',
   'Sleep timer': 'Minuteur',
@@ -702,7 +698,6 @@ const _fr = <String, String>{
   'Unnamed pattern': 'Motif sans nom',
   'Unplayed': 'Non lus',
   'Unplayed episodes': 'Épisodes non lus',
-  'Unreviewed': 'À revoir',
   'Until you choose, the home follows the most played categories this month.':
       'Sans choix, l’accueil suit les catégories les plus écoutées du mois.',
   'Uploads the played state of episodes listened to on this device.':

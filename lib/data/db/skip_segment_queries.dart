@@ -18,15 +18,10 @@ class SkipClassification {
   const SkipClassification({
     required this.templates,
     required this.segments,
-    required this.templateConfirmed,
   });
 
   final List<SegmentTemplate> templates;
   final List<LooseSkipSegment> segments;
-
-  /// `null` : pas revu ou avis partagé. `true` / `false` : tous les
-  /// passages du modèle sont confirmés ou ignorés.
-  final Map<int, bool?> templateConfirmed;
 }
 
 mixin _SkipSegmentQueries on _$AppDatabase {
@@ -113,7 +108,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     required SkipSegmentKind kind,
     required SkipSegmentSource source,
     int matches = 1,
-    bool? confirmed,
     int? confidence,
     int? templateId,
   }) {
@@ -125,7 +119,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
         kind: kind,
         source: source,
         matches: Value(matches),
-        confirmed: Value(confirmed),
         confidence: Value(confidence),
         templateId: Value(templateId),
       ),
@@ -272,11 +265,9 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     return _combineSkip(
       watchSegmentTemplates(podcastId),
       _watchLooseSegments(podcastId),
-      _watchTemplateReviews(podcastId),
-      (templates, segments, reviews) => SkipClassification(
+      (templates, segments) => SkipClassification(
         templates: templates,
         segments: segments,
-        templateConfirmed: reviews,
       ),
     );
   }
@@ -304,30 +295,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
             downloadPath: row.read(episodes.downloadPath),
           ),
       ];
-    });
-  }
-
-  Stream<Map<int, bool?>> _watchTemplateReviews(int podcastId) {
-    return customSelect(
-      'SELECT s.template_id AS template_id, '
-      'SUM(CASE WHEN s.confirmed IS NULL THEN 1 ELSE 0 END) AS pending, '
-      'SUM(CASE WHEN s.confirmed = 1 THEN 1 ELSE 0 END) AS yes, '
-      'SUM(CASE WHEN s.confirmed = 0 THEN 1 ELSE 0 END) AS no '
-      'FROM skip_segments s '
-      'INNER JOIN episodes e ON e.id = s.episode_id '
-      'WHERE e.podcast_id = ? AND s.template_id IS NOT NULL '
-      'GROUP BY s.template_id',
-      variables: [Variable.withInt(podcastId)],
-      readsFrom: {skipSegments, episodes},
-    ).watch().map((rows) {
-      return {
-        for (final row in rows)
-          row.read<int>('template_id'): _reviewOf(
-            row.read<int>('pending'),
-            row.read<int>('yes'),
-            row.read<int>('no'),
-          ),
-      };
     });
   }
 
@@ -359,12 +326,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
   Future<void> setSkipSegmentKind(int id, SkipSegmentKind kind) {
     return (update(skipSegments)..where((row) => row.id.equals(id))).write(
       SkipSegmentsCompanion(kind: Value(kind)),
-    );
-  }
-
-  Future<void> setSkipSegmentReview(int id, {required bool? confirmed}) {
-    return (update(skipSegments)..where((row) => row.id.equals(id))).write(
-      SkipSegmentsCompanion(confirmed: Value(confirmed)),
     );
   }
 
@@ -415,11 +376,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     );
   }
 
-  Future<void> setTemplateReview(int id, {required bool confirmed}) {
-    return (update(skipSegments)..where((row) => row.templateId.equals(id)))
-        .write(SkipSegmentsCompanion(confirmed: Value(confirmed)));
-  }
-
   /// Efface le modèle et les passages qui en dépendent.
   Future<void> deleteSegmentTemplate(int id) {
     return transaction(() async {
@@ -435,54 +391,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
           ..where((row) => row.podcastId.equals(podcastId))
           ..orderBy([(row) => OrderingTerm.asc(row.id)]))
         .get();
-  }
-
-  /// Avis de ces gabarits, tous podcasts confondus.
-  Future<Map<int, bool?>> reviewsForTemplates(Iterable<int> templateIds) async {
-    final ids = templateIds.toSet().toList();
-    if (ids.isEmpty) return const {};
-    final rows = await customSelect(
-      'SELECT s.template_id AS template_id, '
-      'SUM(CASE WHEN s.confirmed IS NULL THEN 1 ELSE 0 END) AS pending, '
-      'SUM(CASE WHEN s.confirmed = 1 THEN 1 ELSE 0 END) AS yes, '
-      'SUM(CASE WHEN s.confirmed = 0 THEN 1 ELSE 0 END) AS no '
-      'FROM skip_segments s '
-      'WHERE s.template_id IN (${List.filled(ids.length, '?').join(', ')}) '
-      'GROUP BY s.template_id',
-      variables: [for (final id in ids) Variable.withInt(id)],
-      readsFrom: {skipSegments},
-    ).get();
-    return {
-      for (final row in rows)
-        row.read<int>('template_id'): _reviewOf(
-          row.read<int>('pending'),
-          row.read<int>('yes'),
-          row.read<int>('no'),
-        ),
-    };
-  }
-
-  Future<Map<int, bool?>> templateReviews(int podcastId) async {
-    final rows = await customSelect(
-      'SELECT s.template_id AS template_id, '
-      'SUM(CASE WHEN s.confirmed IS NULL THEN 1 ELSE 0 END) AS pending, '
-      'SUM(CASE WHEN s.confirmed = 1 THEN 1 ELSE 0 END) AS yes, '
-      'SUM(CASE WHEN s.confirmed = 0 THEN 1 ELSE 0 END) AS no '
-      'FROM skip_segments s '
-      'INNER JOIN episodes e ON e.id = s.episode_id '
-      'WHERE e.podcast_id = ? AND s.template_id IS NOT NULL '
-      'GROUP BY s.template_id',
-      variables: [Variable.withInt(podcastId)],
-      readsFrom: {skipSegments, episodes},
-    ).get();
-    return {
-      for (final row in rows)
-        row.read<int>('template_id'): _reviewOf(
-          row.read<int>('pending'),
-          row.read<int>('yes'),
-          row.read<int>('no'),
-        ),
-    };
   }
 
   Future<List<({Episode episode, EpisodeFingerprint fingerprint})>>
@@ -697,7 +605,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     )..where((row) => row.id.equals(id))).getSingleOrNull();
   }
 
-  /// Bornes corrigées à la main : le passage devient `manual` et confirmé.
+  /// Bornes corrigées à la main : le passage devient `manual`.
   /// Une nouvelle analyse ne réécrit que les lignes `fingerprint`.
   Future<void> setManualSegmentBounds(
     int id, {
@@ -710,7 +618,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
         startMs: Value(startMs),
         endMs: Value(endMs),
         source: const Value(SkipSegmentSource.manual),
-        confirmed: const Value(true),
         templateId: templateId == null
             ? const Value.absent()
             : Value(templateId),
@@ -1073,15 +980,17 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     ];
   }
 
-  /// URLs des fichiers téléchargés, pour regrouper les empreintes.
+  /// URLs de tous les épisodes connus, pour l’hébergeur du réseau.
+  ///
+  /// Sans le filtre « téléchargé » : retirer le dernier fichier ne doit
+  /// pas faire oublier l’hébergeur et effacer ses virgules ailleurs.
   Future<List<({int podcastId, String audioUrl, String feedUrl})>>
-  downloadedHostingRows() async {
+  hostingRows() async {
     final rows = await customSelect(
       'SELECT e.podcast_id AS podcast_id, e.audio_url AS audio_url, '
       'p.feed_url AS feed_url '
       'FROM episodes e '
-      'INNER JOIN podcasts p ON p.id = e.podcast_id '
-      'WHERE e.download_path IS NOT NULL AND length(e.download_path) > 0',
+      'INNER JOIN podcasts p ON p.id = e.podcast_id ',
       readsFrom: {episodes, podcasts},
     ).get();
     return [
@@ -1204,28 +1113,19 @@ class AnalysisSegmentRow {
   final int count;
 }
 
-bool? _reviewOf(int pending, int yes, int no) {
-  if (pending == 0 && no == 0 && yes > 0) return true;
-  if (pending == 0 && yes == 0 && no > 0) return false;
-  return null;
-}
-
-Stream<T> _combineSkip<A, B, C, T>(
+Stream<T> _combineSkip<A, B, T>(
   Stream<A> first,
   Stream<B> second,
-  Stream<C> third,
-  T Function(A, B, C) map,
+  T Function(A, B) map,
 ) {
   return Stream<T>.multi((controller) {
     A? latestA;
     B? latestB;
-    C? latestC;
     var hasA = false;
     var hasB = false;
-    var hasC = false;
     void emit() {
-      if (!hasA || !hasB || !hasC || controller.isClosed) return;
-      controller.add(map(latestA as A, latestB as B, latestC as C));
+      if (!hasA || !hasB || controller.isClosed) return;
+      controller.add(map(latestA as A, latestB as B));
     }
 
     final subs = [
@@ -1237,11 +1137,6 @@ Stream<T> _combineSkip<A, B, C, T>(
       second.listen((value) {
         latestB = value;
         hasB = true;
-        emit();
-      }, onError: controller.addError),
-      third.listen((value) {
-        latestC = value;
-        hasC = true;
         emit();
       }, onError: controller.addError),
     ];

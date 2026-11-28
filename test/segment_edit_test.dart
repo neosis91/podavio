@@ -138,7 +138,6 @@ void main() {
       final row = (await database.skipSegmentById(segmentId))!;
       expect((row.startMs, row.endMs), (11500, 29000));
       expect(row.source, SkipSegmentSource.manual);
-      expect(row.confirmed, isTrue);
       final template = (await database.listSegmentTemplates(podcastId)).single;
       expect(template.durationMs, 17500);
       expect(
@@ -199,7 +198,6 @@ void main() {
           PlannedPattern(
             templateId: template.id,
             kind: SkipSegmentKind.ad,
-            confirmed: null,
             fingerprint: values.sublist(80, 240),
             durationMs: 20000,
             confidence: 80,
@@ -209,7 +207,6 @@ void main() {
                 startMs: 10000,
                 endMs: 30000,
                 kind: SkipSegmentKind.ad,
-                confirmed: null,
                 matches: 2,
                 confidence: 80,
               ),

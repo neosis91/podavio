@@ -137,7 +137,6 @@ List<DisplayChapter> mergeChaptersWithSegments({
       segments
           .where(
             (segment) =>
-                segment.confirmed != false &&
                 segment.source != SkipSegmentSource.chapter &&
                 segment.endMs > segment.startMs,
           )

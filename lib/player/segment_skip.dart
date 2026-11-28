@@ -7,7 +7,6 @@ class SkipCandidate {
     required this.startMs,
     required this.endMs,
     required this.kind,
-    required this.confirmed,
     this.networkSting = false,
   });
 
@@ -18,9 +17,6 @@ class SkipCandidate {
 
   /// Virgule de réseau. Elle se saute avec les pubs, même séparée d’un silence.
   final bool networkSting;
-
-  /// `null` : pas encore revu. `true` : confirmé. `false` : ignoré.
-  final bool? confirmed;
 
   bool contains(int positionMs) {
     return positionMs >= startMs && positionMs < endMs;
@@ -71,7 +67,6 @@ SkipDecision? decideSkipSegment({
   }
   SkipCandidate? chosen;
   for (final segment in segments) {
-    if (segment.confirmed == false) continue;
     if (!_skipsWithAds(segment, autoSkipKinds)) continue;
     if (heldIds.contains(segment.id)) continue;
     if (segment.endMs <= segment.startMs) continue;
@@ -91,6 +86,11 @@ bool _skipsWithAds(SkipCandidate segment, Set<SkipSegmentKind> kinds) {
   return segment.networkSting && kinds.contains(SkipSegmentKind.ad);
 }
 
+/// Jingle ou virgule posée à la main, collée à une pub.
+bool _gluedSting(SkipSegmentKind kind) {
+  return kind == SkipSegmentKind.jingle || kind == SkipSegmentKind.sting;
+}
+
 /// Une pub et la virgule collée juste après forment un seul saut.
 /// Les chapitres, eux, restent deux passages.
 int _contiguousSkipEnd(
@@ -103,11 +103,10 @@ int _contiguousSkipEnd(
   for (var guard = 0; guard < 8; guard++) {
     SkipCandidate? next;
     for (final segment in segments) {
-      if (segment.confirmed == false) continue;
       if (segment.endMs <= end) continue;
       if (segment.startMs > end + 500) continue;
       final enabled = kinds.contains(segment.kind);
-      final stingAfterAd = glueSting && segment.kind == SkipSegmentKind.jingle;
+      final stingAfterAd = glueSting && _gluedSting(segment.kind);
       if (!enabled && !stingAfterAd) continue;
       if (next == null || segment.endMs > next.endMs) next = segment;
     }
@@ -155,7 +154,6 @@ SkipOffer? manualSkipOffer({
   var coveredByAuto = false;
   SkipCandidate? chosen;
   for (final segment in segments) {
-    if (segment.confirmed == false) continue;
     if (segment.endMs <= segment.startMs) continue;
     if (!segment.contains(positionMs)) continue;
     if (autoSkipAds && _skipsWithAds(segment, autoSkipKinds)) {

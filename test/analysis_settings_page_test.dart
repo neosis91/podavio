@@ -74,7 +74,6 @@ void main() {
       endMs: 16000,
       kind: SkipSegmentKind.ad,
       source: SkipSegmentSource.manual,
-      confirmed: true,
       templateId: templateId,
     );
     await database.insertSegmentTemplate(

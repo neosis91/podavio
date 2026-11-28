@@ -216,7 +216,6 @@ void main() {
           kind: SkipSegmentKind.sting,
           fingerprint: motif,
           durationMs: _ms(24),
-          confirmed: true,
         ),
       ],
       discover: false,
@@ -259,7 +258,6 @@ void main() {
           kind: SkipSegmentKind.sting,
           fingerprint: motif,
           durationMs: _ms(6),
-          confirmed: true,
         ),
       ],
       discover: false,
@@ -291,7 +289,6 @@ void main() {
             kind: kind,
             fingerprint: motif,
             durationMs: _ms(24),
-            confirmed: true,
           ),
         ],
         discover: false,
@@ -325,7 +322,6 @@ void main() {
           kind: SkipSegmentKind.ad,
           fingerprint: motif,
           durationMs: _ms(100),
-          confirmed: true,
         ),
       ],
       discover: false,
@@ -352,21 +348,17 @@ void main() {
           kind: SkipSegmentKind.sponsor,
           fingerprint: motif,
           durationMs: _ms(100),
-          confirmed: false,
         ),
       ],
     );
     expect(plan.patterns, hasLength(1));
     expect(plan.patterns.single.templateId, 7);
     expect(plan.patterns.single.kind, SkipSegmentKind.sponsor);
-    expect(plan.patterns.single.confirmed, isFalse);
     expect(plan.patterns.single.segments, hasLength(2));
     expect(plan.patterns.single.confidence, crossEpisodeConfidence);
     expect(
-      plan.patterns.single.segments.every(
-        (segment) => segment.confirmed == false,
-      ),
-      isTrue,
+      plan.patterns.single.segments,
+      isNotEmpty,
     );
   });
 
@@ -598,7 +590,6 @@ void main() {
           kind: SkipSegmentKind.ad,
           fingerprint: known,
           durationMs: _ms(100),
-          confirmed: null,
         ),
       ],
       focusEpisodeId: 2,

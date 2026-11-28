@@ -205,7 +205,6 @@ Future<CreatedSegment> createManualSegment(
       endMs: endMs,
       kind: kind,
       source: SkipSegmentSource.manual,
-      confirmed: true,
       templateId: templateId,
     );
     await database.insertSegmentAnnotation(

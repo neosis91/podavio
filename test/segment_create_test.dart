@@ -82,7 +82,7 @@ void main() {
 
     tearDown(() => database.close());
 
-    test('gabarit coupé et nommé, passage manuel confirmé, vérité sans '
+    test('gabarit coupé et nommé, passage manuel, vérité sans '
         'bornes détectées', () async {
       final created = await createManualSegment(
         database,
@@ -94,7 +94,6 @@ void main() {
       );
       final row = (await database.skipSegmentById(created.segmentId!))!;
       expect(row.source, SkipSegmentSource.manual);
-      expect(row.confirmed, isTrue);
       expect(row.kind, SkipSegmentKind.selfPromo);
       final template = (await database.listSegmentTemplates(podcastId)).single;
       expect(row.templateId, template.id);
@@ -181,7 +180,6 @@ void main() {
           PlannedPattern(
             templateId: template.id,
             kind: SkipSegmentKind.ad,
-            confirmed: true,
             fingerprint: decodeFingerprint(template.fingerprint),
             durationMs: 30000,
             confidence: 90,
@@ -191,7 +189,6 @@ void main() {
                 startMs: 19000,
                 endMs: 51000,
                 kind: SkipSegmentKind.ad,
-                confirmed: true,
                 matches: 2,
                 confidence: 90,
               ),
@@ -200,7 +197,6 @@ void main() {
                 startMs: 70000,
                 endMs: 100000,
                 kind: SkipSegmentKind.ad,
-                confirmed: true,
                 matches: 2,
                 confidence: 90,
               ),
@@ -214,7 +210,6 @@ void main() {
       final found = (await database.listSkipSegments(second)).single;
       expect(found.templateId, template.id);
       expect(found.source, SkipSegmentSource.fingerprint);
-      expect(found.confirmed, isTrue);
     });
 
     test(

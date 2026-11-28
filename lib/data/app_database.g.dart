@@ -5062,20 +5062,6 @@ class $SkipSegmentsTable extends SkipSegments
     requiredDuringInsert: false,
     defaultValue: const Constant(1),
   );
-  static const VerificationMeta _confirmedMeta = const VerificationMeta(
-    'confirmed',
-  );
-  @override
-  late final GeneratedColumn<bool> confirmed = GeneratedColumn<bool>(
-    'confirmed',
-    aliasedName,
-    true,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("confirmed" IN (0, 1))',
-    ),
-  );
   static const VerificationMeta _confidenceMeta = const VerificationMeta(
     'confidence',
   );
@@ -5110,7 +5096,6 @@ class $SkipSegmentsTable extends SkipSegments
     kind,
     source,
     matches,
-    confirmed,
     confidence,
     templateId,
   ];
@@ -5157,12 +5142,6 @@ class $SkipSegmentsTable extends SkipSegments
       context.handle(
         _matchesMeta,
         matches.isAcceptableOrUnknown(data['matches']!, _matchesMeta),
-      );
-    }
-    if (data.containsKey('confirmed')) {
-      context.handle(
-        _confirmedMeta,
-        confirmed.isAcceptableOrUnknown(data['confirmed']!, _confirmedMeta),
       );
     }
     if (data.containsKey('confidence')) {
@@ -5218,10 +5197,6 @@ class $SkipSegmentsTable extends SkipSegments
         DriftSqlType.int,
         data['${effectivePrefix}matches'],
       )!,
-      confirmed: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}confirmed'],
-      ),
       confidence: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}confidence'],
@@ -5257,9 +5232,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
   /// Nombre d’épisodes du podcast qui partagent ce passage.
   final int matches;
 
-  /// `null` : pas revu. `true` : confirmé. `false` : ignoré.
-  final bool? confirmed;
-
   /// 0–100. `null` : pas calculé (chapitre, ou passage ancien).
   /// Sert au tri. Un candidat intra-épisode bas est replié dans l’écran.
   final int? confidence;
@@ -5272,7 +5244,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     required this.kind,
     required this.source,
     required this.matches,
-    this.confirmed,
     this.confidence,
     this.templateId,
   });
@@ -5294,9 +5265,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
       );
     }
     map['matches'] = Variable<int>(matches);
-    if (!nullToAbsent || confirmed != null) {
-      map['confirmed'] = Variable<bool>(confirmed);
-    }
     if (!nullToAbsent || confidence != null) {
       map['confidence'] = Variable<int>(confidence);
     }
@@ -5315,9 +5283,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
       kind: Value(kind),
       source: Value(source),
       matches: Value(matches),
-      confirmed: confirmed == null && nullToAbsent
-          ? const Value.absent()
-          : Value(confirmed),
       confidence: confidence == null && nullToAbsent
           ? const Value.absent()
           : Value(confidence),
@@ -5344,7 +5309,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
         serializer.fromJson<String>(json['source']),
       ),
       matches: serializer.fromJson<int>(json['matches']),
-      confirmed: serializer.fromJson<bool?>(json['confirmed']),
       confidence: serializer.fromJson<int?>(json['confidence']),
       templateId: serializer.fromJson<int?>(json['templateId']),
     );
@@ -5364,7 +5328,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
         $SkipSegmentsTable.$convertersource.toJson(source),
       ),
       'matches': serializer.toJson<int>(matches),
-      'confirmed': serializer.toJson<bool?>(confirmed),
       'confidence': serializer.toJson<int?>(confidence),
       'templateId': serializer.toJson<int?>(templateId),
     };
@@ -5378,7 +5341,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     SkipSegmentKind? kind,
     SkipSegmentSource? source,
     int? matches,
-    Value<bool?> confirmed = const Value.absent(),
     Value<int?> confidence = const Value.absent(),
     Value<int?> templateId = const Value.absent(),
   }) => SkipSegment(
@@ -5389,7 +5351,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     kind: kind ?? this.kind,
     source: source ?? this.source,
     matches: matches ?? this.matches,
-    confirmed: confirmed.present ? confirmed.value : this.confirmed,
     confidence: confidence.present ? confidence.value : this.confidence,
     templateId: templateId.present ? templateId.value : this.templateId,
   );
@@ -5402,7 +5363,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
       kind: data.kind.present ? data.kind.value : this.kind,
       source: data.source.present ? data.source.value : this.source,
       matches: data.matches.present ? data.matches.value : this.matches,
-      confirmed: data.confirmed.present ? data.confirmed.value : this.confirmed,
       confidence: data.confidence.present
           ? data.confidence.value
           : this.confidence,
@@ -5422,7 +5382,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
           ..write('kind: $kind, ')
           ..write('source: $source, ')
           ..write('matches: $matches, ')
-          ..write('confirmed: $confirmed, ')
           ..write('confidence: $confidence, ')
           ..write('templateId: $templateId')
           ..write(')'))
@@ -5438,7 +5397,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     kind,
     source,
     matches,
-    confirmed,
     confidence,
     templateId,
   );
@@ -5453,7 +5411,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
           other.kind == this.kind &&
           other.source == this.source &&
           other.matches == this.matches &&
-          other.confirmed == this.confirmed &&
           other.confidence == this.confidence &&
           other.templateId == this.templateId);
 }
@@ -5466,7 +5423,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
   final Value<SkipSegmentKind> kind;
   final Value<SkipSegmentSource> source;
   final Value<int> matches;
-  final Value<bool?> confirmed;
   final Value<int?> confidence;
   final Value<int?> templateId;
   const SkipSegmentsCompanion({
@@ -5477,7 +5433,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     this.kind = const Value.absent(),
     this.source = const Value.absent(),
     this.matches = const Value.absent(),
-    this.confirmed = const Value.absent(),
     this.confidence = const Value.absent(),
     this.templateId = const Value.absent(),
   });
@@ -5489,7 +5444,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     required SkipSegmentKind kind,
     required SkipSegmentSource source,
     this.matches = const Value.absent(),
-    this.confirmed = const Value.absent(),
     this.confidence = const Value.absent(),
     this.templateId = const Value.absent(),
   }) : episodeId = Value(episodeId),
@@ -5505,7 +5459,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     Expression<String>? kind,
     Expression<String>? source,
     Expression<int>? matches,
-    Expression<bool>? confirmed,
     Expression<int>? confidence,
     Expression<int>? templateId,
   }) {
@@ -5517,7 +5470,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
       if (kind != null) 'kind': kind,
       if (source != null) 'source': source,
       if (matches != null) 'matches': matches,
-      if (confirmed != null) 'confirmed': confirmed,
       if (confidence != null) 'confidence': confidence,
       if (templateId != null) 'template_id': templateId,
     });
@@ -5531,7 +5483,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     Value<SkipSegmentKind>? kind,
     Value<SkipSegmentSource>? source,
     Value<int>? matches,
-    Value<bool?>? confirmed,
     Value<int?>? confidence,
     Value<int?>? templateId,
   }) {
@@ -5543,7 +5494,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
       kind: kind ?? this.kind,
       source: source ?? this.source,
       matches: matches ?? this.matches,
-      confirmed: confirmed ?? this.confirmed,
       confidence: confidence ?? this.confidence,
       templateId: templateId ?? this.templateId,
     );
@@ -5577,9 +5527,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     if (matches.present) {
       map['matches'] = Variable<int>(matches.value);
     }
-    if (confirmed.present) {
-      map['confirmed'] = Variable<bool>(confirmed.value);
-    }
     if (confidence.present) {
       map['confidence'] = Variable<int>(confidence.value);
     }
@@ -5599,7 +5546,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
           ..write('kind: $kind, ')
           ..write('source: $source, ')
           ..write('matches: $matches, ')
-          ..write('confirmed: $confirmed, ')
           ..write('confidence: $confidence, ')
           ..write('templateId: $templateId')
           ..write(')'))
@@ -10726,7 +10672,6 @@ typedef $$SkipSegmentsTableCreateCompanionBuilder =
       required SkipSegmentKind kind,
       required SkipSegmentSource source,
       Value<int> matches,
-      Value<bool?> confirmed,
       Value<int?> confidence,
       Value<int?> templateId,
     });
@@ -10739,7 +10684,6 @@ typedef $$SkipSegmentsTableUpdateCompanionBuilder =
       Value<SkipSegmentKind> kind,
       Value<SkipSegmentSource> source,
       Value<int> matches,
-      Value<bool?> confirmed,
       Value<int?> confidence,
       Value<int?> templateId,
     });
@@ -10822,11 +10766,6 @@ class $$SkipSegmentsTableFilterComposer
 
   ColumnFilters<int> get matches => $composableBuilder(
     column: $table.matches,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get confirmed => $composableBuilder(
-    column: $table.confirmed,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10921,11 +10860,6 @@ class $$SkipSegmentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<bool> get confirmed => $composableBuilder(
-    column: $table.confirmed,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<int> get confidence => $composableBuilder(
     column: $table.confidence,
     builder: (column) => ColumnOrderings(column),
@@ -11004,9 +10938,6 @@ class $$SkipSegmentsTableAnnotationComposer
 
   GeneratedColumn<int> get matches =>
       $composableBuilder(column: $table.matches, builder: (column) => column);
-
-  GeneratedColumn<bool> get confirmed =>
-      $composableBuilder(column: $table.confirmed, builder: (column) => column);
 
   GeneratedColumn<int> get confidence => $composableBuilder(
     column: $table.confidence,
@@ -11095,7 +11026,6 @@ class $$SkipSegmentsTableTableManager
                 Value<SkipSegmentKind> kind = const Value.absent(),
                 Value<SkipSegmentSource> source = const Value.absent(),
                 Value<int> matches = const Value.absent(),
-                Value<bool?> confirmed = const Value.absent(),
                 Value<int?> confidence = const Value.absent(),
                 Value<int?> templateId = const Value.absent(),
               }) => SkipSegmentsCompanion(
@@ -11106,7 +11036,6 @@ class $$SkipSegmentsTableTableManager
                 kind: kind,
                 source: source,
                 matches: matches,
-                confirmed: confirmed,
                 confidence: confidence,
                 templateId: templateId,
               ),
@@ -11119,7 +11048,6 @@ class $$SkipSegmentsTableTableManager
                 required SkipSegmentKind kind,
                 required SkipSegmentSource source,
                 Value<int> matches = const Value.absent(),
-                Value<bool?> confirmed = const Value.absent(),
                 Value<int?> confidence = const Value.absent(),
                 Value<int?> templateId = const Value.absent(),
               }) => SkipSegmentsCompanion.insert(
@@ -11130,7 +11058,6 @@ class $$SkipSegmentsTableTableManager
                 kind: kind,
                 source: source,
                 matches: matches,
-                confirmed: confirmed,
                 confidence: confidence,
                 templateId: templateId,
               ),

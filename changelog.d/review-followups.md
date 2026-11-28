@@ -1,0 +1,1 @@
+- A timed-out episode analysis no longer blocks later comparisons, and skip passages update while the episode is playing. Stings glue to ads the same way jingles do, and removing downloads no longer forgets the host. Confirm and ignore actions are gone.

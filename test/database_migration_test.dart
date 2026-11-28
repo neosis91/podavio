@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:podavio/data/app_database.dart';
+import 'package:podavio/data/models.dart';
+import 'package:podavio/data/skip_segments.dart';
 
 Future<int> _userVersion(AppDatabase database) async {
   final row = await database.customSelect('PRAGMA user_version').getSingle();
@@ -71,7 +73,7 @@ void main() {
         .get();
     await reopened
         .customSelect(
-          'SELECT start_ms, end_ms, kind, source, matches, confirmed, '
+          'SELECT start_ms, end_ms, kind, source, matches, '
           'confidence, template_id FROM skip_segments',
         )
         .get();
@@ -123,6 +125,65 @@ void main() {
         .customSelect('SELECT confidence FROM segment_templates')
         .get();
     await reopened.customSelect('SELECT confidence FROM skip_segments').get();
+    expect(await _userVersion(reopened), reopened.schemaVersion);
+  });
+
+  test('drops the review column and keeps the other skip columns', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-migration-v24');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    await created.customSelect('SELECT 1').get();
+    await created.customStatement(
+      'ALTER TABLE skip_segments ADD COLUMN confirmed INTEGER',
+    );
+    final podcastId = (await created.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a',
+            title: 'Un',
+            description: 'Notes',
+            audioUrl: 'https://example.com/a.mp3',
+          ),
+        ],
+      ),
+    )).podcastId;
+    final episodeId = (await created.watchEpisodes(podcastId: podcastId).first)
+        .single
+        .episode
+        .id;
+    final segmentId = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 1000,
+      endMs: 4000,
+      kind: SkipSegmentKind.ad,
+      source: SkipSegmentSource.manual,
+    );
+    await created.customStatement(
+      'UPDATE skip_segments SET confirmed = 1 WHERE id = $segmentId',
+    );
+    await created.customStatement('PRAGMA user_version = 24');
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    final columns = await reopened
+        .customSelect('PRAGMA table_info(skip_segments)')
+        .get();
+    expect(
+      columns.map((row) => row.read<String>('name')),
+      isNot(contains('confirmed')),
+    );
+    final row = (await reopened.listSkipSegments(episodeId)).single;
+    expect(row.id, segmentId);
+    expect(row.startMs, 1000);
+    expect(row.kind, SkipSegmentKind.ad);
     expect(await _userVersion(reopened), reopened.schemaVersion);
   });
 }

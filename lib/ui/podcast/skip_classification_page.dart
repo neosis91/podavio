@@ -215,10 +215,7 @@ class SkipClassificationPage extends ConsumerWidget {
           grouped
               .putIfAbsent(template.kind, () => [])
               .add(
-                _Row.template(
-                  template,
-                  confirmed: data.templateConfirmed[template.id],
-                ),
+                _Row.template(template),
               );
         }
         for (final loose in data.segments) {
@@ -357,26 +354,20 @@ int _startOf(_Row row) {
   return row.loose?.segment.startMs ?? row.template?.id ?? 0;
 }
 
-/// Candidat d’une seule épisode, déjà ignoré pour le saut, score bas.
+/// Candidat d’une seule épisode, score bas : replié sous « afficher plus ».
 bool _uncertain(_Row row) {
   if (_confidenceOf(row) >= lowConfidenceCutoff) return false;
-  final confirmed = row.template != null
-      ? row.confirmed
-      : row.loose!.segment.confirmed;
   final matches = row.template?.occurrences ?? row.loose!.segment.matches;
-  return confirmed == false && matches <= 1;
+  return matches <= 1;
 }
 
 class _Row {
-  const _Row.template(this.template, {required this.confirmed}) : loose = null;
+  const _Row.template(this.template) : loose = null;
 
-  const _Row.segment(this.loose) : template = null, confirmed = null;
+  const _Row.segment(this.loose) : template = null;
 
   final SegmentTemplate? template;
   final LooseSkipSegment? loose;
-
-  /// Avis du modèle. Ignoré pour un passage isolé (il a le sien).
-  final bool? confirmed;
 
   bool get isTemplate => template != null;
 }
@@ -397,7 +388,6 @@ class _SegmentTile extends ConsumerWidget {
     final durationMs =
         template?.durationMs ?? (loose!.segment.endMs - loose.segment.startMs);
     final count = template?.occurrences ?? loose!.segment.matches;
-    final review = template != null ? row.confirmed : loose!.segment.confirmed;
     final range = loose == null
         ? null
         : '${formatClock(Duration(milliseconds: loose.segment.startMs))}'
@@ -408,7 +398,6 @@ class _SegmentTile extends ConsumerWidget {
       formatClock(Duration(milliseconds: durationMs < 0 ? 0 : durationMs)),
       _episodeCount(context, count),
       if (source == SkipSegmentSource.network) context.tr('Network sting'),
-      context.tr(_reviewKey(review)),
     ].join(' · ');
     return ListTile(
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -435,14 +424,6 @@ class _SegmentTile extends ConsumerWidget {
               PopupMenuItem(
                 value: _SegmentAction.create,
                 child: Text(context.tr('Create a passage')),
-              ),
-              PopupMenuItem(
-                value: _SegmentAction.confirm,
-                child: Text(context.tr('Confirm')),
-              ),
-              PopupMenuItem(
-                value: _SegmentAction.ignore,
-                child: Text(context.tr('Ignore')),
               ),
               if (template != null)
                 PopupMenuItem(
@@ -556,6 +537,9 @@ class _SegmentTile extends ConsumerWidget {
         } else {
           await db.setSkipSegmentKind(segment!.id, choice);
         }
+        // Le lecteur suit la table : un type changé pendant l’écoute
+        // est repris sans rouvrir l’épisode.
+        unawaited(ref.read(playerProvider.notifier).reloadSkipSegments());
       case _SegmentAction.adjust:
         var segmentId = segment?.id;
         if (template != null) {
@@ -588,18 +572,6 @@ class _SegmentTile extends ConsumerWidget {
           return;
         }
         await openPassageCreator(context, ref, episodeId);
-      case _SegmentAction.confirm:
-        if (template != null) {
-          await db.setTemplateReview(template.id, confirmed: true);
-        } else {
-          await db.setSkipSegmentReview(segment!.id, confirmed: true);
-        }
-      case _SegmentAction.ignore:
-        if (template != null) {
-          await db.setTemplateReview(template.id, confirmed: false);
-        } else {
-          await db.setSkipSegmentReview(segment!.id, confirmed: false);
-        }
       case _SegmentAction.rename:
         if (template == null) return;
         final label = await _askLabel(context, template.label);
@@ -633,7 +605,7 @@ class _SegmentTile extends ConsumerWidget {
   }
 }
 
-enum _SegmentAction { kind, adjust, create, confirm, ignore, rename, delete }
+enum _SegmentAction { kind, adjust, create, rename, delete }
 
 String _templateTitle(BuildContext context, SegmentTemplate template) {
   final label = template.label?.trim() ?? '';
@@ -644,12 +616,6 @@ String _templateTitle(BuildContext context, SegmentTemplate template) {
 String _episodeCount(BuildContext context, int count) {
   if (count == 1) return context.tr('1 episode');
   return context.tr('{count} episodes', {'count': '$count'});
-}
-
-String _reviewKey(bool? confirmed) {
-  if (confirmed == true) return 'Confirmed';
-  if (confirmed == false) return 'Ignored';
-  return 'Unreviewed';
 }
 
 Future<String?> _askLabel(BuildContext context, String? current) async {
