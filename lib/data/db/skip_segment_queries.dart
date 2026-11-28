@@ -15,10 +15,7 @@ class LooseSkipSegment {
 
 /// Modèles du podcast et passages qui n’y sont pas rattachés.
 class SkipClassification {
-  const SkipClassification({
-    required this.templates,
-    required this.segments,
-  });
+  const SkipClassification({required this.templates, required this.segments});
 
   final List<SegmentTemplate> templates;
   final List<LooseSkipSegment> segments;
@@ -169,13 +166,10 @@ mixin _SkipSegmentQueries on _$AppDatabase {
 
   /// Virgules et jingles posés à la main sur [podcastIds] (même hébergeur).
   Future<List<SegmentTemplate>> sharedNetworkTemplates(List<int> podcastIds) {
-    return _sharedManualTemplates(
-      [
-        for (final kind in SkipSegmentKind.values)
-          if (spreadsWithinNetwork(kind)) kind,
-      ],
-      podcastIds: podcastIds,
-    );
+    return _sharedManualTemplates([
+      for (final kind in SkipSegmentKind.values)
+        if (spreadsWithinNetwork(kind)) kind,
+    ], podcastIds: podcastIds);
   }
 
   /// Retire les virgules et jingles d’un autre hébergeur sur [podcastId].
@@ -265,10 +259,8 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     return _combineSkip(
       watchSegmentTemplates(podcastId),
       _watchLooseSegments(podcastId),
-      (templates, segments) => SkipClassification(
-        templates: templates,
-        segments: segments,
-      ),
+      (templates, segments) =>
+          SkipClassification(templates: templates, segments: segments),
     );
   }
 
@@ -323,14 +315,57 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     );
   }
 
+  /// Un type choisi par l’utilisateur tient comme un passage posé à la
+  /// main : l’analyse ne réécrit ni ne retire plus cette ligne.
   Future<void> setSkipSegmentKind(int id, SkipSegmentKind kind) {
     return (update(skipSegments)..where((row) => row.id.equals(id))).write(
-      SkipSegmentsCompanion(kind: Value(kind)),
+      SkipSegmentsCompanion(
+        kind: Value(kind),
+        source: const Value(SkipSegmentSource.manual),
+      ),
     );
   }
 
   Future<void> deleteSkipSegment(int id) {
     return (delete(skipSegments)..where((row) => row.id.equals(id))).go();
+  }
+
+  /// Retrait par l’utilisateur. La plage est mémorisée avant l’effacement,
+  /// pour qu’une analyse du même épisode ou du même gabarit ne la recrée pas.
+  Future<void> dismissSkipSegment(int id) {
+    return transaction(() async {
+      final row = await skipSegmentById(id);
+      if (row == null) return;
+      await _rememberDismissed(row);
+      await deleteSkipSegment(id);
+    });
+  }
+
+  Future<void> _rememberDismissed(SkipSegment row) {
+    return into(dismissedSkipSpans).insert(
+      DismissedSkipSpansCompanion.insert(
+        episodeId: row.episodeId,
+        templateId: Value(row.templateId),
+        startMs: row.startMs,
+        endMs: row.endMs,
+      ),
+    );
+  }
+
+  Future<List<DismissedSkipSpan>> dismissedSpansForPodcast(
+    int podcastId,
+  ) async {
+    final query = select(dismissedSkipSpans).join([
+      innerJoin(episodes, episodes.id.equalsExp(dismissedSkipSpans.episodeId)),
+    ])..where(episodes.podcastId.equals(podcastId));
+    final rows = await query.get();
+    return [for (final row in rows) row.readTable(dismissedSkipSpans)];
+  }
+
+  Future<List<DismissedSkipSpan>> dismissedSpansForEpisode(int episodeId) {
+    return (select(
+      dismissedSkipSpans,
+    )..where((row) => row.episodeId.equals(episodeId))).get();
   }
 
   Future<void> setTemplateKind(int id, SkipSegmentKind kind) {
@@ -342,8 +377,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
       await (update(segmentTemplates)..where((row) => row.id.equals(id))).write(
         SegmentTemplatesCompanion(kind: Value(kind)),
       );
-      await (update(skipSegments)..where((row) => row.templateId.equals(id)))
-          .write(SkipSegmentsCompanion(kind: Value(kind)));
       final narrowed =
           (sharesAcrossPodcasts(current.kind) && !sharesAcrossPodcasts(kind)) ||
           (spreadsToEveryPodcast(current.kind) && spreadsWithinNetwork(kind));
@@ -366,6 +399,16 @@ mixin _SkipSegmentQueries on _$AppDatabase {
           await deleteSkipSegment(row.readTable(skipSegments).id);
         }
       }
+      // Le type a été choisi : ces passages ne sont plus des détections
+      // que l’analyse peut déplacer ou effacer.
+      await (update(
+        skipSegments,
+      )..where((row) => row.templateId.equals(id))).write(
+        SkipSegmentsCompanion(
+          kind: Value(kind),
+          source: const Value(SkipSegmentSource.manual),
+        ),
+      );
     });
   }
 
@@ -377,8 +420,13 @@ mixin _SkipSegmentQueries on _$AppDatabase {
   }
 
   /// Efface le modèle et les passages qui en dépendent.
+  /// Chaque passage retiré est mémorisé : le même gabarit ne les repose pas.
   Future<void> deleteSegmentTemplate(int id) {
     return transaction(() async {
+      final rows = await segmentsForTemplate(id);
+      for (final row in rows) {
+        await _rememberDismissed(row);
+      }
       await (delete(
         skipSegments,
       )..where((row) => row.templateId.equals(id))).go();

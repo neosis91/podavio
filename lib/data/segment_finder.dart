@@ -124,6 +124,91 @@ class PlannedPattern {
       segments.map((segment) => segment.episodeId).toSet().length;
 }
 
+/// Plage retirée par l’utilisateur, rattachée à un épisode et, s’il
+/// existait, au gabarit. L’analyse ne la propose plus.
+class DismissedSpan {
+  const DismissedSpan({
+    required this.episodeId,
+    required this.startMs,
+    required this.endMs,
+    this.templateId,
+  });
+
+  final int episodeId;
+  final int startMs;
+  final int endMs;
+  final int? templateId;
+}
+
+/// Moitié de la plus courte des deux plages. Un léger décalage de
+/// l’analyse recouvre encore le passage retiré ou posé à la main.
+bool spansOverlap(int startMs, int endMs, int otherStart, int otherEnd) {
+  final overlap = math.min(endMs, otherEnd) - math.max(startMs, otherStart);
+  final shorter = math.min(endMs - startMs, otherEnd - otherStart);
+  return shorter > 0 && overlap * 2 >= shorter;
+}
+
+/// Vrai si cette plage recouvre un retrait du même épisode.
+///
+/// Le gabarit compte aussi : le même modèle, décalé de moins de deux
+/// secondes, ne revient pas même si les durées se recouvrent peu.
+bool spanWasDismissed(
+  List<DismissedSpan> dismissed, {
+  required int episodeId,
+  required int startMs,
+  required int endMs,
+  int? templateId,
+}) {
+  for (final row in dismissed) {
+    if (row.episodeId != episodeId) continue;
+    if (spansOverlap(startMs, endMs, row.startMs, row.endMs)) return true;
+    final sameTemplate =
+        templateId != null &&
+        row.templateId != null &&
+        row.templateId == templateId;
+    if (sameTemplate && (startMs - row.startMs).abs() <= stableOffsetSlackMs) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Retire du plan les passages qui recouvrent une suppression.
+AnalysisPlan dropDismissedSpans(
+  AnalysisPlan plan,
+  List<DismissedSpan> dismissed,
+) {
+  if (dismissed.isEmpty) return plan;
+  final patterns = <PlannedPattern>[];
+  for (final pattern in plan.patterns) {
+    final segments = [
+      for (final segment in pattern.segments)
+        if (!spanWasDismissed(
+          dismissed,
+          episodeId: segment.episodeId,
+          startMs: segment.startMs,
+          endMs: segment.endMs,
+          templateId: pattern.templateId,
+        ))
+          segment,
+    ];
+    if (segments.isEmpty) continue;
+    patterns.add(
+      _withMatches(
+        PlannedPattern(
+          templateId: pattern.templateId,
+          kind: pattern.kind,
+          fingerprint: pattern.fingerprint,
+          durationMs: pattern.durationMs,
+          segments: segments,
+          confidence: pattern.confidence,
+        ),
+      ),
+    );
+  }
+  return AnalysisPlan(patterns);
+}
+
 /// Résultat pur, sans base. L’écriture est idempotente à part.
 class AnalysisPlan {
   const AnalysisPlan(this.patterns);
@@ -144,6 +229,7 @@ AnalysisPlan buildAnalysisPlan({
   bool useMn04 = false,
   List<Mn04Cue> mn04 = const [],
   bool discover = true,
+  List<DismissedSpan> dismissed = const [],
 }) {
   final usable = [
     for (final episode in episodes)
@@ -210,7 +296,7 @@ AnalysisPlan buildAnalysisPlan({
 
   // Sans découverte, seuls les gabarits donnés sont cherchés : pas de
   // nouveau motif par répétition, pas de couche de contexte.
-  if (!discover) return AnalysisPlan(patterns);
+  if (!discover) return dropDismissedSpans(AnalysisPlan(patterns), dismissed);
   final discovered = focusEpisodeId != null && known.contains(focusEpisodeId)
       ? const <DiscoveredPattern>[]
       : _discoverPatterns(
@@ -306,8 +392,11 @@ AnalysisPlan buildAnalysisPlan({
     );
   }
   final plan = AnalysisPlan(patterns);
-  if (!contextLayer) return plan;
-  return _withContext(plan, byId, useMn04: useMn04, mn04: mn04);
+  if (!contextLayer) return dropDismissedSpans(plan, dismissed);
+  return dropDismissedSpans(
+    _withContext(plan, byId, useMn04: useMn04, mn04: mn04),
+    dismissed,
+  );
 }
 
 AnalysisPlan _withContext(
@@ -577,8 +666,33 @@ Map<String, Object?> planAnalysisMessage(Map<String, Object?> message) {
       useMn04: message['mn04'] == true,
       mn04: _mn04Of(message['mn04Cues']),
       discover: message['discover'] != false,
+      dismissed: _dismissedOf(message['dismissed']),
     ),
   );
+}
+
+List<DismissedSpan> _dismissedOf(Object? raw) {
+  if (raw is! List) return const [];
+  final spans = <DismissedSpan>[];
+  for (final item in raw) {
+    if (item is! List || item.length < 3) continue;
+    final episodeId = item[0];
+    final start = item[1];
+    final end = item[2];
+    if (episodeId is! int || start is! int || end is! int || end <= start) {
+      continue;
+    }
+    final template = item.length > 3 ? item[3] : null;
+    spans.add(
+      DismissedSpan(
+        episodeId: episodeId,
+        startMs: start,
+        endMs: end,
+        templateId: template is int ? template : null,
+      ),
+    );
+  }
+  return spans;
 }
 
 List<AdContextChapter> _chaptersOf(Object? raw) {

@@ -238,6 +238,60 @@ void main() {
     expect(other.single.startMs, closeTo(_ms(220), 800));
   });
 
+  test('a dismissed span is left out, the other hits stay', () {
+    final motif = _motif(24, 9);
+    final values = _noise(800, 3);
+    _write(values, 40, motif);
+    _write(values, 400, motif);
+    final elsewhere = _noise(800, 8);
+    _write(elsewhere, 220, motif);
+    final plan = buildAnalysisPlan(
+      episodes: [
+        FingerprintEpisode(
+          episodeId: 1,
+          values: values,
+          hopMicros: hop,
+          durationMs: 400000,
+        ),
+        FingerprintEpisode(
+          episodeId: 2,
+          values: elsewhere,
+          hopMicros: hop,
+          durationMs: 400000,
+        ),
+      ],
+      templates: [
+        KnownTemplate(
+          id: 4,
+          kind: SkipSegmentKind.sting,
+          fingerprint: motif,
+          durationMs: _ms(24),
+        ),
+      ],
+      discover: false,
+      dismissed: [
+        DismissedSpan(
+          episodeId: 1,
+          templateId: 4,
+          startMs: _ms(40),
+          endMs: _ms(64),
+        ),
+      ],
+    );
+    final own =
+        plan.patterns.single.segments
+            .where((hit) => hit.episodeId == 1)
+            .map((hit) => hit.startMs)
+            .toList()
+          ..sort();
+    expect(own, hasLength(1));
+    expect(own.single, closeTo(_ms(400), 800));
+    expect(
+      plan.patterns.single.segments.where((hit) => hit.episodeId == 2),
+      hasLength(1),
+    );
+  });
+
   test('a template shorter than eight values is not searched', () {
     final motif = _motif(6, 2);
     final values = _noise(400, 1);
@@ -356,10 +410,7 @@ void main() {
     expect(plan.patterns.single.kind, SkipSegmentKind.sponsor);
     expect(plan.patterns.single.segments, hasLength(2));
     expect(plan.patterns.single.confidence, crossEpisodeConfidence);
-    expect(
-      plan.patterns.single.segments,
-      isNotEmpty,
-    );
+    expect(plan.patterns.single.segments, isNotEmpty);
   });
 
   test('music inside one episode is dropped, speech is only a candidate', () {

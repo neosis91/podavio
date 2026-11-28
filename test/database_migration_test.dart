@@ -186,4 +186,57 @@ void main() {
     expect(row.kind, SkipSegmentKind.ad);
     expect(await _userVersion(reopened), reopened.schemaVersion);
   });
+
+  test('adds the dismissed-span table and keeps the skip row', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-migration');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    final podcastId = (await created.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a',
+            title: 'Un',
+            description: 'Notes',
+            audioUrl: 'https://example.com/a.mp3',
+          ),
+        ],
+      ),
+    )).podcastId;
+    final episodeId = (await created.watchEpisodes(podcastId: podcastId).first)
+        .single
+        .episode
+        .id;
+    final segmentId = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 8000,
+      endMs: 12000,
+      kind: SkipSegmentKind.sting,
+      source: SkipSegmentSource.fingerprint,
+    );
+    await created.customStatement('DROP TABLE dismissed_skip_spans');
+    await created.customStatement('PRAGMA user_version = 25');
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    final columns = await reopened
+        .customSelect('PRAGMA table_info(dismissed_skip_spans)')
+        .get();
+    expect(
+      columns.map((row) => row.read<String>('name')),
+      containsAll(['episode_id', 'template_id', 'start_ms', 'end_ms']),
+    );
+    final row = (await reopened.listSkipSegments(episodeId)).single;
+    expect(row.id, segmentId);
+    expect(row.startMs, 8000);
+    expect(row.kind, SkipSegmentKind.sting);
+    expect(await _userVersion(reopened), reopened.schemaVersion);
+  });
 }

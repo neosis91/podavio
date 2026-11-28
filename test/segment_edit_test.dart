@@ -14,6 +14,29 @@ import 'package:podavio/ui/podcast/segment_waveform_page.dart';
 
 const _hop = 123809;
 
+AnalysisPlan _plan(int episodeId, int templateId, List<(int, int)> spans) {
+  return AnalysisPlan([
+    PlannedPattern(
+      templateId: templateId,
+      kind: SkipSegmentKind.ad,
+      fingerprint: const [1, 2, 3, 4, 5, 6, 7, 8],
+      durationMs: 20000,
+      confidence: 80,
+      segments: [
+        for (final span in spans)
+          PlannedSegment(
+            episodeId: episodeId,
+            startMs: span.$1,
+            endMs: span.$2,
+            kind: SkipSegmentKind.ad,
+            matches: spans.length,
+            confidence: 80,
+          ),
+      ],
+    ),
+  ]);
+}
+
 void main() {
   group('bornes', () {
     test('clampBounds garde l’épisode et une seconde au moins', () {
@@ -226,6 +249,69 @@ void main() {
       expect(rows, hasLength(1));
       expect((rows.single.startMs, rows.single.endMs), (12000, 28000));
       expect(rows.single.source, SkipSegmentSource.manual);
+    });
+
+    test('un passage retiré n’est pas recréé, un autre oui', () async {
+      final templateId = await database.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.ad,
+        fingerprint: encodeFingerprint(values.sublist(80, 240)),
+        durationMs: 20000,
+      );
+      final segmentId = await database.insertSkipSegment(
+        episodeId: episodeId,
+        startMs: 10000,
+        endMs: 30000,
+        kind: SkipSegmentKind.ad,
+        source: SkipSegmentSource.fingerprint,
+        templateId: templateId,
+      );
+      await database.dismissSkipSegment(segmentId);
+      expect(await database.listSkipSegments(episodeId), isEmpty);
+      final trace = await database.dismissedSpansForEpisode(episodeId);
+      expect(trace.single.templateId, templateId);
+      expect((trace.single.startMs, trace.single.endMs), (10000, 30000));
+
+      await applyAnalysisPlan(
+        database,
+        podcastId,
+        _plan(episodeId, templateId, [(11000, 29000), (120000, 140000)]),
+        searchedTemplates: {templateId},
+      );
+      final rows = await database.listSkipSegments(episodeId);
+      expect(rows, hasLength(1));
+      expect((rows.single.startMs, rows.single.endMs), (120000, 140000));
+      expect(rows.single.source, SkipSegmentSource.fingerprint);
+    });
+
+    test('un type modifié n’est ni réécrit ni retiré', () async {
+      final templateId = await database.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.ad,
+        fingerprint: encodeFingerprint(values.sublist(80, 240)),
+        durationMs: 20000,
+      );
+      final segmentId = await database.insertSkipSegment(
+        episodeId: episodeId,
+        startMs: 10000,
+        endMs: 30000,
+        kind: SkipSegmentKind.ad,
+        source: SkipSegmentSource.fingerprint,
+        templateId: templateId,
+      );
+      await database.setSkipSegmentKind(segmentId, SkipSegmentKind.intro);
+      await applyAnalysisPlan(
+        database,
+        podcastId,
+        _plan(episodeId, templateId, [(9000, 31000)]),
+        searchedTemplates: {templateId},
+      );
+      final rows = await database.listSkipSegments(episodeId);
+      expect(rows, hasLength(1));
+      expect(rows.single.id, segmentId);
+      expect(rows.single.kind, SkipSegmentKind.intro);
+      expect(rows.single.source, SkipSegmentSource.manual);
+      expect((rows.single.startMs, rows.single.endMs), (10000, 30000));
     });
   });
 

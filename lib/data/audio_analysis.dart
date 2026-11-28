@@ -352,6 +352,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   Future<void>? _pumpFuture;
   final _comparisons = ComparisonPassQueue();
   Future<void> _comparisonTurn = Future<void>.value();
+
   /// Décodage de l’épisode en cours. Le rapprochement a son propre isolate :
   /// un délai dépassé ne tue pas une diffusion lancée à côté.
   Isolate? _decodeWorker;
@@ -611,10 +612,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   /// Une seule passe à la fois. Celles qui arrivent pendant une passe
   /// sont fusionnées en une seule passe suivante. [templateIds] limite
   /// la passe à ces gabarits ; sans liste, tout le périmètre est relu.
-  Future<void> spreadSharedAds({
-    int? exceptPodcastId,
-    Set<int>? templateIds,
-  }) {
+  Future<void> spreadSharedAds({int? exceptPodcastId, Set<int>? templateIds}) {
     return _comparisons.schedule(
       (except) => _alone(() => _spreadSharedAds(exceptPodcastId: except)),
       exceptPodcastId: exceptPodcastId,
@@ -1018,7 +1016,11 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
 /// Un isolate et son attente. onExit et onError terminent [result]
 /// même si l’isolate est tué avant d’avoir répondu.
 class TrackedAnalysis {
-  TrackedAnalysis({required this.isolate, required this.result, required this.close});
+  TrackedAnalysis({
+    required this.isolate,
+    required this.result,
+    required this.close,
+  });
 
   final Isolate isolate;
   final Future<Object?> result;
@@ -1036,10 +1038,13 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
   final exits = ReceivePort();
   final result = Completer<Object?>();
   final tracked = TrackedAnalysis(
-    isolate: await Isolate.spawn(entry, <Object?>[
-      port.sendPort,
-      message,
-    ], onError: errors.sendPort, onExit: exits.sendPort, debugName: 'podavio-analysis'),
+    isolate: await Isolate.spawn(
+      entry,
+      <Object?>[port.sendPort, message],
+      onError: errors.sendPort,
+      onExit: exits.sendPort,
+      debugName: 'podavio-analysis',
+    ),
     result: result.future,
     close: () {
       port.close();
@@ -1054,7 +1059,9 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
 
   var gotMessage = false;
   errors.listen((event) {
-    final text = event is List && event.isNotEmpty ? '${event.first}' : '$event';
+    final text = event is List && event.isNotEmpty
+        ? '${event.first}'
+        : '$event';
     if (!result.isCompleted) result.completeError(StateError(text));
   });
   // Le message de résultat et la fin d’isolate n’ont pas d’ordre garanti.
@@ -1352,11 +1359,16 @@ Future<void> syncPodcastAnalysis(
         template.confidence,
       ]);
     }
+    final dismissed = await database.dismissedSpansForPodcast(podcastId);
     final message = <String, Object?>{
       'episodes': episodes,
       'templates': templates,
       'focus': focusEpisodeId,
       'discover': false,
+      'dismissed': [
+        for (final row in dismissed)
+          <Object?>[row.episodeId, row.startMs, row.endMs, row.templateId],
+      ],
     };
     final raw = offUi == null
         ? await _runPlanAnalysis(message)
@@ -1469,6 +1481,7 @@ AnalysisPlan _keepFocusEpisodes(
 }
 
 /// Écrit [plan] sans doublon. Un passage `manual` n’est pas réécrit.
+/// Une plage retirée par l’utilisateur n’est pas reposée.
 ///
 /// [searchedTemplates] : seules les occurrences de ces gabarits sont
 /// revues ; les anciens passages détectés restent tels quels en base.
@@ -1480,6 +1493,9 @@ Future<void> applyAnalysisPlan(
 }) async {
   final existing = await database.fingerprintSegmentsForPodcast(podcastId);
   final manual = await database.manualSegmentsForPodcast(podcastId);
+  final dismissed = _asDismissed(
+    await database.dismissedSpansForPodcast(podcastId),
+  );
   final keptForLogMel = {
     for (final template in await database.listSegmentTemplates(podcastId))
       if (template.logMel != null) template.id,
@@ -1495,6 +1511,15 @@ Future<void> applyAnalysisPlan(
           desired.episodeId,
           desired.startMs,
           desired.endMs,
+        )) {
+          continue;
+        }
+        if (spanWasDismissed(
+          dismissed,
+          episodeId: desired.episodeId,
+          startMs: desired.startMs,
+          endMs: desired.endMs,
+          templateId: templateId,
         )) {
           continue;
         }
@@ -1555,14 +1580,23 @@ bool overlapsManual(
   int startMs,
   int endMs,
 ) {
-  final length = endMs - startMs;
   for (final row in manual) {
     if (row.episodeId != episodeId) continue;
-    final overlap = math.min(endMs, row.endMs) - math.max(startMs, row.startMs);
-    final shorter = math.min(length, row.endMs - row.startMs);
-    if (overlap > 0 && overlap * 2 >= shorter) return true;
+    if (spansOverlap(startMs, endMs, row.startMs, row.endMs)) return true;
   }
   return false;
+}
+
+List<DismissedSpan> _asDismissed(List<DismissedSkipSpan> rows) {
+  return [
+    for (final row in rows)
+      DismissedSpan(
+        episodeId: row.episodeId,
+        startMs: row.startMs,
+        endMs: row.endMs,
+        templateId: row.templateId,
+      ),
+  ];
 }
 
 Future<int> _upsertTemplate(
@@ -1909,6 +1943,15 @@ Future<int?> _upsertLoose(
       if (row.source == SkipSegmentSource.manual) row,
   ];
   if (overlapsManual(manual, episodeId, startMs, endMs)) return null;
+  if (spanWasDismissed(
+    _asDismissed(await database.dismissedSpansForEpisode(episodeId)),
+    episodeId: episodeId,
+    startMs: startMs,
+    endMs: endMs,
+    templateId: templateId,
+  )) {
+    return null;
+  }
   final rows = existing.isEmpty
       ? all
       : existing.where((row) => row.episodeId == episodeId);

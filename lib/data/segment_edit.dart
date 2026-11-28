@@ -161,7 +161,7 @@ typedef CreatedSegment = ({int? segmentId, SkipSegment? overlap});
 /// 1. empreinte Chromaprint de référence coupée dans celle de l’épisode,
 ///    en nouveau gabarit (nommé [label]) que l’analyse cherche dans les
 ///    autres épisodes ; sans empreinte encore, le gabarit attend l’analyse ;
-/// 2. passage `manual` et confirmé, qu’une analyse ne réécrit pas ; les
+/// 2. passage `manual`, qu’une analyse ne réécrit pas ; les
 ///    passages détectés qu’il recouvre sont retirés ;
 /// 3. vérité terrain sans bornes détectées.
 Future<CreatedSegment> createManualSegment(
@@ -227,7 +227,7 @@ Future<void> deleteManualSegment(AppDatabase database, int segmentId) async {
   if (segment == null) return;
   final created = await database.isCreatedSegment(segmentId);
   await database.transaction(() async {
-    await database.deleteSkipSegment(segmentId);
+    await database.dismissSkipSegment(segmentId);
     final templateId = segment.templateId;
     if (!created || templateId == null) return;
     final left = await database.segmentsForTemplate(templateId);
@@ -239,8 +239,7 @@ Future<void> deleteManualSegment(AppDatabase database, int segmentId) async {
 /// Enregistre des bornes corrigées à la main :
 /// 1. retaille l’empreinte Chromaprint de référence (le gabarit du passage,
 ///    créé au besoin) dans l’empreinte stockée de l’épisode ;
-/// 2. passe le passage en `manual` et confirmé, qu’une analyse ne réécrit
-///    plus ;
+/// 2. passe le passage en `manual`, qu’une analyse ne réécrit plus ;
 /// 3. garde bornes détectées et corrigées comme vérité terrain locale.
 Future<void> saveSegmentBounds(
   AppDatabase database, {

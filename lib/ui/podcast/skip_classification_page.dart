@@ -214,9 +214,7 @@ class SkipClassificationPage extends ConsumerWidget {
         for (final template in data.templates) {
           grouped
               .putIfAbsent(template.kind, () => [])
-              .add(
-                _Row.template(template),
-              );
+              .add(_Row.template(template));
         }
         for (final loose in data.segments) {
           grouped
@@ -598,7 +596,7 @@ class _SegmentTile extends ConsumerWidget {
         if (template != null) {
           await db.deleteSegmentTemplate(template.id);
         } else {
-          await db.deleteSkipSegment(segment!.id);
+          await db.dismissSkipSegment(segment!.id);
         }
         unawaited(ref.read(playerProvider.notifier).reloadSkipSegments());
     }

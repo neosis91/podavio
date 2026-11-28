@@ -5553,6 +5553,366 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
   }
 }
 
+class $DismissedSkipSpansTable extends DismissedSkipSpans
+    with TableInfo<$DismissedSkipSpansTable, DismissedSkipSpan> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DismissedSkipSpansTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _episodeIdMeta = const VerificationMeta(
+    'episodeId',
+  );
+  @override
+  late final GeneratedColumn<int> episodeId = GeneratedColumn<int>(
+    'episode_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES episodes (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _templateIdMeta = const VerificationMeta(
+    'templateId',
+  );
+  @override
+  late final GeneratedColumn<int> templateId = GeneratedColumn<int>(
+    'template_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _startMsMeta = const VerificationMeta(
+    'startMs',
+  );
+  @override
+  late final GeneratedColumn<int> startMs = GeneratedColumn<int>(
+    'start_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _endMsMeta = const VerificationMeta('endMs');
+  @override
+  late final GeneratedColumn<int> endMs = GeneratedColumn<int>(
+    'end_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    episodeId,
+    templateId,
+    startMs,
+    endMs,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'dismissed_skip_spans';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DismissedSkipSpan> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('episode_id')) {
+      context.handle(
+        _episodeIdMeta,
+        episodeId.isAcceptableOrUnknown(data['episode_id']!, _episodeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_episodeIdMeta);
+    }
+    if (data.containsKey('template_id')) {
+      context.handle(
+        _templateIdMeta,
+        templateId.isAcceptableOrUnknown(data['template_id']!, _templateIdMeta),
+      );
+    }
+    if (data.containsKey('start_ms')) {
+      context.handle(
+        _startMsMeta,
+        startMs.isAcceptableOrUnknown(data['start_ms']!, _startMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_startMsMeta);
+    }
+    if (data.containsKey('end_ms')) {
+      context.handle(
+        _endMsMeta,
+        endMs.isAcceptableOrUnknown(data['end_ms']!, _endMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_endMsMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DismissedSkipSpan map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DismissedSkipSpan(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      episodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}episode_id'],
+      )!,
+      templateId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}template_id'],
+      ),
+      startMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}start_ms'],
+      )!,
+      endMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}end_ms'],
+      )!,
+    );
+  }
+
+  @override
+  $DismissedSkipSpansTable createAlias(String alias) {
+    return $DismissedSkipSpansTable(attachedDatabase, alias);
+  }
+}
+
+class DismissedSkipSpan extends DataClass
+    implements Insertable<DismissedSkipSpan> {
+  final int id;
+  final int episodeId;
+
+  /// Gabarit au moment du retrait. Pas de clé étrangère : le gabarit
+  /// peut disparaître, la trace doit rester.
+  final int? templateId;
+  final int startMs;
+  final int endMs;
+  const DismissedSkipSpan({
+    required this.id,
+    required this.episodeId,
+    this.templateId,
+    required this.startMs,
+    required this.endMs,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['episode_id'] = Variable<int>(episodeId);
+    if (!nullToAbsent || templateId != null) {
+      map['template_id'] = Variable<int>(templateId);
+    }
+    map['start_ms'] = Variable<int>(startMs);
+    map['end_ms'] = Variable<int>(endMs);
+    return map;
+  }
+
+  DismissedSkipSpansCompanion toCompanion(bool nullToAbsent) {
+    return DismissedSkipSpansCompanion(
+      id: Value(id),
+      episodeId: Value(episodeId),
+      templateId: templateId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(templateId),
+      startMs: Value(startMs),
+      endMs: Value(endMs),
+    );
+  }
+
+  factory DismissedSkipSpan.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DismissedSkipSpan(
+      id: serializer.fromJson<int>(json['id']),
+      episodeId: serializer.fromJson<int>(json['episodeId']),
+      templateId: serializer.fromJson<int?>(json['templateId']),
+      startMs: serializer.fromJson<int>(json['startMs']),
+      endMs: serializer.fromJson<int>(json['endMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'episodeId': serializer.toJson<int>(episodeId),
+      'templateId': serializer.toJson<int?>(templateId),
+      'startMs': serializer.toJson<int>(startMs),
+      'endMs': serializer.toJson<int>(endMs),
+    };
+  }
+
+  DismissedSkipSpan copyWith({
+    int? id,
+    int? episodeId,
+    Value<int?> templateId = const Value.absent(),
+    int? startMs,
+    int? endMs,
+  }) => DismissedSkipSpan(
+    id: id ?? this.id,
+    episodeId: episodeId ?? this.episodeId,
+    templateId: templateId.present ? templateId.value : this.templateId,
+    startMs: startMs ?? this.startMs,
+    endMs: endMs ?? this.endMs,
+  );
+  DismissedSkipSpan copyWithCompanion(DismissedSkipSpansCompanion data) {
+    return DismissedSkipSpan(
+      id: data.id.present ? data.id.value : this.id,
+      episodeId: data.episodeId.present ? data.episodeId.value : this.episodeId,
+      templateId: data.templateId.present
+          ? data.templateId.value
+          : this.templateId,
+      startMs: data.startMs.present ? data.startMs.value : this.startMs,
+      endMs: data.endMs.present ? data.endMs.value : this.endMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DismissedSkipSpan(')
+          ..write('id: $id, ')
+          ..write('episodeId: $episodeId, ')
+          ..write('templateId: $templateId, ')
+          ..write('startMs: $startMs, ')
+          ..write('endMs: $endMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, episodeId, templateId, startMs, endMs);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DismissedSkipSpan &&
+          other.id == this.id &&
+          other.episodeId == this.episodeId &&
+          other.templateId == this.templateId &&
+          other.startMs == this.startMs &&
+          other.endMs == this.endMs);
+}
+
+class DismissedSkipSpansCompanion extends UpdateCompanion<DismissedSkipSpan> {
+  final Value<int> id;
+  final Value<int> episodeId;
+  final Value<int?> templateId;
+  final Value<int> startMs;
+  final Value<int> endMs;
+  const DismissedSkipSpansCompanion({
+    this.id = const Value.absent(),
+    this.episodeId = const Value.absent(),
+    this.templateId = const Value.absent(),
+    this.startMs = const Value.absent(),
+    this.endMs = const Value.absent(),
+  });
+  DismissedSkipSpansCompanion.insert({
+    this.id = const Value.absent(),
+    required int episodeId,
+    this.templateId = const Value.absent(),
+    required int startMs,
+    required int endMs,
+  }) : episodeId = Value(episodeId),
+       startMs = Value(startMs),
+       endMs = Value(endMs);
+  static Insertable<DismissedSkipSpan> custom({
+    Expression<int>? id,
+    Expression<int>? episodeId,
+    Expression<int>? templateId,
+    Expression<int>? startMs,
+    Expression<int>? endMs,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (episodeId != null) 'episode_id': episodeId,
+      if (templateId != null) 'template_id': templateId,
+      if (startMs != null) 'start_ms': startMs,
+      if (endMs != null) 'end_ms': endMs,
+    });
+  }
+
+  DismissedSkipSpansCompanion copyWith({
+    Value<int>? id,
+    Value<int>? episodeId,
+    Value<int?>? templateId,
+    Value<int>? startMs,
+    Value<int>? endMs,
+  }) {
+    return DismissedSkipSpansCompanion(
+      id: id ?? this.id,
+      episodeId: episodeId ?? this.episodeId,
+      templateId: templateId ?? this.templateId,
+      startMs: startMs ?? this.startMs,
+      endMs: endMs ?? this.endMs,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (episodeId.present) {
+      map['episode_id'] = Variable<int>(episodeId.value);
+    }
+    if (templateId.present) {
+      map['template_id'] = Variable<int>(templateId.value);
+    }
+    if (startMs.present) {
+      map['start_ms'] = Variable<int>(startMs.value);
+    }
+    if (endMs.present) {
+      map['end_ms'] = Variable<int>(endMs.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DismissedSkipSpansCompanion(')
+          ..write('id: $id, ')
+          ..write('episodeId: $episodeId, ')
+          ..write('templateId: $templateId, ')
+          ..write('startMs: $startMs, ')
+          ..write('endMs: $endMs')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $EpisodeLogMelsTable extends EpisodeLogMels
     with TableInfo<$EpisodeLogMelsTable, EpisodeLogMel> {
   @override
@@ -6335,6 +6695,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $SkipSegmentsTable skipSegments = $SkipSegmentsTable(this);
+  late final $DismissedSkipSpansTable dismissedSkipSpans =
+      $DismissedSkipSpansTable(this);
   late final $EpisodeLogMelsTable episodeLogMels = $EpisodeLogMelsTable(this);
   late final $LearnedNetworkStingsTable learnedNetworkStings =
       $LearnedNetworkStingsTable(this);
@@ -6382,6 +6744,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'skip_segments_template_id',
     'CREATE INDEX skip_segments_template_id ON skip_segments (template_id)',
   );
+  late final Index dismissedSkipSpansEpisodeId = Index(
+    'dismissed_skip_spans_episode_id',
+    'CREATE INDEX dismissed_skip_spans_episode_id ON dismissed_skip_spans (episode_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6396,6 +6762,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     episodeFingerprints,
     segmentTemplates,
     skipSegments,
+    dismissedSkipSpans,
     episodeLogMels,
     learnedNetworkStings,
     episodesPodcastId,
@@ -6409,6 +6776,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     segmentTemplatesPodcastId,
     skipSegmentsEpisodeId,
     skipSegmentsTemplateId,
+    dismissedSkipSpansEpisodeId,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -6474,6 +6842,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('skip_segments', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'episodes',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('dismissed_skip_spans', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -7501,6 +7876,27 @@ final class $$EpisodesTableReferences
     );
   }
 
+  static MultiTypedResultKey<$DismissedSkipSpansTable, List<DismissedSkipSpan>>
+  _dismissedSkipSpansRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.dismissedSkipSpans,
+        aliasName: 'episodes__id__dismissed_skip_spans__episode_id',
+      );
+
+  $$DismissedSkipSpansTableProcessedTableManager get dismissedSkipSpansRefs {
+    final manager = $$DismissedSkipSpansTableTableManager(
+      $_db,
+      $_db.dismissedSkipSpans,
+    ).filter((f) => f.episodeId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _dismissedSkipSpansRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$EpisodeLogMelsTable, List<EpisodeLogMel>>
   _episodeLogMelsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.episodeLogMels,
@@ -7773,6 +8169,31 @@ class $$EpisodesTableFilterComposer
           }) => $$SkipSegmentsTableFilterComposer(
             $db: $db,
             $table: $db.skipSegments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> dismissedSkipSpansRefs(
+    Expression<bool> Function($$DismissedSkipSpansTableFilterComposer f) f,
+  ) {
+    final $$DismissedSkipSpansTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dismissedSkipSpans,
+      getReferencedColumn: (t) => t.episodeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DismissedSkipSpansTableFilterComposer(
+            $db: $db,
+            $table: $db.dismissedSkipSpans,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -8188,6 +8609,32 @@ class $$EpisodesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> dismissedSkipSpansRefs<T extends Object>(
+    Expression<T> Function($$DismissedSkipSpansTableAnnotationComposer a) f,
+  ) {
+    final $$DismissedSkipSpansTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.dismissedSkipSpans,
+          getReferencedColumn: (t) => t.episodeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$DismissedSkipSpansTableAnnotationComposer(
+                $db: $db,
+                $table: $db.dismissedSkipSpans,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> episodeLogMelsRefs<T extends Object>(
     Expression<T> Function($$EpisodeLogMelsTableAnnotationComposer a) f,
   ) {
@@ -8234,6 +8681,7 @@ class $$EpisodesTableTableManager
             bool playlistEpisodesRefs,
             bool episodeFingerprintsRefs,
             bool skipSegmentsRefs,
+            bool dismissedSkipSpansRefs,
             bool episodeLogMelsRefs,
           })
         > {
@@ -8360,6 +8808,7 @@ class $$EpisodesTableTableManager
                 playlistEpisodesRefs = false,
                 episodeFingerprintsRefs = false,
                 skipSegmentsRefs = false,
+                dismissedSkipSpansRefs = false,
                 episodeLogMelsRefs = false,
               }) {
                 return PrefetchHooks(
@@ -8370,6 +8819,7 @@ class $$EpisodesTableTableManager
                     if (playlistEpisodesRefs) db.playlistEpisodes,
                     if (episodeFingerprintsRefs) db.episodeFingerprints,
                     if (skipSegmentsRefs) db.skipSegments,
+                    if (dismissedSkipSpansRefs) db.dismissedSkipSpans,
                     if (episodeLogMelsRefs) db.episodeLogMels,
                   ],
                   addJoins:
@@ -8504,6 +8954,26 @@ class $$EpisodesTableTableManager
                           referencedColumn: 'episode_id',
                           typedResults: items,
                         ),
+                      if (dismissedSkipSpansRefs)
+                        await $_getPrefetchedDataByColumns<
+                          Episode,
+                          $EpisodesTable,
+                          DismissedSkipSpan,
+                          $DismissedSkipSpansTable
+                        >(
+                          currentTable: table,
+                          referencedTable: $$EpisodesTableReferences
+                              ._dismissedSkipSpansRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$EpisodesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).dismissedSkipSpansRefs,
+                          currentColumn: 'id',
+                          referencedColumn: 'episode_id',
+                          typedResults: items,
+                        ),
                       if (episodeLogMelsRefs)
                         await $_getPrefetchedDataByColumns<
                           Episode,
@@ -8551,6 +9021,7 @@ typedef $$EpisodesTableProcessedTableManager =
         bool playlistEpisodesRefs,
         bool episodeFingerprintsRefs,
         bool skipSegmentsRefs,
+        bool dismissedSkipSpansRefs,
         bool episodeLogMelsRefs,
       })
     >;
@@ -11137,6 +11608,333 @@ typedef $$SkipSegmentsTableProcessedTableManager =
       SkipSegment,
       PrefetchHooks Function({bool episodeId, bool templateId})
     >;
+typedef $$DismissedSkipSpansTableCreateCompanionBuilder =
+    DismissedSkipSpansCompanion Function({
+      Value<int> id,
+      required int episodeId,
+      Value<int?> templateId,
+      required int startMs,
+      required int endMs,
+    });
+typedef $$DismissedSkipSpansTableUpdateCompanionBuilder =
+    DismissedSkipSpansCompanion Function({
+      Value<int> id,
+      Value<int> episodeId,
+      Value<int?> templateId,
+      Value<int> startMs,
+      Value<int> endMs,
+    });
+
+final class $$DismissedSkipSpansTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $DismissedSkipSpansTable,
+          DismissedSkipSpan
+        > {
+  $$DismissedSkipSpansTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $EpisodesTable _episodeIdTable(_$AppDatabase db) =>
+      db.episodes.createAlias('dismissed_skip_spans__episode_id__episodes__id');
+
+  $$EpisodesTableProcessedTableManager get episodeId {
+    final $_column = $_itemColumn<int>('episode_id')!;
+
+    final manager = $$EpisodesTableTableManager(
+      $_db,
+      $_db.episodes,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_episodeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$DismissedSkipSpansTableFilterComposer
+    extends Composer<_$AppDatabase, $DismissedSkipSpansTable> {
+  $$DismissedSkipSpansTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get templateId => $composableBuilder(
+    column: $table.templateId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get startMs => $composableBuilder(
+    column: $table.startMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get endMs => $composableBuilder(
+    column: $table.endMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$EpisodesTableFilterComposer get episodeId {
+    final $$EpisodesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableFilterComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DismissedSkipSpansTableOrderingComposer
+    extends Composer<_$AppDatabase, $DismissedSkipSpansTable> {
+  $$DismissedSkipSpansTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get templateId => $composableBuilder(
+    column: $table.templateId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get startMs => $composableBuilder(
+    column: $table.startMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get endMs => $composableBuilder(
+    column: $table.endMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$EpisodesTableOrderingComposer get episodeId {
+    final $$EpisodesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableOrderingComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DismissedSkipSpansTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DismissedSkipSpansTable> {
+  $$DismissedSkipSpansTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get templateId => $composableBuilder(
+    column: $table.templateId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get startMs =>
+      $composableBuilder(column: $table.startMs, builder: (column) => column);
+
+  GeneratedColumn<int> get endMs =>
+      $composableBuilder(column: $table.endMs, builder: (column) => column);
+
+  $$EpisodesTableAnnotationComposer get episodeId {
+    final $$EpisodesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DismissedSkipSpansTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DismissedSkipSpansTable,
+          DismissedSkipSpan,
+          $$DismissedSkipSpansTableFilterComposer,
+          $$DismissedSkipSpansTableOrderingComposer,
+          $$DismissedSkipSpansTableAnnotationComposer,
+          $$DismissedSkipSpansTableCreateCompanionBuilder,
+          $$DismissedSkipSpansTableUpdateCompanionBuilder,
+          (DismissedSkipSpan, $$DismissedSkipSpansTableReferences),
+          DismissedSkipSpan,
+          PrefetchHooks Function({bool episodeId})
+        > {
+  $$DismissedSkipSpansTableTableManager(
+    _$AppDatabase db,
+    $DismissedSkipSpansTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DismissedSkipSpansTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DismissedSkipSpansTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DismissedSkipSpansTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> episodeId = const Value.absent(),
+                Value<int?> templateId = const Value.absent(),
+                Value<int> startMs = const Value.absent(),
+                Value<int> endMs = const Value.absent(),
+              }) => DismissedSkipSpansCompanion(
+                id: id,
+                episodeId: episodeId,
+                templateId: templateId,
+                startMs: startMs,
+                endMs: endMs,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int episodeId,
+                Value<int?> templateId = const Value.absent(),
+                required int startMs,
+                required int endMs,
+              }) => DismissedSkipSpansCompanion.insert(
+                id: id,
+                episodeId: episodeId,
+                templateId: templateId,
+                startMs: startMs,
+                endMs: endMs,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$DismissedSkipSpansTable, DismissedSkipSpan>(
+                    table,
+                  ),
+                  $$DismissedSkipSpansTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({episodeId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (episodeId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.episodeId,
+                        referencedTable: $$DismissedSkipSpansTableReferences
+                            ._episodeIdTable(db),
+                        referencedColumn: $$DismissedSkipSpansTableReferences
+                            ._episodeIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$DismissedSkipSpansTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DismissedSkipSpansTable,
+      DismissedSkipSpan,
+      $$DismissedSkipSpansTableFilterComposer,
+      $$DismissedSkipSpansTableOrderingComposer,
+      $$DismissedSkipSpansTableAnnotationComposer,
+      $$DismissedSkipSpansTableCreateCompanionBuilder,
+      $$DismissedSkipSpansTableUpdateCompanionBuilder,
+      (DismissedSkipSpan, $$DismissedSkipSpansTableReferences),
+      DismissedSkipSpan,
+      PrefetchHooks Function({bool episodeId})
+    >;
 typedef $$EpisodeLogMelsTableCreateCompanionBuilder =
     EpisodeLogMelsCompanion Function({
       Value<int> episodeId,
@@ -11720,6 +12518,8 @@ class $AppDatabaseManager {
       $$SegmentTemplatesTableTableManager(_db, _db.segmentTemplates);
   $$SkipSegmentsTableTableManager get skipSegments =>
       $$SkipSegmentsTableTableManager(_db, _db.skipSegments);
+  $$DismissedSkipSpansTableTableManager get dismissedSkipSpans =>
+      $$DismissedSkipSpansTableTableManager(_db, _db.dismissedSkipSpans);
   $$EpisodeLogMelsTableTableManager get episodeLogMels =>
       $$EpisodeLogMelsTableTableManager(_db, _db.episodeLogMels);
   $$LearnedNetworkStingsTableTableManager get learnedNetworkStings =>

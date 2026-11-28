@@ -234,6 +234,23 @@ class SkipSegments extends Table {
   )();
 }
 
+/// Passage détecté que l’utilisateur a retiré.
+///
+/// La ligne reste après la suppression du passage et du gabarit : une
+/// analyse ultérieure ne le repose pas si la plage se recouvre à moitié.
+@TableIndex(name: 'dismissed_skip_spans_episode_id', columns: {#episodeId})
+class DismissedSkipSpans extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get episodeId =>
+      integer().references(Episodes, #id, onDelete: KeyAction.cascade)();
+
+  /// Gabarit au moment du retrait. Pas de clé étrangère : le gabarit
+  /// peut disparaître, la trace doit rester.
+  IntColumn get templateId => integer().nullable()();
+  IntColumn get startMs => integer()();
+  IntColumn get endMs => integer()();
+}
+
 /// Log-mel des 180 premières secondes, pour ne pas redécoder le fichier.
 class EpisodeLogMels extends Table {
   IntColumn get episodeId =>
@@ -308,6 +325,7 @@ class EpisodeEntry {
     EpisodeFingerprints,
     SegmentTemplates,
     SkipSegments,
+    DismissedSkipSpans,
     EpisodeLogMels,
     LearnedNetworkStings,
   ],
@@ -325,7 +343,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -452,6 +470,9 @@ class AppDatabase extends _$AppDatabase
       if (from < 23) await _ensureFingerprintStatus();
       if (from < 24) await _ensureFingerprintEnvelope();
       if (from < 25) await _dropSkipReview();
+      if (from < 26) {
+        await _createTableIfMissing(migrator, dismissedSkipSpans);
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
