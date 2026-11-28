@@ -1,0 +1,1 @@
+- Narrowing a pattern no longer lets removed passages from other podcasts come back, and analysis does not delete a passage the listener has just edited.

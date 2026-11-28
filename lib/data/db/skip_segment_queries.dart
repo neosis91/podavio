@@ -330,6 +330,17 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     return (delete(skipSegments)..where((row) => row.id.equals(id))).go();
   }
 
+  /// L’analyse ne retire qu’une détection. Un passage dont le type ou les
+  /// bornes viennent d’être choisis (`manual`) reste en place.
+  Future<void> deleteDetectedSkipSegment(int id) {
+    return (delete(skipSegments)..where(
+          (row) =>
+              row.id.equals(id) &
+              row.source.equalsValue(SkipSegmentSource.manual).not(),
+        ))
+        .go();
+  }
+
   /// Retrait par l’utilisateur. La plage est mémorisée avant l’effacement,
   /// pour qu’une analyse du même épisode ou du même gabarit ne la recrée pas.
   Future<void> dismissSkipSegment(int id) {
@@ -396,7 +407,11 @@ mixin _SkipSegmentQueries on _$AppDatabase {
                 ))
                 .get();
         for (final row in foreign) {
-          await deleteSkipSegment(row.readTable(skipSegments).id);
+          final segment = row.readTable(skipSegments);
+          // Sans trace, le même gabarit reposerait ces passages dès que
+          // le type redevient large.
+          await _rememberDismissed(segment);
+          await deleteSkipSegment(segment.id);
         }
       }
       // Le type a été choisi : ces passages ne sont plus des détections

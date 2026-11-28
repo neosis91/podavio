@@ -313,6 +313,98 @@ void main() {
       expect(rows.single.source, SkipSegmentSource.manual);
       expect((rows.single.startMs, rows.single.endMs), (10000, 30000));
     });
+
+    test('un type plus étroit mémorise les autres podcasts', () async {
+      final otherPodcastId = (await database.saveFeed(
+        const FeedDraft(
+          feedUrl: 'https://example.com/other.xml',
+          title: 'Autre',
+          author: 'Auteur',
+          description: 'Description',
+          episodes: [
+            EpisodeDraft(
+              guid: 'b',
+              title: 'Deux',
+              description: 'Notes',
+              audioUrl: 'https://example.com/b.mp3',
+            ),
+          ],
+        ),
+      )).podcastId;
+      final otherEpisodeId =
+          (await database.watchEpisodes(podcastId: otherPodcastId).first)
+              .single
+              .episode
+              .id;
+      final templateId = await database.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.ad,
+        fingerprint: encodeFingerprint(values.sublist(80, 240)),
+        durationMs: 4000,
+      );
+      await database.insertSkipSegment(
+        episodeId: episodeId,
+        startMs: 1000,
+        endMs: 5000,
+        kind: SkipSegmentKind.ad,
+        source: SkipSegmentSource.fingerprint,
+        templateId: templateId,
+      );
+      await database.insertSkipSegment(
+        episodeId: otherEpisodeId,
+        startMs: 5000,
+        endMs: 9000,
+        kind: SkipSegmentKind.ad,
+        source: SkipSegmentSource.fingerprint,
+        templateId: templateId,
+      );
+      await database.setTemplateKind(templateId, SkipSegmentKind.intro);
+      expect(await database.listSkipSegments(otherEpisodeId), isEmpty);
+      final trace = await database.dismissedSpansForEpisode(otherEpisodeId);
+      expect(trace.single.templateId, templateId);
+      expect((trace.single.startMs, trace.single.endMs), (5000, 9000));
+      expect(
+        (await database.listSkipSegments(episodeId)).single.source,
+        SkipSegmentSource.manual,
+      );
+
+      await database.setTemplateKind(templateId, SkipSegmentKind.ad);
+      await applyAnalysisPlan(
+        database,
+        otherPodcastId,
+        _plan(otherEpisodeId, templateId, [(4800, 9200)]),
+        searchedTemplates: {templateId},
+      );
+      expect(await database.listSkipSegments(otherEpisodeId), isEmpty);
+      final kept = (await database.listSkipSegments(episodeId)).single;
+      expect(kept.source, SkipSegmentSource.manual);
+      expect((kept.startMs, kept.endMs), (1000, 5000));
+    });
+
+    test('l’analyse n’efface pas un passage passé en manual', () async {
+      final keptId = await database.insertSkipSegment(
+        episodeId: episodeId,
+        startMs: 1000,
+        endMs: 4000,
+        kind: SkipSegmentKind.ad,
+        source: SkipSegmentSource.fingerprint,
+      );
+      await database.setSkipSegmentKind(keptId, SkipSegmentKind.sting);
+      await database.deleteDetectedSkipSegment(keptId);
+      final kept = await database.skipSegmentById(keptId);
+      expect(kept?.source, SkipSegmentSource.manual);
+      expect((kept?.startMs, kept?.endMs), (1000, 4000));
+
+      final detectedId = await database.insertSkipSegment(
+        episodeId: episodeId,
+        startMs: 60000,
+        endMs: 70000,
+        kind: SkipSegmentKind.ad,
+        source: SkipSegmentSource.fingerprint,
+      );
+      await database.deleteDetectedSkipSegment(detectedId);
+      expect(await database.skipSegmentById(detectedId), isNull);
+    });
   });
 
   group('forme d’onde', () {

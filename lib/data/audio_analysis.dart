@@ -1491,17 +1491,19 @@ Future<void> applyAnalysisPlan(
   AnalysisPlan plan, {
   Set<int>? searchedTemplates,
 }) async {
-  final existing = await database.fingerprintSegmentsForPodcast(podcastId);
-  final manual = await database.manualSegmentsForPodcast(podcastId);
-  final dismissed = _asDismissed(
-    await database.dismissedSpansForPodcast(podcastId),
-  );
-  final keptForLogMel = {
-    for (final template in await database.listSegmentTemplates(podcastId))
-      if (template.logMel != null) template.id,
-  };
-  final touched = <int>{};
   await database.transaction(() async {
+    // Relu dans la transaction : un retrait ou une modification déjà
+    // enregistré n’est pas écrasé par ce rapprochement.
+    final existing = await database.fingerprintSegmentsForPodcast(podcastId);
+    final manual = await database.manualSegmentsForPodcast(podcastId);
+    final dismissed = _asDismissed(
+      await database.dismissedSpansForPodcast(podcastId),
+    );
+    final keptForLogMel = {
+      for (final template in await database.listSegmentTemplates(podcastId))
+        if (template.logMel != null) template.id,
+    };
+    final touched = <int>{};
     for (final pattern in plan.patterns) {
       if (pattern.segments.isEmpty || pattern.fingerprint.isEmpty) continue;
       final templateId = await _upsertTemplate(database, podcastId, pattern);
@@ -1566,7 +1568,7 @@ Future<void> applyAnalysisPlan(
       if (row.templateId != null && keptForLogMel.contains(row.templateId)) {
         continue;
       }
-      await database.deleteSkipSegment(row.id);
+      await database.deleteDetectedSkipSegment(row.id);
     }
     await _recountTemplates(database, podcastId);
   });
@@ -1875,7 +1877,7 @@ Future<void> _applyLogMelPlan(
   }
   for (final row in network) {
     if (touched.contains(row.id)) continue;
-    await database.deleteSkipSegment(row.id);
+    await database.deleteDetectedSkipSegment(row.id);
   }
 
   for (final raw in plan['postAd'] as List? ?? const []) {
