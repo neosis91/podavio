@@ -1,1 +1,0 @@
-- An edited network sting stored as manual is classified again so it still skips with ads, while a hand-placed passage stays manual. The same content is not put back over a removal, and an isolate that exits without a result no longer leaves its wait open.
