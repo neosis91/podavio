@@ -41,6 +41,9 @@ app.*.symbols
 sentry.properties
 .sentry-native/
 
+# DSN local pour flutter run. Jamais versionné.
+/dart_defines.json
+
 # Obfuscation related
 app.*.map.json
 

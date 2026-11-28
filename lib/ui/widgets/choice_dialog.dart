@@ -10,6 +10,7 @@ Future<T?> showChoiceDialog<T>(
   required String title,
   required T selected,
   required List<ChoiceOption<T>> options,
+  Widget? Function(T value)? leading,
 }) {
   return showDialog<T>(
     context: context,
@@ -26,6 +27,10 @@ Future<T?> showChoiceDialog<T>(
                   onPressed: () => Navigator.pop(context, option.value),
                   child: Row(
                     children: [
+                      if (leading?.call(option.value) case final mark?) ...[
+                        mark,
+                        const SizedBox(width: 12),
+                      ],
                       Expanded(child: Text(context.tr(option.label))),
                       if (option.value == selected)
                         const Icon(Icons.check, size: 20),

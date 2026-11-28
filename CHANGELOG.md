@@ -9,6 +9,20 @@ La fusion de `develop` dans `main` publie cette version.
 Une pull request vers `develop` sans fragment porte `[skip changelog]`
 dans son titre, ou l’étiquette `skip-changelog`.
 
+## 2026.11.21
+
+- The Android analysis notification updates in place while episodes remain, instead of starting the foreground service again.
+- Searching other podcasts for a hand-made ad runs one comparison at a time, so two requests cannot write the same passage twice.
+- On Linux and Windows, analysis shows how far ffmpeg has decoded instead of leaving the percentage stuck on the decode step.
+- A nearby repeat of the same pattern is kept, a short removal no longer blocks a longer passage, and cancelling analysis stops a comparison that already started. A network sting still skips with ads after its kind is edited.
+- An edited network sting stored as manual is classified again so it still skips with ads, while a hand-placed passage stays manual. The same content is not put back over a removal, and an isolate that exits without a result no longer leaves its wait open.
+- A hand-placed sting no longer skips with ads, while a network sting that was edited still does. Isolate results are sent before the isolate exits, a killed isolate releases its wait at once, a clearly different passage is not blocked by a long removal, and unfinished segment cleanup is finished the next time the database opens.
+- A passage the listener removes is not put back by a later analysis, and a passage they edit keeps the bounds and kind they chose.
+- Narrowing a pattern no longer lets removed passages from other podcasts come back, and analysis does not delete a passage the listener has just edited.
+- A timed-out episode analysis no longer blocks later comparisons, and skip passages update while the episode is playing. Stings glue to ads the same way jingles do, and removing downloads no longer forgets the host. Confirm and ignore actions are gone.
+- A hand-placed sting or jingle is found at every non-overlapping spot in its podcast and on the other podcasts of the same host. An intro or outro is kept once per episode and stays in its podcast. Ads and the other kind are searched in every podcast, and a new passage only rechecks that template.
+- The waveform playhead moves on its own layer, so playback no longer redraws the whole wave.
+
 ## 2026.11.20
 
 - Nothing is detected on its own any more: the analysis only prepares each download and searches it for the passages created by hand. Previously detected passages and chapter-based passages are kept in the database but no longer shown or skipped.

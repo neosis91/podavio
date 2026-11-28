@@ -18,6 +18,7 @@ import 'automatic_downloads_page.dart';
 import 'discover_languages_page.dart';
 import 'discover_page.dart';
 import 'episode_page.dart';
+import 'podcast/episode_analysis_page.dart';
 import 'episodes_page.dart';
 import 'history_page.dart';
 import 'interface_language_page.dart';
@@ -144,6 +145,18 @@ final routerProvider = Provider<GoRouter>((ref) {
                           if (id == null) return const PodcastsPage();
                           return SkipClassificationPage(podcastId: id);
                         },
+                        routes: [
+                          GoRoute(
+                            path: 'analyses',
+                            builder: (context, state) {
+                              final id = int.tryParse(
+                                state.pathParameters['id'] ?? '',
+                              );
+                              if (id == null) return const PodcastsPage();
+                              return EpisodeAnalysisPage(podcastId: id);
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),

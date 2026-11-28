@@ -187,6 +187,329 @@ void main() {
     );
   });
 
+  test('a sting is found at every non-overlapping place, even close', () {
+    final motif = _motif(24, 9);
+    final values = _noise(800, 3);
+    _write(values, 40, motif);
+    _write(values, 80, motif);
+    _write(values, 400, motif);
+    final elsewhere = _noise(800, 8);
+    _write(elsewhere, 220, motif);
+    final plan = buildAnalysisPlan(
+      episodes: [
+        FingerprintEpisode(
+          episodeId: 1,
+          values: values,
+          hopMicros: hop,
+          durationMs: 400000,
+        ),
+        FingerprintEpisode(
+          episodeId: 2,
+          values: elsewhere,
+          hopMicros: hop,
+          durationMs: 400000,
+        ),
+      ],
+      templates: [
+        KnownTemplate(
+          id: 4,
+          kind: SkipSegmentKind.sting,
+          fingerprint: motif,
+          durationMs: _ms(24),
+        ),
+      ],
+      discover: false,
+    );
+    final own =
+        plan.patterns.single.segments
+            .where((hit) => hit.episodeId == 1)
+            .map((hit) => hit.startMs)
+            .toList()
+          ..sort();
+    expect(own, hasLength(3));
+    expect(own[0], closeTo(_ms(40), 800));
+    expect(own[1], closeTo(_ms(80), 800));
+    expect(own[2], closeTo(_ms(400), 800));
+    expect(own[1] - own[0], greaterThan(_ms(24) ~/ 2));
+    final other = plan.patterns.single.segments
+        .where((hit) => hit.episodeId == 2)
+        .toList();
+    expect(other, hasLength(1));
+    expect(other.single.startMs, closeTo(_ms(220), 800));
+  });
+
+  test('a nearby second hit of the same template is not a dismissal', () {
+    const dismissed = [
+      DismissedSpan(episodeId: 1, startMs: 0, endMs: 2000, templateId: 4),
+    ];
+    expect(
+      spanWasDismissed(dismissed, episodeId: 1, startMs: 1500, endMs: 4000),
+      isFalse,
+    );
+  });
+
+  test('a short dismissal does not block a longer different passage', () {
+    const dismissed = [
+      DismissedSpan(episodeId: 1, startMs: 0, endMs: 2000, templateId: 4),
+    ];
+    expect(
+      spanWasDismissed(dismissed, episodeId: 1, startMs: 0, endMs: 30000),
+      isFalse,
+    );
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 200,
+        endMs: 1800,
+        templateId: 4,
+      ),
+      isTrue,
+    );
+  });
+
+  test('a short new passage inside a long dismissal is not blocked', () {
+    const dismissed = [
+      DismissedSpan(episodeId: 1, startMs: 0, endMs: 30000, templateId: 4),
+    ];
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 1000,
+        endMs: 3000,
+        templateId: 4,
+      ),
+      isFalse,
+    );
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 500,
+        endMs: 10500,
+        templateId: 9,
+      ),
+      isFalse,
+    );
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 500,
+        endMs: 29500,
+        templateId: 4,
+      ),
+      isTrue,
+    );
+  });
+
+  test('the same content at the same place stays dismissed', () {
+    const dismissed = [
+      DismissedSpan(
+        episodeId: 1,
+        startMs: 0,
+        endMs: 10000,
+        templateId: 4,
+        kind: SkipSegmentKind.ad,
+      ),
+    ];
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 0,
+        endMs: 10000,
+        templateId: 9,
+        kind: SkipSegmentKind.ad,
+      ),
+      isTrue,
+    );
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 0,
+        endMs: 28000,
+        templateId: 9,
+        kind: SkipSegmentKind.ad,
+      ),
+      isTrue,
+    );
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 1000,
+        endMs: 3000,
+        templateId: 4,
+        kind: SkipSegmentKind.ad,
+      ),
+      isFalse,
+    );
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 0,
+        endMs: 30000,
+        templateId: 4,
+        kind: SkipSegmentKind.sting,
+      ),
+      isFalse,
+    );
+  });
+
+  test('a dismissed span is left out, the other hits stay', () {
+    final motif = _motif(24, 9);
+    final values = _noise(800, 3);
+    _write(values, 40, motif);
+    _write(values, 400, motif);
+    final elsewhere = _noise(800, 8);
+    _write(elsewhere, 220, motif);
+    final plan = buildAnalysisPlan(
+      episodes: [
+        FingerprintEpisode(
+          episodeId: 1,
+          values: values,
+          hopMicros: hop,
+          durationMs: 400000,
+        ),
+        FingerprintEpisode(
+          episodeId: 2,
+          values: elsewhere,
+          hopMicros: hop,
+          durationMs: 400000,
+        ),
+      ],
+      templates: [
+        KnownTemplate(
+          id: 4,
+          kind: SkipSegmentKind.sting,
+          fingerprint: motif,
+          durationMs: _ms(24),
+        ),
+      ],
+      discover: false,
+      dismissed: [
+        DismissedSpan(
+          episodeId: 1,
+          templateId: 4,
+          startMs: _ms(40),
+          endMs: _ms(64),
+        ),
+      ],
+    );
+    final own =
+        plan.patterns.single.segments
+            .where((hit) => hit.episodeId == 1)
+            .map((hit) => hit.startMs)
+            .toList()
+          ..sort();
+    expect(own, hasLength(1));
+    expect(own.single, closeTo(_ms(400), 800));
+    expect(
+      plan.patterns.single.segments.where((hit) => hit.episodeId == 2),
+      hasLength(1),
+    );
+  });
+
+  test('a template shorter than eight values is not searched', () {
+    final motif = _motif(6, 2);
+    final values = _noise(400, 1);
+    _write(values, 30, motif);
+    _write(values, 120, motif);
+    final plan = buildAnalysisPlan(
+      episodes: [
+        FingerprintEpisode(
+          episodeId: 1,
+          values: values,
+          hopMicros: hop,
+          durationMs: 200000,
+        ),
+      ],
+      templates: [
+        KnownTemplate(
+          id: 1,
+          kind: SkipSegmentKind.sting,
+          fingerprint: motif,
+          durationMs: _ms(6),
+        ),
+      ],
+      discover: false,
+    );
+    expect(plan.patterns, isEmpty);
+  });
+
+  test('intro and outro keep a single best match per episode', () {
+    for (final kind in [SkipSegmentKind.intro, SkipSegmentKind.outro]) {
+      final motif = _motif(24, kind.index + 3);
+      final values = _noise(900, 5);
+      _write(values, 40, motif);
+      for (var i = 0; i < 12; i++) {
+        values[40 + i * 2] ^= 0x00FFFFFF;
+      }
+      _write(values, 500, motif);
+      final plan = buildAnalysisPlan(
+        episodes: [
+          FingerprintEpisode(
+            episodeId: 1,
+            values: values,
+            hopMicros: hop,
+            durationMs: 400000,
+          ),
+        ],
+        templates: [
+          KnownTemplate(
+            id: 8,
+            kind: kind,
+            fingerprint: motif,
+            durationMs: _ms(24),
+          ),
+        ],
+        discover: false,
+      );
+      expect(plan.patterns, hasLength(1), reason: kind.name);
+      expect(plan.patterns.single.segments, hasLength(1));
+      expect(
+        plan.patterns.single.segments.single.startMs,
+        closeTo(_ms(500), 800),
+      );
+    }
+  });
+
+  test('the same ad can occur twice in one episode', () {
+    final motif = _motif(100, 15);
+    final values = _noise(2000, 3);
+    _write(values, 80, motif);
+    _write(values, 900, motif);
+    final plan = buildAnalysisPlan(
+      episodes: [
+        FingerprintEpisode(
+          episodeId: 1,
+          values: values,
+          hopMicros: hop,
+          durationMs: 400000,
+        ),
+      ],
+      templates: [
+        KnownTemplate(
+          id: 7,
+          kind: SkipSegmentKind.ad,
+          fingerprint: motif,
+          durationMs: _ms(100),
+        ),
+      ],
+      discover: false,
+    );
+    final starts =
+        plan.patterns.single.segments.map((hit) => hit.startMs).toList()
+          ..sort();
+    expect(starts, hasLength(2));
+    expect(starts[0], closeTo(_ms(80), 1500));
+    expect(starts[1], closeTo(_ms(900), 1500));
+  });
+
   test('known templates are matched before a new pattern is created', () {
     final motif = _motif(100, 15);
     final episodes = [
@@ -201,22 +524,15 @@ void main() {
           kind: SkipSegmentKind.sponsor,
           fingerprint: motif,
           durationMs: _ms(100),
-          confirmed: false,
         ),
       ],
     );
     expect(plan.patterns, hasLength(1));
     expect(plan.patterns.single.templateId, 7);
     expect(plan.patterns.single.kind, SkipSegmentKind.sponsor);
-    expect(plan.patterns.single.confirmed, isFalse);
     expect(plan.patterns.single.segments, hasLength(2));
     expect(plan.patterns.single.confidence, crossEpisodeConfidence);
-    expect(
-      plan.patterns.single.segments.every(
-        (segment) => segment.confirmed == false,
-      ),
-      isTrue,
-    );
+    expect(plan.patterns.single.segments, isNotEmpty);
   });
 
   test('music inside one episode is dropped, speech is only a candidate', () {
@@ -447,7 +763,6 @@ void main() {
           kind: SkipSegmentKind.ad,
           fingerprint: known,
           durationMs: _ms(100),
-          confirmed: null,
         ),
       ],
       focusEpisodeId: 2,

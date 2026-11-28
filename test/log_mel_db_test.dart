@@ -49,16 +49,14 @@ void main() {
       expect(segments.single.startMs, lessThanOrEqualTo(40));
       ids.add(segments.single.id);
     }
-    await database.setTemplateReview(templates.single.id, confirmed: false);
     await applyLogMelFindings(database, podcastId);
     for (final entry in episodes) {
       final segments = await database.listSkipSegments(entry.episode.id);
       expect(segments.single.id, ids[episodes.indexOf(entry)]);
-      expect(segments.single.confirmed, isFalse);
     }
   });
 
-  test('a learned sting marks the pre-roll and keeps its review', () async {
+  test('a learned sting marks the pre-roll', () async {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
     final podcastId = (await database.saveFeed(_draft([_episode('a')])))
@@ -92,11 +90,9 @@ void main() {
     expect(segments.single.startMs, 0);
     expect((segments.single.endMs - 6600).abs(), lessThanOrEqualTo(80));
     final id = segments.single.id;
-    await database.setSkipSegmentReview(id, confirmed: true);
     await applyLogMelFindings(database, podcastId);
     final again = await database.listSkipSegments(episode.id);
     expect(again.single.id, id);
-    expect(again.single.confirmed, isTrue);
   });
 
   test('deleting a download drops the stored log-mel', () async {

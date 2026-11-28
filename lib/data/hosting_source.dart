@@ -59,6 +59,20 @@ String hostingUrlOf(HostingDownload row) {
   return row.feedUrl.trim();
 }
 
+/// Hébergeur dominant des téléchargements de [podcastId]. Vide s’il n’y en a pas.
+String podcastHostingKey(List<HostingDownload> hosts, int podcastId) {
+  return dominantHostingSource([
+    for (final row in hosts)
+      if (row.podcastId == podcastId) hostingUrlOf(row),
+  ]);
+}
+
+/// Une virgule posée à la main ne se cherche que sur ce même hébergeur.
+/// Une clé vide (URL illisible) ne se propage pas.
+bool stingSharesNetwork(String originKey, String hereKey) {
+  return originKey.isNotEmpty && originKey == hereKey;
+}
+
 /// Podcasts dont les empreintes se comparent ensemble.
 ///
 /// Avec moins de deux téléchargements sur le podcast suivi, on ne compare

@@ -8,6 +8,7 @@ enum AnalysisOverviewStatus { analysed, pending, failed, inProgress }
 const analysisCountKinds = <SkipSegmentKind>[
   SkipSegmentKind.ad,
   SkipSegmentKind.jingle,
+  SkipSegmentKind.sting,
   SkipSegmentKind.sponsor,
   SkipSegmentKind.outro,
 ];

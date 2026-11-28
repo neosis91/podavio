@@ -66,7 +66,6 @@ class KnownTemplate {
     required this.kind,
     required this.fingerprint,
     required this.durationMs,
-    required this.confirmed,
     this.confidence,
   });
 
@@ -74,9 +73,6 @@ class KnownTemplate {
   final SkipSegmentKind kind;
   final List<int> fingerprint;
   final int durationMs;
-
-  /// Avis agrégé des passages : `false` = ignoré, on le propage.
-  final bool? confirmed;
 
   /// 0–100. `null` : gabarit posé avant le score.
   final int? confidence;
@@ -89,7 +85,6 @@ class PlannedSegment {
     required this.startMs,
     required this.endMs,
     required this.kind,
-    required this.confirmed,
     required this.matches,
     required this.confidence,
   });
@@ -98,7 +93,6 @@ class PlannedSegment {
   final int startMs;
   final int endMs;
   final SkipSegmentKind kind;
-  final bool? confirmed;
   final int matches;
 
   /// 0–100. Le saut n’en dépend pas.
@@ -110,7 +104,6 @@ class PlannedPattern {
   const PlannedPattern({
     required this.templateId,
     required this.kind,
-    required this.confirmed,
     required this.fingerprint,
     required this.durationMs,
     required this.segments,
@@ -120,7 +113,6 @@ class PlannedPattern {
   /// `null` : gabarit à créer.
   final int? templateId;
   final SkipSegmentKind kind;
-  final bool? confirmed;
   final List<int> fingerprint;
   final int durationMs;
   final List<PlannedSegment> segments;
@@ -130,6 +122,108 @@ class PlannedPattern {
 
   int get occurrences =>
       segments.map((segment) => segment.episodeId).toSet().length;
+}
+
+/// Plage retirée par l’utilisateur, rattachée à un épisode et, s’il
+/// existait, au gabarit. L’analyse ne la propose plus.
+class DismissedSpan {
+  const DismissedSpan({
+    required this.episodeId,
+    required this.startMs,
+    required this.endMs,
+    this.templateId,
+    this.kind,
+  });
+
+  final int episodeId;
+  final int startMs;
+  final int endMs;
+  final int? templateId;
+  final SkipSegmentKind? kind;
+}
+
+/// Moitié de la plus courte des deux plages. Un léger décalage de
+/// l’analyse recouvre encore le passage retiré ou posé à la main.
+bool spansOverlap(int startMs, int endMs, int otherStart, int otherEnd) {
+  final overlap = math.min(endMs, otherEnd) - math.max(startMs, otherStart);
+  final shorter = math.min(endMs - startMs, otherEnd - otherStart);
+  return shorter > 0 && overlap * 2 >= shorter;
+}
+
+/// Vrai si le passage proposé est la réapparition d’un retrait.
+///
+/// Même type et recouvrement d’au moins la moitié de la plage retirée :
+/// c’est le même contenu au même endroit, même avec un autre gabarit ou
+/// une autre durée. Sinon, un gabarit différent ou une durée au moins
+/// deux fois plus courte ou plus longue n’est pas le même passage. Un
+/// court passage dans un long retrait, ou un long passage d’un autre
+/// type, reste en place.
+bool spanWasDismissed(
+  List<DismissedSpan> dismissed, {
+  required int episodeId,
+  required int startMs,
+  required int endMs,
+  int? templateId,
+  SkipSegmentKind? kind,
+}) {
+  final length = endMs - startMs;
+  if (length <= 0) return false;
+  for (final row in dismissed) {
+    if (row.episodeId != episodeId) continue;
+    final other = row.endMs - row.startMs;
+    if (other <= 0) continue;
+    final overlap = math.min(endMs, row.endMs) - math.max(startMs, row.startMs);
+    if (overlap <= 0) continue;
+    final sameKind = kind != null && row.kind != null && kind == row.kind;
+    if (sameKind && overlap * 2 >= other) return true;
+    if (templateId != null &&
+        row.templateId != null &&
+        templateId != row.templateId) {
+      continue;
+    }
+    final shorter = math.min(length, other);
+    final longer = math.max(length, other);
+    if (shorter * 2 < longer) continue;
+    if (overlap * 2 >= shorter) return true;
+  }
+  return false;
+}
+
+/// Retire du plan les passages qui recouvrent une suppression.
+AnalysisPlan dropDismissedSpans(
+  AnalysisPlan plan,
+  List<DismissedSpan> dismissed,
+) {
+  if (dismissed.isEmpty) return plan;
+  final patterns = <PlannedPattern>[];
+  for (final pattern in plan.patterns) {
+    final segments = [
+      for (final segment in pattern.segments)
+        if (!spanWasDismissed(
+          dismissed,
+          episodeId: segment.episodeId,
+          startMs: segment.startMs,
+          endMs: segment.endMs,
+          templateId: pattern.templateId,
+          kind: segment.kind,
+        ))
+          segment,
+    ];
+    if (segments.isEmpty) continue;
+    patterns.add(
+      _withMatches(
+        PlannedPattern(
+          templateId: pattern.templateId,
+          kind: pattern.kind,
+          fingerprint: pattern.fingerprint,
+          durationMs: pattern.durationMs,
+          segments: segments,
+          confidence: pattern.confidence,
+        ),
+      ),
+    );
+  }
+  return AnalysisPlan(patterns);
 }
 
 /// Résultat pur, sans base. L’écriture est idempotente à part.
@@ -152,6 +246,7 @@ AnalysisPlan buildAnalysisPlan({
   bool useMn04 = false,
   List<Mn04Cue> mn04 = const [],
   bool discover = true,
+  List<DismissedSpan> dismissed = const [],
 }) {
   final usable = [
     for (final episode in episodes)
@@ -176,6 +271,7 @@ AnalysisPlan buildAnalysisPlan({
         episode.values,
         requireTemplateShape: true,
         index: indexes[episode.episodeId],
+        bestOnly: oncePerEpisode(template.kind),
       );
       for (final range in ranges) {
         final startMs = _indexMs(range.start, episode.hopMicros);
@@ -187,7 +283,6 @@ AnalysisPlan buildAnalysisPlan({
             startMs: startMs,
             endMs: endMs,
             kind: template.kind,
-            confirmed: template.confirmed,
             matches: 0,
             confidence: _templateConfidence(template),
           ),
@@ -207,7 +302,6 @@ AnalysisPlan buildAnalysisPlan({
         PlannedPattern(
           templateId: template.id,
           kind: template.kind,
-          confirmed: template.confirmed,
           fingerprint: template.fingerprint,
           durationMs: template.durationMs,
           segments: refinedSegments,
@@ -219,7 +313,7 @@ AnalysisPlan buildAnalysisPlan({
 
   // Sans découverte, seuls les gabarits donnés sont cherchés : pas de
   // nouveau motif par répétition, pas de couche de contexte.
-  if (!discover) return AnalysisPlan(patterns);
+  if (!discover) return dropDismissedSpans(AnalysisPlan(patterns), dismissed);
   final discovered = focusEpisodeId != null && known.contains(focusEpisodeId)
       ? const <DiscoveredPattern>[]
       : _discoverPatterns(
@@ -246,7 +340,6 @@ AnalysisPlan buildAnalysisPlan({
             startMs: hit.startMs,
             endMs: hit.endMs,
             kind: similar.kind,
-            confirmed: similar.confirmed,
             matches: 0,
             confidence: _templateConfidence(similar),
           ),
@@ -256,7 +349,6 @@ AnalysisPlan buildAnalysisPlan({
           PlannedPattern(
             templateId: similar.id,
             kind: similar.kind,
-            confirmed: similar.confirmed,
             fingerprint: patterns[host].fingerprint,
             durationMs: patterns[host].durationMs,
             segments: [...patterns[host].segments, ...extraSegments],
@@ -269,7 +361,6 @@ AnalysisPlan buildAnalysisPlan({
             PlannedPattern(
               templateId: similar.id,
               kind: similar.kind,
-              confirmed: similar.confirmed,
               fingerprint: found.fingerprint,
               durationMs: found.durationMs,
               segments: extraSegments,
@@ -294,13 +385,11 @@ AnalysisPlan buildAnalysisPlan({
         : _keep(fresh, byId);
     if (decision == null) continue;
     final kind = decision.kind ?? SkipSegmentKind.other;
-    final confirmed = decision.autoSkip ? null : false;
     patterns.add(
       _withMatches(
         PlannedPattern(
           templateId: null,
           kind: kind,
-          confirmed: confirmed,
           fingerprint: found.fingerprint,
           durationMs: found.durationMs,
           confidence: decision.confidence,
@@ -311,7 +400,6 @@ AnalysisPlan buildAnalysisPlan({
                 startMs: hit.startMs,
                 endMs: hit.endMs,
                 kind: kind,
-                confirmed: confirmed,
                 matches: 0,
                 confidence: decision.confidence,
               ),
@@ -321,8 +409,11 @@ AnalysisPlan buildAnalysisPlan({
     );
   }
   final plan = AnalysisPlan(patterns);
-  if (!contextLayer) return plan;
-  return _withContext(plan, byId, useMn04: useMn04, mn04: mn04);
+  if (!contextLayer) return dropDismissedSpans(plan, dismissed);
+  return dropDismissedSpans(
+    _withContext(plan, byId, useMn04: useMn04, mn04: mn04),
+    dismissed,
+  );
 }
 
 AnalysisPlan _withContext(
@@ -373,7 +464,6 @@ AnalysisPlan _withContext(
       PlannedPattern(
         templateId: pattern.templateId,
         kind: pattern.kind,
-        confirmed: pattern.confirmed,
         fingerprint: pattern.fingerprint,
         durationMs: duration,
         confidence: pattern.confidence,
@@ -384,7 +474,6 @@ AnalysisPlan _withContext(
               startMs: hit.startMs,
               endMs: hit.endMs,
               kind: pattern.kind,
-              confirmed: pattern.confirmed,
               matches: ids.length,
               confidence:
                   byStart[(hit.episodeId, hit.startMs)]?.confidence ??
@@ -422,7 +511,6 @@ AnalysisPlan _withContext(
       PlannedPattern(
         templateId: null,
         kind: kind,
-        confirmed: false,
         fingerprint: episode.values.sublist(from, to),
         durationMs: length,
         confidence: confidence,
@@ -432,7 +520,6 @@ AnalysisPlan _withContext(
             startMs: hit.startMs,
             endMs: hit.endMs,
             kind: kind,
-            confirmed: false,
             matches: 1,
             confidence: confidence,
           ),
@@ -547,7 +634,6 @@ Map<String, Object?> encodeAnalysisInput({
         <Object?>[
           template.id,
           template.kind.name,
-          template.confirmed,
           template.durationMs,
           encodeFingerprint(template.fingerprint),
           template.confidence,
@@ -582,10 +668,9 @@ Map<String, Object?> planAnalysisMessage(Map<String, Object?> message) {
       KnownTemplate(
         id: row[0]! as int,
         kind: _kindOf(row[1]! as String),
-        confirmed: row[2] as bool?,
-        durationMs: row[3]! as int,
-        fingerprint: decodeFingerprint(_bytes(row[4]) ?? Uint8List(0)),
-        confidence: row.length > 5 ? row[5] as int? : null,
+        durationMs: row[2]! as int,
+        fingerprint: decodeFingerprint(_bytes(row[3]) ?? Uint8List(0)),
+        confidence: row.length > 4 ? row[4] as int? : null,
       ),
     );
   }
@@ -598,8 +683,33 @@ Map<String, Object?> planAnalysisMessage(Map<String, Object?> message) {
       useMn04: message['mn04'] == true,
       mn04: _mn04Of(message['mn04Cues']),
       discover: message['discover'] != false,
+      dismissed: _dismissedOf(message['dismissed']),
     ),
   );
+}
+
+List<DismissedSpan> _dismissedOf(Object? raw) {
+  if (raw is! List) return const [];
+  final spans = <DismissedSpan>[];
+  for (final item in raw) {
+    if (item is! List || item.length < 3) continue;
+    final episodeId = item[0];
+    final start = item[1];
+    final end = item[2];
+    if (episodeId is! int || start is! int || end is! int || end <= start) {
+      continue;
+    }
+    final template = item.length > 3 ? item[3] : null;
+    spans.add(
+      DismissedSpan(
+        episodeId: episodeId,
+        startMs: start,
+        endMs: end,
+        templateId: template is int ? template : null,
+      ),
+    );
+  }
+  return spans;
 }
 
 List<AdContextChapter> _chaptersOf(Object? raw) {
@@ -661,7 +771,6 @@ AnalysisPlan decodeAnalysisPlan(Map<Object?, Object?> message) {
           startMs: segment['startMs']! as int,
           endMs: segment['endMs']! as int,
           kind: _kindOf(segment['kind']! as String),
-          confirmed: segment['confirmed'] as bool?,
           matches: segment['matches']! as int,
           confidence: segment['confidence'] as int? ?? crossEpisodeConfidence,
         ),
@@ -671,7 +780,6 @@ AnalysisPlan decodeAnalysisPlan(Map<Object?, Object?> message) {
       PlannedPattern(
         templateId: row['templateId'] as int?,
         kind: _kindOf(row['kind']! as String),
-        confirmed: row['confirmed'] as bool?,
         fingerprint: (row['fingerprint']! as List).cast<int>(),
         durationMs: row['durationMs']! as int,
         segments: segments,
@@ -693,7 +801,6 @@ Map<String, Object?> _encodePlan(AnalysisPlan plan) {
         <String, Object?>{
           'templateId': pattern.templateId,
           'kind': pattern.kind.name,
-          'confirmed': pattern.confirmed,
           'durationMs': pattern.durationMs,
           'fingerprint': pattern.fingerprint,
           'confidence': pattern.confidence,
@@ -704,7 +811,6 @@ Map<String, Object?> _encodePlan(AnalysisPlan plan) {
                 'startMs': segment.startMs,
                 'endMs': segment.endMs,
                 'kind': segment.kind.name,
-                'confirmed': segment.confirmed,
                 'matches': segment.matches,
                 'confidence': segment.confidence,
               },
@@ -1136,6 +1242,7 @@ List<_Range> _matchNeedle(
   List<int> haystack, {
   required bool requireTemplateShape,
   _Index? index,
+  bool bestOnly = false,
 }) {
   if (needle.length < 8 || haystack.isEmpty) return const [];
   final built = index ?? _Index(haystack);
@@ -1156,7 +1263,10 @@ List<_Range> _matchNeedle(
       ? candidates.sublist(0, _maxCandidateDeltas)
       : candidates;
   final found = <_Range>[];
+  _Range? best;
+  var bestVotes = -1;
   for (final candidate in limited) {
+    if (bestOnly && best != null && candidate.value.count < bestVotes) break;
     final (low, high, count) = candidate.value.densest();
     final span = high - low + 1;
     if (span > count * 80 + 128) continue;
@@ -1177,10 +1287,24 @@ List<_Range> _matchNeedle(
           shaped &&
           chromaprintAgreementOk(run.matches, run.end - run.start) &&
           _distinctive(haystack, run.start, run.end)) {
-        found.add(run);
+        if (!bestOnly) {
+          found.add(run);
+          continue;
+        }
+        final better =
+            best == null ||
+            candidate.value.count > bestVotes ||
+            (candidate.value.count == bestVotes &&
+                (run.matches > best.matches ||
+                    (run.matches == best.matches && run.start < best.start)));
+        if (better) {
+          best = run;
+          bestVotes = candidate.value.count;
+        }
       }
     }
   }
+  if (bestOnly) return best == null ? const [] : [best];
   return _mergeRanges(found);
 }
 
@@ -1488,7 +1612,6 @@ List<PlannedSegment> _refinePlanned(
         startMs: refined[i].startMs,
         endMs: refined[i].endMs,
         kind: segments[i].kind,
-        confirmed: segments[i].confirmed,
         matches: segments[i].matches,
         confidence: segments[i].confidence,
       ),
@@ -1658,7 +1781,6 @@ PlannedPattern _withMatches(PlannedPattern pattern) {
   return PlannedPattern(
     templateId: pattern.templateId,
     kind: pattern.kind,
-    confirmed: pattern.confirmed,
     fingerprint: pattern.fingerprint,
     durationMs: pattern.durationMs,
     confidence: pattern.confidence,
@@ -1669,7 +1791,6 @@ PlannedPattern _withMatches(PlannedPattern pattern) {
           startMs: segment.startMs,
           endMs: segment.endMs,
           kind: segment.kind,
-          confirmed: segment.confirmed,
           matches: matches,
           confidence: segment.confidence,
         ),

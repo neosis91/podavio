@@ -1,8 +1,11 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:podavio/data/app_database.dart';
+import 'package:podavio/data/models.dart';
+import 'package:podavio/data/skip_segments.dart';
 
 Future<int> _userVersion(AppDatabase database) async {
   final row = await database.customSelect('PRAGMA user_version').getSingle();
@@ -71,7 +74,7 @@ void main() {
         .get();
     await reopened
         .customSelect(
-          'SELECT start_ms, end_ms, kind, source, matches, confirmed, '
+          'SELECT start_ms, end_ms, kind, source, matches, '
           'confidence, template_id FROM skip_segments',
         )
         .get();
@@ -123,6 +126,318 @@ void main() {
         .customSelect('SELECT confidence FROM segment_templates')
         .get();
     await reopened.customSelect('SELECT confidence FROM skip_segments').get();
+    expect(await _userVersion(reopened), reopened.schemaVersion);
+  });
+
+  test('drops the review column and keeps the other skip columns', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-migration-v24');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    await created.customSelect('SELECT 1').get();
+    await created.customStatement(
+      'ALTER TABLE skip_segments ADD COLUMN confirmed INTEGER',
+    );
+    final podcastId = (await created.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a',
+            title: 'Un',
+            description: 'Notes',
+            audioUrl: 'https://example.com/a.mp3',
+          ),
+        ],
+      ),
+    )).podcastId;
+    final episodeId = (await created.watchEpisodes(podcastId: podcastId).first)
+        .single
+        .episode
+        .id;
+    final segmentId = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 1000,
+      endMs: 4000,
+      kind: SkipSegmentKind.ad,
+      source: SkipSegmentSource.manual,
+    );
+    await created.customStatement(
+      'UPDATE skip_segments SET confirmed = 1 WHERE id = $segmentId',
+    );
+    await created.customStatement('PRAGMA user_version = 24');
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    final columns = await reopened
+        .customSelect('PRAGMA table_info(skip_segments)')
+        .get();
+    expect(
+      columns.map((row) => row.read<String>('name')),
+      isNot(contains('confirmed')),
+    );
+    final row = (await reopened.listSkipSegments(episodeId)).single;
+    expect(row.id, segmentId);
+    expect(row.startMs, 1000);
+    expect(row.kind, SkipSegmentKind.ad);
+    expect(await _userVersion(reopened), reopened.schemaVersion);
+  });
+
+  test('adds the dismissed-span table and keeps the skip row', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-migration');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    final podcastId = (await created.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a',
+            title: 'Un',
+            description: 'Notes',
+            audioUrl: 'https://example.com/a.mp3',
+          ),
+        ],
+      ),
+    )).podcastId;
+    final episodeId = (await created.watchEpisodes(podcastId: podcastId).first)
+        .single
+        .episode
+        .id;
+    final segmentId = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 8000,
+      endMs: 12000,
+      kind: SkipSegmentKind.sting,
+      source: SkipSegmentSource.fingerprint,
+    );
+    await created.customStatement('DROP TABLE dismissed_skip_spans');
+    await created.customStatement('PRAGMA user_version = 25');
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    final columns = await reopened
+        .customSelect('PRAGMA table_info(dismissed_skip_spans)')
+        .get();
+    expect(
+      columns.map((row) => row.read<String>('name')),
+      containsAll(['episode_id', 'template_id', 'start_ms', 'end_ms']),
+    );
+    final row = (await reopened.listSkipSegments(episodeId)).single;
+    expect(row.id, segmentId);
+    expect(row.startMs, 8000);
+    expect(row.kind, SkipSegmentKind.sting);
+    expect(await _userVersion(reopened), reopened.schemaVersion);
+  });
+
+  test('creates the pending drops from schema 26', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-migration-v26');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    await created.customSelect('SELECT 1').get();
+    await created.customStatement('DROP TABLE pending_segment_drops');
+    await created.customStatement('PRAGMA user_version = 26');
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    await reopened
+        .customSelect('SELECT segment_id FROM pending_segment_drops')
+        .get();
+    expect(await _userVersion(reopened), reopened.schemaVersion);
+  });
+
+  test('finishes pending drops on the next open', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-pending-drops');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    final podcastId = (await created.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a',
+            title: 'Un',
+            description: 'Notes',
+            audioUrl: 'https://example.com/a.mp3',
+          ),
+        ],
+      ),
+    )).podcastId;
+    final episodeId = (await created.watchEpisodes(podcastId: podcastId).first)
+        .single
+        .episode
+        .id;
+    final detected = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 1000,
+      endMs: 4000,
+      kind: SkipSegmentKind.ad,
+      source: SkipSegmentSource.fingerprint,
+    );
+    final kept = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 8000,
+      endMs: 12000,
+      kind: SkipSegmentKind.sting,
+      source: SkipSegmentSource.network,
+    );
+    await created.setSkipSegmentKind(kept, SkipSegmentKind.jingle);
+    await created.rememberPendingDrops([detected, kept]);
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    expect(await reopened.skipSegmentById(detected), isNull);
+    final row = await reopened.skipSegmentById(kept);
+    expect(row?.source, SkipSegmentSource.networkEdited);
+    expect(await reopened.select(reopened.pendingSegmentDrops).get(), isEmpty);
+  });
+
+  test('reclasses an edited network sting and keeps a hand passage', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-migration-v27');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    final podcastId = (await created.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a',
+            title: 'Un',
+            description: 'Notes',
+            audioUrl: 'https://example.com/a.mp3',
+          ),
+        ],
+      ),
+    )).podcastId;
+    final episodeId = (await created.watchEpisodes(podcastId: podcastId).first)
+        .single
+        .episode
+        .id;
+    final fromNetwork = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 0,
+      endMs: 3000,
+      kind: SkipSegmentKind.sting,
+      source: SkipSegmentSource.manual,
+    );
+    await created.insertSegmentAnnotation(
+      segmentId: fromNetwork,
+      episodeId: episodeId,
+      kind: SkipSegmentKind.sting,
+      detectedSource: SkipSegmentSource.network,
+      detectedStartMs: 0,
+      detectedEndMs: 3000,
+      correctedStartMs: 0,
+      correctedEndMs: 3000,
+    );
+    final loose = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 4000,
+      endMs: 7000,
+      kind: SkipSegmentKind.jingle,
+      source: SkipSegmentSource.manual,
+    );
+    final hand = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 8000,
+      endMs: 11000,
+      kind: SkipSegmentKind.sting,
+      source: SkipSegmentSource.manual,
+      templateId: await created.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.sting,
+        durationMs: 3000,
+      ),
+    );
+    await created.insertSegmentAnnotation(
+      segmentId: hand,
+      episodeId: episodeId,
+      kind: SkipSegmentKind.sting,
+      correctedStartMs: 8000,
+      correctedEndMs: 11000,
+    );
+    final editedPrint = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 20000,
+      endMs: 40000,
+      kind: SkipSegmentKind.ad,
+      source: SkipSegmentSource.manual,
+      templateId: await created.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.ad,
+        durationMs: 20000,
+      ),
+    );
+    final templateId = await created.insertSegmentTemplate(
+      podcastId: podcastId,
+      kind: SkipSegmentKind.ad,
+      durationMs: 10000,
+    );
+    await created
+        .into(created.dismissedSkipSpans)
+        .insert(
+          DismissedSkipSpansCompanion.insert(
+            episodeId: episodeId,
+            templateId: Value(templateId),
+            startMs: 0,
+            endMs: 10000,
+          ),
+        );
+    await created.customStatement(
+      'ALTER TABLE dismissed_skip_spans DROP COLUMN kind',
+    );
+    await created.customStatement('PRAGMA user_version = 27');
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    expect(
+      (await reopened.skipSegmentById(fromNetwork))?.source,
+      SkipSegmentSource.networkEdited,
+    );
+    expect(
+      (await reopened.skipSegmentById(loose))?.source,
+      SkipSegmentSource.networkEdited,
+    );
+    expect(
+      (await reopened.skipSegmentById(hand))?.source,
+      SkipSegmentSource.manual,
+    );
+    expect(
+      (await reopened.skipSegmentById(editedPrint))?.source,
+      SkipSegmentSource.manual,
+    );
+    final columns = await reopened
+        .customSelect('PRAGMA table_info(dismissed_skip_spans)')
+        .get();
+    expect(columns.map((row) => row.read<String>('name')), contains('kind'));
+    final dismissed = await reopened.dismissedSpansForEpisode(episodeId);
+    expect(dismissed.single.kind, SkipSegmentKind.ad);
     expect(await _userVersion(reopened), reopened.schemaVersion);
   });
 }

@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
@@ -23,8 +24,24 @@ import java.nio.ByteOrder
 object AudioDecodePlugin {
     const val CHANNEL = "fr.podavio.podavio/audio_decode"
 
+    @Volatile
+    private var progressSink: EventChannel.EventSink? = null
+    private var lastProgressAt = 0L
+
     fun attach(engine: FlutterEngine, context: Context) {
         val main = Handler(Looper.getMainLooper())
+        EventChannel(engine.dartExecutor.binaryMessenger, "$CHANNEL/progress")
+            .setStreamHandler(
+                object : EventChannel.StreamHandler {
+                    override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                        progressSink = events
+                    }
+
+                    override fun onCancel(arguments: Any?) {
+                        progressSink = null
+                    }
+                },
+            )
         MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             if (call.method != "decodeToPcm") {
                 result.notImplemented()
@@ -96,6 +113,16 @@ object AudioDecodePlugin {
                 var emptyReads = 0
                 var failed = false
                 val deadline = SystemClock.elapsedRealtime() + deadlineMs.coerceAtLeast(1_000)
+                val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) {
+                    format.getLong(MediaFormat.KEY_DURATION)
+                } else {
+                    0L
+                }
+                val expected = if (durationUs > 0L) {
+                    durationUs * targetRate / 1_000_000L
+                } else {
+                    0L
+                }
                 while (!outputDone) {
                     if (SystemClock.elapsedRealtime() >= deadline) {
                         failed = true
@@ -159,6 +186,7 @@ object AudioDecodePlugin {
                     }
                     if (progressed) {
                         idle = 0
+                        reportProgress(writer.written, expected, targetRate)
                     } else {
                         idle += 1
                         // 200 essais après la fin d’entrée, 500 si elle n’arrive pas.
@@ -192,6 +220,24 @@ object AudioDecodePlugin {
             }
             codec?.release()
             extractor.release()
+        }
+    }
+
+    /// Échantillons déjà écrits, au plus toutes les 400 ms.
+    private fun reportProgress(samples: Long, expected: Long, sampleRate: Int) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastProgressAt < 400L) return
+        lastProgressAt = now
+        val sink = progressSink ?: return
+        Handler(Looper.getMainLooper()).post {
+            if (progressSink !== sink) return@post
+            sink.success(
+                mapOf(
+                    "samples" to samples,
+                    "expected" to expected,
+                    "sampleRate" to sampleRate,
+                ),
+            )
         }
     }
 }

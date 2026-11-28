@@ -8,7 +8,9 @@ import 'package:podavio/data/models.dart';
 import 'package:podavio/data/providers.dart';
 import 'package:podavio/data/segment_edit.dart';
 import 'package:podavio/data/skip_segments.dart';
+import 'package:podavio/data/analysis_overview.dart';
 import 'package:podavio/ui/podcast/skip_classification_page.dart';
+import 'package:podavio/ui/settings/analysis_status_mark.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -214,6 +216,11 @@ void main() {
     expect(find.text('Analyse en cours (2 restants)'), findsOneWidget);
     expect(find.text('Décodage de l’audio de Un'), findsOneWidget);
     expect(find.text('Environ 3 min'), findsOneWidget);
+    expect(find.text('Détail des analyses'), findsNothing);
+    expect(
+      tester.widget<AnalysisStatusMark>(find.byType(AnalysisStatusMark)).status,
+      AnalysisOverviewStatus.inProgress,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();

@@ -45,20 +45,29 @@ class GlobalSkipController extends Notifier<GlobalSkipSettings> {
     await preferences.setBool(GlobalSkipSettings.enabledKey, enabled);
   }
 
-  Future<void> setKind(SkipSegmentKind kind, {required bool enabled}) async {
+  Future<void> setKind(SkipSegmentKind kind, {required bool enabled}) {
+    return setKinds([kind], enabled: enabled);
+  }
+
+  /// Active ou retire plusieurs types d’un coup. La pub et le sponsor
+  /// passent ensemble : l’écran n’en montre qu’un.
+  Future<void> setKinds(
+    Iterable<SkipSegmentKind> kinds, {
+    required bool enabled,
+  }) async {
     final selected = state.kinds.toSet();
     if (enabled) {
-      selected.add(kind);
+      selected.addAll(kinds);
     } else {
-      selected.remove(kind);
+      selected.removeAll(kinds);
     }
-    final kinds = [
+    final next = [
       for (final value in SkipSegmentKind.values)
         if (selected.contains(value)) value,
     ];
-    state = GlobalSkipSettings(enabled: state.enabled, kinds: kinds);
+    state = GlobalSkipSettings(enabled: state.enabled, kinds: next);
     await ref
         .read(sharedPreferencesProvider)
-        .setString(GlobalSkipSettings.kindsKey, encodeAutoSkipKinds(kinds));
+        .setString(GlobalSkipSettings.kindsKey, encodeAutoSkipKinds(next));
   }
 }

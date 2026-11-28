@@ -3,31 +3,31 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/app_database.dart';
 import '../../data/audio_analysis.dart';
 import '../../data/providers.dart';
 import '../../data/segment_edit.dart';
 import '../../data/skip_segments.dart';
 import '../../l10n/l10n.dart';
 import '../../player/player_controller.dart';
+import '../skip_kind_mark.dart';
 import '../widgets/messages.dart';
 import 'segment_waveform_page.dart';
 
-/// Corrige le début et la fin d’un passage détecté, par pas de 0,5 s, avec
-/// une écoute autour de chaque coupe. La forme d’onde s’ouvre d’ici.
+/// Pose ou corrige un passage : forme d’onde en haut, type, nom et bornes
+/// sur la même page. L’écoute se fait autour de chaque coupe, par pas de 0,5 s.
 ///
 /// [SegmentEditorPage.create] pose un nouveau passage, à partir de la
 /// position de lecture, avec son type et un nom facultatif.
 class SegmentEditorPage extends ConsumerStatefulWidget {
   const SegmentEditorPage({super.key, required int this.segmentId})
     : episodeId = null,
-      positionMs = 0,
-      openWaveform = false;
+      positionMs = 0;
 
   const SegmentEditorPage.create({
     super.key,
     required int this.episodeId,
     required this.positionMs,
-    this.openWaveform = false,
   }) : segmentId = null;
 
   final int? segmentId;
@@ -35,9 +35,6 @@ class SegmentEditorPage extends ConsumerStatefulWidget {
 
   /// Début proposé pour un nouveau passage.
   final int positionMs;
-
-  /// Ouvre la forme d’onde dès le chargement.
-  final bool openWaveform;
 
   bool get creating => segmentId == null;
 
@@ -95,11 +92,6 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
         _end = bounds.endMs;
       }
     });
-    if (target != null && widget.openWaveform) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _openWaveform();
-      });
-    }
   }
 
   void _setBounds({required bool start, required int ms}) {
@@ -145,6 +137,20 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
     );
   }
 
+  Future<int?> _templateId(AppDatabase database, int segmentId) async {
+    final segment = await database.skipSegmentById(segmentId);
+    return segment?.templateId;
+  }
+
+  Future<void> _searchPassage({
+    required int podcastId,
+    required Set<int> templateIds,
+  }) async {
+    await ref
+        .read(audioAnalysisProvider.notifier)
+        .analyzeDownloaded(podcastId, spreadTemplateIds: templateIds);
+  }
+
   Future<bool> _save(int startMs, int endMs) async {
     final database = ref.read(databaseProvider);
     final target = _target!;
@@ -169,10 +175,14 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
         }
         return false;
       }
+      final templateId = await _templateId(database, created.segmentId!);
       unawaited(
-        ref
-            .read(audioAnalysisProvider.notifier)
-            .analyzeDownloaded(target.entry.episode.podcastId),
+        _searchPassage(
+          podcastId: target.entry.episode.podcastId,
+          templateIds: sharesAcrossPodcasts(_kind) && templateId != null
+              ? {templateId}
+              : const {},
+        ),
       );
     } else {
       await saveSegmentBounds(
@@ -181,18 +191,30 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
         startMs: startMs,
         endMs: endMs,
       );
+      final segment = target.segment!;
+      if (shownSkipKind(_kind) != shownSkipKind(segment.kind)) {
+        final templateId = segment.templateId;
+        if (templateId != null) {
+          await database.setTemplateKind(templateId, _kind);
+        } else {
+          await database.setSkipSegmentKind(widget.segmentId!, _kind);
+        }
+      }
+      if (sharesAcrossPodcasts(_kind)) {
+        final id = segment.templateId;
+        if (id != null) {
+          unawaited(
+            ref
+                .read(audioAnalysisProvider.notifier)
+                .spreadSharedAds(
+                  exceptPodcastId: target.entry.episode.podcastId,
+                  templateIds: {id},
+                ),
+          );
+        }
+      }
     }
     unawaited(ref.read(playerProvider.notifier).reloadSkipSegments());
-    return true;
-  }
-
-  /// En création, la forme d’onde règle les bornes ; le type et le nom
-  /// se choisissent ici avant d’enregistrer.
-  Future<bool> _apply(int startMs, int endMs) async {
-    setState(() {
-      _start = startMs;
-      _end = endMs;
-    });
     return true;
   }
 
@@ -219,27 +241,6 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
     if (mounted) Navigator.of(context).pop(true);
   }
 
-  Future<void> _openWaveform() async {
-    final target = _target!;
-    final saved = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => SegmentWaveformPage(
-          envelope: target.envelope,
-          durationMs: target.durationMs,
-          startMs: _start,
-          endMs: _end,
-          onListen: _listen,
-          onSave: widget.creating ? _apply : _save,
-          saveLabel: widget.creating ? 'Apply' : 'Save',
-          playhead: _playhead,
-        ),
-      ),
-    );
-    if (saved == true && mounted && !widget.creating) {
-      Navigator.of(context).pop(true);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final target = _target;
@@ -250,7 +251,8 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
             : null;
       });
     }
-    final manual = target?.segment?.source == SkipSegmentSource.manual;
+    final segment = target?.segment;
+    final manual = segment != null && sourceIsProtected(segment.source);
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -277,98 +279,139 @@ class _SegmentEditorPageState extends ConsumerState<SegmentEditorPage> {
           ? const Center(child: CircularProgressIndicator())
           : target == null
           ? Center(child: Text(context.tr('This passage no longer exists.')))
-          : ListView(
-              padding: const EdgeInsets.all(16),
+          : Column(
               children: [
-                if (widget.creating) ...[
-                  Text(
-                    context.tr('Kind'),
-                    style: Theme.of(context).textTheme.titleSmall,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: SegmentWaveform(
+                    envelope: target.envelope,
+                    durationMs: target.durationMs,
+                    startMs: _start,
+                    endMs: _end,
+                    accent: Color(skipKindArgb(shownSkipKind(_kind))),
+                    others: [
+                      for (final segment
+                          in ref
+                                  .watch(
+                                    activeSkipSegmentsProvider(
+                                      target.entry.episode.id,
+                                    ),
+                                  )
+                                  .value ??
+                              const <SkipSegment>[])
+                        if (segment.id != widget.segmentId &&
+                            segment.endMs > segment.startMs)
+                          WaveformSpan(
+                            startMs: segment.startMs,
+                            endMs: segment.endMs,
+                            color: Color(skipKindArgb(segment.kind)),
+                          ),
+                    ],
+                    playhead: _playhead,
+                    onBounds: (start, end) => setState(() {
+                      _start = start;
+                      _end = end;
+                    }),
+                    onListen: _listen,
                   ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
                     children: [
-                      for (final kind in SkipSegmentKind.values)
-                        ChoiceChip(
-                          key: Key('kind-${kind.name}'),
-                          label: Text(context.tr(skipKindLabel(kind))),
-                          selected: _kind == kind,
-                          onSelected: (_) => setState(() => _kind = kind),
+                      DropdownButtonFormField<SkipSegmentKind>(
+                        key: const Key('segment-kind'),
+                        initialValue: shownSkipKind(_kind),
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: context.tr('Kind'),
                         ),
+                        items: [
+                          for (final kind in SkipSegmentKind.values)
+                            if (kind != SkipSegmentKind.sponsor)
+                              DropdownMenuItem(
+                                value: kind,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SkipKindMark(kind, size: 12),
+                                    const SizedBox(width: 8),
+                                    Text(context.tr(skipKindLabel(kind))),
+                                  ],
+                                ),
+                              ),
+                        ],
+                        onChanged: (kind) {
+                          if (kind == null || shownSkipKind(_kind) == kind) {
+                            return;
+                          }
+                          setState(() => _kind = kind);
+                        },
+                      ),
+                      if (widget.creating) ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('segment-name'),
+                          controller: _name,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: InputDecoration(
+                            labelText: context.tr('Name (optional)'),
+                          ),
+                        ),
+                      ],
+                      ValueListenableBuilder<int?>(
+                        valueListenable: _playhead,
+                        builder: (context, playhead, _) => Column(
+                          children: [
+                            BoundControls(
+                              id: 'start',
+                              label: context.tr('Start'),
+                              valueMs: _start,
+                              onStep: (delta) =>
+                                  _step(start: true, delta: delta),
+                              onListen: () => _listenAround(_start),
+                              onHere: playhead == null
+                                  ? null
+                                  : () => _setBounds(start: true, ms: playhead),
+                            ),
+                            BoundControls(
+                              id: 'end',
+                              label: context.tr('End'),
+                              valueMs: _end,
+                              onStep: (delta) =>
+                                  _step(start: false, delta: delta),
+                              onListen: () => _listenAround(_end),
+                              onHere: playhead == null
+                                  ? null
+                                  : () =>
+                                        _setBounds(start: false, ms: playhead),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.play_arrow),
+                          label: Text(context.tr('Preview')),
+                          onPressed: () => _listen(_start, _end),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        context.tr(
+                          widget.creating
+                              ? 'A passage placed by hand is kept by later '
+                                    'analyses and searched for in the other '
+                                    'episodes.'
+                              : 'Saved bounds are kept by later analyses and '
+                                    'become the reference for this passage.',
+                        ),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    key: const Key('segment-name'),
-                    controller: _name,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      labelText: context.tr('Name (optional)'),
-                    ),
-                  ),
-                ] else
-                  Text(
-                    context.tr(skipKindLabel(_kind)),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                const SizedBox(height: 8),
-                ValueListenableBuilder<int?>(
-                  valueListenable: _playhead,
-                  builder: (context, playhead, _) => Column(
-                    children: [
-                      BoundControls(
-                        id: 'start',
-                        label: context.tr('Start'),
-                        valueMs: _start,
-                        onStep: (delta) => _step(start: true, delta: delta),
-                        onListen: () => _listenAround(_start),
-                        onHere: playhead == null
-                            ? null
-                            : () => _setBounds(start: true, ms: playhead),
-                      ),
-                      BoundControls(
-                        id: 'end',
-                        label: context.tr('End'),
-                        valueMs: _end,
-                        onStep: (delta) => _step(start: false, delta: delta),
-                        onListen: () => _listenAround(_end),
-                        onHere: playhead == null
-                            ? null
-                            : () => _setBounds(start: false, ms: playhead),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.play_arrow),
-                      label: Text(context.tr('Preview')),
-                      onPressed: () => _listen(_start, _end),
-                    ),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.graphic_eq),
-                      label: Text(context.tr('Waveform')),
-                      onPressed: _openWaveform,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  context.tr(
-                    widget.creating
-                        ? 'A passage placed by hand is kept by later '
-                              'analyses and searched for in the other '
-                              'episodes.'
-                        : 'Saved bounds are kept by later analyses and '
-                              'become the reference for this passage.',
-                  ),
-                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),

@@ -15,18 +15,10 @@ class LooseSkipSegment {
 
 /// Modèles du podcast et passages qui n’y sont pas rattachés.
 class SkipClassification {
-  const SkipClassification({
-    required this.templates,
-    required this.segments,
-    required this.templateConfirmed,
-  });
+  const SkipClassification({required this.templates, required this.segments});
 
   final List<SegmentTemplate> templates;
   final List<LooseSkipSegment> segments;
-
-  /// `null` : pas revu ou avis partagé. `true` / `false` : tous les
-  /// passages du modèle sont confirmés ou ignorés.
-  final Map<int, bool?> templateConfirmed;
 }
 
 mixin _SkipSegmentQueries on _$AppDatabase {
@@ -113,7 +105,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     required SkipSegmentKind kind,
     required SkipSegmentSource source,
     int matches = 1,
-    bool? confirmed,
     int? confidence,
     int? templateId,
   }) {
@@ -125,7 +116,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
         kind: kind,
         source: source,
         matches: Value(matches),
-        confirmed: Value(confirmed),
         confidence: Value(confidence),
         templateId: Value(templateId),
       ),
@@ -166,14 +156,85 @@ mixin _SkipSegmentQueries on _$AppDatabase {
       ..orderBy([(row) => OrderingTerm.asc(row.startMs)]);
   }
 
+  /// Pub, sponsor et « autre » posés à la main, quel que soit le podcast.
+  Future<List<SegmentTemplate>> sharedAdTemplates() {
+    return _sharedManualTemplates([
+      for (final kind in SkipSegmentKind.values)
+        if (spreadsToEveryPodcast(kind)) kind,
+    ]);
+  }
+
+  /// Virgules et jingles posés à la main sur [podcastIds] (même hébergeur).
+  Future<List<SegmentTemplate>> sharedNetworkTemplates(List<int> podcastIds) {
+    return _sharedManualTemplates([
+      for (final kind in SkipSegmentKind.values)
+        if (spreadsWithinNetwork(kind)) kind,
+    ], podcastIds: podcastIds);
+  }
+
+  /// Retire les virgules et jingles d’un autre hébergeur sur [podcastId].
+  /// Les passages posés à la main restent.
+  Future<void> deleteNetworkHitsOutside(
+    int podcastId,
+    List<int> allowedPodcastIds,
+  ) async {
+    final kinds = [
+      for (final kind in SkipSegmentKind.values)
+        if (spreadsWithinNetwork(kind)) "'${kind.name}'",
+    ].join(', ');
+    if (kinds.isEmpty) return;
+    final allowed = {...allowedPodcastIds, podcastId}.join(', ');
+    final rows = await customSelect(
+      'SELECT s.id AS id FROM skip_segments s '
+      'INNER JOIN episodes e ON e.id = s.episode_id '
+      'INNER JOIN segment_templates t ON t.id = s.template_id '
+      'WHERE e.podcast_id = ? AND s.source NOT IN (\'manual\', \'networkEdited\') '
+      'AND t.kind IN ($kinds) AND t.podcast_id NOT IN ($allowed)',
+      variables: [Variable.withInt(podcastId)],
+      readsFrom: {skipSegments, episodes, segmentTemplates},
+    ).get();
+    for (final row in rows) {
+      await deleteSkipSegment(row.read<int>('id'));
+    }
+  }
+
+  Future<List<SegmentTemplate>> _sharedManualTemplates(
+    List<SkipSegmentKind> kinds, {
+    List<int>? podcastIds,
+  }) async {
+    if (kinds.isEmpty) return const [];
+    if (podcastIds != null && podcastIds.isEmpty) return const [];
+    final kindSql = [for (final kind in kinds) "'${kind.name}'"].join(', ');
+    final podcastSql = podcastIds == null
+        ? ''
+        : ' AND t.podcast_id IN (${podcastIds.join(', ')})';
+    final rows = await customSelect(
+      'SELECT DISTINCT t.* FROM segment_templates t '
+      'WHERE t.kind IN ($kindSql) AND $_manualTemplateSql$podcastSql',
+      readsFrom: {segmentTemplates, skipSegments},
+    ).get();
+    return [for (final row in rows) segmentTemplates.map(row.data)];
+  }
+
+  /// Podcasts qui ont au moins une empreinte, pour y chercher une pub.
+  Future<List<int>> podcastIdsWithFingerprints() async {
+    final rows = await customSelect(
+      'SELECT DISTINCT e.podcast_id AS podcast_id '
+      'FROM episode_fingerprints f '
+      'INNER JOIN episodes e ON e.id = f.episode_id',
+      readsFrom: {episodeFingerprints, episodes},
+    ).get();
+    return [for (final row in rows) row.read<int>('podcast_id')];
+  }
+
   /// Gabarits du podcast rattachés à au moins un passage posé à la main :
-  /// les seuls que l’analyse cherche.
+  /// les seuls que l’analyse cherche, avec les publicités des autres.
   Future<Set<int>> manualTemplateIds(int podcastId) async {
     final rows = await customSelect(
       'SELECT DISTINCT s.template_id AS template_id '
       'FROM skip_segments s '
       'INNER JOIN episodes e ON e.id = s.episode_id '
-      "WHERE e.podcast_id = ? AND s.source = 'manual' "
+      "WHERE e.podcast_id = ? AND s.source IN ('manual', 'networkEdited') "
       'AND s.template_id IS NOT NULL',
       variables: [Variable.withInt(podcastId)],
       readsFrom: {skipSegments, episodes},
@@ -198,12 +259,8 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     return _combineSkip(
       watchSegmentTemplates(podcastId),
       _watchLooseSegments(podcastId),
-      _watchTemplateReviews(podcastId),
-      (templates, segments, reviews) => SkipClassification(
-        templates: templates,
-        segments: segments,
-        templateConfirmed: reviews,
-      ),
+      (templates, segments) =>
+          SkipClassification(templates: templates, segments: segments),
     );
   }
 
@@ -215,7 +272,10 @@ mixin _SkipSegmentQueries on _$AppDatabase {
           ..where(
             episodes.podcastId.equals(podcastId) &
                 skipSegments.templateId.isNull() &
-                skipSegments.source.equalsValue(SkipSegmentSource.manual),
+                (skipSegments.source.equalsValue(SkipSegmentSource.manual) |
+                    skipSegments.source.equalsValue(
+                      SkipSegmentSource.networkEdited,
+                    )),
           )
           ..orderBy([
             OrderingTerm.asc(skipSegments.kind),
@@ -230,30 +290,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
             downloadPath: row.read(episodes.downloadPath),
           ),
       ];
-    });
-  }
-
-  Stream<Map<int, bool?>> _watchTemplateReviews(int podcastId) {
-    return customSelect(
-      'SELECT s.template_id AS template_id, '
-      'SUM(CASE WHEN s.confirmed IS NULL THEN 1 ELSE 0 END) AS pending, '
-      'SUM(CASE WHEN s.confirmed = 1 THEN 1 ELSE 0 END) AS yes, '
-      'SUM(CASE WHEN s.confirmed = 0 THEN 1 ELSE 0 END) AS no '
-      'FROM skip_segments s '
-      'INNER JOIN episodes e ON e.id = s.episode_id '
-      'WHERE e.podcast_id = ? AND s.template_id IS NOT NULL '
-      'GROUP BY s.template_id',
-      variables: [Variable.withInt(podcastId)],
-      readsFrom: {skipSegments, episodes},
-    ).watch().map((rows) {
-      return {
-        for (final row in rows)
-          row.read<int>('template_id'): _reviewOf(
-            row.read<int>('pending'),
-            row.read<int>('yes'),
-            row.read<int>('no'),
-          ),
-      };
     });
   }
 
@@ -282,15 +318,16 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     );
   }
 
-  Future<void> setSkipSegmentKind(int id, SkipSegmentKind kind) {
-    return (update(skipSegments)..where((row) => row.id.equals(id))).write(
-      SkipSegmentsCompanion(kind: Value(kind)),
-    );
-  }
-
-  Future<void> setSkipSegmentReview(int id, {required bool? confirmed}) {
-    return (update(skipSegments)..where((row) => row.id.equals(id))).write(
-      SkipSegmentsCompanion(confirmed: Value(confirmed)),
+  /// Un type choisi par l’utilisateur protège la ligne. Une détection
+  /// de réseau reste une virgule de réseau ; le reste devient manuel.
+  Future<void> setSkipSegmentKind(int id, SkipSegmentKind kind) async {
+    final row = await skipSegmentById(id);
+    if (row == null) return;
+    await (update(skipSegments)..where((item) => item.id.equals(id))).write(
+      SkipSegmentsCompanion(
+        kind: Value(kind),
+        source: Value(sourceAfterEdit(row.source)),
+      ),
     );
   }
 
@@ -298,13 +335,144 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     return (delete(skipSegments)..where((row) => row.id.equals(id))).go();
   }
 
+  /// L’analyse ne retire qu’une détection. Un passage protégé
+  /// (`manual` ou `networkEdited`) reste en place.
+  Future<void> deleteDetectedSkipSegment(int id) {
+    return (delete(skipSegments)..where(
+          (row) =>
+              row.id.equals(id) &
+              row.source.equalsValue(SkipSegmentSource.manual).not() &
+              row.source.equalsValue(SkipSegmentSource.networkEdited).not(),
+        ))
+        .go();
+  }
+
+  /// Mémorise des détections à retirer après l’écriture du plan.
+  Future<void> rememberPendingDrops(Iterable<int> ids) async {
+    for (final id in ids) {
+      await into(pendingSegmentDrops).insert(
+        PendingSegmentDropsCompanion.insert(segmentId: Value(id)),
+        mode: InsertMode.insertOrIgnore,
+      );
+    }
+  }
+
+  /// Retire les détections encore en attente. Un passage protégé entre
+  /// temps est laissé, et la ligne d’attente part dans les deux cas.
+  Future<void> finishPendingSegmentDrops() async {
+    final rows = await select(pendingSegmentDrops).get();
+    for (final row in rows) {
+      await deleteDetectedSkipSegment(row.segmentId);
+      await (delete(
+        pendingSegmentDrops,
+      )..where((table) => table.segmentId.equals(row.segmentId))).go();
+    }
+  }
+
+  /// Retrait par l’utilisateur. La plage est mémorisée avant l’effacement,
+  /// pour qu’une analyse du même épisode ou du même gabarit ne la recrée pas.
+  Future<void> dismissSkipSegment(int id) {
+    return transaction(() async {
+      final row = await skipSegmentById(id);
+      if (row == null) return;
+      await _rememberDismissed(row);
+      await deleteSkipSegment(id);
+    });
+  }
+
+  Future<void> _rememberDismissed(SkipSegment row) {
+    return into(dismissedSkipSpans).insert(
+      DismissedSkipSpansCompanion.insert(
+        episodeId: row.episodeId,
+        templateId: Value(row.templateId),
+        kind: Value(row.kind),
+        startMs: row.startMs,
+        endMs: row.endMs,
+      ),
+    );
+  }
+
+  Future<List<DismissedSkipSpan>> dismissedSpansForPodcast(
+    int podcastId,
+  ) async {
+    final query = select(dismissedSkipSpans).join([
+      innerJoin(episodes, episodes.id.equalsExp(dismissedSkipSpans.episodeId)),
+    ])..where(episodes.podcastId.equals(podcastId));
+    final rows = await query.get();
+    return [for (final row in rows) row.readTable(dismissedSkipSpans)];
+  }
+
+  Future<List<DismissedSkipSpan>> dismissedSpansForEpisode(int episodeId) {
+    return (select(
+      dismissedSkipSpans,
+    )..where((row) => row.episodeId.equals(episodeId))).get();
+  }
+
   Future<void> setTemplateKind(int id, SkipSegmentKind kind) {
     return transaction(() async {
+      final current = await (select(
+        segmentTemplates,
+      )..where((row) => row.id.equals(id))).getSingleOrNull();
+      if (current == null) return;
       await (update(segmentTemplates)..where((row) => row.id.equals(id))).write(
         SegmentTemplatesCompanion(kind: Value(kind)),
       );
-      await (update(skipSegments)..where((row) => row.templateId.equals(id)))
-          .write(SkipSegmentsCompanion(kind: Value(kind)));
+      final narrowed =
+          (sharesAcrossPodcasts(current.kind) && !sharesAcrossPodcasts(kind)) ||
+          (spreadsToEveryPodcast(current.kind) && spreadsWithinNetwork(kind));
+      if (narrowed) {
+        final foreign =
+            await (select(skipSegments).join([
+                  innerJoin(
+                    episodes,
+                    episodes.id.equalsExp(skipSegments.episodeId),
+                  ),
+                ])..where(
+                  skipSegments.templateId.equals(id) &
+                      episodes.podcastId.equals(current.podcastId).not() &
+                      skipSegments.source
+                          .equalsValue(SkipSegmentSource.manual)
+                          .not() &
+                      skipSegments.source
+                          .equalsValue(SkipSegmentSource.networkEdited)
+                          .not(),
+                ))
+                .get();
+        for (final row in foreign) {
+          final segment = row.readTable(skipSegments);
+          // Sans trace, le même gabarit reposerait ces passages dès que
+          // le type redevient large.
+          await _rememberDismissed(segment);
+          await deleteSkipSegment(segment.id);
+        }
+      }
+      // Le type a été choisi : ces passages ne sont plus des détections
+      // que l’analyse peut déplacer ou effacer. Une virgule de réseau
+      // le reste, pour sauter encore avec les pubs.
+      await (update(skipSegments)..where(
+            (row) =>
+                row.templateId.equals(id) &
+                (row.source.equalsValue(SkipSegmentSource.network) |
+                    row.source.equalsValue(SkipSegmentSource.networkEdited)),
+          ))
+          .write(
+            SkipSegmentsCompanion(
+              kind: Value(kind),
+              source: const Value(SkipSegmentSource.networkEdited),
+            ),
+          );
+      await (update(skipSegments)..where(
+            (row) =>
+                row.templateId.equals(id) &
+                row.source.equalsValue(SkipSegmentSource.network).not() &
+                row.source.equalsValue(SkipSegmentSource.networkEdited).not(),
+          ))
+          .write(
+            SkipSegmentsCompanion(
+              kind: Value(kind),
+              source: const Value(SkipSegmentSource.manual),
+            ),
+          );
     });
   }
 
@@ -315,14 +483,14 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     );
   }
 
-  Future<void> setTemplateReview(int id, {required bool confirmed}) {
-    return (update(skipSegments)..where((row) => row.templateId.equals(id)))
-        .write(SkipSegmentsCompanion(confirmed: Value(confirmed)));
-  }
-
   /// Efface le modèle et les passages qui en dépendent.
+  /// Chaque passage retiré est mémorisé : le même gabarit ne les repose pas.
   Future<void> deleteSegmentTemplate(int id) {
     return transaction(() async {
+      final rows = await segmentsForTemplate(id);
+      for (final row in rows) {
+        await _rememberDismissed(row);
+      }
       await (delete(
         skipSegments,
       )..where((row) => row.templateId.equals(id))).go();
@@ -335,29 +503,6 @@ mixin _SkipSegmentQueries on _$AppDatabase {
           ..where((row) => row.podcastId.equals(podcastId))
           ..orderBy([(row) => OrderingTerm.asc(row.id)]))
         .get();
-  }
-
-  Future<Map<int, bool?>> templateReviews(int podcastId) async {
-    final rows = await customSelect(
-      'SELECT s.template_id AS template_id, '
-      'SUM(CASE WHEN s.confirmed IS NULL THEN 1 ELSE 0 END) AS pending, '
-      'SUM(CASE WHEN s.confirmed = 1 THEN 1 ELSE 0 END) AS yes, '
-      'SUM(CASE WHEN s.confirmed = 0 THEN 1 ELSE 0 END) AS no '
-      'FROM skip_segments s '
-      'INNER JOIN episodes e ON e.id = s.episode_id '
-      'WHERE e.podcast_id = ? AND s.template_id IS NOT NULL '
-      'GROUP BY s.template_id',
-      variables: [Variable.withInt(podcastId)],
-      readsFrom: {skipSegments, episodes},
-    ).get();
-    return {
-      for (final row in rows)
-        row.read<int>('template_id'): _reviewOf(
-          row.read<int>('pending'),
-          row.read<int>('yes'),
-          row.read<int>('no'),
-        ),
-    };
   }
 
   Future<List<({Episode episode, EpisodeFingerprint fingerprint})>>
@@ -403,6 +548,44 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     return [
       for (final row in rows)
         (id: row.read<int>('id'), podcastId: row.read<int>('podcast_id')),
+    ];
+  }
+
+  /// Épisodes téléchargés du podcast, du plus récent au plus ancien,
+  /// avec l’état d’empreinte déjà écrit.
+  Future<
+    List<
+      ({
+        int episodeId,
+        String title,
+        String? fingerprintStatus,
+        bool chromaprint,
+      })
+    >
+  >
+  episodeAnalysisFacts(int podcastId) async {
+    final rows = await customSelect(
+      'SELECT e.id AS id, e.title AS title, f.status AS status, '
+      'CASE WHEN f.data IS NOT NULL '
+      'AND length(f.data) >= 32 AND length(f.data) % 4 = 0 '
+      "AND NOT (substr(f.data, 1, 4) = X'4F6C6166') "
+      'THEN 1 ELSE 0 END AS chromaprint '
+      'FROM episodes e '
+      'LEFT JOIN episode_fingerprints f ON f.episode_id = e.id '
+      'WHERE e.podcast_id = ? '
+      'AND e.download_path IS NOT NULL AND length(trim(e.download_path)) > 0 '
+      'ORDER BY e.published_at DESC, e.id DESC',
+      variables: [Variable.withInt(podcastId)],
+      readsFrom: {episodes, episodeFingerprints},
+    ).get();
+    return [
+      for (final row in rows)
+        (
+          episodeId: row.read<int>('id'),
+          title: row.read<String>('title'),
+          fingerprintStatus: row.read<String?>('status'),
+          chromaprint: row.read<int>('chromaprint') == 1,
+        ),
     ];
   }
 
@@ -494,7 +677,8 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     return (update(skipSegments)..where(
           (row) =>
               row.id.equals(id) &
-              row.source.equalsValue(SkipSegmentSource.manual).not(),
+              row.source.equalsValue(SkipSegmentSource.manual).not() &
+              row.source.equalsValue(SkipSegmentSource.networkEdited).not(),
         ))
         .write(
           SkipSegmentsCompanion(
@@ -534,20 +718,21 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     )..where((row) => row.id.equals(id))).getSingleOrNull();
   }
 
-  /// Bornes corrigées à la main : le passage devient `manual` et confirmé.
-  /// Une nouvelle analyse ne réécrit que les lignes `fingerprint`.
+  /// Bornes corrigées à la main. Une détection de réseau le reste ;
+  /// le reste devient `manual`. L’analyse ne réécrit plus la ligne.
   Future<void> setManualSegmentBounds(
     int id, {
     required int startMs,
     required int endMs,
     int? templateId,
-  }) {
-    return (update(skipSegments)..where((row) => row.id.equals(id))).write(
+  }) async {
+    final row = await skipSegmentById(id);
+    if (row == null) return;
+    await (update(skipSegments)..where((item) => item.id.equals(id))).write(
       SkipSegmentsCompanion(
         startMs: Value(startMs),
         endMs: Value(endMs),
-        source: const Value(SkipSegmentSource.manual),
-        confirmed: const Value(true),
+        source: Value(sourceAfterEdit(row.source)),
         templateId: templateId == null
             ? const Value.absent()
             : Value(templateId),
@@ -562,7 +747,10 @@ mixin _SkipSegmentQueries on _$AppDatabase {
           innerJoin(episodes, episodes.id.equalsExp(skipSegments.episodeId)),
         ])..where(
           episodes.podcastId.equals(podcastId) &
-              skipSegments.source.equalsValue(SkipSegmentSource.manual),
+              (skipSegments.source.equalsValue(SkipSegmentSource.manual) |
+                  skipSegments.source.equalsValue(
+                    SkipSegmentSource.networkEdited,
+                  )),
         );
     final rows = await query.get();
     return [for (final row in rows) row.readTable(skipSegments)];
@@ -831,7 +1019,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
       'SELECT e.podcast_id AS podcast_id, COUNT(*) AS n '
       'FROM skip_segments s '
       'INNER JOIN episodes e ON e.id = s.episode_id '
-      "WHERE s.source = 'manual' "
+      "WHERE s.source IN ('manual', 'networkEdited') "
       'GROUP BY e.podcast_id',
       readsFrom: {skipSegments, episodes},
     ).get();
@@ -895,7 +1083,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
       'FROM skip_segments s '
       'INNER JOIN episodes e ON e.id = s.episode_id '
       'WHERE s.template_id IS NULL '
-      "AND s.source = 'manual' "
+      "AND s.source IN ('manual', 'networkEdited') "
       'AND e.download_path IS NOT NULL AND length(e.download_path) > 0 '
       'GROUP BY e.podcast_id, s.kind',
       readsFrom: {segmentTemplates, skipSegments, episodes},
@@ -910,15 +1098,17 @@ mixin _SkipSegmentQueries on _$AppDatabase {
     ];
   }
 
-  /// URLs des fichiers téléchargés, pour regrouper les empreintes.
+  /// URLs de tous les épisodes connus, pour l’hébergeur du réseau.
+  ///
+  /// Sans le filtre « téléchargé » : retirer le dernier fichier ne doit
+  /// pas faire oublier l’hébergeur et effacer ses virgules ailleurs.
   Future<List<({int podcastId, String audioUrl, String feedUrl})>>
-  downloadedHostingRows() async {
+  hostingRows() async {
     final rows = await customSelect(
       'SELECT e.podcast_id AS podcast_id, e.audio_url AS audio_url, '
       'p.feed_url AS feed_url '
       'FROM episodes e '
-      'INNER JOIN podcasts p ON p.id = e.podcast_id '
-      'WHERE e.download_path IS NOT NULL AND length(e.download_path) > 0',
+      'INNER JOIN podcasts p ON p.id = e.podcast_id ',
       readsFrom: {episodes, podcasts},
     ).get();
     return [
@@ -1041,28 +1231,19 @@ class AnalysisSegmentRow {
   final int count;
 }
 
-bool? _reviewOf(int pending, int yes, int no) {
-  if (pending == 0 && no == 0 && yes > 0) return true;
-  if (pending == 0 && yes == 0 && no > 0) return false;
-  return null;
-}
-
-Stream<T> _combineSkip<A, B, C, T>(
+Stream<T> _combineSkip<A, B, T>(
   Stream<A> first,
   Stream<B> second,
-  Stream<C> third,
-  T Function(A, B, C) map,
+  T Function(A, B) map,
 ) {
   return Stream<T>.multi((controller) {
     A? latestA;
     B? latestB;
-    C? latestC;
     var hasA = false;
     var hasB = false;
-    var hasC = false;
     void emit() {
-      if (!hasA || !hasB || !hasC || controller.isClosed) return;
-      controller.add(map(latestA as A, latestB as B, latestC as C));
+      if (!hasA || !hasB || controller.isClosed) return;
+      controller.add(map(latestA as A, latestB as B));
     }
 
     final subs = [
@@ -1074,11 +1255,6 @@ Stream<T> _combineSkip<A, B, C, T>(
       second.listen((value) {
         latestB = value;
         hasB = true;
-        emit();
-      }, onError: controller.addError),
-      third.listen((value) {
-        latestC = value;
-        hasC = true;
         emit();
       }, onError: controller.addError),
     ];
@@ -1093,12 +1269,13 @@ Stream<T> _combineSkip<A, B, C, T>(
 /// Gabarit `t` rattaché à un passage posé à la main.
 const _manualTemplateSql =
     'EXISTS (SELECT 1 FROM skip_segments m '
-    "WHERE m.template_id = t.id AND m.source = 'manual')";
+    'WHERE m.template_id = t.id '
+    "AND m.source IN ('manual', 'networkEdited'))";
 
-/// Passage manuel, ou occurrence d’un gabarit rattaché à un passage manuel.
+/// Passage protégé, ou occurrence d’un gabarit qui en a un.
 const _activeSegment = CustomExpression<bool>(
-  "(skip_segments.source = 'manual' OR EXISTS ("
+  "(skip_segments.source IN ('manual', 'networkEdited') OR EXISTS ("
   'SELECT 1 FROM skip_segments m '
   'WHERE m.template_id = skip_segments.template_id '
-  "AND m.source = 'manual'))",
+  "AND m.source IN ('manual', 'networkEdited')))",
 );

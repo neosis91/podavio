@@ -65,6 +65,22 @@ const _libraryRoots = <String>[
   AppRoutes.backupRestore,
 ];
 
+/// Un hot reload garde un provider déjà en erreur. Un seul nouvel essai
+/// après le cadre, pour ne pas boucler si l’échec revient.
+var _analysisBootstrapRetried = false;
+
+void _watchAnalysisBootstrap(WidgetRef ref) {
+  try {
+    ref.watch(audioAnalysisBootstrapProvider);
+  } catch (_) {
+    if (_analysisBootstrapRetried) return;
+    _analysisBootstrapRetried = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(audioAnalysisBootstrapProvider);
+    });
+  }
+}
+
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.child});
 
@@ -74,7 +90,7 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(coverPrefetchProvider);
     ref.watch(mojibakeRepairProvider);
-    ref.watch(audioAnalysisBootstrapProvider);
+    _watchAnalysisBootstrap(ref);
     ref.watch(automaticDatabaseBackupProvider);
     ref.listen(automaticBackupFailureProvider, (previous, next) {
       if (next == 0 || next == previous) return;

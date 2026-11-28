@@ -63,7 +63,7 @@ void main() {
     );
   });
 
-  test('a rejected passage and a chapter-sourced one stay out', () {
+  test('a chapter-sourced passage stays out of the chapter list', () {
     final merged = mergeChaptersWithSegments(
       chapters: [_chapter(id: 1, startMs: 0, title: 'Talk')],
       segments: [
@@ -72,7 +72,6 @@ void main() {
           startMs: 1000,
           endMs: 2000,
           kind: SkipSegmentKind.ad,
-          confirmed: false,
         ),
         _segment(
           id: 2,
@@ -84,7 +83,8 @@ void main() {
       ],
     );
 
-    expect(merged.map((chapter) => chapter.title), ['Talk']);
+    expect(merged.map((chapter) => chapter.title), contains('Ad'));
+    expect(merged.map((chapter) => chapter.title), isNot(contains('Chapter')));
   });
 
   test('a narrower passage is nested inside a wider one', () {
@@ -199,14 +199,12 @@ void main() {
       startMs: 10000,
       endMs: 30000,
       kind: SkipSegmentKind.ad,
-      confirmed: null,
     );
     final intro = SkipCandidate(
       id: 2,
       startMs: 0,
       endMs: 15000,
       kind: SkipSegmentKind.intro,
-      confirmed: true,
     );
 
     expect(
@@ -260,7 +258,6 @@ SkipSegment _segment({
   required int endMs,
   required SkipSegmentKind kind,
   SkipSegmentSource source = SkipSegmentSource.fingerprint,
-  bool? confirmed,
 }) {
   return SkipSegment(
     id: id,
@@ -270,6 +267,5 @@ SkipSegment _segment({
     kind: kind,
     source: source,
     matches: 1,
-    confirmed: confirmed,
   );
 }

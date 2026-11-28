@@ -5062,20 +5062,6 @@ class $SkipSegmentsTable extends SkipSegments
     requiredDuringInsert: false,
     defaultValue: const Constant(1),
   );
-  static const VerificationMeta _confirmedMeta = const VerificationMeta(
-    'confirmed',
-  );
-  @override
-  late final GeneratedColumn<bool> confirmed = GeneratedColumn<bool>(
-    'confirmed',
-    aliasedName,
-    true,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("confirmed" IN (0, 1))',
-    ),
-  );
   static const VerificationMeta _confidenceMeta = const VerificationMeta(
     'confidence',
   );
@@ -5110,7 +5096,6 @@ class $SkipSegmentsTable extends SkipSegments
     kind,
     source,
     matches,
-    confirmed,
     confidence,
     templateId,
   ];
@@ -5157,12 +5142,6 @@ class $SkipSegmentsTable extends SkipSegments
       context.handle(
         _matchesMeta,
         matches.isAcceptableOrUnknown(data['matches']!, _matchesMeta),
-      );
-    }
-    if (data.containsKey('confirmed')) {
-      context.handle(
-        _confirmedMeta,
-        confirmed.isAcceptableOrUnknown(data['confirmed']!, _confirmedMeta),
       );
     }
     if (data.containsKey('confidence')) {
@@ -5218,10 +5197,6 @@ class $SkipSegmentsTable extends SkipSegments
         DriftSqlType.int,
         data['${effectivePrefix}matches'],
       )!,
-      confirmed: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}confirmed'],
-      ),
       confidence: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}confidence'],
@@ -5257,9 +5232,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
   /// Nombre d’épisodes du podcast qui partagent ce passage.
   final int matches;
 
-  /// `null` : pas revu. `true` : confirmé. `false` : ignoré.
-  final bool? confirmed;
-
   /// 0–100. `null` : pas calculé (chapitre, ou passage ancien).
   /// Sert au tri. Un candidat intra-épisode bas est replié dans l’écran.
   final int? confidence;
@@ -5272,7 +5244,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     required this.kind,
     required this.source,
     required this.matches,
-    this.confirmed,
     this.confidence,
     this.templateId,
   });
@@ -5294,9 +5265,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
       );
     }
     map['matches'] = Variable<int>(matches);
-    if (!nullToAbsent || confirmed != null) {
-      map['confirmed'] = Variable<bool>(confirmed);
-    }
     if (!nullToAbsent || confidence != null) {
       map['confidence'] = Variable<int>(confidence);
     }
@@ -5315,9 +5283,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
       kind: Value(kind),
       source: Value(source),
       matches: Value(matches),
-      confirmed: confirmed == null && nullToAbsent
-          ? const Value.absent()
-          : Value(confirmed),
       confidence: confidence == null && nullToAbsent
           ? const Value.absent()
           : Value(confidence),
@@ -5344,7 +5309,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
         serializer.fromJson<String>(json['source']),
       ),
       matches: serializer.fromJson<int>(json['matches']),
-      confirmed: serializer.fromJson<bool?>(json['confirmed']),
       confidence: serializer.fromJson<int?>(json['confidence']),
       templateId: serializer.fromJson<int?>(json['templateId']),
     );
@@ -5364,7 +5328,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
         $SkipSegmentsTable.$convertersource.toJson(source),
       ),
       'matches': serializer.toJson<int>(matches),
-      'confirmed': serializer.toJson<bool?>(confirmed),
       'confidence': serializer.toJson<int?>(confidence),
       'templateId': serializer.toJson<int?>(templateId),
     };
@@ -5378,7 +5341,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     SkipSegmentKind? kind,
     SkipSegmentSource? source,
     int? matches,
-    Value<bool?> confirmed = const Value.absent(),
     Value<int?> confidence = const Value.absent(),
     Value<int?> templateId = const Value.absent(),
   }) => SkipSegment(
@@ -5389,7 +5351,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     kind: kind ?? this.kind,
     source: source ?? this.source,
     matches: matches ?? this.matches,
-    confirmed: confirmed.present ? confirmed.value : this.confirmed,
     confidence: confidence.present ? confidence.value : this.confidence,
     templateId: templateId.present ? templateId.value : this.templateId,
   );
@@ -5402,7 +5363,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
       kind: data.kind.present ? data.kind.value : this.kind,
       source: data.source.present ? data.source.value : this.source,
       matches: data.matches.present ? data.matches.value : this.matches,
-      confirmed: data.confirmed.present ? data.confirmed.value : this.confirmed,
       confidence: data.confidence.present
           ? data.confidence.value
           : this.confidence,
@@ -5422,7 +5382,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
           ..write('kind: $kind, ')
           ..write('source: $source, ')
           ..write('matches: $matches, ')
-          ..write('confirmed: $confirmed, ')
           ..write('confidence: $confidence, ')
           ..write('templateId: $templateId')
           ..write(')'))
@@ -5438,7 +5397,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
     kind,
     source,
     matches,
-    confirmed,
     confidence,
     templateId,
   );
@@ -5453,7 +5411,6 @@ class SkipSegment extends DataClass implements Insertable<SkipSegment> {
           other.kind == this.kind &&
           other.source == this.source &&
           other.matches == this.matches &&
-          other.confirmed == this.confirmed &&
           other.confidence == this.confidence &&
           other.templateId == this.templateId);
 }
@@ -5466,7 +5423,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
   final Value<SkipSegmentKind> kind;
   final Value<SkipSegmentSource> source;
   final Value<int> matches;
-  final Value<bool?> confirmed;
   final Value<int?> confidence;
   final Value<int?> templateId;
   const SkipSegmentsCompanion({
@@ -5477,7 +5433,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     this.kind = const Value.absent(),
     this.source = const Value.absent(),
     this.matches = const Value.absent(),
-    this.confirmed = const Value.absent(),
     this.confidence = const Value.absent(),
     this.templateId = const Value.absent(),
   });
@@ -5489,7 +5444,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     required SkipSegmentKind kind,
     required SkipSegmentSource source,
     this.matches = const Value.absent(),
-    this.confirmed = const Value.absent(),
     this.confidence = const Value.absent(),
     this.templateId = const Value.absent(),
   }) : episodeId = Value(episodeId),
@@ -5505,7 +5459,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     Expression<String>? kind,
     Expression<String>? source,
     Expression<int>? matches,
-    Expression<bool>? confirmed,
     Expression<int>? confidence,
     Expression<int>? templateId,
   }) {
@@ -5517,7 +5470,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
       if (kind != null) 'kind': kind,
       if (source != null) 'source': source,
       if (matches != null) 'matches': matches,
-      if (confirmed != null) 'confirmed': confirmed,
       if (confidence != null) 'confidence': confidence,
       if (templateId != null) 'template_id': templateId,
     });
@@ -5531,7 +5483,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     Value<SkipSegmentKind>? kind,
     Value<SkipSegmentSource>? source,
     Value<int>? matches,
-    Value<bool?>? confirmed,
     Value<int?>? confidence,
     Value<int?>? templateId,
   }) {
@@ -5543,7 +5494,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
       kind: kind ?? this.kind,
       source: source ?? this.source,
       matches: matches ?? this.matches,
-      confirmed: confirmed ?? this.confirmed,
       confidence: confidence ?? this.confidence,
       templateId: templateId ?? this.templateId,
     );
@@ -5577,9 +5527,6 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
     if (matches.present) {
       map['matches'] = Variable<int>(matches.value);
     }
-    if (confirmed.present) {
-      map['confirmed'] = Variable<bool>(confirmed.value);
-    }
     if (confidence.present) {
       map['confidence'] = Variable<int>(confidence.value);
     }
@@ -5599,9 +5546,571 @@ class SkipSegmentsCompanion extends UpdateCompanion<SkipSegment> {
           ..write('kind: $kind, ')
           ..write('source: $source, ')
           ..write('matches: $matches, ')
-          ..write('confirmed: $confirmed, ')
           ..write('confidence: $confidence, ')
           ..write('templateId: $templateId')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DismissedSkipSpansTable extends DismissedSkipSpans
+    with TableInfo<$DismissedSkipSpansTable, DismissedSkipSpan> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DismissedSkipSpansTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _episodeIdMeta = const VerificationMeta(
+    'episodeId',
+  );
+  @override
+  late final GeneratedColumn<int> episodeId = GeneratedColumn<int>(
+    'episode_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES episodes (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _templateIdMeta = const VerificationMeta(
+    'templateId',
+  );
+  @override
+  late final GeneratedColumn<int> templateId = GeneratedColumn<int>(
+    'template_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<SkipSegmentKind?, String> kind =
+      GeneratedColumn<String>(
+        'kind',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      ).withConverter<SkipSegmentKind?>(
+        $DismissedSkipSpansTable.$converterkindn,
+      );
+  static const VerificationMeta _startMsMeta = const VerificationMeta(
+    'startMs',
+  );
+  @override
+  late final GeneratedColumn<int> startMs = GeneratedColumn<int>(
+    'start_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _endMsMeta = const VerificationMeta('endMs');
+  @override
+  late final GeneratedColumn<int> endMs = GeneratedColumn<int>(
+    'end_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    episodeId,
+    templateId,
+    kind,
+    startMs,
+    endMs,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'dismissed_skip_spans';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DismissedSkipSpan> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('episode_id')) {
+      context.handle(
+        _episodeIdMeta,
+        episodeId.isAcceptableOrUnknown(data['episode_id']!, _episodeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_episodeIdMeta);
+    }
+    if (data.containsKey('template_id')) {
+      context.handle(
+        _templateIdMeta,
+        templateId.isAcceptableOrUnknown(data['template_id']!, _templateIdMeta),
+      );
+    }
+    if (data.containsKey('start_ms')) {
+      context.handle(
+        _startMsMeta,
+        startMs.isAcceptableOrUnknown(data['start_ms']!, _startMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_startMsMeta);
+    }
+    if (data.containsKey('end_ms')) {
+      context.handle(
+        _endMsMeta,
+        endMs.isAcceptableOrUnknown(data['end_ms']!, _endMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_endMsMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DismissedSkipSpan map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DismissedSkipSpan(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      episodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}episode_id'],
+      )!,
+      templateId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}template_id'],
+      ),
+      kind: $DismissedSkipSpansTable.$converterkindn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}kind'],
+        ),
+      ),
+      startMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}start_ms'],
+      )!,
+      endMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}end_ms'],
+      )!,
+    );
+  }
+
+  @override
+  $DismissedSkipSpansTable createAlias(String alias) {
+    return $DismissedSkipSpansTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<SkipSegmentKind, String, String> $converterkind =
+      const EnumNameConverter<SkipSegmentKind>(SkipSegmentKind.values);
+  static JsonTypeConverter2<SkipSegmentKind?, String?, String?>
+  $converterkindn = JsonTypeConverter2.asNullable($converterkind);
+}
+
+class DismissedSkipSpan extends DataClass
+    implements Insertable<DismissedSkipSpan> {
+  final int id;
+  final int episodeId;
+
+  /// Gabarit au moment du retrait. Pas de clé étrangère : le gabarit
+  /// peut disparaître, la trace doit rester.
+  final int? templateId;
+
+  /// Type au moment du retrait. `null` sur une trace plus ancienne.
+  final SkipSegmentKind? kind;
+  final int startMs;
+  final int endMs;
+  const DismissedSkipSpan({
+    required this.id,
+    required this.episodeId,
+    this.templateId,
+    this.kind,
+    required this.startMs,
+    required this.endMs,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['episode_id'] = Variable<int>(episodeId);
+    if (!nullToAbsent || templateId != null) {
+      map['template_id'] = Variable<int>(templateId);
+    }
+    if (!nullToAbsent || kind != null) {
+      map['kind'] = Variable<String>(
+        $DismissedSkipSpansTable.$converterkindn.toSql(kind),
+      );
+    }
+    map['start_ms'] = Variable<int>(startMs);
+    map['end_ms'] = Variable<int>(endMs);
+    return map;
+  }
+
+  DismissedSkipSpansCompanion toCompanion(bool nullToAbsent) {
+    return DismissedSkipSpansCompanion(
+      id: Value(id),
+      episodeId: Value(episodeId),
+      templateId: templateId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(templateId),
+      kind: kind == null && nullToAbsent ? const Value.absent() : Value(kind),
+      startMs: Value(startMs),
+      endMs: Value(endMs),
+    );
+  }
+
+  factory DismissedSkipSpan.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DismissedSkipSpan(
+      id: serializer.fromJson<int>(json['id']),
+      episodeId: serializer.fromJson<int>(json['episodeId']),
+      templateId: serializer.fromJson<int?>(json['templateId']),
+      kind: $DismissedSkipSpansTable.$converterkindn.fromJson(
+        serializer.fromJson<String?>(json['kind']),
+      ),
+      startMs: serializer.fromJson<int>(json['startMs']),
+      endMs: serializer.fromJson<int>(json['endMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'episodeId': serializer.toJson<int>(episodeId),
+      'templateId': serializer.toJson<int?>(templateId),
+      'kind': serializer.toJson<String?>(
+        $DismissedSkipSpansTable.$converterkindn.toJson(kind),
+      ),
+      'startMs': serializer.toJson<int>(startMs),
+      'endMs': serializer.toJson<int>(endMs),
+    };
+  }
+
+  DismissedSkipSpan copyWith({
+    int? id,
+    int? episodeId,
+    Value<int?> templateId = const Value.absent(),
+    Value<SkipSegmentKind?> kind = const Value.absent(),
+    int? startMs,
+    int? endMs,
+  }) => DismissedSkipSpan(
+    id: id ?? this.id,
+    episodeId: episodeId ?? this.episodeId,
+    templateId: templateId.present ? templateId.value : this.templateId,
+    kind: kind.present ? kind.value : this.kind,
+    startMs: startMs ?? this.startMs,
+    endMs: endMs ?? this.endMs,
+  );
+  DismissedSkipSpan copyWithCompanion(DismissedSkipSpansCompanion data) {
+    return DismissedSkipSpan(
+      id: data.id.present ? data.id.value : this.id,
+      episodeId: data.episodeId.present ? data.episodeId.value : this.episodeId,
+      templateId: data.templateId.present
+          ? data.templateId.value
+          : this.templateId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      startMs: data.startMs.present ? data.startMs.value : this.startMs,
+      endMs: data.endMs.present ? data.endMs.value : this.endMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DismissedSkipSpan(')
+          ..write('id: $id, ')
+          ..write('episodeId: $episodeId, ')
+          ..write('templateId: $templateId, ')
+          ..write('kind: $kind, ')
+          ..write('startMs: $startMs, ')
+          ..write('endMs: $endMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, episodeId, templateId, kind, startMs, endMs);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DismissedSkipSpan &&
+          other.id == this.id &&
+          other.episodeId == this.episodeId &&
+          other.templateId == this.templateId &&
+          other.kind == this.kind &&
+          other.startMs == this.startMs &&
+          other.endMs == this.endMs);
+}
+
+class DismissedSkipSpansCompanion extends UpdateCompanion<DismissedSkipSpan> {
+  final Value<int> id;
+  final Value<int> episodeId;
+  final Value<int?> templateId;
+  final Value<SkipSegmentKind?> kind;
+  final Value<int> startMs;
+  final Value<int> endMs;
+  const DismissedSkipSpansCompanion({
+    this.id = const Value.absent(),
+    this.episodeId = const Value.absent(),
+    this.templateId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.startMs = const Value.absent(),
+    this.endMs = const Value.absent(),
+  });
+  DismissedSkipSpansCompanion.insert({
+    this.id = const Value.absent(),
+    required int episodeId,
+    this.templateId = const Value.absent(),
+    this.kind = const Value.absent(),
+    required int startMs,
+    required int endMs,
+  }) : episodeId = Value(episodeId),
+       startMs = Value(startMs),
+       endMs = Value(endMs);
+  static Insertable<DismissedSkipSpan> custom({
+    Expression<int>? id,
+    Expression<int>? episodeId,
+    Expression<int>? templateId,
+    Expression<String>? kind,
+    Expression<int>? startMs,
+    Expression<int>? endMs,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (episodeId != null) 'episode_id': episodeId,
+      if (templateId != null) 'template_id': templateId,
+      if (kind != null) 'kind': kind,
+      if (startMs != null) 'start_ms': startMs,
+      if (endMs != null) 'end_ms': endMs,
+    });
+  }
+
+  DismissedSkipSpansCompanion copyWith({
+    Value<int>? id,
+    Value<int>? episodeId,
+    Value<int?>? templateId,
+    Value<SkipSegmentKind?>? kind,
+    Value<int>? startMs,
+    Value<int>? endMs,
+  }) {
+    return DismissedSkipSpansCompanion(
+      id: id ?? this.id,
+      episodeId: episodeId ?? this.episodeId,
+      templateId: templateId ?? this.templateId,
+      kind: kind ?? this.kind,
+      startMs: startMs ?? this.startMs,
+      endMs: endMs ?? this.endMs,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (episodeId.present) {
+      map['episode_id'] = Variable<int>(episodeId.value);
+    }
+    if (templateId.present) {
+      map['template_id'] = Variable<int>(templateId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(
+        $DismissedSkipSpansTable.$converterkindn.toSql(kind.value),
+      );
+    }
+    if (startMs.present) {
+      map['start_ms'] = Variable<int>(startMs.value);
+    }
+    if (endMs.present) {
+      map['end_ms'] = Variable<int>(endMs.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DismissedSkipSpansCompanion(')
+          ..write('id: $id, ')
+          ..write('episodeId: $episodeId, ')
+          ..write('templateId: $templateId, ')
+          ..write('kind: $kind, ')
+          ..write('startMs: $startMs, ')
+          ..write('endMs: $endMs')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PendingSegmentDropsTable extends PendingSegmentDrops
+    with TableInfo<$PendingSegmentDropsTable, PendingSegmentDrop> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingSegmentDropsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _segmentIdMeta = const VerificationMeta(
+    'segmentId',
+  );
+  @override
+  late final GeneratedColumn<int> segmentId = GeneratedColumn<int>(
+    'segment_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [segmentId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_segment_drops';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PendingSegmentDrop> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('segment_id')) {
+      context.handle(
+        _segmentIdMeta,
+        segmentId.isAcceptableOrUnknown(data['segment_id']!, _segmentIdMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {segmentId};
+  @override
+  PendingSegmentDrop map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PendingSegmentDrop(
+      segmentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}segment_id'],
+      )!,
+    );
+  }
+
+  @override
+  $PendingSegmentDropsTable createAlias(String alias) {
+    return $PendingSegmentDropsTable(attachedDatabase, alias);
+  }
+}
+
+class PendingSegmentDrop extends DataClass
+    implements Insertable<PendingSegmentDrop> {
+  final int segmentId;
+  const PendingSegmentDrop({required this.segmentId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['segment_id'] = Variable<int>(segmentId);
+    return map;
+  }
+
+  PendingSegmentDropsCompanion toCompanion(bool nullToAbsent) {
+    return PendingSegmentDropsCompanion(segmentId: Value(segmentId));
+  }
+
+  factory PendingSegmentDrop.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PendingSegmentDrop(
+      segmentId: serializer.fromJson<int>(json['segmentId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{'segmentId': serializer.toJson<int>(segmentId)};
+  }
+
+  PendingSegmentDrop copyWith({int? segmentId}) =>
+      PendingSegmentDrop(segmentId: segmentId ?? this.segmentId);
+  PendingSegmentDrop copyWithCompanion(PendingSegmentDropsCompanion data) {
+    return PendingSegmentDrop(
+      segmentId: data.segmentId.present ? data.segmentId.value : this.segmentId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingSegmentDrop(')
+          ..write('segmentId: $segmentId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => segmentId.hashCode;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PendingSegmentDrop && other.segmentId == this.segmentId);
+}
+
+class PendingSegmentDropsCompanion extends UpdateCompanion<PendingSegmentDrop> {
+  final Value<int> segmentId;
+  const PendingSegmentDropsCompanion({this.segmentId = const Value.absent()});
+  PendingSegmentDropsCompanion.insert({this.segmentId = const Value.absent()});
+  static Insertable<PendingSegmentDrop> custom({Expression<int>? segmentId}) {
+    return RawValuesInsertable({
+      if (segmentId != null) 'segment_id': segmentId,
+    });
+  }
+
+  PendingSegmentDropsCompanion copyWith({Value<int>? segmentId}) {
+    return PendingSegmentDropsCompanion(segmentId: segmentId ?? this.segmentId);
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (segmentId.present) {
+      map['segment_id'] = Variable<int>(segmentId.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingSegmentDropsCompanion(')
+          ..write('segmentId: $segmentId')
           ..write(')'))
         .toString();
   }
@@ -6389,6 +6898,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $SkipSegmentsTable skipSegments = $SkipSegmentsTable(this);
+  late final $DismissedSkipSpansTable dismissedSkipSpans =
+      $DismissedSkipSpansTable(this);
+  late final $PendingSegmentDropsTable pendingSegmentDrops =
+      $PendingSegmentDropsTable(this);
   late final $EpisodeLogMelsTable episodeLogMels = $EpisodeLogMelsTable(this);
   late final $LearnedNetworkStingsTable learnedNetworkStings =
       $LearnedNetworkStingsTable(this);
@@ -6436,6 +6949,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'skip_segments_template_id',
     'CREATE INDEX skip_segments_template_id ON skip_segments (template_id)',
   );
+  late final Index dismissedSkipSpansEpisodeId = Index(
+    'dismissed_skip_spans_episode_id',
+    'CREATE INDEX dismissed_skip_spans_episode_id ON dismissed_skip_spans (episode_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6450,6 +6967,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     episodeFingerprints,
     segmentTemplates,
     skipSegments,
+    dismissedSkipSpans,
+    pendingSegmentDrops,
     episodeLogMels,
     learnedNetworkStings,
     episodesPodcastId,
@@ -6463,6 +6982,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     segmentTemplatesPodcastId,
     skipSegmentsEpisodeId,
     skipSegmentsTemplateId,
+    dismissedSkipSpansEpisodeId,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -6528,6 +7048,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('skip_segments', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'episodes',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('dismissed_skip_spans', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -7555,6 +8082,27 @@ final class $$EpisodesTableReferences
     );
   }
 
+  static MultiTypedResultKey<$DismissedSkipSpansTable, List<DismissedSkipSpan>>
+  _dismissedSkipSpansRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.dismissedSkipSpans,
+        aliasName: 'episodes__id__dismissed_skip_spans__episode_id',
+      );
+
+  $$DismissedSkipSpansTableProcessedTableManager get dismissedSkipSpansRefs {
+    final manager = $$DismissedSkipSpansTableTableManager(
+      $_db,
+      $_db.dismissedSkipSpans,
+    ).filter((f) => f.episodeId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _dismissedSkipSpansRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$EpisodeLogMelsTable, List<EpisodeLogMel>>
   _episodeLogMelsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.episodeLogMels,
@@ -7827,6 +8375,31 @@ class $$EpisodesTableFilterComposer
           }) => $$SkipSegmentsTableFilterComposer(
             $db: $db,
             $table: $db.skipSegments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> dismissedSkipSpansRefs(
+    Expression<bool> Function($$DismissedSkipSpansTableFilterComposer f) f,
+  ) {
+    final $$DismissedSkipSpansTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dismissedSkipSpans,
+      getReferencedColumn: (t) => t.episodeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DismissedSkipSpansTableFilterComposer(
+            $db: $db,
+            $table: $db.dismissedSkipSpans,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -8242,6 +8815,32 @@ class $$EpisodesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> dismissedSkipSpansRefs<T extends Object>(
+    Expression<T> Function($$DismissedSkipSpansTableAnnotationComposer a) f,
+  ) {
+    final $$DismissedSkipSpansTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.dismissedSkipSpans,
+          getReferencedColumn: (t) => t.episodeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$DismissedSkipSpansTableAnnotationComposer(
+                $db: $db,
+                $table: $db.dismissedSkipSpans,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> episodeLogMelsRefs<T extends Object>(
     Expression<T> Function($$EpisodeLogMelsTableAnnotationComposer a) f,
   ) {
@@ -8288,6 +8887,7 @@ class $$EpisodesTableTableManager
             bool playlistEpisodesRefs,
             bool episodeFingerprintsRefs,
             bool skipSegmentsRefs,
+            bool dismissedSkipSpansRefs,
             bool episodeLogMelsRefs,
           })
         > {
@@ -8414,6 +9014,7 @@ class $$EpisodesTableTableManager
                 playlistEpisodesRefs = false,
                 episodeFingerprintsRefs = false,
                 skipSegmentsRefs = false,
+                dismissedSkipSpansRefs = false,
                 episodeLogMelsRefs = false,
               }) {
                 return PrefetchHooks(
@@ -8424,6 +9025,7 @@ class $$EpisodesTableTableManager
                     if (playlistEpisodesRefs) db.playlistEpisodes,
                     if (episodeFingerprintsRefs) db.episodeFingerprints,
                     if (skipSegmentsRefs) db.skipSegments,
+                    if (dismissedSkipSpansRefs) db.dismissedSkipSpans,
                     if (episodeLogMelsRefs) db.episodeLogMels,
                   ],
                   addJoins:
@@ -8558,6 +9160,26 @@ class $$EpisodesTableTableManager
                           referencedColumn: 'episode_id',
                           typedResults: items,
                         ),
+                      if (dismissedSkipSpansRefs)
+                        await $_getPrefetchedDataByColumns<
+                          Episode,
+                          $EpisodesTable,
+                          DismissedSkipSpan,
+                          $DismissedSkipSpansTable
+                        >(
+                          currentTable: table,
+                          referencedTable: $$EpisodesTableReferences
+                              ._dismissedSkipSpansRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$EpisodesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).dismissedSkipSpansRefs,
+                          currentColumn: 'id',
+                          referencedColumn: 'episode_id',
+                          typedResults: items,
+                        ),
                       if (episodeLogMelsRefs)
                         await $_getPrefetchedDataByColumns<
                           Episode,
@@ -8605,6 +9227,7 @@ typedef $$EpisodesTableProcessedTableManager =
         bool playlistEpisodesRefs,
         bool episodeFingerprintsRefs,
         bool skipSegmentsRefs,
+        bool dismissedSkipSpansRefs,
         bool episodeLogMelsRefs,
       })
     >;
@@ -10726,7 +11349,6 @@ typedef $$SkipSegmentsTableCreateCompanionBuilder =
       required SkipSegmentKind kind,
       required SkipSegmentSource source,
       Value<int> matches,
-      Value<bool?> confirmed,
       Value<int?> confidence,
       Value<int?> templateId,
     });
@@ -10739,7 +11361,6 @@ typedef $$SkipSegmentsTableUpdateCompanionBuilder =
       Value<SkipSegmentKind> kind,
       Value<SkipSegmentSource> source,
       Value<int> matches,
-      Value<bool?> confirmed,
       Value<int?> confidence,
       Value<int?> templateId,
     });
@@ -10822,11 +11443,6 @@ class $$SkipSegmentsTableFilterComposer
 
   ColumnFilters<int> get matches => $composableBuilder(
     column: $table.matches,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get confirmed => $composableBuilder(
-    column: $table.confirmed,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10921,11 +11537,6 @@ class $$SkipSegmentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<bool> get confirmed => $composableBuilder(
-    column: $table.confirmed,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<int> get confidence => $composableBuilder(
     column: $table.confidence,
     builder: (column) => ColumnOrderings(column),
@@ -11004,9 +11615,6 @@ class $$SkipSegmentsTableAnnotationComposer
 
   GeneratedColumn<int> get matches =>
       $composableBuilder(column: $table.matches, builder: (column) => column);
-
-  GeneratedColumn<bool> get confirmed =>
-      $composableBuilder(column: $table.confirmed, builder: (column) => column);
 
   GeneratedColumn<int> get confidence => $composableBuilder(
     column: $table.confidence,
@@ -11095,7 +11703,6 @@ class $$SkipSegmentsTableTableManager
                 Value<SkipSegmentKind> kind = const Value.absent(),
                 Value<SkipSegmentSource> source = const Value.absent(),
                 Value<int> matches = const Value.absent(),
-                Value<bool?> confirmed = const Value.absent(),
                 Value<int?> confidence = const Value.absent(),
                 Value<int?> templateId = const Value.absent(),
               }) => SkipSegmentsCompanion(
@@ -11106,7 +11713,6 @@ class $$SkipSegmentsTableTableManager
                 kind: kind,
                 source: source,
                 matches: matches,
-                confirmed: confirmed,
                 confidence: confidence,
                 templateId: templateId,
               ),
@@ -11119,7 +11725,6 @@ class $$SkipSegmentsTableTableManager
                 required SkipSegmentKind kind,
                 required SkipSegmentSource source,
                 Value<int> matches = const Value.absent(),
-                Value<bool?> confirmed = const Value.absent(),
                 Value<int?> confidence = const Value.absent(),
                 Value<int?> templateId = const Value.absent(),
               }) => SkipSegmentsCompanion.insert(
@@ -11130,7 +11735,6 @@ class $$SkipSegmentsTableTableManager
                 kind: kind,
                 source: source,
                 matches: matches,
-                confirmed: confirmed,
                 confidence: confidence,
                 templateId: templateId,
               ),
@@ -11209,6 +11813,488 @@ typedef $$SkipSegmentsTableProcessedTableManager =
       (SkipSegment, $$SkipSegmentsTableReferences),
       SkipSegment,
       PrefetchHooks Function({bool episodeId, bool templateId})
+    >;
+typedef $$DismissedSkipSpansTableCreateCompanionBuilder =
+    DismissedSkipSpansCompanion Function({
+      Value<int> id,
+      required int episodeId,
+      Value<int?> templateId,
+      Value<SkipSegmentKind?> kind,
+      required int startMs,
+      required int endMs,
+    });
+typedef $$DismissedSkipSpansTableUpdateCompanionBuilder =
+    DismissedSkipSpansCompanion Function({
+      Value<int> id,
+      Value<int> episodeId,
+      Value<int?> templateId,
+      Value<SkipSegmentKind?> kind,
+      Value<int> startMs,
+      Value<int> endMs,
+    });
+
+final class $$DismissedSkipSpansTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $DismissedSkipSpansTable,
+          DismissedSkipSpan
+        > {
+  $$DismissedSkipSpansTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $EpisodesTable _episodeIdTable(_$AppDatabase db) =>
+      db.episodes.createAlias('dismissed_skip_spans__episode_id__episodes__id');
+
+  $$EpisodesTableProcessedTableManager get episodeId {
+    final $_column = $_itemColumn<int>('episode_id')!;
+
+    final manager = $$EpisodesTableTableManager(
+      $_db,
+      $_db.episodes,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_episodeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$DismissedSkipSpansTableFilterComposer
+    extends Composer<_$AppDatabase, $DismissedSkipSpansTable> {
+  $$DismissedSkipSpansTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get templateId => $composableBuilder(
+    column: $table.templateId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<SkipSegmentKind?, SkipSegmentKind, String>
+  get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<int> get startMs => $composableBuilder(
+    column: $table.startMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get endMs => $composableBuilder(
+    column: $table.endMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$EpisodesTableFilterComposer get episodeId {
+    final $$EpisodesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableFilterComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DismissedSkipSpansTableOrderingComposer
+    extends Composer<_$AppDatabase, $DismissedSkipSpansTable> {
+  $$DismissedSkipSpansTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get templateId => $composableBuilder(
+    column: $table.templateId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get startMs => $composableBuilder(
+    column: $table.startMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get endMs => $composableBuilder(
+    column: $table.endMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$EpisodesTableOrderingComposer get episodeId {
+    final $$EpisodesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableOrderingComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DismissedSkipSpansTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DismissedSkipSpansTable> {
+  $$DismissedSkipSpansTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get templateId => $composableBuilder(
+    column: $table.templateId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<SkipSegmentKind?, String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<int> get startMs =>
+      $composableBuilder(column: $table.startMs, builder: (column) => column);
+
+  GeneratedColumn<int> get endMs =>
+      $composableBuilder(column: $table.endMs, builder: (column) => column);
+
+  $$EpisodesTableAnnotationComposer get episodeId {
+    final $$EpisodesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.episodeId,
+      referencedTable: $db.episodes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EpisodesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.episodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DismissedSkipSpansTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DismissedSkipSpansTable,
+          DismissedSkipSpan,
+          $$DismissedSkipSpansTableFilterComposer,
+          $$DismissedSkipSpansTableOrderingComposer,
+          $$DismissedSkipSpansTableAnnotationComposer,
+          $$DismissedSkipSpansTableCreateCompanionBuilder,
+          $$DismissedSkipSpansTableUpdateCompanionBuilder,
+          (DismissedSkipSpan, $$DismissedSkipSpansTableReferences),
+          DismissedSkipSpan,
+          PrefetchHooks Function({bool episodeId})
+        > {
+  $$DismissedSkipSpansTableTableManager(
+    _$AppDatabase db,
+    $DismissedSkipSpansTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DismissedSkipSpansTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DismissedSkipSpansTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DismissedSkipSpansTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> episodeId = const Value.absent(),
+                Value<int?> templateId = const Value.absent(),
+                Value<SkipSegmentKind?> kind = const Value.absent(),
+                Value<int> startMs = const Value.absent(),
+                Value<int> endMs = const Value.absent(),
+              }) => DismissedSkipSpansCompanion(
+                id: id,
+                episodeId: episodeId,
+                templateId: templateId,
+                kind: kind,
+                startMs: startMs,
+                endMs: endMs,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int episodeId,
+                Value<int?> templateId = const Value.absent(),
+                Value<SkipSegmentKind?> kind = const Value.absent(),
+                required int startMs,
+                required int endMs,
+              }) => DismissedSkipSpansCompanion.insert(
+                id: id,
+                episodeId: episodeId,
+                templateId: templateId,
+                kind: kind,
+                startMs: startMs,
+                endMs: endMs,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$DismissedSkipSpansTable, DismissedSkipSpan>(
+                    table,
+                  ),
+                  $$DismissedSkipSpansTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({episodeId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (episodeId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.episodeId,
+                        referencedTable: $$DismissedSkipSpansTableReferences
+                            ._episodeIdTable(db),
+                        referencedColumn: $$DismissedSkipSpansTableReferences
+                            ._episodeIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$DismissedSkipSpansTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DismissedSkipSpansTable,
+      DismissedSkipSpan,
+      $$DismissedSkipSpansTableFilterComposer,
+      $$DismissedSkipSpansTableOrderingComposer,
+      $$DismissedSkipSpansTableAnnotationComposer,
+      $$DismissedSkipSpansTableCreateCompanionBuilder,
+      $$DismissedSkipSpansTableUpdateCompanionBuilder,
+      (DismissedSkipSpan, $$DismissedSkipSpansTableReferences),
+      DismissedSkipSpan,
+      PrefetchHooks Function({bool episodeId})
+    >;
+typedef $$PendingSegmentDropsTableCreateCompanionBuilder =
+    PendingSegmentDropsCompanion Function({Value<int> segmentId});
+typedef $$PendingSegmentDropsTableUpdateCompanionBuilder =
+    PendingSegmentDropsCompanion Function({Value<int> segmentId});
+
+class $$PendingSegmentDropsTableFilterComposer
+    extends Composer<_$AppDatabase, $PendingSegmentDropsTable> {
+  $$PendingSegmentDropsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get segmentId => $composableBuilder(
+    column: $table.segmentId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PendingSegmentDropsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PendingSegmentDropsTable> {
+  $$PendingSegmentDropsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get segmentId => $composableBuilder(
+    column: $table.segmentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PendingSegmentDropsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PendingSegmentDropsTable> {
+  $$PendingSegmentDropsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get segmentId =>
+      $composableBuilder(column: $table.segmentId, builder: (column) => column);
+}
+
+class $$PendingSegmentDropsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PendingSegmentDropsTable,
+          PendingSegmentDrop,
+          $$PendingSegmentDropsTableFilterComposer,
+          $$PendingSegmentDropsTableOrderingComposer,
+          $$PendingSegmentDropsTableAnnotationComposer,
+          $$PendingSegmentDropsTableCreateCompanionBuilder,
+          $$PendingSegmentDropsTableUpdateCompanionBuilder,
+          (
+            PendingSegmentDrop,
+            BaseReferences<
+              _$AppDatabase,
+              $PendingSegmentDropsTable,
+              PendingSegmentDrop
+            >,
+          ),
+          PendingSegmentDrop,
+          PrefetchHooks Function()
+        > {
+  $$PendingSegmentDropsTableTableManager(
+    _$AppDatabase db,
+    $PendingSegmentDropsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingSegmentDropsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PendingSegmentDropsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PendingSegmentDropsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback: ({
+            Value<int> segmentId = const Value.absent(),
+          }) => PendingSegmentDropsCompanion(segmentId: segmentId),
+          createCompanionCallback: ({
+            Value<int> segmentId = const Value.absent(),
+          }) => PendingSegmentDropsCompanion.insert(segmentId: segmentId),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$PendingSegmentDropsTable, PendingSegmentDrop>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $PendingSegmentDropsTable,
+                    PendingSegmentDrop
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PendingSegmentDropsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PendingSegmentDropsTable,
+      PendingSegmentDrop,
+      $$PendingSegmentDropsTableFilterComposer,
+      $$PendingSegmentDropsTableOrderingComposer,
+      $$PendingSegmentDropsTableAnnotationComposer,
+      $$PendingSegmentDropsTableCreateCompanionBuilder,
+      $$PendingSegmentDropsTableUpdateCompanionBuilder,
+      (
+        PendingSegmentDrop,
+        BaseReferences<
+          _$AppDatabase,
+          $PendingSegmentDropsTable,
+          PendingSegmentDrop
+        >,
+      ),
+      PendingSegmentDrop,
+      PrefetchHooks Function()
     >;
 typedef $$EpisodeLogMelsTableCreateCompanionBuilder =
     EpisodeLogMelsCompanion Function({
@@ -11793,6 +12879,10 @@ class $AppDatabaseManager {
       $$SegmentTemplatesTableTableManager(_db, _db.segmentTemplates);
   $$SkipSegmentsTableTableManager get skipSegments =>
       $$SkipSegmentsTableTableManager(_db, _db.skipSegments);
+  $$DismissedSkipSpansTableTableManager get dismissedSkipSpans =>
+      $$DismissedSkipSpansTableTableManager(_db, _db.dismissedSkipSpans);
+  $$PendingSegmentDropsTableTableManager get pendingSegmentDrops =>
+      $$PendingSegmentDropsTableTableManager(_db, _db.pendingSegmentDrops);
   $$EpisodeLogMelsTableTableManager get episodeLogMels =>
       $$EpisodeLogMelsTableTableManager(_db, _db.episodeLogMels);
   $$LearnedNetworkStingsTableTableManager get learnedNetworkStings =>

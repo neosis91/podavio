@@ -19,13 +19,11 @@ enum _NotAnalysed { analyse, createAnyway }
 /// Le début est posé à [positionMs], sinon à la position de lecture si
 /// l’épisode joue, sinon au début. Un épisode non téléchargé ne s’ouvre pas ;
 /// sans enveloppe (pas encore analysé), l’analyse est proposée d’abord.
-/// [waveformFirst] ouvre directement la forme d’onde.
 Future<void> openPassageCreator(
   BuildContext context,
   WidgetRef ref,
   int episodeId, {
   int? positionMs,
-  bool waveformFirst = false,
 }) async {
   final database = ref.read(databaseProvider);
   final entry = await database.getEpisode(episodeId);
@@ -84,11 +82,8 @@ Future<void> openPassageCreator(
       (player.episodeId == episodeId ? player.position.inMilliseconds : 0);
   await Navigator.of(context, rootNavigator: true).push<bool>(
     MaterialPageRoute(
-      builder: (_) => SegmentEditorPage.create(
-        episodeId: episodeId,
-        positionMs: start,
-        openWaveform: waveformFirst,
-      ),
+      builder: (_) =>
+          SegmentEditorPage.create(episodeId: episodeId, positionMs: start),
     ),
   );
 }
