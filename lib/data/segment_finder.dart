@@ -148,27 +148,24 @@ bool spansOverlap(int startMs, int endMs, int otherStart, int otherEnd) {
   return shorter > 0 && overlap * 2 >= shorter;
 }
 
-/// Vrai si cette plage recouvre un retrait du même épisode.
+/// Vrai si le passage proposé recouvre au moins à moitié un retrait
+/// du même épisode.
 ///
-/// Le gabarit compte aussi : le même modèle, décalé de moins de deux
-/// secondes, ne revient pas même si les durées se recouvrent peu.
+/// On mesure le passage proposé, pas la plus courte des deux plages :
+/// un court retrait ne bloque pas un passage plus long et différent, et
+/// le même gabarit tout près mais sans recouvrement reste en place.
 bool spanWasDismissed(
   List<DismissedSpan> dismissed, {
   required int episodeId,
   required int startMs,
   required int endMs,
-  int? templateId,
 }) {
+  final length = endMs - startMs;
+  if (length <= 0) return false;
   for (final row in dismissed) {
     if (row.episodeId != episodeId) continue;
-    if (spansOverlap(startMs, endMs, row.startMs, row.endMs)) return true;
-    final sameTemplate =
-        templateId != null &&
-        row.templateId != null &&
-        row.templateId == templateId;
-    if (sameTemplate && (startMs - row.startMs).abs() <= stableOffsetSlackMs) {
-      return true;
-    }
+    final overlap = math.min(endMs, row.endMs) - math.max(startMs, row.startMs);
+    if (overlap * 2 >= length) return true;
   }
   return false;
 }
@@ -188,7 +185,6 @@ AnalysisPlan dropDismissedSpans(
           episodeId: segment.episodeId,
           startMs: segment.startMs,
           endMs: segment.endMs,
-          templateId: pattern.templateId,
         ))
           segment,
     ];

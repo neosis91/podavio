@@ -356,6 +356,10 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   /// Décodage de l’épisode en cours. Le rapprochement a son propre isolate :
   /// un délai dépassé ne tue pas une diffusion lancée à côté.
   Isolate? _decodeWorker;
+
+  /// Rapprochement de l’épisode en cours. L’annulation le tue avec
+  /// le décodage, pas seulement l’empreinte.
+  Isolate? _matchWorker;
   final _isolates = <Isolate>{};
   Timer? _budgetTimer;
   var _epoch = 0;
@@ -432,6 +436,7 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       _running!.again = false;
       _epoch++;
       _decodeWorker?.kill(priority: Isolate.immediate);
+      _matchWorker?.kill(priority: Isolate.immediate);
     }
     final dropped = [
       for (final job in _wait)
@@ -807,14 +812,15 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   }
 
   Future<void> _analyze(_Job job) async {
+    final epoch = _epoch;
+    bool stopped() => !ref.mounted || epoch != _epoch;
     final stored = await _withinBudget(job, () => _analyzeBody(job));
-    if (!stored) return;
-    if (!ref.mounted) return;
+    if (!stored || stopped()) return;
     // Le rapprochement attend la file partagée. Il est hors du délai
     // de l’épisode : sinon un passage long tue aussi la diffusion.
     final database = ref.read(databaseProvider);
     final episode = await database.episodeById(job.episodeId);
-    if (episode == null || !ref.mounted) return;
+    if (episode == null || stopped()) return;
     _step(AnalysisStep.matching);
     final match = Stopwatch()..start();
     await _alone(
@@ -822,9 +828,11 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
         database,
         episode.podcastId,
         focusEpisodeId: episode.id,
-        offUi: _offUi,
+        offUi: _offUiMatch,
+        stopped: stopped,
       ),
     );
+    if (stopped()) return;
     job.finished = true;
     debugPrint(
       'Analyse audio: podcast ${episode.podcastId}, '
@@ -980,6 +988,14 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     return _spawnTracked(entry, message, paced: false);
   }
 
+  /// Rapprochement de l’analyse automatique : [cancelAutomatic] peut le tuer.
+  Future<Object?> _offUiMatch(
+    void Function(List<Object?> message) entry,
+    Object? message,
+  ) {
+    return _spawnTracked(entry, message, paced: false, match: true);
+  }
+
   Future<Object?> _offUiPaced(
     void Function(List<Object?> message) entry,
     Object? message,
@@ -991,10 +1007,12 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
     void Function(List<Object?> message) entry,
     Object? message, {
     required bool paced,
+    bool match = false,
   }) async {
     final tracked = await trackAnalysisIsolate(entry, message, paced: paced);
     _isolates.add(tracked.isolate);
     if (paced) _decodeWorker = tracked.isolate;
+    if (match) _matchWorker = tracked.isolate;
     try {
       final value = await tracked.result;
       if (value is List && value.isNotEmpty && value.first == 'error') {
@@ -1006,6 +1024,9 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
       _isolates.remove(tracked.isolate);
       if (paced && identical(_decodeWorker, tracked.isolate)) {
         _decodeWorker = null;
+      }
+      if (match && identical(_matchWorker, tracked.isolate)) {
+        _matchWorker = null;
       }
       tracked.isolate.kill(priority: Isolate.immediate);
       tracked.close();
@@ -1036,7 +1057,8 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
   final port = ReceivePort();
   final errors = ReceivePort();
   final exits = ReceivePort();
-  final result = Completer<Object?>();
+  final incoming = Completer<Object?>();
+  final exited = Completer<void>();
   final tracked = TrackedAnalysis(
     isolate: await Isolate.spawn(
       entry,
@@ -1045,30 +1067,21 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
       onExit: exits.sendPort,
       debugName: 'podavio-analysis',
     ),
-    result: result.future,
+    result: waitForIsolateResult(message: incoming.future, exit: exited.future),
     close: () {
       port.close();
       errors.close();
       exits.close();
     },
   );
-
-  void finish(Object? value) {
-    if (!result.isCompleted) result.complete(value);
-  }
-
-  var gotMessage = false;
   errors.listen((event) {
     final text = event is List && event.isNotEmpty
         ? '${event.first}'
         : '$event';
-    if (!result.isCompleted) result.completeError(StateError(text));
+    if (!incoming.isCompleted) incoming.completeError(StateError(text));
   });
-  // Le message de résultat et la fin d’isolate n’ont pas d’ordre garanti.
   exits.listen((_) {
-    Future<void>.delayed(const Duration(milliseconds: 20), () {
-      if (!gotMessage) finish(null);
-    });
+    if (!exited.isCompleted) exited.complete();
   });
   port.listen((event) {
     if (paced && event is SendPort) {
@@ -1079,10 +1092,41 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
       });
       return;
     }
-    gotMessage = true;
-    finish(event);
+    if (!incoming.isCompleted) incoming.complete(event);
   });
   return tracked;
+}
+
+/// Le résultat et la fin d’isolate n’ont pas d’ordre. Un gros message
+/// peut arriver après la fin : on l’accepte encore pendant [grace],
+/// au lieu de conclure `null` au bout de 20 ms.
+Future<Object?> waitForIsolateResult({
+  required Future<Object?> message,
+  required Future<void> exit,
+  Duration grace = const Duration(seconds: 1),
+}) {
+  final done = Completer<Object?>();
+  var gotMessage = false;
+  unawaited(
+    message.then(
+      (value) {
+        gotMessage = true;
+        if (!done.isCompleted) done.complete(value);
+      },
+      onError: (Object error, StackTrace stack) {
+        gotMessage = true;
+        if (!done.isCompleted) done.completeError(error, stack);
+      },
+    ),
+  );
+  unawaited(
+    exit.then((_) {
+      Future<void>.delayed(grace, () {
+        if (!gotMessage && !done.isCompleted) done.complete(null);
+      });
+    }),
+  );
+  return done.future;
 }
 
 class ChromaprintEpisodeAudioAnalyzer implements EpisodeAudioAnalyzer {
@@ -1269,7 +1313,9 @@ Future<void> syncPodcastAnalysis(
   int? focusEpisodeId,
   Future<Object?> Function(void Function(List<Object?>), Object?)? offUi,
   Set<int>? onlyTemplateIds,
+  bool Function()? stopped,
 }) async {
+  if (stopped?.call() == true) return;
   var ownSearched = await database.manualTemplateIds(podcastId);
   final hosts = await database.hostingRows();
   final here = podcastHostingKey(hosts, podcastId);
@@ -1370,9 +1416,11 @@ Future<void> syncPodcastAnalysis(
           <Object?>[row.episodeId, row.startMs, row.endMs, row.templateId],
       ],
     };
+    if (stopped?.call() == true) return;
     final raw = offUi == null
         ? await _runPlanAnalysis(message)
         : await offUi(planAnalysisEntry, message);
+    if (stopped?.call() == true) return;
     if (raw is Map) {
       final plan = decodeAnalysisPlan(Map<Object?, Object?>.from(raw));
       await applyAnalysisPlan(
@@ -1491,9 +1539,12 @@ Future<void> applyAnalysisPlan(
   AnalysisPlan plan, {
   Set<int>? searchedTemplates,
 }) async {
+  final dropped = <int>[];
   await database.transaction(() async {
     // Relu dans la transaction : un retrait ou une modification déjà
     // enregistré n’est pas écrasé par ce rapprochement.
+    // Les effacements sont faits après, pour qu’une modification en
+    // attente retrouve encore la ligne.
     final existing = await database.fingerprintSegmentsForPodcast(podcastId);
     final manual = await database.manualSegmentsForPodcast(podcastId);
     final dismissed = _asDismissed(
@@ -1521,7 +1572,6 @@ Future<void> applyAnalysisPlan(
           episodeId: desired.episodeId,
           startMs: desired.startMs,
           endMs: desired.endMs,
-          templateId: templateId,
         )) {
           continue;
         }
@@ -1568,10 +1618,13 @@ Future<void> applyAnalysisPlan(
       if (row.templateId != null && keptForLogMel.contains(row.templateId)) {
         continue;
       }
-      await database.deleteDetectedSkipSegment(row.id);
+      dropped.add(row.id);
     }
-    await _recountTemplates(database, podcastId);
   });
+  for (final id in dropped) {
+    await database.deleteDetectedSkipSegment(id);
+  }
+  await _recountTemplates(database, podcastId);
 }
 
 /// Vrai si un passage corrigé à la main couvre déjà la moitié de
@@ -1950,7 +2003,6 @@ Future<int?> _upsertLoose(
     episodeId: episodeId,
     startMs: startMs,
     endMs: endMs,
-    templateId: templateId,
   )) {
     return null;
   }

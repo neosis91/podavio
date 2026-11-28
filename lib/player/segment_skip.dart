@@ -86,6 +86,19 @@ bool _skipsWithAds(SkipCandidate segment, Set<SkipSegmentKind> kinds) {
   return segment.networkSting && kinds.contains(SkipSegmentKind.ad);
 }
 
+/// Virgule ou jingle qui saute avec les pubs.
+///
+/// Un changement de type passe la ligne en `manual`. Elle reste une
+/// virgule de réseau pour le lecteur : sinon elle n’est plus sautée
+/// quand seules les pubs le sont. Une détection encore `fingerprint`
+/// ne l’est pas.
+bool stingSkipsWithAds(SkipSegmentKind kind, SkipSegmentSource source) {
+  final sting = kind == SkipSegmentKind.jingle || kind == SkipSegmentKind.sting;
+  if (!sting) return false;
+  return source == SkipSegmentSource.network ||
+      source == SkipSegmentSource.manual;
+}
+
 /// Jingle ou virgule posée à la main, collée à une pub.
 bool _gluedSting(SkipSegmentKind kind) {
   return kind == SkipSegmentKind.jingle || kind == SkipSegmentKind.sting;

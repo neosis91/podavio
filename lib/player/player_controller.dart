@@ -1424,10 +1424,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
           startMs: row.startMs,
           endMs: row.endMs,
           kind: row.kind,
-          networkSting:
-              (row.kind == SkipSegmentKind.jingle ||
-                  row.kind == SkipSegmentKind.sting) &&
-              row.source == SkipSegmentSource.network,
+          networkSting: stingSkipsWithAds(row.kind, row.source),
         ),
     ];
   }

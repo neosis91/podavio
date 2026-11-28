@@ -32,10 +32,7 @@ void main() {
       tracked.close();
     });
     tracked.isolate.kill(priority: Isolate.immediate);
-    expect(
-      await tracked.result.timeout(const Duration(seconds: 2)),
-      isNull,
-    );
+    expect(await tracked.result.timeout(const Duration(seconds: 4)), isNull);
   });
 
   test('killing one analysis isolate leaves the other running', () async {
@@ -51,8 +48,59 @@ void main() {
     });
     stuck.isolate.kill(priority: Isolate.immediate);
     expect(await live.result.timeout(const Duration(seconds: 2)), 'ok');
-    expect(await stuck.result.timeout(const Duration(seconds: 2)), isNull);
+    expect(await stuck.result.timeout(const Duration(seconds: 4)), isNull);
   });
+
+  test('a result that arrives after the isolate exit is kept', () async {
+    final message = Completer<Object?>();
+    final exit = Completer<void>();
+    final result = waitForIsolateResult(
+      message: message.future,
+      exit: exit.future,
+      grace: const Duration(milliseconds: 200),
+    );
+    exit.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    message.complete('kept');
+    expect(await result, 'kept');
+  });
+
+  test(
+    'a stopped comparison does not write the passage it would find',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final ad = _motif(100, 11);
+      final firstId = (await database.saveFeed(
+        _draft([_episodeDraft('a', 'Un')], url: 'https://a.example/feed.xml'),
+      )).podcastId;
+      final secondId = (await database.saveFeed(
+        _draft([_episodeDraft('b', 'Deux')], url: 'https://b.example/feed.xml'),
+      )).podcastId;
+      final origin = (await database.watchEpisodes(podcastId: firstId).first)
+          .single
+          .episode
+          .id;
+      final elsewhere =
+          (await database.watchEpisodes(podcastId: secondId).first)
+              .single
+              .episode
+              .id;
+      await _ready(database, origin, _placed(1500, 1, 80, ad));
+      await _ready(database, elsewhere, _placed(1500, 2, 400, ad));
+      await createManualSegment(
+        database,
+        episodeId: origin,
+        startMs: _msAt(80, ceil: true),
+        endMs: _msAt(180),
+        kind: SkipSegmentKind.ad,
+      );
+
+      await syncPodcastAnalysis(database, secondId, stopped: () => true);
+
+      expect(await database.listActiveSkipSegments(elsewhere), isEmpty);
+    },
+  );
 
   test('a long episode is given more than six minutes to decode', () {
     expect(analysisBudgetFor(25 * 60), const Duration(minutes: 8, seconds: 15));
@@ -303,10 +351,9 @@ void main() {
       SkipSegmentKind.ad,
       SkipSegmentKind.other,
     });
-    expect(
-      found.map((row) => row.source).toSet(),
-      {SkipSegmentSource.fingerprint},
-    );
+    expect(found.map((row) => row.source).toSet(), {
+      SkipSegmentSource.fingerprint,
+    });
   });
 
   test(
@@ -368,7 +415,9 @@ void main() {
       await syncPodcastAnalysis(database, away.podcastId);
 
       final source = await database.listActiveSkipSegments(home.episodes['a']!);
-      final stingHits = source.where((row) => row.kind == SkipSegmentKind.sting);
+      final stingHits = source.where(
+        (row) => row.kind == SkipSegmentKind.sting,
+      );
       final jingleHits = source.where(
         (row) => row.kind == SkipSegmentKind.jingle,
       );
@@ -389,9 +438,8 @@ void main() {
         containsAll([SkipSegmentKind.sting, SkipSegmentKind.jingle]),
       );
       expect(
-        (await database.listActiveSkipSegments(home.episodes['b']!)).where(
-          (row) => row.kind == SkipSegmentKind.selfPromo,
-        ),
+        (await database.listActiveSkipSegments(home.episodes['b']!))
+            .where((row) => row.kind == SkipSegmentKind.selfPromo),
         isEmpty,
       );
       final siblingHits = await database.listActiveSkipSegments(
@@ -482,7 +530,10 @@ void main() {
         other.where((row) => row.kind == SkipSegmentKind.outro),
         hasLength(1),
       );
-      expect(other.every((row) => row.source == SkipSegmentSource.fingerprint), isTrue);
+      expect(
+        other.every((row) => row.source == SkipSegmentSource.fingerprint),
+        isTrue,
+      );
       expect(await database.listActiveSkipSegments(sibling.episodeId), isEmpty);
     },
   );

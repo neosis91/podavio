@@ -238,6 +238,30 @@ void main() {
     expect(other.single.startMs, closeTo(_ms(220), 800));
   });
 
+  test('a nearby second hit of the same template is not a dismissal', () {
+    const dismissed = [
+      DismissedSpan(episodeId: 1, startMs: 0, endMs: 2000, templateId: 4),
+    ];
+    expect(
+      spanWasDismissed(dismissed, episodeId: 1, startMs: 1500, endMs: 4000),
+      isFalse,
+    );
+  });
+
+  test('a short dismissal does not block a longer different passage', () {
+    const dismissed = [
+      DismissedSpan(episodeId: 1, startMs: 0, endMs: 2000, templateId: 4),
+    ];
+    expect(
+      spanWasDismissed(dismissed, episodeId: 1, startMs: 0, endMs: 30000),
+      isFalse,
+    );
+    expect(
+      spanWasDismissed(dismissed, episodeId: 1, startMs: 200, endMs: 1800),
+      isTrue,
+    );
+  });
+
   test('a dismissed span is left out, the other hits stay', () {
     final motif = _motif(24, 9);
     final values = _noise(800, 3);

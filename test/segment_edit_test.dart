@@ -405,6 +405,41 @@ void main() {
       await database.deleteDetectedSkipSegment(detectedId);
       expect(await database.skipSegmentById(detectedId), isNull);
     });
+
+    test('un court retrait ne fait pas effacer un passage plus long', () async {
+      final templateId = await database.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.ad,
+        fingerprint: encodeFingerprint(values.sublist(80, 240)),
+        durationMs: 30000,
+      );
+      final longId = await database.insertSkipSegment(
+        episodeId: episodeId,
+        startMs: 0,
+        endMs: 30000,
+        kind: SkipSegmentKind.ad,
+        source: SkipSegmentSource.fingerprint,
+        templateId: templateId,
+      );
+      await database.dismissSkipSegment(
+        await database.insertSkipSegment(
+          episodeId: episodeId,
+          startMs: 0,
+          endMs: 2000,
+          kind: SkipSegmentKind.sting,
+          source: SkipSegmentSource.fingerprint,
+        ),
+      );
+      await applyAnalysisPlan(
+        database,
+        podcastId,
+        _plan(episodeId, templateId, [(0, 30000)]),
+        searchedTemplates: {templateId},
+      );
+      final rows = await database.listSkipSegments(episodeId);
+      expect(rows.map((row) => row.id), contains(longId));
+      expect(rows.single.endMs, 30000);
+    });
   });
 
   group('forme d’onde', () {

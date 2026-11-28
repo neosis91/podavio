@@ -429,6 +429,53 @@ void main() {
     expect(rejected?.seekToMs, 33000);
   });
 
+  test('a sting kept after a kind change still skips with the ads', () {
+    expect(
+      stingSkipsWithAds(SkipSegmentKind.sting, SkipSegmentSource.manual),
+      isTrue,
+    );
+    expect(
+      stingSkipsWithAds(SkipSegmentKind.jingle, SkipSegmentSource.network),
+      isTrue,
+    );
+    expect(
+      stingSkipsWithAds(SkipSegmentKind.sting, SkipSegmentSource.fingerprint),
+      isFalse,
+    );
+    expect(
+      stingSkipsWithAds(SkipSegmentKind.intro, SkipSegmentSource.manual),
+      isFalse,
+    );
+    final decision = decideSkipSegment(
+      positionMs: 31000,
+      previousMs: 30000,
+      playing: true,
+      fromDownload: true,
+      autoSkipAds: true,
+      autoSkipKinds: const {SkipSegmentKind.ad},
+      segments: [
+        const SkipCandidate(
+          id: 1,
+          startMs: 0,
+          endMs: 30000,
+          kind: SkipSegmentKind.ad,
+        ),
+        SkipCandidate(
+          id: 2,
+          startMs: 30000,
+          endMs: 33000,
+          kind: SkipSegmentKind.sting,
+          networkSting: stingSkipsWithAds(
+            SkipSegmentKind.sting,
+            SkipSegmentSource.manual,
+          ),
+        ),
+      ],
+      heldIds: <int>{},
+    );
+    expect(decision?.seekToMs, 33000);
+  });
+
   test('a network sting skips with the ads even across a silence', () {
     final decision = decideSkipSegment(
       positionMs: 70000,
