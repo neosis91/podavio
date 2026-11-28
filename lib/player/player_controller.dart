@@ -220,6 +220,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration?>? _durationSub;
   StreamSubscription<PlayerState>? _stateSub;
+  StreamSubscription<List<SkipSegment>>? _skipSub;
 
   @override
   PlayerUiState build() {
@@ -1092,10 +1093,10 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
       await _player.setSpeed(_ui.speed);
       await _player.setVolume(_ui.volume);
       if (downloaded) {
-        final rows = await db.listActiveSkipSegments(episode.id);
-        if (!ref.mounted || _disposed || _ui.episodeId != episode.id) return;
-        _skipWindows = _skipCandidates(rows);
-        _emit(_withSkip(_ui));
+        // La liste n’est plus lue une fois : un passage trouvé pendant
+        // la lecture doit pouvoir être sauté. Le flux SQL redonne les
+        // lignes de cet épisode à chaque écriture.
+        _followSkipSegments(episode.id);
       }
       final preview = _previewSeek;
       if (preview != null && _ui.episodeId == episode.id) {
@@ -1373,8 +1374,35 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     unawaited(_onCompleted());
   }
 
+  /// Suit les passages de l’épisode ouvert.
+  ///
+  /// Le premier envoi remplit la liste. Les suivants, arrivés pendant
+  /// la lecture, tiennent le passage qui couvre déjà la position pour
+  /// ne pas sauter au milieu d’une phrase.
+  void _followSkipSegments(int episodeId) {
+    unawaited(_skipSub?.cancel());
+    var first = true;
+    _skipSub = ref
+        .read(databaseProvider)
+        .watchActiveSkipSegments(episodeId)
+        .listen((rows) {
+          if (_disposed || !ref.mounted || _ui.episodeId != episodeId) return;
+          if (!_playingFromDownload) return;
+          _skipWindows = _skipCandidates(rows);
+          if (!first) {
+            final position = _ui.position.inMilliseconds;
+            for (final window in _skipWindows) {
+              if (window.contains(position)) _heldSegmentIds.add(window.id);
+            }
+          }
+          first = false;
+          _emit(_withSkip(_ui));
+        });
+  }
+
   /// Relit les passages de l’épisode en cours après une modification à la
   /// main. Un passage qui couvre déjà la position n’est pas sauté aussitôt.
+  /// Le flux de [_followSkipSegments] couvre le même cas pendant la lecture.
   Future<void> reloadSkipSegments() async {
     final id = _ui.episodeId;
     if (id == null || !_playingFromDownload || _disposed) return;
@@ -1396,10 +1424,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
           startMs: row.startMs,
           endMs: row.endMs,
           kind: row.kind,
-          confirmed: row.confirmed,
-          networkSting:
-              row.kind == SkipSegmentKind.jingle &&
-              row.source == SkipSegmentSource.network,
+          networkSting: stingSkipsWithAds(row.kind, row.source),
         ),
     ];
   }
@@ -1409,6 +1434,8 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     final skip = ref.read(globalSkipSettingsProvider);
     _autoSkipAds = skip.enabled;
     _autoSkipKinds = skip.kinds.toSet();
+    unawaited(_skipSub?.cancel());
+    _skipSub = null;
     _skipWindows = const [];
     _heldSegmentIds.clear();
     _ui = _ui.copyWith(setManualSkip: true);
@@ -1634,6 +1661,7 @@ class PlayerNotifier extends Notifier<PlayerUiState> {
     await _positionSub?.cancel();
     await _durationSub?.cancel();
     await _stateSub?.cancel();
+    await _skipSub?.cancel();
     await _player.dispose();
   }
 }

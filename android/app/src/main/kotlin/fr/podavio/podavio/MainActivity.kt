@@ -1,19 +1,47 @@
 package fr.podavio.podavio
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 
 class MainActivity : FlutterActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        AnalysisKeepAlive.activityCount += 1
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        AnalysisKeepAlive.activityCount =
+            (AnalysisKeepAlive.activityCount - 1).coerceAtLeast(0)
+    }
+
+    /// Seulement pendant une analyse : sinon une nouvelle activité
+    /// repart sur un moteur neuf.
+    override fun provideFlutterEngine(context: Context): FlutterEngine? {
+        if (!AnalysisKeepAlive.active) return null
+        return FlutterEngineCache.getInstance().get(AndroidAutoBridge.ENGINE_ID)
+    }
+
+    /// Une analyse en cours garde le moteur : quitter l’écran ne coupe pas le décodage.
+    override fun shouldDestroyEngineWithHost(): Boolean = !AnalysisKeepAlive.active
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-        FlutterEngineCache.getInstance().put(AndroidAutoBridge.ENGINE_ID, flutterEngine)
-        AndroidAutoBridge.attach(flutterEngine)
-        NearbySharePlugin.attach(flutterEngine, applicationContext)
-        AudioDecodePlugin.attach(flutterEngine, applicationContext)
-        WebCompanionPlugin.attach(flutterEngine, applicationContext)
+        val reused =
+            FlutterEngineCache.getInstance().get(AndroidAutoBridge.ENGINE_ID) === flutterEngine
+        if (!reused) {
+            super.configureFlutterEngine(flutterEngine)
+            FlutterEngineCache.getInstance().put(AndroidAutoBridge.ENGINE_ID, flutterEngine)
+            AndroidAutoBridge.attach(flutterEngine)
+            NearbySharePlugin.attach(flutterEngine, applicationContext)
+            AudioDecodePlugin.attach(flutterEngine, applicationContext)
+            WebCompanionPlugin.attach(flutterEngine, applicationContext)
+            AnalysisPlugin.attach(flutterEngine, applicationContext)
+        }
         DatabaseExportPlugin.attach(flutterEngine) { name ->
             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -46,7 +74,12 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
-        FlutterEngineCache.getInstance().remove(AndroidAutoBridge.ENGINE_ID)
+        if (shouldDestroyEngineWithHost()) {
+            val cache = FlutterEngineCache.getInstance()
+            if (cache.get(AndroidAutoBridge.ENGINE_ID) === flutterEngine) {
+                cache.remove(AndroidAutoBridge.ENGINE_ID)
+            }
+        }
         super.cleanUpFlutterEngine(flutterEngine)
     }
 

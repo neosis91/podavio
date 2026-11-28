@@ -1,0 +1,1 @@
+- A nearby repeat of the same pattern is kept, a short removal no longer blocks a longer passage, and cancelling analysis stops a comparison that already started. A network sting still skips with ads after its kind is edited.

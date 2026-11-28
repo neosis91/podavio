@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -17,7 +19,233 @@ import 'package:podavio/data/skip_segments.dart';
 import 'package:podavio/settings/settings_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+void _hangIsolate(List<Object?> args) {
+  final port = ReceivePort();
+  port.listen((_) {});
+}
+
 void main() {
+  test('a killed analysis isolate finishes the wait', () async {
+    final tracked = await trackAnalysisIsolate(_hangIsolate, null);
+    addTearDown(() {
+      tracked.kill();
+      tracked.close();
+    });
+    final started = DateTime.now();
+    tracked.kill();
+    expect(await tracked.result, isNull);
+    expect(
+      DateTime.now().difference(started),
+      lessThan(const Duration(milliseconds: 500)),
+    );
+  });
+
+  test('killing one analysis isolate leaves the other running', () async {
+    final stuck = await trackAnalysisIsolate(_hangIsolate, null);
+    final live = await trackAnalysisIsolate((args) {
+      Isolate.exit(args[0]! as SendPort, 'ok');
+    }, null);
+    addTearDown(() {
+      stuck.kill();
+      live.kill();
+      stuck.close();
+      live.close();
+    });
+    stuck.kill();
+    expect(await live.result.timeout(const Duration(seconds: 2)), 'ok');
+    expect(await stuck.result, isNull);
+  });
+
+  test('a result sent as the isolate exits is kept', () async {
+    final tracked = await trackAnalysisIsolate((args) {
+      final send = args[0]! as SendPort;
+      final keep = ReceivePort();
+      Timer(const Duration(milliseconds: 80), () {
+        keep.close();
+        Isolate.exit(send, 'kept');
+      });
+    }, null);
+    addTearDown(() {
+      tracked.kill();
+      tracked.close();
+    });
+    expect(await tracked.result.timeout(const Duration(seconds: 2)), 'kept');
+  });
+
+  test('a quiet isolate exit ends the wait', () async {
+    final previous = analysisIsolateExitGrace;
+    analysisIsolateExitGrace = const Duration(milliseconds: 200);
+    addTearDown(() => analysisIsolateExitGrace = previous);
+    final tracked = await trackAnalysisIsolate((_) {}, null);
+    addTearDown(tracked.close);
+    final started = DateTime.now();
+    expect(await tracked.result, isNull);
+    expect(
+      DateTime.now().difference(started),
+      lessThan(const Duration(seconds: 2)),
+    );
+  });
+
+  test('a result sent before the isolate returns is kept', () async {
+    final previous = analysisIsolateExitGrace;
+    analysisIsolateExitGrace = const Duration(milliseconds: 400);
+    addTearDown(() => analysisIsolateExitGrace = previous);
+    final tracked = await trackAnalysisIsolate((args) {
+      (args[0]! as SendPort).send('kept');
+    }, null);
+    addTearDown(() {
+      tracked.kill();
+      tracked.close();
+    });
+    expect(await tracked.result.timeout(const Duration(seconds: 2)), 'kept');
+  });
+
+  test(
+    'a stopped comparison does not write the passage it would find',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final ad = _motif(100, 11);
+      final firstId = (await database.saveFeed(
+        _draft([_episodeDraft('a', 'Un')], url: 'https://a.example/feed.xml'),
+      )).podcastId;
+      final secondId = (await database.saveFeed(
+        _draft([_episodeDraft('b', 'Deux')], url: 'https://b.example/feed.xml'),
+      )).podcastId;
+      final origin = (await database.watchEpisodes(podcastId: firstId).first)
+          .single
+          .episode
+          .id;
+      final elsewhere =
+          (await database.watchEpisodes(podcastId: secondId).first)
+              .single
+              .episode
+              .id;
+      await _ready(database, origin, _placed(1500, 1, 80, ad));
+      await _ready(database, elsewhere, _placed(1500, 2, 400, ad));
+      await createManualSegment(
+        database,
+        episodeId: origin,
+        startMs: _msAt(80, ceil: true),
+        endMs: _msAt(180),
+        kind: SkipSegmentKind.ad,
+      );
+
+      await syncPodcastAnalysis(database, secondId, stopped: () => true);
+
+      expect(await database.listActiveSkipSegments(elsewhere), isEmpty);
+    },
+  );
+
+  test('a long episode is given more than six minutes to decode', () {
+    expect(analysisBudgetFor(25 * 60), const Duration(minutes: 8, seconds: 15));
+    expect(
+      analysisBudgetFor(51 * 60 + 6),
+      const Duration(seconds: (51 * 60 + 6) ~/ 4 + 120),
+    );
+    expect(
+      analysisBudgetFor(95 * 60),
+      greaterThan(const Duration(minutes: 20)),
+    );
+    expect(analysisBudgetFor(5 * 3600), audioAnalysisBudgetCeiling);
+    expect(
+      nativeDecodeBudgetFor(analysisBudgetFor(62 * 60)),
+      greaterThan(const Duration(minutes: 12)),
+    );
+    expect(
+      nativeDecodeBudgetFor(const Duration(milliseconds: 30)),
+      const Duration(milliseconds: 30),
+    );
+  });
+
+  test('comparison passes never overlap and coalesce', () async {
+    final queue = ComparisonPassQueue();
+    var current = 0;
+    var maxInFlight = 0;
+    var runs = 0;
+    final exceptions = <int?>[];
+
+    Future<void> run(int? except) async {
+      runs++;
+      exceptions.add(except);
+      current++;
+      if (current > maxInFlight) maxInFlight = current;
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      current--;
+    }
+
+    final first = queue.schedule(run, exceptPodcastId: 1);
+    final second = queue.schedule(run, exceptPodcastId: 1);
+    final third = queue.schedule(run, exceptPodcastId: 2);
+    await Future.wait([first, second, third]);
+
+    expect(maxInFlight, 1);
+    expect(runs, 2);
+    expect(exceptions, [1, null]);
+  });
+
+  test('a coalesced request waits for the follow-up pass', () async {
+    final queue = ComparisonPassQueue();
+    final gate = Completer<void>();
+    var runs = 0;
+
+    Future<void> run(int? except) {
+      runs++;
+      if (runs == 1) return gate.future;
+      return Future<void>.value();
+    }
+
+    final first = queue.schedule(run, exceptPodcastId: 7);
+    final second = queue.schedule(run, exceptPodcastId: 7);
+    final third = queue.schedule(run, exceptPodcastId: 7);
+    await Future<void>.delayed(Duration.zero);
+    expect(runs, 1);
+    var followed = false;
+    unawaited(second.then((_) => followed = true));
+    await Future<void>.delayed(Duration.zero);
+    expect(followed, isFalse);
+    gate.complete();
+    await Future.wait([first, second, third]);
+    expect(runs, 2);
+    expect(followed, isTrue);
+  });
+
+  test('a coalesced spread searches the union of the new templates', () async {
+    final queue = ComparisonPassQueue();
+    final gate = Completer<void>();
+    final seen = <Set<int>?>[];
+
+    Future<void> run(int? except) {
+      final only = queue.onlyTemplates;
+      seen.add(only == null ? null : {...only});
+      if (seen.length == 1) return gate.future;
+      return Future<void>.value();
+    }
+
+    final first = queue.schedule(run, templateIds: {1});
+    await Future<void>.delayed(Duration.zero);
+    final second = queue.schedule(run, templateIds: {2});
+    final third = queue.schedule(run, templateIds: {3});
+    gate.complete();
+    await Future.wait([first, second, third]);
+    expect(seen, [
+      {1},
+      {2, 3},
+    ]);
+  });
+
+  test('a pass started after the previous one still runs', () async {
+    final queue = ComparisonPassQueue();
+    final seen = <int?>[];
+    Future<void> run(int? except) async {
+      seen.add(except);
+    }
+
+    await queue.schedule(run, exceptPodcastId: 4);
+    await queue.schedule(run, exceptPodcastId: 4);
+    expect(seen, [4, 4]);
+  });
+
   test('remaining time follows the length of the audio', () {
     final now = DateTime.utc(2026, 11, 21, 16);
     final left = estimateAnalysisRemaining(
@@ -74,6 +302,396 @@ void main() {
     expect(await database.listActiveSkipSegments(ids.a), isEmpty);
   });
 
+  test('a publicité is searched in every podcast', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final ad = _motif(100, 11);
+    final firstId = (await database.saveFeed(
+      _draft([_episodeDraft('a', 'Un')], url: 'https://a.example/feed.xml'),
+    )).podcastId;
+    final secondId = (await database.saveFeed(
+      _draft([_episodeDraft('b', 'Deux')], url: 'https://b.example/feed.xml'),
+    )).podcastId;
+    final origin = (await database.watchEpisodes(podcastId: firstId).first)
+        .single
+        .episode
+        .id;
+    final elsewhere = (await database.watchEpisodes(podcastId: secondId).first)
+        .single
+        .episode
+        .id;
+    await _ready(database, origin, _placed(1500, 1, 80, ad));
+    await _ready(database, elsewhere, _placed(1500, 2, 400, ad));
+    await createManualSegment(
+      database,
+      episodeId: origin,
+      startMs: _msAt(80, ceil: true),
+      endMs: _msAt(180),
+      kind: SkipSegmentKind.ad,
+    );
+    await createManualSegment(
+      database,
+      episodeId: origin,
+      startMs: _msAt(300, ceil: true),
+      endMs: _msAt(400),
+      kind: SkipSegmentKind.selfPromo,
+    );
+
+    await syncPodcastAnalysis(database, secondId);
+
+    final found = await database.listActiveSkipSegments(elsewhere);
+    expect(found, hasLength(1));
+    expect(found.single.kind, SkipSegmentKind.ad);
+    expect(found.single.source, SkipSegmentSource.fingerprint);
+    expect(found.single.startMs, closeTo(_msAt(400), 1500));
+    expect(await database.listSegmentTemplates(secondId), isEmpty);
+  });
+
+  test('an ad and autre are found on a podcast of another network', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final ad = _motif(80, 31);
+    final other = _motif(80, 32);
+    final home = await _hosted(database, 'audiomeans.fr', 'home');
+    final away = await _hosted(database, 'acast.com', 'away');
+    final local = _placed(1200, 1, 80, ad);
+    for (var i = 0; i < other.length; i++) {
+      local[200 + i] = other[i];
+    }
+    final awayPrint = _placed(1200, 2, 400, ad);
+    for (var i = 0; i < other.length; i++) {
+      awayPrint[700 + i] = other[i];
+    }
+    await _ready(database, home.episodeId, local);
+    await _ready(database, away.episodeId, awayPrint);
+    await createManualSegment(
+      database,
+      episodeId: home.episodeId,
+      startMs: _msAt(80, ceil: true),
+      endMs: _msAt(160),
+      kind: SkipSegmentKind.ad,
+    );
+    await createManualSegment(
+      database,
+      episodeId: home.episodeId,
+      startMs: _msAt(200, ceil: true),
+      endMs: _msAt(280),
+      kind: SkipSegmentKind.other,
+    );
+
+    await syncPodcastAnalysis(database, away.podcastId);
+
+    final found = await database.listActiveSkipSegments(away.episodeId);
+    expect(found.map((row) => row.kind).toSet(), {
+      SkipSegmentKind.ad,
+      SkipSegmentKind.other,
+    });
+    expect(found.map((row) => row.source).toSet(), {
+      SkipSegmentSource.fingerprint,
+    });
+  });
+
+  test(
+    'a sting and a jingle repeat inside the network and stop at its edge',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final sting = _motif(24, 41);
+      final jingle = _motif(24, 42);
+      final home = await _hosted(
+        database,
+        'audiomeans.fr',
+        'home',
+        guids: ['a', 'b'],
+      );
+      final sibling = await _hosted(database, 'audiomeans.fr', 'sibling');
+      final away = await _hosted(database, 'acast.com', 'away');
+      List<int> paint(int seed) {
+        final values = _placed(1200, seed, 40, sting);
+        for (var i = 0; i < sting.length; i++) {
+          values[80 + i] = sting[i];
+          values[400 + i] = sting[i];
+        }
+        for (var i = 0; i < jingle.length; i++) {
+          values[200 + i] = jingle[i];
+          values[260 + i] = jingle[i];
+        }
+        return values;
+      }
+
+      await _ready(database, home.episodes['a']!, paint(1));
+      await _ready(database, home.episodes['b']!, paint(2));
+      await _ready(database, sibling.episodeId, paint(3));
+      await _ready(database, away.episodeId, paint(4));
+      await createManualSegment(
+        database,
+        episodeId: home.episodes['a']!,
+        startMs: _msAt(40, ceil: true),
+        endMs: _msAt(64),
+        kind: SkipSegmentKind.sting,
+      );
+      await createManualSegment(
+        database,
+        episodeId: home.episodes['a']!,
+        startMs: _msAt(200, ceil: true),
+        endMs: _msAt(224),
+        kind: SkipSegmentKind.jingle,
+      );
+      await createManualSegment(
+        database,
+        episodeId: home.episodes['a']!,
+        startMs: _msAt(700, ceil: true),
+        endMs: _msAt(780),
+        kind: SkipSegmentKind.selfPromo,
+      );
+
+      await syncPodcastAnalysis(database, home.podcastId);
+      await syncPodcastAnalysis(database, sibling.podcastId);
+      await syncPodcastAnalysis(database, away.podcastId);
+
+      final source = await database.listActiveSkipSegments(home.episodes['a']!);
+      final stingHits = source.where(
+        (row) => row.kind == SkipSegmentKind.sting,
+      );
+      final jingleHits = source.where(
+        (row) => row.kind == SkipSegmentKind.jingle,
+      );
+      expect(stingHits.map((row) => row.source), [
+        SkipSegmentSource.manual,
+        SkipSegmentSource.fingerprint,
+        SkipSegmentSource.fingerprint,
+      ]);
+      expect(jingleHits, hasLength(2));
+      expect(
+        source.where((row) => row.kind == SkipSegmentKind.selfPromo),
+        hasLength(1),
+      );
+      expect(
+        (await database.listActiveSkipSegments(home.episodes['b']!))
+            .map((row) => row.kind)
+            .toList(),
+        containsAll([SkipSegmentKind.sting, SkipSegmentKind.jingle]),
+      );
+      expect(
+        (await database.listActiveSkipSegments(home.episodes['b']!))
+            .where((row) => row.kind == SkipSegmentKind.selfPromo),
+        isEmpty,
+      );
+      final siblingHits = await database.listActiveSkipSegments(
+        sibling.episodeId,
+      );
+      expect(siblingHits.map((row) => row.kind).toSet(), {
+        SkipSegmentKind.sting,
+        SkipSegmentKind.jingle,
+      });
+      expect(
+        siblingHits.where((row) => row.kind == SkipSegmentKind.sting).length,
+        greaterThan(1),
+      );
+      expect(await database.listActiveSkipSegments(away.episodeId), isEmpty);
+
+      await database.setDownloadPath(home.episodes['a']!, null);
+      await database.setDownloadPath(home.episodes['b']!, null);
+      await syncPodcastAnalysis(database, sibling.podcastId);
+      expect(
+        await database.listActiveSkipSegments(sibling.episodeId),
+        isNotEmpty,
+      );
+    },
+  );
+
+  test(
+    'intro and outro stay once in their podcast and off the network',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final intro = _motif(24, 51);
+      final outro = _motif(24, 52);
+      final home = await _hosted(
+        database,
+        'audiomeans.fr',
+        'home',
+        guids: ['a', 'b'],
+      );
+      final sibling = await _hosted(database, 'audiomeans.fr', 'sibling');
+      List<int> paint(int seed) {
+        final values = _placed(1200, seed, 30, intro);
+        for (var i = 0; i < intro.length; i++) {
+          values[300 + i] = intro[i];
+        }
+        for (var i = 0; i < outro.length; i++) {
+          values[500 + i] = outro[i];
+          values[800 + i] = outro[i];
+        }
+        return values;
+      }
+
+      await _ready(database, home.episodes['a']!, paint(1));
+      await _ready(database, home.episodes['b']!, paint(2));
+      await _ready(database, sibling.episodeId, paint(3));
+      await createManualSegment(
+        database,
+        episodeId: home.episodes['a']!,
+        startMs: _msAt(30, ceil: true),
+        endMs: _msAt(54),
+        kind: SkipSegmentKind.intro,
+      );
+      await createManualSegment(
+        database,
+        episodeId: home.episodes['a']!,
+        startMs: _msAt(800, ceil: true),
+        endMs: _msAt(824),
+        kind: SkipSegmentKind.outro,
+      );
+
+      await syncPodcastAnalysis(database, home.podcastId);
+      await syncPodcastAnalysis(database, sibling.podcastId);
+
+      final source = await database.listActiveSkipSegments(home.episodes['a']!);
+      expect(
+        source.where((row) => row.kind == SkipSegmentKind.intro),
+        hasLength(1),
+      );
+      expect(
+        source.where((row) => row.kind == SkipSegmentKind.outro),
+        hasLength(1),
+      );
+      final other = await database.listActiveSkipSegments(home.episodes['b']!);
+      expect(
+        other.where((row) => row.kind == SkipSegmentKind.intro),
+        hasLength(1),
+      );
+      expect(
+        other.where((row) => row.kind == SkipSegmentKind.outro),
+        hasLength(1),
+      );
+      expect(
+        other.every((row) => row.source == SkipSegmentSource.fingerprint),
+        isTrue,
+      );
+      expect(await database.listActiveSkipSegments(sibling.episodeId), isEmpty);
+    },
+  );
+
+  test('a targeted spread checks only the new template', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final first = _motif(80, 71);
+    final second = _motif(80, 72);
+    final home = await _hosted(database, 'audiomeans.fr', 'home');
+    final away = await _hosted(database, 'acast.com', 'away');
+    final local = _placed(1000, 1, 40, first);
+    for (var i = 0; i < second.length; i++) {
+      local[200 + i] = second[i];
+    }
+    final remote = _placed(1000, 2, 300, first);
+    for (var i = 0; i < second.length; i++) {
+      remote[600 + i] = second[i];
+    }
+    await _ready(database, home.episodeId, local);
+    await _ready(database, away.episodeId, remote);
+    await createManualSegment(
+      database,
+      episodeId: home.episodeId,
+      startMs: _msAt(40, ceil: true),
+      endMs: _msAt(120),
+      kind: SkipSegmentKind.ad,
+    );
+    await createManualSegment(
+      database,
+      episodeId: home.episodeId,
+      startMs: _msAt(200, ceil: true),
+      endMs: _msAt(280),
+      kind: SkipSegmentKind.ad,
+    );
+    final keptId = (await database.listSkipSegments(home.episodeId))
+        .first
+        .templateId!;
+
+    await syncPodcastAnalysis(
+      database,
+      away.podcastId,
+      onlyTemplateIds: {keptId},
+    );
+
+    final found = await database.listActiveSkipSegments(away.episodeId);
+    expect(found, hasLength(1));
+    expect(found.single.templateId, keptId);
+    expect(found.single.startMs, closeTo(_msAt(300), 1500));
+  });
+
+  test('two close stings in one episode stay two segments', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final sting = _motif(8, 61);
+    final home = await _hosted(database, 'audiomeans.fr', 'home');
+    final values = _placed(400, 1, 40, sting);
+    for (var i = 0; i < sting.length; i++) {
+      values[50 + i] = sting[i];
+    }
+    await _ready(database, home.episodeId, values);
+    await createManualSegment(
+      database,
+      episodeId: home.episodeId,
+      startMs: _msAt(40, ceil: true),
+      endMs: _msAt(48),
+      kind: SkipSegmentKind.sting,
+    );
+
+    await syncPodcastAnalysis(database, home.podcastId);
+
+    final hits = (await database.listActiveSkipSegments(home.episodeId))
+        .where((row) => row.kind == SkipSegmentKind.sting)
+        .toList();
+    expect(hits, hasLength(2));
+    expect(hits.first.source, SkipSegmentSource.manual);
+    expect(hits.last.source, SkipSegmentSource.fingerprint);
+    expect(hits.last.startMs - hits.first.startMs, greaterThan(500));
+  });
+
+  test('two overlapping searches still leave a single ad', () async {
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final ad = _motif(100, 11);
+    final firstId = (await database.saveFeed(
+      _draft([_episodeDraft('a', 'Un')], url: 'https://a.example/feed.xml'),
+    )).podcastId;
+    final secondId = (await database.saveFeed(
+      _draft([_episodeDraft('b', 'Deux')], url: 'https://b.example/feed.xml'),
+    )).podcastId;
+    final origin = (await database.watchEpisodes(podcastId: firstId).first)
+        .single
+        .episode
+        .id;
+    final elsewhere = (await database.watchEpisodes(podcastId: secondId).first)
+        .single
+        .episode
+        .id;
+    await _ready(database, origin, _placed(1500, 1, 80, ad));
+    await _ready(database, elsewhere, _placed(1500, 2, 400, ad));
+    await createManualSegment(
+      database,
+      episodeId: origin,
+      startMs: _msAt(80, ceil: true),
+      endMs: _msAt(180),
+      kind: SkipSegmentKind.ad,
+    );
+    final container = ProviderContainer(
+      overrides: [databaseProvider.overrideWithValue(database)],
+    );
+    addTearDown(container.dispose);
+    final notifier = container.read(audioAnalysisProvider.notifier);
+
+    await Future.wait([
+      notifier.spreadSharedAds(exceptPodcastId: firstId),
+      notifier.spreadSharedAds(exceptPodcastId: firstId),
+      notifier.spreadSharedAds(exceptPodcastId: secondId),
+    ]);
+
+    expect(await database.listActiveSkipSegments(elsewhere), hasLength(1));
+    expect(await database.listActiveSkipSegments(origin), hasLength(1));
+  });
+
   test(
     'a hand-made passage is searched in the other episodes, idempotently',
     () async {
@@ -106,7 +724,6 @@ void main() {
       expect(found.single.templateId, template.id);
       expect(found.single.source, SkipSegmentSource.fingerprint);
       expect(found.single.kind, SkipSegmentKind.selfPromo);
-      expect(found.single.confirmed, isTrue);
       expect(found.single.startMs, closeTo(_msAt(640), 1500));
 
       final thirdId = await _addEpisode(database, podcastId, 'c', 'Trois');
@@ -437,6 +1054,10 @@ void main() {
     addTearDown(container.dispose);
     final notifier = container.read(audioAnalysisProvider.notifier);
     expect(container.read(settingsProvider).automaticAudioAnalysis, isFalse);
+    expect(
+      () => container.read(audioAnalysisBootstrapProvider),
+      returnsNormally,
+    );
     await notifier.enqueueMissing();
     expect(decoder.calls, 0);
   });
@@ -530,14 +1151,49 @@ FeedDraft _draft(
   );
 }
 
-EpisodeDraft _episodeDraft(String guid, String title) {
+EpisodeDraft _episodeDraft(String guid, String title, {String? audioUrl}) {
   return EpisodeDraft(
     guid: guid,
     title: title,
     description: 'Notes',
-    audioUrl: 'https://example.com/$guid.mp3',
+    audioUrl: audioUrl ?? 'https://example.com/$guid.mp3',
     durationSeconds: 400,
   );
+}
+
+class _Hosted {
+  _Hosted(this.podcastId, this.episodes);
+
+  final int podcastId;
+  final Map<String, int> episodes;
+
+  int get episodeId => episodes.values.first;
+}
+
+Future<_Hosted> _hosted(
+  AppDatabase database,
+  String host,
+  String name, {
+  List<String> guids = const ['a'],
+}) async {
+  final podcastId = (await database.saveFeed(
+    _draft([
+      for (final guid in guids)
+        _episodeDraft(
+          '$name-$guid',
+          guid,
+          audioUrl: 'https://audio.$host/$name-$guid.mp3',
+        ),
+    ], url: 'https://$host/$name.xml'),
+  )).podcastId;
+  final rows = await database.watchEpisodes(podcastId: podcastId).first;
+  return _Hosted(podcastId, {
+    for (final guid in guids)
+      guid: rows
+          .singleWhere((row) => row.episode.guid == '$name-$guid')
+          .episode
+          .id,
+  });
 }
 
 Int16List _bed(int seconds, double freq) {
@@ -597,6 +1253,7 @@ class _CountingDecoder extends PcmDecoder {
     String path, {
     int sampleRate = chromaprintSampleRate,
     Duration? budget,
+    void Function(int samples, int expected, int sampleRate)? onProgress,
   }) async {
     calls++;
     order.add(path);
@@ -620,6 +1277,7 @@ class _MapDecoder extends PcmDecoder {
     String path, {
     int sampleRate = chromaprintSampleRate,
     Duration? budget,
+    void Function(int samples, int expected, int sampleRate)? onProgress,
   }) async {
     final samples = files[path];
     if (samples == null) return null;

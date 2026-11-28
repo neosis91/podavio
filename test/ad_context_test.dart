@@ -54,7 +54,6 @@ void main() {
     expect(on.patterns, hasLength(1));
     final segment = on.patterns.single.segments.single;
     expect(segment.episodeId, 1);
-    expect(segment.confirmed, isFalse);
     expect(segment.endMs - segment.startMs, inInclusiveRange(15000, 25000));
   });
 

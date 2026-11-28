@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,6 +13,7 @@ import '../podcast/passage_creation.dart';
 import 'audio_output_sheet.dart';
 import 'player_panel.dart';
 import 'player_sheets.dart';
+import 'segment_bar.dart';
 
 class PlayerTransport extends ConsumerWidget {
   const PlayerTransport({super.key});
@@ -63,51 +62,35 @@ class PlayerTransport extends ConsumerWidget {
     }
 
     final scheme = Theme.of(context).colorScheme;
-    final activeChapter = currentDisplayChapter(chapters, position);
-    final showChapterMarkers = totalMs > 0 && chapters.isNotEmpty;
-    final sliderTheme = SliderTheme.of(context);
-    final thumbWidth = (sliderTheme.thumbShape ?? const RoundSliderThumbShape())
-        .getPreferredSize(true, false)
-        .width;
-    final overlayWidth =
-        (sliderTheme.overlayShape ?? const RoundSliderOverlayShape())
-            .getPreferredSize(true, false)
-            .width;
-    // Même inset horizontal que BaseSliderTrackShape.getPreferredRect.
-    final trackInset = sliderTheme.padding == null
-        ? math.max(overlayWidth / 2, thumbWidth / 2)
-        : 0.0;
+    final spans = episodeId == null
+        ? const <ColoredBarSpan>[]
+        : spansForSegments(
+            ref.watch(activeSkipSegmentsProvider(episodeId)).value ?? const [],
+          );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            if (showChapterMarkers)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: CustomPaint(
-                    painter: _ChapterMarkersPainter(
-                      chapters: chapters,
-                      durationMs: totalMs,
-                      activeStartMs: activeChapter?.startMs,
-                      markerColor: scheme.onSurfaceVariant,
-                      activeColor: scheme.primary,
-                      trackInset: trackInset,
-                    ),
-                  ),
-                ),
-              ),
-            Slider(
-              value: totalMs == 0 ? 0 : positionMs.toDouble(),
-              max: totalMs == 0 ? 1 : totalMs.toDouble(),
-              onChanged: totalMs == 0
-                  ? null
-                  : (value) =>
-                        player.seek(Duration(milliseconds: value.round())),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: Colors.white,
+            inactiveTrackColor: Colors.black,
+            disabledActiveTrackColor: Colors.white,
+            disabledInactiveTrackColor: Colors.black,
+            thumbColor: Colors.white,
+            overlayColor: Colors.white.withValues(alpha: 0.12),
+            trackShape: SkipSegmentTrackShape(
+              spans: spans,
+              durationMs: totalMs,
             ),
-          ],
+          ),
+          child: Slider(
+            value: totalMs == 0 ? 0 : positionMs.toDouble(),
+            max: totalMs == 0 ? 1 : totalMs.toDouble(),
+            onChanged: totalMs == 0
+                ? null
+                : (value) => player.seek(Duration(milliseconds: value.round())),
+          ),
         ),
         Stack(
           alignment: Alignment.center,
@@ -267,7 +250,6 @@ class PlayerTransport extends ConsumerWidget {
                             .read(playerProvider)
                             .position
                             .inMilliseconds,
-                        waveformFirst: true,
                       ),
                 icon: const Icon(Icons.content_cut),
               ),
@@ -289,67 +271,6 @@ class PlayerTransport extends ConsumerWidget {
         ],
       ],
     );
-  }
-}
-
-/// Repères de chapitres alignés sur la piste du [Slider] Material.
-class _ChapterMarkersPainter extends CustomPainter {
-  const _ChapterMarkersPainter({
-    required this.chapters,
-    required this.durationMs,
-    required this.activeStartMs,
-    required this.markerColor,
-    required this.activeColor,
-    required this.trackInset,
-  });
-
-  final List<DisplayChapter> chapters;
-  final int durationMs;
-  final int? activeStartMs;
-  final Color markerColor;
-  final Color activeColor;
-  final double trackInset;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (durationMs <= 0 || chapters.isEmpty) return;
-
-    final trackLeft = trackInset;
-    final trackWidth = size.width - trackInset * 2;
-    if (trackWidth <= 0) return;
-
-    final trackCenterY = size.height / 2;
-    const markerHalfHeight = 6.0;
-    final inactivePaint = Paint()
-      ..color = markerColor.withValues(alpha: 0.55)
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round;
-    final activePaint = Paint()
-      ..color = activeColor
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-
-    for (final chapter in chapters) {
-      final start = chapter.startMs;
-      if (start < 0 || start > durationMs) continue;
-      final x = trackLeft + trackWidth * (start / durationMs);
-      final isActive = activeStartMs != null && start == activeStartMs;
-      canvas.drawLine(
-        Offset(x, trackCenterY - markerHalfHeight),
-        Offset(x, trackCenterY + markerHalfHeight),
-        isActive ? activePaint : inactivePaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _ChapterMarkersPainter oldDelegate) {
-    return oldDelegate.chapters != chapters ||
-        oldDelegate.durationMs != durationMs ||
-        oldDelegate.activeStartMs != activeStartMs ||
-        oldDelegate.markerColor != markerColor ||
-        oldDelegate.activeColor != activeColor ||
-        oldDelegate.trackInset != trackInset;
   }
 }
 

@@ -32,6 +32,10 @@ String localizedChapterTitle(
   String Function(String key) translate,
 ) {
   if (chapter.fromSegment || chapter.title == episodeChapterLabel) {
+    final kind = chapter.fromSegment
+        ? skipKindForStoredLabel(chapter.title)
+        : null;
+    if (kind != null) return translate(skipKindLabel(shownSkipKind(kind)));
     return translate(chapter.title);
   }
   return chapter.title;
@@ -133,7 +137,6 @@ List<DisplayChapter> mergeChaptersWithSegments({
       segments
           .where(
             (segment) =>
-                segment.confirmed != false &&
                 segment.source != SkipSegmentSource.chapter &&
                 segment.endMs > segment.startMs,
           )

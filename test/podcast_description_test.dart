@@ -17,6 +17,7 @@ void main() {
               30,
               'Une phrase assez longue pour déborder.',
             ).join(' '),
+            surface: Colors.black,
           ),
         ),
       ),
@@ -35,7 +36,12 @@ void main() {
   testWidgets('une description courte ne propose pas Plus', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(body: PodcastDescription(html: 'Une phrase courte.')),
+        home: Scaffold(
+          body: PodcastDescription(
+            html: 'Une phrase courte.',
+            surface: Colors.black,
+          ),
+        ),
       ),
     );
 
@@ -62,6 +68,7 @@ void main() {
                 automaticDownload: true,
                 onSubscribe: () {},
                 onAutomaticDownload: () {},
+                surface: const Color(0xFFE7E953),
               ),
             ),
           ),
@@ -71,6 +78,10 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Lecture'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('Lecture')).style?.color,
+      Colors.white,
+    );
     expect(find.byIcon(Icons.swap_vert), findsOneWidget);
     expect(find.byIcon(Icons.downloading), findsOneWidget);
     expect(
@@ -154,6 +165,7 @@ void main() {
                   onReverse: () {},
                   reversed: false,
                   onAutomaticDownload: () {},
+                  surface: const Color(0xFFE7E953),
                 ),
               ),
             ),
@@ -167,5 +179,9 @@ void main() {
     final title = tester.getRect(find.text('Sous la pochette'));
     expect(title.top, greaterThanOrEqualTo(cover.bottom));
     expect(find.text('3 épisodes'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('Sous la pochette')).style?.color,
+      const Color(0xFF1A1A1A),
+    );
   });
 }

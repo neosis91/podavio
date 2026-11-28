@@ -2,7 +2,16 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 /// Passage qu’on peut sauter dans un épisode.
-enum SkipSegmentKind { intro, outro, sponsor, ad, jingle, selfPromo, other }
+enum SkipSegmentKind {
+  intro,
+  outro,
+  sponsor,
+  ad,
+  jingle,
+  sting,
+  selfPromo,
+  other,
+}
 
 /// D’où vient le passage.
 enum SkipSegmentSource {
@@ -12,15 +21,110 @@ enum SkipSegmentSource {
   /// Titre de chapitre qui ressemble à une pub ou un sponsor.
   chapter,
 
-  /// Posé à la main.
+  /// Posé à la main dès le départ.
   manual,
 
   /// Virgule de réseau (pré-roll ou post-roll délimité par un sting).
   network,
+
+  /// Détection de réseau dont le type ou les bornes ont été choisis.
+  /// Elle saute encore avec les pubs, contrairement à un passage posé
+  /// à la main dès le départ.
+  networkEdited,
+}
+
+/// Une détection de réseau corrigée le reste. Tout autre passage choisi
+/// à la main devient [SkipSegmentSource.manual].
+SkipSegmentSource sourceAfterEdit(SkipSegmentSource source) {
+  if (source == SkipSegmentSource.network ||
+      source == SkipSegmentSource.networkEdited) {
+    return SkipSegmentSource.networkEdited;
+  }
+  return SkipSegmentSource.manual;
+}
+
+/// L’analyse ne réécrit ni ne retire ces passages.
+bool sourceIsProtected(SkipSegmentSource source) {
+  return source == SkipSegmentSource.manual ||
+      source == SkipSegmentSource.networkEdited;
 }
 
 /// Chapitre de contenu quand le podcast n’a pas donné de titre.
 const episodeChapterLabel = 'Episode';
+
+/// Couleur de barre SponsorBlock du type, en ARGB opaque.
+///
+/// La pub et le sponsor partagent le vert « sponsor ». L’intro, l’outro
+/// et l’autopromo reprennent le type du même nom. Le jingle reprend
+/// « music_offtopic », la virgule « interaction », le reste « filler ».
+int skipKindArgb(SkipSegmentKind kind) {
+  switch (kind) {
+    case SkipSegmentKind.sponsor:
+    case SkipSegmentKind.ad:
+      return 0xFF00D400;
+    case SkipSegmentKind.selfPromo:
+      return 0xFFFFFF00;
+    case SkipSegmentKind.intro:
+      return 0xFF00FFFF;
+    case SkipSegmentKind.outro:
+      return 0xFF0202ED;
+    case SkipSegmentKind.jingle:
+      return 0xFFFF9900;
+    case SkipSegmentKind.sting:
+      return 0xFFCC00FF;
+    case SkipSegmentKind.other:
+      return 0xFF7300FF;
+  }
+}
+
+/// Type affiché. La pub et le sponsor sont le même choix à l’écran.
+SkipSegmentKind shownSkipKind(SkipSegmentKind kind) {
+  if (kind == SkipSegmentKind.sponsor) return SkipSegmentKind.ad;
+  return kind;
+}
+
+/// Pub, sponsor et « autre » : tous les podcasts, quel que soit l’hébergeur.
+bool spreadsToEveryPodcast(SkipSegmentKind kind) {
+  final shown = shownSkipKind(kind);
+  return shown == SkipSegmentKind.ad || shown == SkipSegmentKind.other;
+}
+
+/// Virgule et jingle : plusieurs fois, mais seulement le même hébergeur.
+bool spreadsWithinNetwork(SkipSegmentKind kind) {
+  return kind == SkipSegmentKind.sting || kind == SkipSegmentKind.jingle;
+}
+
+/// Intro et outro : une seule occurrence par épisode, dans le podcast.
+bool oncePerEpisode(SkipSegmentKind kind) {
+  return kind == SkipSegmentKind.intro || kind == SkipSegmentKind.outro;
+}
+
+/// Le gabarit se cherche aussi hors de son podcast.
+///
+/// L’autopromo, l’intro et l’outro restent dans l’émission. La virgule
+/// et le jingle ne sortent pas de l’hébergeur ; la pub et « autre » si.
+bool sharesAcrossPodcasts(SkipSegmentKind kind) {
+  return spreadsToEveryPodcast(kind) || spreadsWithinNetwork(kind);
+}
+
+/// Type d’un titre stocké pour un passage détecté (clé anglaise).
+///
+/// `null` si le titre n’est pas une de ces clés.
+SkipSegmentKind? skipKindForStoredLabel(String title) {
+  if (title ==
+      detectedChapterLabel(
+        SkipSegmentKind.jingle,
+        source: SkipSegmentSource.network,
+      )) {
+    return SkipSegmentKind.jingle;
+  }
+  for (final kind in SkipSegmentKind.values) {
+    if (title == detectedChapterLabel(kind) || title == skipKindLabel(kind)) {
+      return kind;
+    }
+  }
+  return null;
+}
 
 /// Clé anglaise affichée pour [kind] (traduite par l’interface).
 String skipKindLabel(SkipSegmentKind kind) {
@@ -35,6 +139,8 @@ String skipKindLabel(SkipSegmentKind kind) {
       return 'Ad';
     case SkipSegmentKind.jingle:
       return 'Jingle';
+    case SkipSegmentKind.sting:
+      return 'Sting';
     case SkipSegmentKind.selfPromo:
       return 'Self-promo';
     case SkipSegmentKind.other:

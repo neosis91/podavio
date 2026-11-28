@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/cover_tone.dart';
 import '../../core/format.dart';
 import '../../data/app_database.dart';
 import '../../data/feed_service.dart';
@@ -12,6 +13,22 @@ import '../podcasts/podcast_feed_actions.dart';
 import '../widgets/brand.dart';
 import '../widgets/cover.dart';
 import '../widgets/messages.dart';
+
+/// Fond des boutons sous la jaquette : noir sur un fond clair, blanc sinon,
+/// avec la même transparence que les boutons posés sur la pochette.
+Color coverButtonFill(Color surface) =>
+    coverInk(surface).withValues(alpha: 0.8);
+
+/// Icône lisible sur ce bouton.
+Color coverButtonInk(Color surface) => coverInk(coverInk(surface));
+
+/// Encre lisible sur [surface] : sombre sur un fond clair, blanche sinon.
+TextStyle? coverTextStyle(TextStyle? style, Color surface, {double alpha = 1}) {
+  final ink = coverInk(surface);
+  return style?.copyWith(
+    color: alpha >= 1 ? ink : ink.withValues(alpha: alpha),
+  );
+}
 
 /// Haut de page d’une émission, calqué sur la page album : jaquette carrée
 /// entière, actions puis description en dessous.
@@ -26,6 +43,7 @@ class PodcastAlbumHeader extends ConsumerWidget {
     required this.onReverse,
     required this.reversed,
     required this.onAutomaticDownload,
+    required this.surface,
   });
 
   final Podcast podcast;
@@ -36,6 +54,9 @@ class PodcastAlbumHeader extends ConsumerWidget {
   final VoidCallback onReverse;
   final bool reversed;
   final VoidCallback onAutomaticDownload;
+
+  /// Couleur derrière le titre et la description.
+  final Color surface;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -103,16 +124,21 @@ class PodcastAlbumHeader extends ConsumerWidget {
                   Text(
                     podcast.title,
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleLarge
-                        ?.copyWith(color: Colors.white),
+                    style: coverTextStyle(
+                      Theme.of(context).textTheme.titleLarge,
+                      surface,
+                    ),
                   ),
                   if (count != null) ...[
                     const SizedBox(height: 4),
                     Text(
                       _episodeCountLabel(count),
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium
-                          ?.copyWith(color: const Color(0xC4FFFFFF)),
+                      style: coverTextStyle(
+                        Theme.of(context).textTheme.bodyMedium,
+                        surface,
+                        alpha: 0.77,
+                      ),
                     ),
                   ],
                 ],
@@ -136,10 +162,11 @@ class PodcastAlbumHeader extends ConsumerWidget {
                     openPodcast: false,
                   ),
                   onAutomaticDownload: onAutomaticDownload,
+                  surface: surface,
                 ),
               ),
             ),
-            PodcastDescription(html: podcast.description),
+            PodcastDescription(html: podcast.description, surface: surface),
           ],
         );
       },
@@ -159,6 +186,7 @@ class PodcastLandscapeFrame extends ConsumerWidget {
     required this.reversed,
     required this.onAutomaticDownload,
     required this.listColor,
+    required this.surface,
     required this.episodes,
   });
 
@@ -169,6 +197,7 @@ class PodcastLandscapeFrame extends ConsumerWidget {
   final bool reversed;
   final VoidCallback onAutomaticDownload;
   final Color listColor;
+  final Color surface;
   final Widget episodes;
 
   @override
@@ -233,6 +262,7 @@ class PodcastLandscapeFrame extends ConsumerWidget {
                           openPodcast: false,
                         ),
                         onAutomaticDownload: onAutomaticDownload,
+                        surface: surface,
                       ),
                     ),
                   ],
@@ -264,6 +294,7 @@ class PodcastActionRow extends StatelessWidget {
     required this.automaticDownload,
     required this.onSubscribe,
     required this.onAutomaticDownload,
+    required this.surface,
   });
 
   final bool showPause;
@@ -274,10 +305,13 @@ class PodcastActionRow extends StatelessWidget {
   final bool automaticDownload;
   final VoidCallback onSubscribe;
   final VoidCallback onAutomaticDownload;
+  final Color surface;
 
   @override
   Widget build(BuildContext context) {
     final label = Theme.of(context).textTheme.labelLarge;
+    final fill = coverButtonFill(surface);
+    final ink = coverButtonInk(surface);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -287,20 +321,17 @@ class PodcastActionRow extends StatelessWidget {
           _RoundButton(
             tooltip: 'Inverser l’ordre',
             onTap: onReverse,
-            color: reversed
-                ? Colors.white
-                : Colors.white.withValues(alpha: 0.12),
-            child: Icon(
-              Icons.swap_vert,
-              size: 22,
-              color: reversed ? Colors.black : Colors.white,
+            color: fill,
+            child: Semantics(
+              selected: reversed,
+              child: Icon(Icons.swap_vert, size: 22, color: ink),
             ),
           ),
           const SizedBox(width: 12),
           Tooltip(
             message: showPause ? 'Pause' : 'Lire',
             child: Material(
-              color: Colors.white,
+              color: fill,
               shape: const StadiumBorder(),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
@@ -320,12 +351,14 @@ class PodcastActionRow extends StatelessWidget {
                         Icon(
                           showPause ? Icons.pause : Icons.play_arrow,
                           size: 22,
-                          color: onPlay == null ? Colors.black38 : Colors.black,
+                          color: onPlay == null
+                              ? ink.withValues(alpha: 0.38)
+                              : ink,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           context.tr(showPause ? 'Pause' : 'Play'),
-                          style: label?.copyWith(color: Colors.black),
+                          style: label?.copyWith(color: ink),
                         ),
                       ],
                     ),
@@ -339,23 +372,19 @@ class PodcastActionRow extends StatelessWidget {
             _RoundButton(
               tooltip: context.tr('Automatic download'),
               onTap: onAutomaticDownload,
-              color: Colors.white.withValues(alpha: 0.12),
+              color: fill,
               child: Icon(
                 Icons.downloading,
                 size: 22,
-                color: automaticDownload ? downloadActiveColor : Colors.white,
+                color: automaticDownload ? downloadActiveColor : ink,
               ),
             )
           else
             _RoundButton(
               tooltip: 'S’abonner',
               onTap: onSubscribe,
-              color: Colors.white.withValues(alpha: 0.12),
-              child: const Icon(
-                Icons.person_add_alt_1,
-                size: 22,
-                color: Colors.white,
-              ),
+              color: fill,
+              child: Icon(Icons.person_add_alt_1, size: 22, color: ink),
             ),
         ],
       ),
@@ -365,9 +394,14 @@ class PodcastActionRow extends StatelessWidget {
 
 /// Description repliée sur 3 lignes, avec les liens cliquables.
 class PodcastDescription extends StatefulWidget {
-  const PodcastDescription({super.key, required this.html});
+  const PodcastDescription({
+    super.key,
+    required this.html,
+    required this.surface,
+  });
 
   final String html;
+  final Color surface;
 
   @override
   State<PodcastDescription> createState() => _PodcastDescriptionState();
@@ -395,8 +429,10 @@ class _PodcastDescriptionState extends State<PodcastDescription> {
     _disposeRecognizers();
     final spans = showNotesSpans(widget.html);
     if (spans.isEmpty) return const SizedBox.shrink();
-    final style = Theme.of(context).textTheme.bodyMedium
-        ?.copyWith(color: Colors.white);
+    final style = coverTextStyle(
+      Theme.of(context).textTheme.bodyMedium,
+      widget.surface,
+    );
     final linkStyle = style?.copyWith(color: const Color(0xFF00B0FF));
     final text = TextSpan(
       children: [
@@ -439,8 +475,11 @@ class _PodcastDescriptionState extends State<PodcastDescription> {
                   onTap: () => setState(() => _expanded = !_expanded),
                   child: Text(
                     _expanded ? 'Moins' : 'Plus',
-                    style: Theme.of(context).textTheme.labelSmall
-                        ?.copyWith(color: const Color(0xFFD3D3D3)),
+                    style: coverTextStyle(
+                      Theme.of(context).textTheme.labelSmall,
+                      widget.surface,
+                      alpha: 0.77,
+                    ),
                   ),
                 ),
               ],

@@ -10,6 +10,7 @@ import '../../data/providers.dart';
 import '../../player/playback_source.dart';
 import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
+import '../player/segment_bar.dart';
 import '../router.dart';
 import 'brand.dart';
 import 'episode_actions_sheet.dart';
@@ -247,21 +248,23 @@ class EpisodeListSubtitle extends ConsumerWidget {
 }
 
 /// Barre toujours présente. À gauche le temps déjà lu, à droite le reste.
-class _ListenProgress extends StatelessWidget {
+class _ListenProgress extends ConsumerWidget {
   const _ListenProgress({
+    required this.episodeId,
     required this.position,
     required this.duration,
     required this.played,
     required this.style,
   });
 
+  final int episodeId;
   final Duration position;
   final Duration? duration;
   final bool played;
   final TextStyle? style;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final total = duration;
     final known = total != null && total > Duration.zero;
     final finished = played && position <= Duration.zero;
@@ -281,12 +284,13 @@ class _ListenProgress extends StatelessWidget {
         ? Duration.zero
         : total - shown;
 
-    final bar = ClipRRect(
-      borderRadius: BorderRadius.circular(2),
-      child: SizedBox(
-        height: 3,
-        child: LinearProgressIndicator(value: fraction),
-      ),
+    final spans = spansForSegments(
+      ref.watch(activeSkipSegmentsProvider(episodeId)).value ?? const [],
+    );
+    final bar = SegmentProgressBar(
+      fraction: fraction,
+      durationMs: known ? total.inMilliseconds : 0,
+      spans: spans,
     );
     if (!known) return bar;
     return Row(
@@ -411,6 +415,7 @@ class EpisodeLine extends StatelessWidget {
                   subtitle,
                   const SizedBox(height: 6),
                   _ListenProgress(
+                    episodeId: episode.id,
                     position: position,
                     duration: duration,
                     played: episode.played,

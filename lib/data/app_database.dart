@@ -224,9 +224,6 @@ class SkipSegments extends Table {
   /// Nombre d’épisodes du podcast qui partagent ce passage.
   IntColumn get matches => integer().withDefault(const Constant(1))();
 
-  /// `null` : pas revu. `true` : confirmé. `false` : ignoré.
-  BoolColumn get confirmed => boolean().nullable()();
-
   /// 0–100. `null` : pas calculé (chapitre, ou passage ancien).
   /// Sert au tri. Un candidat intra-épisode bas est replié dans l’écran.
   IntColumn get confidence => integer().nullable()();
@@ -235,6 +232,38 @@ class SkipSegments extends Table {
     #id,
     onDelete: KeyAction.setNull,
   )();
+}
+
+/// Passage détecté que l’utilisateur a retiré.
+///
+/// La ligne reste après la suppression du passage et du gabarit : une
+/// analyse ultérieure ne le repose pas si la plage se recouvre à moitié.
+@TableIndex(name: 'dismissed_skip_spans_episode_id', columns: {#episodeId})
+class DismissedSkipSpans extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get episodeId =>
+      integer().references(Episodes, #id, onDelete: KeyAction.cascade)();
+
+  /// Gabarit au moment du retrait. Pas de clé étrangère : le gabarit
+  /// peut disparaître, la trace doit rester.
+  IntColumn get templateId => integer().nullable()();
+
+  /// Type au moment du retrait. `null` sur une trace plus ancienne.
+  TextColumn get kind => textEnum<SkipSegmentKind>().nullable()();
+  IntColumn get startMs => integer()();
+  IntColumn get endMs => integer()();
+}
+
+/// Détections à retirer une fois le plan écrit.
+///
+/// Les identifiants sont enregistrés dans la même transaction que le
+/// plan. L’effacement suit, et un redémarrage termine ce qui reste :
+/// une modification déjà passée en passage protégé n’est pas touchée.
+class PendingSegmentDrops extends Table {
+  IntColumn get segmentId => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {segmentId};
 }
 
 /// Log-mel des 180 premières secondes, pour ne pas redécoder le fichier.
@@ -311,6 +340,8 @@ class EpisodeEntry {
     EpisodeFingerprints,
     SegmentTemplates,
     SkipSegments,
+    DismissedSkipSpans,
+    PendingSegmentDrops,
     EpisodeLogMels,
     LearnedNetworkStings,
   ],
@@ -328,7 +359,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -454,6 +485,28 @@ class AppDatabase extends _$AppDatabase
       }
       if (from < 23) await _ensureFingerprintStatus();
       if (from < 24) await _ensureFingerprintEnvelope();
+      if (from < 25) await _dropSkipReview();
+      if (from < 26) {
+        await _createTableIfMissing(migrator, dismissedSkipSpans);
+      }
+      if (from < 27) {
+        await _createTableIfMissing(migrator, pendingSegmentDrops);
+      }
+      if (from < 28) {
+        await _addColumnIfMissing(
+          migrator,
+          dismissedSkipSpans,
+          dismissedSkipSpans.kind,
+        );
+        await _ensureSegmentAnnotations();
+        await _reclassEditedNetworkStings();
+        await customStatement(
+          'UPDATE dismissed_skip_spans SET kind = ('
+          'SELECT t.kind FROM segment_templates t '
+          'WHERE t.id = dismissed_skip_spans.template_id) '
+          'WHERE kind IS NULL AND template_id IS NOT NULL',
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -464,6 +517,7 @@ class AppDatabase extends _$AppDatabase
       // Idempotent : v8 a pu être appliqué avant l’ajout des indexes.
       await _createEpisodeIndexes();
       await _ensureDefaultPlaylist();
+      await finishPendingSegmentDrops();
     },
   );
 
@@ -510,6 +564,14 @@ class AppDatabase extends _$AppDatabase
     );
   }
 
+  /// L’avis confirmé / ignoré ne sert plus. La colonne part, le reste reste.
+  Future<void> _dropSkipReview() async {
+    final rows = await customSelect('PRAGMA table_info(skip_segments)').get();
+    if (rows.isEmpty) return;
+    if (!rows.any((row) => row.read<String>('name') == 'confirmed')) return;
+    await customStatement('ALTER TABLE skip_segments DROP COLUMN confirmed');
+  }
+
   /// Enveloppe d’énergie (uint8, 20 ms). Hors schéma Drift, comme `status` :
   /// les épisodes déjà analysés restent `NULL` et ne sont pas recalculés.
   Future<void> _ensureFingerprintEnvelope() async {
@@ -529,6 +591,29 @@ class AppDatabase extends _$AppDatabase
         .get();
     if (!rows.any((row) => row.read<String>('name') == 'olaf')) return;
     await customStatement('ALTER TABLE episode_fingerprints DROP COLUMN olaf');
+  }
+
+  /// Une ligne `manual` qui vient d’une détection de réseau redevient
+  /// `networkEdited`, pour sauter encore avec les pubs.
+  ///
+  /// L’indice est l’annotation : `detected_source = network` quand les
+  /// bornes ont été enregistrées avant le changement de source. À défaut,
+  /// une virgule ou un jingle sans gabarit et sans annotation de création
+  /// manuelle : les détections de réseau n’ont pas de gabarit, un passage
+  /// créé à la main en a une avec `detected_source` vide.
+  Future<void> _reclassEditedNetworkStings() async {
+    await customStatement(
+      'UPDATE skip_segments SET source = \'networkEdited\' '
+      "WHERE source = 'manual' "
+      'AND id NOT IN ('
+      'SELECT segment_id FROM segment_annotations '
+      'WHERE detected_source IS NULL) '
+      'AND ('
+      'id IN ('
+      'SELECT segment_id FROM segment_annotations '
+      "WHERE detected_source = 'network') "
+      "OR (kind IN ('jingle', 'sting') AND template_id IS NULL))",
+    );
   }
 
   /// Bornes corrigées à la main, hors schéma Drift. Le passage peut être

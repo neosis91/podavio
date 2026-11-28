@@ -358,6 +358,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                           episodes: episodes,
                           pullToRefresh: true,
                           background: listBackground,
+                          headerColor: background,
                           showPause: playingHere,
                           onPlay: first == null
                               ? null
@@ -370,6 +371,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                         episodes: episodes,
                         pullToRefresh: false,
                         background: listBackground,
+                        headerColor: background,
                         showPause: playingHere,
                         onPlay: first == null
                             ? null
@@ -544,6 +546,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     required AsyncValue<EpisodeWindow> episodes,
     required bool pullToRefresh,
     required Color background,
+    required Color headerColor,
     required bool showPause,
     required VoidCallback? onPlay,
   }) {
@@ -563,6 +566,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
         episodes: episodes,
         pullToRefresh: pullToRefresh,
         background: background,
+        headerColor: headerColor,
         showPause: showPause,
         onPlay: onPlay,
       ),
@@ -575,6 +579,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
     required AsyncValue<EpisodeWindow> episodes,
     required bool pullToRefresh,
     required Color background,
+    required Color headerColor,
     required bool showPause,
     required VoidCallback? onPlay,
   }) {
@@ -598,10 +603,16 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
                 podcastListReversedProvider(widget.podcastId),
               ),
               onAutomaticDownload: () => _showAutoDownload(item),
+              surface: headerColor,
             ),
           ),
         if (landscape)
-          SliverToBoxAdapter(child: PodcastDescription(html: item.description)),
+          SliverToBoxAdapter(
+            child: PodcastDescription(
+              html: item.description,
+              surface: background,
+            ),
+          ),
         ..._episodeSlivers(
           window: window,
           episodes: episodes,
@@ -618,6 +629,7 @@ class _PodcastPageState extends ConsumerState<PodcastPage> {
       reversed: ref.watch(podcastListReversedProvider(widget.podcastId)),
       onAutomaticDownload: () => _showAutoDownload(item),
       listColor: background,
+      surface: headerColor,
       episodes: scroll,
     );
   }

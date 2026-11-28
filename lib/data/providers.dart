@@ -113,6 +113,12 @@ final chaptersProvider = StreamProvider.family<List<EpisodeChapter>, int>((
   return ref.watch(databaseProvider).watchChapters(id);
 });
 
+/// Passages posés à la main, ou retrouvés à partir d’un de ces passages.
+final activeSkipSegmentsProvider =
+    StreamProvider.family<List<SkipSegment>, int>((ref, id) {
+      return ref.watch(databaseProvider).watchActiveSkipSegments(id);
+    });
+
 /// Chapitres du flux, avec les passages détectés insérés dedans.
 final displayChaptersProvider =
     StreamProvider.family<List<DisplayChapter>, int>((ref, id) {

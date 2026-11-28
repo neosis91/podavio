@@ -7,10 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../data/feed_service.dart';
 import '../../data/providers.dart';
+import '../../data/skip_segments.dart';
 import '../../l10n/l10n.dart';
 import '../../player/chapter_merge.dart';
 import '../../player/player_controller.dart';
 import '../../settings/settings_controller.dart';
+import '../skip_kind_mark.dart';
 import '../widgets/brand.dart';
 import '../widgets/cover.dart';
 import 'player_controls.dart';
@@ -52,6 +54,9 @@ class PlayerNowPlaying extends ConsumerWidget {
     final activeChapter = carMode
         ? null
         : currentDisplayChapter(chapters, position);
+    final chapterKind = activeChapter != null && activeChapter.fromSegment
+        ? skipKindForStoredLabel(activeChapter.title)
+        : null;
     final theme = Theme.of(context);
 
     Widget content({required bool compact}) {
@@ -163,14 +168,24 @@ class PlayerNowPlaying extends ConsumerWidget {
                     if (!carMode &&
                         activeChapter != null &&
                         activeChapter.title.isNotEmpty)
-                      Text(
-                        localizedChapterTitle(activeChapter, context.tr),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Row(
+                        children: [
+                          if (chapterKind != null) ...[
+                            SkipKindMark(chapterKind, size: 10),
+                            const SizedBox(width: 6),
+                          ],
+                          Flexible(
+                            child: Text(
+                              localizedChapterTitle(activeChapter, context.tr),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                   ],
                 ),

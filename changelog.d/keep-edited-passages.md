@@ -1,0 +1,1 @@
+- A passage the listener removes is not put back by a later analysis, and a passage they edit keeps the bounds and kind they chose.

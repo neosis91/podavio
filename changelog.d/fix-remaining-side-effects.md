@@ -1,0 +1,1 @@
+- A hand-placed sting no longer skips with ads, while a network sting that was edited still does. Isolate results are sent before the isolate exits, a killed isolate releases its wait at once, a clearly different passage is not blocked by a long removal, and unfinished segment cleanup is finished the next time the database opens.

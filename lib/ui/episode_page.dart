@@ -255,6 +255,7 @@ class _EpisodeDetailState extends ConsumerState<_EpisodeDetail> {
             slivers: [
               SliverToBoxAdapter(
                 child: _EpisodeCover(
+                  surface: background,
                   entry: entry,
                   imageUrl: imageUrl,
                   imagePath: imagePath,
@@ -296,10 +297,16 @@ class _EpisodeDetailState extends ConsumerState<_EpisodeDetail> {
                   ),
                 ),
               SliverToBoxAdapter(
-                child: PodcastDescription(html: episode.description),
+                child: PodcastDescription(
+                  html: episode.description,
+                  surface: background,
+                ),
               ),
               SliverToBoxAdapter(
-                child: _EpisodePodcastShelf(podcast: entry.podcast),
+                child: _EpisodePodcastShelf(
+                  podcast: entry.podcast,
+                  surface: background,
+                ),
               ),
               SliverPadding(
                 padding: EdgeInsets.only(
@@ -332,9 +339,10 @@ class _EpisodeDetailState extends ConsumerState<_EpisodeDetail> {
 }
 
 class _EpisodePodcastShelf extends StatelessWidget {
-  const _EpisodePodcastShelf({required this.podcast});
+  const _EpisodePodcastShelf({required this.podcast, required this.surface});
 
   final Podcast podcast;
+  final Color surface;
 
   @override
   Widget build(BuildContext context) {
@@ -348,7 +356,7 @@ class _EpisodePodcastShelf extends StatelessWidget {
             'Le podcast',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.headlineSmall,
+            style: coverTextStyle(theme.textTheme.headlineSmall, surface),
           ),
         ),
         SizedBox(
@@ -411,9 +419,10 @@ class _EpisodePodcastShelf extends StatelessWidget {
                         podcast.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          height: 1.25,
-                        ),
+                        style: coverTextStyle(
+                          theme.textTheme.titleSmall,
+                          surface,
+                        )?.copyWith(height: 1.25),
                       ),
                     ],
                   ),
@@ -451,6 +460,7 @@ class _EpisodeCover extends StatelessWidget {
     required this.onPlaylist,
     required this.onPlayed,
     required this.onShare,
+    required this.surface,
   });
 
   final EpisodeEntry entry;
@@ -467,6 +477,7 @@ class _EpisodeCover extends StatelessWidget {
   final VoidCallback onPlaylist;
   final VoidCallback onPlayed;
   final VoidCallback onShare;
+  final Color surface;
 
   @override
   Widget build(BuildContext context) {
@@ -529,8 +540,10 @@ class _EpisodeCover extends StatelessWidget {
               Text(
                 episode.title,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge
-                    ?.copyWith(color: Colors.white),
+                style: coverTextStyle(
+                  Theme.of(context).textTheme.titleLarge,
+                  surface,
+                ),
               ),
               const SizedBox(height: 4),
               GestureDetector(
@@ -538,8 +551,10 @@ class _EpisodeCover extends StatelessWidget {
                 child: Text(
                   entry.podcast.title,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleSmall
-                      ?.copyWith(color: Colors.white),
+                  style: coverTextStyle(
+                    Theme.of(context).textTheme.titleSmall,
+                    surface,
+                  ),
                 ),
               ),
               if (meta.isNotEmpty) ...[
@@ -547,8 +562,11 @@ class _EpisodeCover extends StatelessWidget {
                 Text(
                   meta,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium
-                      ?.copyWith(color: const Color(0xC4FFFFFF)),
+                  style: coverTextStyle(
+                    Theme.of(context).textTheme.bodyMedium,
+                    surface,
+                    alpha: 0.77,
+                  ),
                 ),
               ],
             ],
@@ -564,6 +582,8 @@ class _EpisodeCover extends StatelessWidget {
                 _CircleButton(
                   tooltip: 'Ajouter à la playlist',
                   onPressed: onPlaylist,
+                  fill: coverButtonFill(surface),
+                  ink: coverButtonInk(surface),
                   child: const PlaylistAddIcon(size: 22),
                 ),
                 const SizedBox(width: 12),
@@ -572,12 +592,13 @@ class _EpisodeCover extends StatelessWidget {
                       ? 'Marquer comme non lu'
                       : 'Marquer comme lu',
                   onPressed: onPlayed,
+                  fill: coverButtonFill(surface),
+                  ink: coverButtonInk(surface),
                   child: Icon(
                     episode.played
                         ? Icons.mark_email_unread_outlined
                         : Icons.check_circle_outline,
                     size: 22,
-                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -585,17 +606,23 @@ class _EpisodeCover extends StatelessWidget {
                   label: playLabel,
                   playing: playing,
                   onPressed: onPlay,
+                  fill: coverButtonFill(surface),
+                  ink: coverButtonInk(surface),
                 ),
                 const SizedBox(width: 12),
                 _DownloadButton(
                   progress: progress,
                   downloaded: downloaded,
                   onPressed: onDownload,
+                  fill: coverButtonFill(surface),
+                  ink: coverButtonInk(surface),
                 ),
                 const SizedBox(width: 12),
                 _CircleButton(
                   tooltip: 'Partager',
                   onPressed: onShare,
+                  fill: coverButtonFill(surface),
+                  ink: coverButtonInk(surface),
                   child: const ShareIcon(size: 22),
                 ),
               ],
@@ -648,11 +675,15 @@ class _CircleButton extends StatelessWidget {
   const _CircleButton({
     required this.tooltip,
     required this.onPressed,
+    required this.fill,
+    required this.ink,
     required this.child,
   });
 
   final String tooltip;
   final VoidCallback onPressed;
+  final Color fill;
+  final Color ink;
   final Widget child;
 
   @override
@@ -660,14 +691,14 @@ class _CircleButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: Colors.white.withValues(alpha: 0.12),
+        color: fill,
         shape: const CircleBorder(),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onPressed,
           customBorder: const CircleBorder(),
           child: IconTheme(
-            data: const IconThemeData(color: Colors.white, size: 22),
+            data: IconThemeData(color: ink, size: 22),
             child: SizedBox(width: 48, height: 48, child: Center(child: child)),
           ),
         ),
@@ -708,18 +739,22 @@ class _PlayPill extends StatelessWidget {
     required this.label,
     required this.playing,
     required this.onPressed,
+    required this.fill,
+    required this.ink,
   });
 
   final String label;
   final bool playing;
   final VoidCallback onPressed;
+  final Color fill;
+  final Color ink;
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: label,
       child: Material(
-        color: Colors.white,
+        color: fill,
         shape: const StadiumBorder(),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -736,13 +771,13 @@ class _PlayPill extends StatelessWidget {
                   Icon(
                     playing ? Icons.pause : Icons.play_arrow,
                     size: 22,
-                    color: Colors.black,
+                    color: ink,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     label,
                     style: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(color: Colors.black),
+                        ?.copyWith(color: ink),
                   ),
                 ],
               ),
@@ -759,11 +794,15 @@ class _DownloadButton extends StatelessWidget {
     required this.progress,
     required this.downloaded,
     required this.onPressed,
+    required this.fill,
+    required this.ink,
   });
 
   final double? progress;
   final bool downloaded;
   final VoidCallback onPressed;
+  final Color fill;
+  final Color ink;
 
   @override
   Widget build(BuildContext context) {
@@ -777,7 +816,7 @@ class _DownloadButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: Colors.white.withValues(alpha: 0.12),
+        color: fill,
         shape: const CircleBorder(),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -798,7 +837,7 @@ class _DownloadButton extends StatelessWidget {
                           ? Icons.download_for_offline
                           : Icons.download_outlined,
                       size: 22,
-                      color: downloaded ? downloadActiveColor : Colors.white,
+                      color: downloaded ? downloadActiveColor : ink,
                     ),
             ),
           ),

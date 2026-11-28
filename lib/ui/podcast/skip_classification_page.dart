@@ -2,20 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
+import '../../data/analysis_overview.dart';
 import '../../data/app_database.dart';
 import '../../data/audio_analysis.dart';
 import '../../data/providers.dart';
-import '../../settings/global_skip.dart';
 import '../../settings/settings_controller.dart';
 import '../../data/segment_match.dart';
 import '../../data/skip_segments.dart';
 import '../../l10n/l10n.dart';
+import '../router.dart';
+import '../settings/analysis_settings_page.dart';
+import '../settings/analysis_status_mark.dart';
 import '../../player/player_controller.dart';
+import '../skip_kind_mark.dart';
 import '../widgets/choice_dialog.dart';
 import '../widgets/empty_state.dart';
-import '../widgets/list_metrics.dart';
 import '../widgets/messages.dart';
 import 'passage_creation.dart';
 import 'segment_editor_page.dart';
@@ -69,6 +73,16 @@ class SkipClassificationPage extends ConsumerWidget {
                   ?.value
                   ?.episode
                   .title;
+        final stored = ref
+            .watch(analysisOverviewProvider)
+            .asData
+            ?.value
+            .where((row) => row.id == podcastId)
+            .firstOrNull;
+        final status = _podcastAnalysisStatus(stored, analysis, podcastId);
+        final playing = ref.watch(
+          playerProvider.select((state) => state.hasEpisode),
+        );
         return Scaffold(
           appBar: AppBar(
             toolbarHeight: 72,
@@ -99,80 +113,77 @@ class SkipClassificationPage extends ConsumerWidget {
               ],
             ),
           ),
-          body: ListView(
-            padding: underChrome(context, const EdgeInsets.only(bottom: 32)),
+          body: Column(
             children: [
-              _Section(context.tr('Skip automatically')),
-              SwitchListTile(
-                title: Text(context.tr('Skip automatically')),
-                subtitle: Text(
-                  '${context.tr('Skips confirmed passages in downloaded episodes')}\n'
-                  '${context.tr('Applies to every podcast.')}',
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  children: [
+                    _AnalysisEntry(
+                      pending: pending,
+                      countLabel: context.tr(
+                        'Analyzing episodes ({count} left)',
+                        {'count': '$pending'},
+                      ),
+                      detail: pending > 0
+                          ? _analysisDetail(
+                              context,
+                              analysis,
+                              podcastId,
+                              runningTitle,
+                            )
+                          : null,
+                      remainingAt: (now) =>
+                          analysis.remainingFor(podcastId, now),
+                      onOpen: () => context.push(
+                        AppRoutes.podcastEpisodeAnalyses(podcastId),
+                      ),
+                    ),
+                    SwitchListTile(
+                      title: Text(
+                        context.tr('Analyze downloads automatically'),
+                      ),
+                      value: ref.watch(settingsProvider).automaticAudioAnalysis,
+                      onChanged: (enabled) => ref
+                          .read(settingsProvider.notifier)
+                          .setAutomaticAudioAnalysis(enabled),
+                    ),
+                    ..._segmentTiles(context, ref, classification),
+                  ],
                 ),
-                value: ref.watch(globalSkipSettingsProvider).enabled,
-                onChanged: (enabled) => ref
-                    .read(globalSkipSettingsProvider.notifier)
-                    .setEnabled(enabled),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: Text(
-                  context.tr('Kinds to skip'),
-                  style: theme.textTheme.titleSmall,
+                padding: EdgeInsets.only(
+                  bottom: _aboveShellChrome(context, player: playing),
                 ),
-              ),
-              for (final kind in SkipSegmentKind.values)
-                SwitchListTile(
-                  title: Text(context.tr(skipKindLabel(kind))),
-                  value: ref
-                      .watch(globalSkipSettingsProvider)
-                      .kinds
-                      .contains(kind),
-                  onChanged: (enabled) => ref
-                      .read(globalSkipSettingsProvider.notifier)
-                      .setKind(kind, enabled: enabled),
-                ),
-              _Section(context.tr('Passages created by hand')),
-              SwitchListTile(
-                title: Text(context.tr('Analyze downloads automatically')),
-                subtitle: Text(
-                  context.tr(
-                    'Prepares each download (fingerprint and waveform) and searches it for the passages created by hand. Nothing is detected on its own. Turn this off if the app stops responding.',
-                  ),
-                ),
-                value: ref.watch(settingsProvider).automaticAudioAnalysis,
-                onChanged: (enabled) => ref
-                    .read(settingsProvider.notifier)
-                    .setAutomaticAudioAnalysis(enabled),
-              ),
-              if (pending > 0)
-                _AnalysisStatus(
-                  countLabel: context.tr('Analyzing episodes ({count} left)', {
-                    'count': '$pending',
-                  }),
-                  detail: _analysisDetail(
-                    context,
-                    analysis,
-                    podcastId,
-                    runningTitle,
-                  ),
-                  remainingAt: (now) => analysis.remainingFor(podcastId, now),
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                child: Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: OutlinedButton(
-                    onPressed: pending > 0
-                        ? null
-                        : () => ref
-                              .read(audioAnalysisProvider.notifier)
-                              .analyzeDownloaded(podcastId),
-                    child: Text(context.tr('Analyze downloaded episodes')),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: pending > 0
+                                ? null
+                                : () => ref
+                                      .read(audioAnalysisProvider.notifier)
+                                      .analyzeDownloaded(podcastId),
+                            child: Text(
+                              context.tr('Analyze downloaded episodes'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        AnalysisStatusMark(
+                          status: status,
+                          label: context.tr(_analysisMarkLabel(status)),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              ..._segmentTiles(context, ref, classification),
             ],
           ),
         );
@@ -203,12 +214,7 @@ class SkipClassificationPage extends ConsumerWidget {
         for (final template in data.templates) {
           grouped
               .putIfAbsent(template.kind, () => [])
-              .add(
-                _Row.template(
-                  template,
-                  confirmed: data.templateConfirmed[template.id],
-                ),
-              );
+              .add(_Row.template(template));
         }
         for (final loose in data.segments) {
           grouped
@@ -237,18 +243,25 @@ class SkipClassificationPage extends ConsumerWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section(this.label);
+  const _Section(this.label, {this.mark});
 
   final String label;
+  final Widget? mark;
 
   @override
   Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.titleSmall?.copyWith(
+      color: mark == null
+          ? Theme.of(context).colorScheme.primary
+          : Theme.of(context).colorScheme.onSurface,
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.titleSmall
-            ?.copyWith(color: Theme.of(context).colorScheme.primary),
+      child: Row(
+        children: [
+          if (mark != null) ...[mark!, const SizedBox(width: 8)],
+          Flexible(child: Text(label, style: style)),
+        ],
       ),
     );
   }
@@ -274,8 +287,13 @@ class _RankedSegmentsState extends State<_RankedSegments> {
     final tiles = <Widget>[];
     var uncertain = 0;
     for (final kind in SkipSegmentKind.values) {
-      final rows = widget.grouped[kind];
-      if (rows == null || rows.isEmpty) continue;
+      if (kind == SkipSegmentKind.sponsor) continue;
+      final rows = [
+        ...?widget.grouped[kind],
+        if (kind == SkipSegmentKind.ad)
+          ...?widget.grouped[SkipSegmentKind.sponsor],
+      ];
+      if (rows.isEmpty) continue;
       final sorted = [...rows]
         ..sort((a, b) {
           final byConfidence = _confidenceOf(b).compareTo(_confidenceOf(a));
@@ -291,7 +309,9 @@ class _RankedSegmentsState extends State<_RankedSegments> {
         visible.add(row);
       }
       if (visible.isEmpty) continue;
-      tiles.add(_Section(context.tr(skipKindLabel(kind))));
+      tiles.add(
+        _Section(context.tr(skipKindLabel(kind)), mark: SkipKindMark(kind)),
+      );
       for (final row in visible) {
         tiles.add(_SegmentTile(podcastId: widget.podcastId, row: row));
       }
@@ -332,26 +352,20 @@ int _startOf(_Row row) {
   return row.loose?.segment.startMs ?? row.template?.id ?? 0;
 }
 
-/// Candidat d’une seule épisode, déjà ignoré pour le saut, score bas.
+/// Candidat d’une seule épisode, score bas : replié sous « afficher plus ».
 bool _uncertain(_Row row) {
   if (_confidenceOf(row) >= lowConfidenceCutoff) return false;
-  final confirmed = row.template != null
-      ? row.confirmed
-      : row.loose!.segment.confirmed;
   final matches = row.template?.occurrences ?? row.loose!.segment.matches;
-  return confirmed == false && matches <= 1;
+  return matches <= 1;
 }
 
 class _Row {
-  const _Row.template(this.template, {required this.confirmed}) : loose = null;
+  const _Row.template(this.template) : loose = null;
 
-  const _Row.segment(this.loose) : template = null, confirmed = null;
+  const _Row.segment(this.loose) : template = null;
 
   final SegmentTemplate? template;
   final LooseSkipSegment? loose;
-
-  /// Avis du modèle. Ignoré pour un passage isolé (il a le sien).
-  final bool? confirmed;
 
   bool get isTemplate => template != null;
 }
@@ -372,7 +386,6 @@ class _SegmentTile extends ConsumerWidget {
     final durationMs =
         template?.durationMs ?? (loose!.segment.endMs - loose.segment.startMs);
     final count = template?.occurrences ?? loose!.segment.matches;
-    final review = template != null ? row.confirmed : loose!.segment.confirmed;
     final range = loose == null
         ? null
         : '${formatClock(Duration(milliseconds: loose.segment.startMs))}'
@@ -383,7 +396,6 @@ class _SegmentTile extends ConsumerWidget {
       formatClock(Duration(milliseconds: durationMs < 0 ? 0 : durationMs)),
       _episodeCount(context, count),
       if (source == SkipSegmentSource.network) context.tr('Network sting'),
-      context.tr(_reviewKey(review)),
     ].join(' · ');
     return ListTile(
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -410,14 +422,6 @@ class _SegmentTile extends ConsumerWidget {
               PopupMenuItem(
                 value: _SegmentAction.create,
                 child: Text(context.tr('Create a passage')),
-              ),
-              PopupMenuItem(
-                value: _SegmentAction.confirm,
-                child: Text(context.tr('Confirm')),
-              ),
-              PopupMenuItem(
-                value: _SegmentAction.ignore,
-                child: Text(context.tr('Ignore')),
               ),
               if (template != null)
                 PopupMenuItem(
@@ -505,18 +509,35 @@ class _SegmentTile extends ConsumerWidget {
         final choice = await showChoiceDialog<SkipSegmentKind>(
           context,
           title: 'Change kind',
-          selected: current,
+          selected: shownSkipKind(current),
+          leading: (kind) => SkipKindMark(kind),
           options: [
             for (final kind in SkipSegmentKind.values)
-              (value: kind, label: skipKindLabel(kind)),
+              if (kind != SkipSegmentKind.sponsor)
+                (value: kind, label: skipKindLabel(kind)),
           ],
         );
-        if (choice == null || choice == current) return;
+        if (choice == null || shownSkipKind(choice) == shownSkipKind(current)) {
+          return;
+        }
         if (template != null) {
           await db.setTemplateKind(template.id, choice);
+          if (sharesAcrossPodcasts(choice)) {
+            unawaited(
+              ref
+                  .read(audioAnalysisProvider.notifier)
+                  .spreadSharedAds(
+                    exceptPodcastId: podcastId,
+                    templateIds: {template.id},
+                  ),
+            );
+          }
         } else {
           await db.setSkipSegmentKind(segment!.id, choice);
         }
+        // Le lecteur suit la table : un type changé pendant l’écoute
+        // est repris sans rouvrir l’épisode.
+        unawaited(ref.read(playerProvider.notifier).reloadSkipSegments());
       case _SegmentAction.adjust:
         var segmentId = segment?.id;
         if (template != null) {
@@ -549,18 +570,6 @@ class _SegmentTile extends ConsumerWidget {
           return;
         }
         await openPassageCreator(context, ref, episodeId);
-      case _SegmentAction.confirm:
-        if (template != null) {
-          await db.setTemplateReview(template.id, confirmed: true);
-        } else {
-          await db.setSkipSegmentReview(segment!.id, confirmed: true);
-        }
-      case _SegmentAction.ignore:
-        if (template != null) {
-          await db.setTemplateReview(template.id, confirmed: false);
-        } else {
-          await db.setSkipSegmentReview(segment!.id, confirmed: false);
-        }
       case _SegmentAction.rename:
         if (template == null) return;
         final label = await _askLabel(context, template.label);
@@ -587,14 +596,14 @@ class _SegmentTile extends ConsumerWidget {
         if (template != null) {
           await db.deleteSegmentTemplate(template.id);
         } else {
-          await db.deleteSkipSegment(segment!.id);
+          await db.dismissSkipSegment(segment!.id);
         }
         unawaited(ref.read(playerProvider.notifier).reloadSkipSegments());
     }
   }
 }
 
-enum _SegmentAction { kind, adjust, create, confirm, ignore, rename, delete }
+enum _SegmentAction { kind, adjust, create, rename, delete }
 
 String _templateTitle(BuildContext context, SegmentTemplate template) {
   final label = template.label?.trim() ?? '';
@@ -605,12 +614,6 @@ String _templateTitle(BuildContext context, SegmentTemplate template) {
 String _episodeCount(BuildContext context, int count) {
   if (count == 1) return context.tr('1 episode');
   return context.tr('{count} episodes', {'count': '$count'});
-}
-
-String _reviewKey(bool? confirmed) {
-  if (confirmed == true) return 'Confirmed';
-  if (confirmed == false) return 'Ignored';
-  return 'Unreviewed';
 }
 
 Future<String?> _askLabel(BuildContext context, String? current) async {
@@ -640,6 +643,16 @@ Future<String?> _askLabel(BuildContext context, String? current) async {
   );
   controller.dispose();
   return result;
+}
+
+/// Hauteur de la barre du bas sur téléphone, pour laisser le bouton au-dessus.
+///
+/// Sur un écran large, la coque réserve déjà cet espace.
+double _aboveShellChrome(BuildContext context, {required bool player}) {
+  if (MediaQuery.sizeOf(context).width >= 600) return 0;
+  const bar = 4.0 + 64.0 + 8.0;
+  final playerSlot = player ? 56.0 + 8.0 : 0.0;
+  return bar + playerSlot;
 }
 
 String? _remainingLabel(BuildContext context, Duration? remaining) {
@@ -694,28 +707,76 @@ String _analysisDetail(
   };
 }
 
-class _AnalysisStatus extends StatefulWidget {
-  const _AnalysisStatus({
+/// Même pastille que la gestion des analyses, pour ce podcast.
+AnalysisOverviewStatus _podcastAnalysisStatus(
+  AnalysisOverviewPodcast? stored,
+  AudioAnalysisProgress progress,
+  int podcastId,
+) {
+  final running = progress.runningPodcastId == podcastId;
+  final queued = progress.pending.any((job) => job.podcastId == podcastId);
+  if (stored != null && !running && !queued) return stored.status;
+  if (running || queued) {
+    return analysisStatus(
+      fingerprintStatuses: const [],
+      running: running,
+      queued: queued,
+    );
+  }
+  return AnalysisOverviewStatus.pending;
+}
+
+String _analysisMarkLabel(AnalysisOverviewStatus status) {
+  return switch (status) {
+    AnalysisOverviewStatus.analysed => 'Analysed',
+    AnalysisOverviewStatus.pending => 'Pending',
+    AnalysisOverviewStatus.failed => 'Failed',
+    AnalysisOverviewStatus.inProgress => 'In progress',
+  };
+}
+
+/// Une seule ligne : le détail des étapes, et l’avancement quand il y en a.
+class _AnalysisEntry extends StatefulWidget {
+  const _AnalysisEntry({
+    required this.pending,
     required this.countLabel,
     required this.detail,
     required this.remainingAt,
+    required this.onOpen,
   });
 
+  final int pending;
   final String countLabel;
-  final String detail;
+  final String? detail;
   final Duration? Function(DateTime now) remainingAt;
+  final VoidCallback onOpen;
 
   @override
-  State<_AnalysisStatus> createState() => _AnalysisStatusState();
+  State<_AnalysisEntry> createState() => _AnalysisEntryState();
 }
 
-class _AnalysisStatusState extends State<_AnalysisStatus> {
+class _AnalysisEntryState extends State<_AnalysisEntry> {
   Timer? _tick;
 
   @override
   void initState() {
     super.initState();
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+    _syncTick();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnalysisEntry oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncTick();
+  }
+
+  void _syncTick() {
+    if (widget.pending <= 0) {
+      _tick?.cancel();
+      _tick = null;
+      return;
+    }
+    _tick ??= Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
   }
@@ -729,42 +790,29 @@ class _AnalysisStatusState extends State<_AnalysisStatus> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final remaining = _remainingLabel(
-      context,
-      widget.remainingAt(DateTime.now()),
-    );
+    final busy = widget.pending > 0;
+    final remaining = busy
+        ? _remainingLabel(context, widget.remainingAt(DateTime.now()))
+        : null;
     final subtle = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return ListTile(
+      title: Text(busy ? widget.countLabel : context.tr('Analysis details')),
+      subtitle: busy && widget.detail != null
+          ? Text(widget.detail!, style: subtle)
+          : null,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 2),
-            child: SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.countLabel),
-                Text(widget.detail, style: subtle),
-              ],
-            ),
-          ),
           if (remaining != null) ...[
-            const SizedBox(width: 12),
             Text(remaining, style: subtle),
+            const SizedBox(width: 8),
           ],
+          const Icon(Icons.chevron_right),
         ],
       ),
+      onTap: widget.onOpen,
     );
   }
 }
