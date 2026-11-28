@@ -304,6 +304,62 @@ void main() {
     );
   });
 
+  test('the same content at the same place stays dismissed', () {
+    const dismissed = [
+      DismissedSpan(
+        episodeId: 1,
+        startMs: 0,
+        endMs: 10000,
+        templateId: 4,
+        kind: SkipSegmentKind.ad,
+      ),
+    ];
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 0,
+        endMs: 10000,
+        templateId: 9,
+        kind: SkipSegmentKind.ad,
+      ),
+      isTrue,
+    );
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 0,
+        endMs: 28000,
+        templateId: 9,
+        kind: SkipSegmentKind.ad,
+      ),
+      isTrue,
+    );
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 1000,
+        endMs: 3000,
+        templateId: 4,
+        kind: SkipSegmentKind.ad,
+      ),
+      isFalse,
+    );
+    expect(
+      spanWasDismissed(
+        dismissed,
+        episodeId: 1,
+        startMs: 0,
+        endMs: 30000,
+        templateId: 4,
+        kind: SkipSegmentKind.sting,
+      ),
+      isFalse,
+    );
+  });
+
   test('a dismissed span is left out, the other hits stay', () {
     final motif = _motif(24, 9);
     final values = _noise(800, 3);

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:podavio/data/app_database.dart';
@@ -309,5 +310,134 @@ void main() {
     final row = await reopened.skipSegmentById(kept);
     expect(row?.source, SkipSegmentSource.networkEdited);
     expect(await reopened.select(reopened.pendingSegmentDrops).get(), isEmpty);
+  });
+
+  test('reclasses an edited network sting and keeps a hand passage', () async {
+    final dir = await Directory.systemTemp.createTemp('podavio-migration-v27');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/podavio.sqlite');
+
+    final created = AppDatabase(NativeDatabase(file));
+    final podcastId = (await created.saveFeed(
+      const FeedDraft(
+        feedUrl: 'https://example.com/feed.xml',
+        title: 'Essai',
+        author: 'Auteur',
+        description: 'Description',
+        episodes: [
+          EpisodeDraft(
+            guid: 'a',
+            title: 'Un',
+            description: 'Notes',
+            audioUrl: 'https://example.com/a.mp3',
+          ),
+        ],
+      ),
+    )).podcastId;
+    final episodeId = (await created.watchEpisodes(podcastId: podcastId).first)
+        .single
+        .episode
+        .id;
+    final fromNetwork = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 0,
+      endMs: 3000,
+      kind: SkipSegmentKind.sting,
+      source: SkipSegmentSource.manual,
+    );
+    await created.insertSegmentAnnotation(
+      segmentId: fromNetwork,
+      episodeId: episodeId,
+      kind: SkipSegmentKind.sting,
+      detectedSource: SkipSegmentSource.network,
+      detectedStartMs: 0,
+      detectedEndMs: 3000,
+      correctedStartMs: 0,
+      correctedEndMs: 3000,
+    );
+    final loose = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 4000,
+      endMs: 7000,
+      kind: SkipSegmentKind.jingle,
+      source: SkipSegmentSource.manual,
+    );
+    final hand = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 8000,
+      endMs: 11000,
+      kind: SkipSegmentKind.sting,
+      source: SkipSegmentSource.manual,
+      templateId: await created.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.sting,
+        durationMs: 3000,
+      ),
+    );
+    await created.insertSegmentAnnotation(
+      segmentId: hand,
+      episodeId: episodeId,
+      kind: SkipSegmentKind.sting,
+      correctedStartMs: 8000,
+      correctedEndMs: 11000,
+    );
+    final editedPrint = await created.insertSkipSegment(
+      episodeId: episodeId,
+      startMs: 20000,
+      endMs: 40000,
+      kind: SkipSegmentKind.ad,
+      source: SkipSegmentSource.manual,
+      templateId: await created.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.ad,
+        durationMs: 20000,
+      ),
+    );
+    final templateId = await created.insertSegmentTemplate(
+      podcastId: podcastId,
+      kind: SkipSegmentKind.ad,
+      durationMs: 10000,
+    );
+    await created
+        .into(created.dismissedSkipSpans)
+        .insert(
+          DismissedSkipSpansCompanion.insert(
+            episodeId: episodeId,
+            templateId: Value(templateId),
+            startMs: 0,
+            endMs: 10000,
+          ),
+        );
+    await created.customStatement(
+      'ALTER TABLE dismissed_skip_spans DROP COLUMN kind',
+    );
+    await created.customStatement('PRAGMA user_version = 27');
+    await created.close();
+
+    final reopened = AppDatabase(NativeDatabase(file));
+    addTearDown(reopened.close);
+    expect(
+      (await reopened.skipSegmentById(fromNetwork))?.source,
+      SkipSegmentSource.networkEdited,
+    );
+    expect(
+      (await reopened.skipSegmentById(loose))?.source,
+      SkipSegmentSource.networkEdited,
+    );
+    expect(
+      (await reopened.skipSegmentById(hand))?.source,
+      SkipSegmentSource.manual,
+    );
+    expect(
+      (await reopened.skipSegmentById(editedPrint))?.source,
+      SkipSegmentSource.manual,
+    );
+    final columns = await reopened
+        .customSelect('PRAGMA table_info(dismissed_skip_spans)')
+        .get();
+    expect(columns.map((row) => row.read<String>('name')), contains('kind'));
+    final dismissed = await reopened.dismissedSpansForEpisode(episodeId);
+    expect(dismissed.single.kind, SkipSegmentKind.ad);
+    expect(await _userVersion(reopened), reopened.schemaVersion);
   });
 }

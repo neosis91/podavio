@@ -5597,6 +5597,17 @@ class $DismissedSkipSpansTable extends DismissedSkipSpans
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  @override
+  late final GeneratedColumnWithTypeConverter<SkipSegmentKind?, String> kind =
+      GeneratedColumn<String>(
+        'kind',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      ).withConverter<SkipSegmentKind?>(
+        $DismissedSkipSpansTable.$converterkindn,
+      );
   static const VerificationMeta _startMsMeta = const VerificationMeta(
     'startMs',
   );
@@ -5622,6 +5633,7 @@ class $DismissedSkipSpansTable extends DismissedSkipSpans
     id,
     episodeId,
     templateId,
+    kind,
     startMs,
     endMs,
   ];
@@ -5691,6 +5703,12 @@ class $DismissedSkipSpansTable extends DismissedSkipSpans
         DriftSqlType.int,
         data['${effectivePrefix}template_id'],
       ),
+      kind: $DismissedSkipSpansTable.$converterkindn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}kind'],
+        ),
+      ),
       startMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}start_ms'],
@@ -5706,6 +5724,11 @@ class $DismissedSkipSpansTable extends DismissedSkipSpans
   $DismissedSkipSpansTable createAlias(String alias) {
     return $DismissedSkipSpansTable(attachedDatabase, alias);
   }
+
+  static JsonTypeConverter2<SkipSegmentKind, String, String> $converterkind =
+      const EnumNameConverter<SkipSegmentKind>(SkipSegmentKind.values);
+  static JsonTypeConverter2<SkipSegmentKind?, String?, String?>
+  $converterkindn = JsonTypeConverter2.asNullable($converterkind);
 }
 
 class DismissedSkipSpan extends DataClass
@@ -5716,12 +5739,16 @@ class DismissedSkipSpan extends DataClass
   /// Gabarit au moment du retrait. Pas de clé étrangère : le gabarit
   /// peut disparaître, la trace doit rester.
   final int? templateId;
+
+  /// Type au moment du retrait. `null` sur une trace plus ancienne.
+  final SkipSegmentKind? kind;
   final int startMs;
   final int endMs;
   const DismissedSkipSpan({
     required this.id,
     required this.episodeId,
     this.templateId,
+    this.kind,
     required this.startMs,
     required this.endMs,
   });
@@ -5732,6 +5759,11 @@ class DismissedSkipSpan extends DataClass
     map['episode_id'] = Variable<int>(episodeId);
     if (!nullToAbsent || templateId != null) {
       map['template_id'] = Variable<int>(templateId);
+    }
+    if (!nullToAbsent || kind != null) {
+      map['kind'] = Variable<String>(
+        $DismissedSkipSpansTable.$converterkindn.toSql(kind),
+      );
     }
     map['start_ms'] = Variable<int>(startMs);
     map['end_ms'] = Variable<int>(endMs);
@@ -5745,6 +5777,7 @@ class DismissedSkipSpan extends DataClass
       templateId: templateId == null && nullToAbsent
           ? const Value.absent()
           : Value(templateId),
+      kind: kind == null && nullToAbsent ? const Value.absent() : Value(kind),
       startMs: Value(startMs),
       endMs: Value(endMs),
     );
@@ -5759,6 +5792,9 @@ class DismissedSkipSpan extends DataClass
       id: serializer.fromJson<int>(json['id']),
       episodeId: serializer.fromJson<int>(json['episodeId']),
       templateId: serializer.fromJson<int?>(json['templateId']),
+      kind: $DismissedSkipSpansTable.$converterkindn.fromJson(
+        serializer.fromJson<String?>(json['kind']),
+      ),
       startMs: serializer.fromJson<int>(json['startMs']),
       endMs: serializer.fromJson<int>(json['endMs']),
     );
@@ -5770,6 +5806,9 @@ class DismissedSkipSpan extends DataClass
       'id': serializer.toJson<int>(id),
       'episodeId': serializer.toJson<int>(episodeId),
       'templateId': serializer.toJson<int?>(templateId),
+      'kind': serializer.toJson<String?>(
+        $DismissedSkipSpansTable.$converterkindn.toJson(kind),
+      ),
       'startMs': serializer.toJson<int>(startMs),
       'endMs': serializer.toJson<int>(endMs),
     };
@@ -5779,12 +5818,14 @@ class DismissedSkipSpan extends DataClass
     int? id,
     int? episodeId,
     Value<int?> templateId = const Value.absent(),
+    Value<SkipSegmentKind?> kind = const Value.absent(),
     int? startMs,
     int? endMs,
   }) => DismissedSkipSpan(
     id: id ?? this.id,
     episodeId: episodeId ?? this.episodeId,
     templateId: templateId.present ? templateId.value : this.templateId,
+    kind: kind.present ? kind.value : this.kind,
     startMs: startMs ?? this.startMs,
     endMs: endMs ?? this.endMs,
   );
@@ -5795,6 +5836,7 @@ class DismissedSkipSpan extends DataClass
       templateId: data.templateId.present
           ? data.templateId.value
           : this.templateId,
+      kind: data.kind.present ? data.kind.value : this.kind,
       startMs: data.startMs.present ? data.startMs.value : this.startMs,
       endMs: data.endMs.present ? data.endMs.value : this.endMs,
     );
@@ -5806,6 +5848,7 @@ class DismissedSkipSpan extends DataClass
           ..write('id: $id, ')
           ..write('episodeId: $episodeId, ')
           ..write('templateId: $templateId, ')
+          ..write('kind: $kind, ')
           ..write('startMs: $startMs, ')
           ..write('endMs: $endMs')
           ..write(')'))
@@ -5813,7 +5856,8 @@ class DismissedSkipSpan extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(id, episodeId, templateId, startMs, endMs);
+  int get hashCode =>
+      Object.hash(id, episodeId, templateId, kind, startMs, endMs);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5821,6 +5865,7 @@ class DismissedSkipSpan extends DataClass
           other.id == this.id &&
           other.episodeId == this.episodeId &&
           other.templateId == this.templateId &&
+          other.kind == this.kind &&
           other.startMs == this.startMs &&
           other.endMs == this.endMs);
 }
@@ -5829,12 +5874,14 @@ class DismissedSkipSpansCompanion extends UpdateCompanion<DismissedSkipSpan> {
   final Value<int> id;
   final Value<int> episodeId;
   final Value<int?> templateId;
+  final Value<SkipSegmentKind?> kind;
   final Value<int> startMs;
   final Value<int> endMs;
   const DismissedSkipSpansCompanion({
     this.id = const Value.absent(),
     this.episodeId = const Value.absent(),
     this.templateId = const Value.absent(),
+    this.kind = const Value.absent(),
     this.startMs = const Value.absent(),
     this.endMs = const Value.absent(),
   });
@@ -5842,6 +5889,7 @@ class DismissedSkipSpansCompanion extends UpdateCompanion<DismissedSkipSpan> {
     this.id = const Value.absent(),
     required int episodeId,
     this.templateId = const Value.absent(),
+    this.kind = const Value.absent(),
     required int startMs,
     required int endMs,
   }) : episodeId = Value(episodeId),
@@ -5851,6 +5899,7 @@ class DismissedSkipSpansCompanion extends UpdateCompanion<DismissedSkipSpan> {
     Expression<int>? id,
     Expression<int>? episodeId,
     Expression<int>? templateId,
+    Expression<String>? kind,
     Expression<int>? startMs,
     Expression<int>? endMs,
   }) {
@@ -5858,6 +5907,7 @@ class DismissedSkipSpansCompanion extends UpdateCompanion<DismissedSkipSpan> {
       if (id != null) 'id': id,
       if (episodeId != null) 'episode_id': episodeId,
       if (templateId != null) 'template_id': templateId,
+      if (kind != null) 'kind': kind,
       if (startMs != null) 'start_ms': startMs,
       if (endMs != null) 'end_ms': endMs,
     });
@@ -5867,6 +5917,7 @@ class DismissedSkipSpansCompanion extends UpdateCompanion<DismissedSkipSpan> {
     Value<int>? id,
     Value<int>? episodeId,
     Value<int?>? templateId,
+    Value<SkipSegmentKind?>? kind,
     Value<int>? startMs,
     Value<int>? endMs,
   }) {
@@ -5874,6 +5925,7 @@ class DismissedSkipSpansCompanion extends UpdateCompanion<DismissedSkipSpan> {
       id: id ?? this.id,
       episodeId: episodeId ?? this.episodeId,
       templateId: templateId ?? this.templateId,
+      kind: kind ?? this.kind,
       startMs: startMs ?? this.startMs,
       endMs: endMs ?? this.endMs,
     );
@@ -5891,6 +5943,11 @@ class DismissedSkipSpansCompanion extends UpdateCompanion<DismissedSkipSpan> {
     if (templateId.present) {
       map['template_id'] = Variable<int>(templateId.value);
     }
+    if (kind.present) {
+      map['kind'] = Variable<String>(
+        $DismissedSkipSpansTable.$converterkindn.toSql(kind.value),
+      );
+    }
     if (startMs.present) {
       map['start_ms'] = Variable<int>(startMs.value);
     }
@@ -5906,6 +5963,7 @@ class DismissedSkipSpansCompanion extends UpdateCompanion<DismissedSkipSpan> {
           ..write('id: $id, ')
           ..write('episodeId: $episodeId, ')
           ..write('templateId: $templateId, ')
+          ..write('kind: $kind, ')
           ..write('startMs: $startMs, ')
           ..write('endMs: $endMs')
           ..write(')'))
@@ -11761,6 +11819,7 @@ typedef $$DismissedSkipSpansTableCreateCompanionBuilder =
       Value<int> id,
       required int episodeId,
       Value<int?> templateId,
+      Value<SkipSegmentKind?> kind,
       required int startMs,
       required int endMs,
     });
@@ -11769,6 +11828,7 @@ typedef $$DismissedSkipSpansTableUpdateCompanionBuilder =
       Value<int> id,
       Value<int> episodeId,
       Value<int?> templateId,
+      Value<SkipSegmentKind?> kind,
       Value<int> startMs,
       Value<int> endMs,
     });
@@ -11821,6 +11881,12 @@ class $$DismissedSkipSpansTableFilterComposer
   ColumnFilters<int> get templateId => $composableBuilder(
     column: $table.templateId,
     builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<SkipSegmentKind?, SkipSegmentKind, String>
+  get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
   ColumnFilters<int> get startMs => $composableBuilder(
@@ -11876,6 +11942,11 @@ class $$DismissedSkipSpansTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get startMs => $composableBuilder(
     column: $table.startMs,
     builder: (column) => ColumnOrderings(column),
@@ -11926,6 +11997,9 @@ class $$DismissedSkipSpansTableAnnotationComposer
     column: $table.templateId,
     builder: (column) => column,
   );
+
+  GeneratedColumnWithTypeConverter<SkipSegmentKind?, String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
 
   GeneratedColumn<int> get startMs =>
       $composableBuilder(column: $table.startMs, builder: (column) => column);
@@ -11993,12 +12067,14 @@ class $$DismissedSkipSpansTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<int> episodeId = const Value.absent(),
                 Value<int?> templateId = const Value.absent(),
+                Value<SkipSegmentKind?> kind = const Value.absent(),
                 Value<int> startMs = const Value.absent(),
                 Value<int> endMs = const Value.absent(),
               }) => DismissedSkipSpansCompanion(
                 id: id,
                 episodeId: episodeId,
                 templateId: templateId,
+                kind: kind,
                 startMs: startMs,
                 endMs: endMs,
               ),
@@ -12007,12 +12083,14 @@ class $$DismissedSkipSpansTableTableManager
                 Value<int> id = const Value.absent(),
                 required int episodeId,
                 Value<int?> templateId = const Value.absent(),
+                Value<SkipSegmentKind?> kind = const Value.absent(),
                 required int startMs,
                 required int endMs,
               }) => DismissedSkipSpansCompanion.insert(
                 id: id,
                 episodeId: episodeId,
                 templateId: templateId,
+                kind: kind,
                 startMs: startMs,
                 endMs: endMs,
               ),

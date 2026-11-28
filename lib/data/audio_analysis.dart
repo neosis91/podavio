@@ -1030,27 +1030,34 @@ class AudioAnalysisController extends Notifier<AudioAnalysisProgress> {
   }
 }
 
+/// Délai après une sortie ou une erreur sans message. Un résultat déjà
+/// envoyé par [Isolate.exit] est encore accepté pendant ce temps ; au-delà,
+/// l’attente se termine par `null` et ne reste pas ouverte.
+Duration analysisIsolateExitGrace = const Duration(seconds: 5);
+
 /// Un isolate et son attente.
 ///
-/// [kill] libère [result] tout de suite. Une fin normale ne le fait
-/// pas : le message est envoyé avant la sortie, et il peut arriver
-/// après le signal onExit.
+/// [kill] libère [result] tout de suite. Une sortie ou une erreur sans
+/// message le libère au bout de [analysisIsolateExitGrace].
 class TrackedAnalysis {
   TrackedAnalysis({
     required this.isolate,
     required this.result,
     required this.close,
+    required this.onKill,
   });
 
   final Isolate isolate;
   final Future<Object?> result;
   final void Function() close;
+  final void Function() onKill;
   Timer? pace;
   var killed = false;
 
-  /// Tue l’isolate et termine l’attente par `null` dès sa sortie.
+  /// Tue l’isolate et termine l’attente par `null` tout de suite.
   void kill() {
     killed = true;
+    onKill();
     isolate.kill(priority: Isolate.immediate);
   }
 }
@@ -1064,6 +1071,17 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
   final errors = ReceivePort();
   final exits = ReceivePort();
   final incoming = Completer<Object?>();
+  Timer? grace;
+  void finishNull() {
+    grace?.cancel();
+    if (!incoming.isCompleted) incoming.complete(null);
+  }
+
+  void settle() {
+    if (grace != null || incoming.isCompleted) return;
+    grace = Timer(analysisIsolateExitGrace, finishNull);
+  }
+
   final tracked = TrackedAnalysis(
     isolate: await Isolate.spawn(
       entry,
@@ -1073,20 +1091,21 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
       debugName: 'podavio-analysis',
     ),
     result: incoming.future,
+    onKill: finishNull,
     close: () {
+      grace?.cancel();
       port.close();
       errors.close();
       exits.close();
     },
   );
-  errors.listen((event) {
-    final text = event is List && event.isNotEmpty
-        ? '${event.first}'
-        : '$event';
-    if (!incoming.isCompleted) incoming.completeError(StateError(text));
-  });
+  errors.listen((_) => settle());
   exits.listen((_) {
-    if (tracked.killed && !incoming.isCompleted) incoming.complete(null);
+    if (tracked.killed) {
+      finishNull();
+    } else {
+      settle();
+    }
   });
   port.listen((event) {
     if (paced && event is SendPort) {
@@ -1097,7 +1116,10 @@ Future<TrackedAnalysis> trackAnalysisIsolate(
       });
       return;
     }
-    if (!incoming.isCompleted) incoming.complete(event);
+    if (!incoming.isCompleted) {
+      grace?.cancel();
+      incoming.complete(event);
+    }
   });
   return tracked;
 }
@@ -1550,6 +1572,7 @@ Future<void> applyAnalysisPlan(
           startMs: desired.startMs,
           endMs: desired.endMs,
           templateId: templateId,
+          kind: desired.kind,
         )) {
           continue;
         }
@@ -1627,6 +1650,7 @@ List<DismissedSpan> _asDismissed(List<DismissedSkipSpan> rows) {
         startMs: row.startMs,
         endMs: row.endMs,
         templateId: row.templateId,
+        kind: row.kind,
       ),
   ];
 }
@@ -1981,6 +2005,7 @@ Future<int?> _upsertLoose(
     startMs: startMs,
     endMs: endMs,
     templateId: templateId,
+    kind: kind,
   )) {
     return null;
   }

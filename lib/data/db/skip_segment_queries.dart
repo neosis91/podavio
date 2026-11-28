@@ -385,6 +385,7 @@ mixin _SkipSegmentQueries on _$AppDatabase {
       DismissedSkipSpansCompanion.insert(
         episodeId: row.episodeId,
         templateId: Value(row.templateId),
+        kind: Value(row.kind),
         startMs: row.startMs,
         endMs: row.endMs,
       ),

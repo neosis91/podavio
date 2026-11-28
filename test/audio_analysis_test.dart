@@ -72,6 +72,34 @@ void main() {
     expect(await tracked.result.timeout(const Duration(seconds: 2)), 'kept');
   });
 
+  test('a quiet isolate exit ends the wait', () async {
+    final previous = analysisIsolateExitGrace;
+    analysisIsolateExitGrace = const Duration(milliseconds: 200);
+    addTearDown(() => analysisIsolateExitGrace = previous);
+    final tracked = await trackAnalysisIsolate((_) {}, null);
+    addTearDown(tracked.close);
+    final started = DateTime.now();
+    expect(await tracked.result, isNull);
+    expect(
+      DateTime.now().difference(started),
+      lessThan(const Duration(seconds: 2)),
+    );
+  });
+
+  test('a result sent before the isolate returns is kept', () async {
+    final previous = analysisIsolateExitGrace;
+    analysisIsolateExitGrace = const Duration(milliseconds: 400);
+    addTearDown(() => analysisIsolateExitGrace = previous);
+    final tracked = await trackAnalysisIsolate((args) {
+      (args[0]! as SendPort).send('kept');
+    }, null);
+    addTearDown(() {
+      tracked.kill();
+      tracked.close();
+    });
+    expect(await tracked.result.timeout(const Duration(seconds: 2)), 'kept');
+  });
+
   test(
     'a stopped comparison does not write the passage it would find',
     () async {

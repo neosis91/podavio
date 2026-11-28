@@ -462,6 +462,38 @@ void main() {
       expect(pending, isEmpty);
     });
 
+    test('le même contenu avec un autre gabarit n’est pas reposé', () async {
+      final removed = await database.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.ad,
+        fingerprint: encodeFingerprint(values.sublist(80, 240)),
+        durationMs: 12000,
+      );
+      final other = await database.insertSegmentTemplate(
+        podcastId: podcastId,
+        kind: SkipSegmentKind.ad,
+        fingerprint: encodeFingerprint(values.sublist(80, 240)),
+        durationMs: 28000,
+      );
+      await database.dismissSkipSegment(
+        await database.insertSkipSegment(
+          episodeId: episodeId,
+          startMs: 0,
+          endMs: 12000,
+          kind: SkipSegmentKind.ad,
+          source: SkipSegmentSource.fingerprint,
+          templateId: removed,
+        ),
+      );
+      await applyAnalysisPlan(
+        database,
+        podcastId,
+        _plan(episodeId, other, [(0, 28000)]),
+        searchedTemplates: {other},
+      );
+      expect(await database.listSkipSegments(episodeId), isEmpty);
+    });
+
     test('un court retrait ne fait pas effacer un passage plus long', () async {
       final templateId = await database.insertSegmentTemplate(
         podcastId: podcastId,

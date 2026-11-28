@@ -247,6 +247,9 @@ class DismissedSkipSpans extends Table {
   /// Gabarit au moment du retrait. Pas de clé étrangère : le gabarit
   /// peut disparaître, la trace doit rester.
   IntColumn get templateId => integer().nullable()();
+
+  /// Type au moment du retrait. `null` sur une trace plus ancienne.
+  TextColumn get kind => textEnum<SkipSegmentKind>().nullable()();
   IntColumn get startMs => integer()();
   IntColumn get endMs => integer()();
 }
@@ -356,7 +359,7 @@ class AppDatabase extends _$AppDatabase
   AppDatabase.defaults() : super(driftDatabase(name: 'podavio'));
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -489,6 +492,21 @@ class AppDatabase extends _$AppDatabase
       if (from < 27) {
         await _createTableIfMissing(migrator, pendingSegmentDrops);
       }
+      if (from < 28) {
+        await _addColumnIfMissing(
+          migrator,
+          dismissedSkipSpans,
+          dismissedSkipSpans.kind,
+        );
+        await _ensureSegmentAnnotations();
+        await _reclassEditedNetworkStings();
+        await customStatement(
+          'UPDATE dismissed_skip_spans SET kind = ('
+          'SELECT t.kind FROM segment_templates t '
+          'WHERE t.id = dismissed_skip_spans.template_id) '
+          'WHERE kind IS NULL AND template_id IS NOT NULL',
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -573,6 +591,29 @@ class AppDatabase extends _$AppDatabase
         .get();
     if (!rows.any((row) => row.read<String>('name') == 'olaf')) return;
     await customStatement('ALTER TABLE episode_fingerprints DROP COLUMN olaf');
+  }
+
+  /// Une ligne `manual` qui vient d’une détection de réseau redevient
+  /// `networkEdited`, pour sauter encore avec les pubs.
+  ///
+  /// L’indice est l’annotation : `detected_source = network` quand les
+  /// bornes ont été enregistrées avant le changement de source. À défaut,
+  /// une virgule ou un jingle sans gabarit et sans annotation de création
+  /// manuelle : les détections de réseau n’ont pas de gabarit, un passage
+  /// créé à la main en a une avec `detected_source` vide.
+  Future<void> _reclassEditedNetworkStings() async {
+    await customStatement(
+      'UPDATE skip_segments SET source = \'networkEdited\' '
+      "WHERE source = 'manual' "
+      'AND id NOT IN ('
+      'SELECT segment_id FROM segment_annotations '
+      'WHERE detected_source IS NULL) '
+      'AND ('
+      'id IN ('
+      'SELECT segment_id FROM segment_annotations '
+      "WHERE detected_source = 'network') "
+      "OR (kind IN ('jingle', 'sting') AND template_id IS NULL))",
+    );
   }
 
   /// Bornes corrigées à la main, hors schéma Drift. Le passage peut être

@@ -132,12 +132,14 @@ class DismissedSpan {
     required this.startMs,
     required this.endMs,
     this.templateId,
+    this.kind,
   });
 
   final int episodeId;
   final int startMs;
   final int endMs;
   final int? templateId;
+  final SkipSegmentKind? kind;
 }
 
 /// Moitié de la plus courte des deux plages. Un léger décalage de
@@ -150,16 +152,19 @@ bool spansOverlap(int startMs, int endMs, int otherStart, int otherEnd) {
 
 /// Vrai si le passage proposé est la réapparition d’un retrait.
 ///
-/// Un gabarit différent, ou une durée au moins deux fois plus courte
-/// ou plus longue, n’est pas le même passage. Le recouvrement doit
-/// couvrir la moitié du plus court des deux. Un même gabarit tout près
-/// mais sans recouvrement reste en place.
+/// Même type et recouvrement d’au moins la moitié de la plage retirée :
+/// c’est le même contenu au même endroit, même avec un autre gabarit ou
+/// une autre durée. Sinon, un gabarit différent ou une durée au moins
+/// deux fois plus courte ou plus longue n’est pas le même passage. Un
+/// court passage dans un long retrait, ou un long passage d’un autre
+/// type, reste en place.
 bool spanWasDismissed(
   List<DismissedSpan> dismissed, {
   required int episodeId,
   required int startMs,
   required int endMs,
   int? templateId,
+  SkipSegmentKind? kind,
 }) {
   final length = endMs - startMs;
   if (length <= 0) return false;
@@ -167,6 +172,10 @@ bool spanWasDismissed(
     if (row.episodeId != episodeId) continue;
     final other = row.endMs - row.startMs;
     if (other <= 0) continue;
+    final overlap = math.min(endMs, row.endMs) - math.max(startMs, row.startMs);
+    if (overlap <= 0) continue;
+    final sameKind = kind != null && row.kind != null && kind == row.kind;
+    if (sameKind && overlap * 2 >= other) return true;
     if (templateId != null &&
         row.templateId != null &&
         templateId != row.templateId) {
@@ -175,7 +184,6 @@ bool spanWasDismissed(
     final shorter = math.min(length, other);
     final longer = math.max(length, other);
     if (shorter * 2 < longer) continue;
-    final overlap = math.min(endMs, row.endMs) - math.max(startMs, row.startMs);
     if (overlap * 2 >= shorter) return true;
   }
   return false;
@@ -197,6 +205,7 @@ AnalysisPlan dropDismissedSpans(
           startMs: segment.startMs,
           endMs: segment.endMs,
           templateId: pattern.templateId,
+          kind: segment.kind,
         ))
           segment,
     ];
